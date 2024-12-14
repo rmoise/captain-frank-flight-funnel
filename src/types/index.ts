@@ -11,6 +11,12 @@ export interface Flight {
   price: number;
 }
 
+export interface FlightSegment {
+  id: string;
+  fromLocation: string | null;
+  toLocation: string | null;
+}
+
 export interface PassengerDetails {
   firstName: string;
   lastName: string;
@@ -24,9 +30,9 @@ export interface BookingDetails {
 }
 
 export interface FlightSelectorProps {
-  onViewModeChange: () => void;
-  onNotListedClick: () => void;
-  onSelect: (flight: Flight) => void;
+  onSelect: (flight: Flight | Flight[]) => void;
+  onViewModeChange?: () => void;
+  onNotListedClick?: () => void;
 }
 
 export interface ExperienceSelectionProps {

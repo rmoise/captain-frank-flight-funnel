@@ -15,10 +15,20 @@ export default function BookingSummary() {
           <Headline
             text="Booking Summary"
             isFirst={true}
-            step="summary"
+            step="step1"
           />
           <div className="mt-4">
             <SpeechBubble message="Here's a summary of your booking details" />
+          </div>
+
+          <div className="mt-8">
+            <Headline
+              text="Additional Information"
+              step="step2"
+            />
+            <div className="mt-4">
+              <SpeechBubble message="Please review all the details carefully" />
+            </div>
           </div>
 
           <div className="mt-8 bg-white rounded-lg shadow p-6">

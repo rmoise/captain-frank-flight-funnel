@@ -1,16 +1,25 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
-import { FlightSelectorProps, Flight } from '@/types';
-import { AutocompleteInput } from '@/components/AutocompleteInput';
+import { FlightSelectorProps, Flight, FlightSegment } from '@/types';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import {
   setSelectedFlight,
-  markStepIncomplete,
-  setStep,
   setFromLocation,
   setToLocation,
-  setFocusedInput
-} from '@/store/bookingSlice';
+  setFocusedInput,
+  completeStep,
+  markStepIncomplete,
+} from '@/store/slices/bookingSlice';
 import { useSteps } from '@/context/StepsContext';
+import { FlightTypeSelector } from '../shared/FlightTypeSelector';
+import { LocationSelector } from '../shared/LocationSelector';
+import { PlusIcon, XMarkIcon } from '@heroicons/react/24/outline';
+
+const flightTypes = [
+  { id: 'direct', label: 'Direct Flight' },
+  { id: 'multi', label: 'Multi City' },
+];
 
 const airportOptions = [
   { value: 'LHR', label: 'London Heathrow' },
@@ -19,63 +28,99 @@ const airportOptions = [
   { value: 'SIN', label: 'Singapore Changi' },
 ];
 
-const mockFlights: Flight[] = [
-  {
-    id: '1',
-    airline: 'British Airways',
-    flightNumber: 'BA123',
-    departureCity: 'London Heathrow',
-    arrivalCity: 'Paris Charles de Gaulle',
-    departureTime: '10:00',
-    arrivalTime: '13:00',
-    departure: 'London Heathrow - 10:00',
-    arrival: 'Paris Charles de Gaulle - 13:00',
-    price: 299
-  },
-  // ... update other mock flights with the same structure
-];
-
-export default function FlightSelector({
-  onViewModeChange,
-  onNotListedClick,
-  onSelect,
-}: FlightSelectorProps) {
+export default function FlightSelector({ onSelect, onInteract }: FlightSelectorProps) {
   const [flightType, setFlightType] = useState<'direct' | 'multi'>('direct');
+  const [segments, setSegments] = useState<FlightSegment[]>([
+    { id: '1', fromLocation: null, toLocation: null },
+  ]);
+  const [hasInteracted, setHasInteracted] = useState(false);
+
   const dispatch = useAppDispatch();
-  const { fromLocation, toLocation, focusedInput } = useAppSelector(state => state.booking);
-  const { registerStep, unregisterStep } = useSteps();
+  const { fromLocation, toLocation, focusedInput } = useAppSelector(
+    (state) => state.booking
+  );
+  const { registerStep } = useSteps();
 
   useEffect(() => {
-    if (fromLocation && toLocation) {
-      const flight: Flight = {
-        id: '1',
-        departureCity: fromLocation,
-        arrivalCity: toLocation,
-        airline: 'Sample Airline',
-        flightNumber: 'FL123',
-        departureTime: '10:00',
-        arrivalTime: '12:00',
-        departure: `${fromLocation} - 10:00`,
-        arrival: `${toLocation} - 12:00`,
-        price: 299,
-      };
-      dispatch(setSelectedFlight(flight));
+    const STEP_ID = 'FlightSelector';
+    const STEP_NUMBER = 1;
+    registerStep(STEP_ID, STEP_NUMBER);
+  }, [registerStep]);
+
+  const handleInteraction = () => {
+    if (!hasInteracted) {
+      setHasInteracted(true);
+      onInteract?.();
     }
-  }, [fromLocation, toLocation, dispatch]);
-
-  useEffect(() => {
-    registerStep('FlightSelector', 1);
-    return () => {
-      unregisterStep('FlightSelector');
-    };
-  }, []);
-
-  const handleFromLocationChange = (value: string) => {
-    dispatch(setFromLocation(value));
   };
 
-  const handleToLocationChange = (value: string) => {
-    dispatch(setToLocation(value));
+  const updateFlightSelection = (segments: FlightSegment[]) => {
+    const allSegmentsComplete = segments.every(
+      (segment) => segment.fromLocation && segment.toLocation
+    );
+
+    if (allSegmentsComplete) {
+      if (flightType === 'direct') {
+        const mockFlight: Flight = {
+          id: '1',
+          airline: 'Selected Flight',
+          flightNumber: 'SF001',
+          departureCity: segments[0].fromLocation!,
+          arrivalCity: segments[0].toLocation!,
+          departureTime: '',
+          arrivalTime: '',
+          departure: segments[0].fromLocation!,
+          arrival: segments[0].toLocation!,
+          price: 0,
+        };
+        dispatch(setSelectedFlight(mockFlight));
+        onSelect(mockFlight);
+      } else {
+        const mockFlights: Flight[] = segments.map((segment, index) => ({
+          id: (index + 1).toString(),
+          airline: 'Selected Flight',
+          flightNumber: `SF00${index + 1}`,
+          departureCity: segment.fromLocation!,
+          arrivalCity: segment.toLocation!,
+          departureTime: '',
+          arrivalTime: '',
+          departure: segment.fromLocation!,
+          arrival: segment.toLocation!,
+          price: 0,
+        }));
+        dispatch(setSelectedFlight(mockFlights[0])); // Store first flight for now
+        onSelect(mockFlights);
+      }
+      dispatch(completeStep(1));
+    } else {
+      dispatch(markStepIncomplete(1));
+      dispatch(setSelectedFlight(null));
+    }
+  };
+
+  const handleSegmentChange = (
+    segmentId: string,
+    field: 'fromLocation' | 'toLocation',
+    value: string
+  ) => {
+    handleInteraction();
+    const newSegments = segments.map((segment) => {
+      if (segment.id === segmentId) {
+        return { ...segment, [field]: value || null };
+      }
+      return segment;
+    });
+    setSegments(newSegments);
+    updateFlightSelection(newSegments);
+
+    // Update redux state for compatibility with existing code
+    if (segmentId === '1') {
+      if (field === 'fromLocation') {
+        dispatch(setFromLocation(value || null));
+      } else {
+        dispatch(setToLocation(value || null));
+      }
+    }
   };
 
   const handleFocusInput = (input: 'from' | 'to') => {
@@ -86,105 +131,85 @@ export default function FlightSelector({
     dispatch(setFocusedInput(null));
   };
 
-  const handleClearFlight = () => {
-    dispatch(setSelectedFlight(null));
-    dispatch(setFromLocation(null));
-    dispatch(setToLocation(null));
-    dispatch(markStepIncomplete(1));
+  const addSegment = () => {
+    if (segments.length < 4) {
+      setSegments([
+        ...segments,
+        {
+          id: (segments.length + 1).toString(),
+          fromLocation: null,
+          toLocation: null,
+        },
+      ]);
+    }
+  };
+
+  const removeSegment = (segmentId: string) => {
+    if (segments.length > 1) {
+      const newSegments = segments.filter(
+        (segment) => segment.id !== segmentId
+      );
+      setSegments(newSegments);
+      updateFlightSelection(newSegments);
+    }
+  };
+
+  const handleFlightTypeChange = (type: string) => {
+    setFlightType(type as 'direct' | 'multi');
+    if (type === 'direct') {
+      setSegments([segments[0]]);
+    }
   };
 
   return (
-    <div className="flex justify-center items-center w-full mb-16">
-      <div className="w-full lg:w-[963px] h-auto lg:h-[498px] px-4 lg:px-[47px] py-8 lg:py-[103px] bg-[#eceef1] rounded-2xl flex-col justify-start items-start gap-2.5 inline-flex">
-        <div className="flex flex-col lg:flex-row justify-start items-center gap-8 lg:gap-[65px] w-full">
-          <div className="block w-full lg:w-[393px] h-[200px] lg:h-[257.88px] relative">
-            <img
-              src="https://ik.imagekit.io/0adjo0tl4/Group%20140.svg?updatedAt=1733662470241"
-              alt="Flight illustration"
-              className="w-full h-full object-contain"
+    <div className="space-y-8">
+      {/* Flight Type Selection */}
+      <FlightTypeSelector
+        types={flightTypes}
+        selectedType={flightType}
+        onTypeSelect={handleFlightTypeChange}
+      />
+
+      {/* Flight Search */}
+      <div className="space-y-4">
+        {segments.map((segment, index) => (
+          <div key={segment.id} className="flex items-start gap-4">
+            <LocationSelector
+              fromLocation={segment.fromLocation || ''}
+              toLocation={segment.toLocation || ''}
+              locationOptions={airportOptions}
+              onFromLocationChange={(value) =>
+                handleSegmentChange(segment.id, 'fromLocation', value)
+              }
+              onToLocationChange={(value) =>
+                handleSegmentChange(segment.id, 'toLocation', value)
+              }
+              onFocusInput={handleFocusInput}
+              onBlurInput={handleBlurInput}
+              focusedInput={focusedInput as 'from' | 'to' | null}
+              className="flex-1"
             />
+            {flightType === 'multi' && segments.length > 1 && (
+              <button
+                onClick={() => removeSegment(segment.id)}
+                className="mt-7 p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                aria-label="Remove flight segment"
+              >
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            )}
           </div>
+        ))}
 
-          <div className="w-full lg:w-[394.96px] relative flex flex-col lg:justify-center h-full">
-            <div className="w-full lg:w-[361.16px] relative lg:absolute lg:left-[14px] lg:top-[50%] lg:-translate-y-[40%]">
-              {/* Flight Type Selector */}
-              <div className="w-full lg:w-[394.96px] h-[40.64px] mb-8 flex justify-start items-center gap-4">
-                <button
-                  onClick={() => setFlightType('direct')}
-                  className={`px-5 py-2.5 rounded-[49px] justify-center items-center gap-2.5 flex
-                    ${flightType === 'direct' ? 'bg-[#464646]' : 'bg-white'}`}
-                >
-                  <div
-                    className={`text-base font-['Heebo']
-                    ${
-                      flightType === 'direct'
-                        ? 'text-white font-bold'
-                        : 'text-[#121212] font-medium'
-                    }`}
-                  >
-                    Direct Flight
-                  </div>
-                </button>
-                <button
-                  onClick={() => setFlightType('multi')}
-                  className={`px-5 py-2.5 rounded-[50px] justify-center items-center gap-2.5 flex
-                    ${flightType === 'multi' ? 'bg-[#464646]' : 'bg-white'}`}
-                >
-                  <div
-                    className={`text-base font-['Heebo']
-                    ${
-                      flightType === 'multi'
-                        ? 'text-white font-bold'
-                        : 'text-[#121212] font-medium'
-                    }`}
-                  >
-                    Multi City
-                  </div>
-                </button>
-              </div>
-
-              <div className="flex flex-col gap-6">
-                {/* From Input */}
-                <AutocompleteInput
-                  label="Select departure"
-                  focusedLabel={
-                    fromLocation ? 'From' : 'Select departure'
-                  }
-                  value={fromLocation || ''}
-                  options={airportOptions}
-                  onChange={handleFromLocationChange}
-                  onFocus={() => handleFocusInput('from')}
-                  onBlur={handleBlurInput}
-                  isFocused={focusedInput === 'from'}
-                />
-
-                {/* To Input */}
-                <AutocompleteInput
-                  label="Select destination"
-                  focusedLabel={toLocation ? 'To' : 'Select destination'}
-                  value={toLocation || ''}
-                  options={airportOptions}
-                  onChange={handleToLocationChange}
-                  onFocus={() => handleFocusInput('to')}
-                  onBlur={handleBlurInput}
-                  isFocused={focusedInput === 'to'}
-                />
-              </div>
-
-              {/* Swap Button */}
-              <div className="hidden lg:block absolute -right-4 top-[98px] w-[75.03px] h-[75.03px] pointer-events-none">
-                <div className="w-[75.03px] h-[75.03px] bg-white rounded-full shadow" />
-                <div className="w-[34.39px] h-[18.76px] absolute left-[20.32px] top-[28.14px]">
-                  <img
-                    src="/icons/swap-arrows.svg"
-                    alt="Swap"
-                    className="w-full h-full"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        {flightType === 'multi' && segments.length < 4 && (
+          <button
+            onClick={addSegment}
+            className="flex items-center gap-2 text-[#F54538] hover:text-[#E03F33] transition-colors"
+          >
+            <PlusIcon className="w-5 h-5" />
+            <span>Add another flight</span>
+          </button>
+        )}
       </div>
     </div>
   );

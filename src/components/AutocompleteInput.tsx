@@ -1,56 +1,40 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { PiAirplaneTakeoff, PiAirplaneLanding } from 'react-icons/pi';
 
 interface Option {
   value: string;
   label: string;
 }
 
-interface AutocompleteInputProps {
+export interface AutocompleteInputProps {
   label: string;
-  focusedLabel?: string;
   value: string;
   options: Option[];
   onChange: (value: string) => void;
-  onFocus?: () => void;
-  onBlur?: () => void;
-  isFocused?: boolean;
+  onFocus: () => void;
+  onBlur: () => void;
+  isFocused: boolean;
+  className?: string;
+  iconType?: 'from' | 'to';
 }
 
 export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   label,
-  focusedLabel,
   value,
   options,
   onChange,
   onFocus,
   onBlur,
-  isFocused = false,
+  isFocused,
+  className = '',
+  iconType = 'from',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [filteredOptions, setFilteredOptions] = useState<Option[]>([]);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
-
-  const containerClasses = `
-    relative w-full lg:w-[267px] h-14
-  `;
-
-  const inputClasses = `
-    w-full h-14 px-4 pt-5 pb-2
-    text-[#4b616d] text-xl lg:text-[28px] font-medium font-['Heebo'] tracking-tight
-    bg-white rounded-xl
-    border border-[#e0e1e4]
-    transition-all duration-200
-    ${isFocused ? 'border-[#464646] border-2' : ''}
-    focus:outline-none
-  `;
-
-  const labelClasses = `
-    absolute left-4
-    transition-all duration-200 pointer-events-none
-    text-[#909090] font-['Heebo']
-    ${isFocused || value ? 'top-2 text-[10px]' : 'top-4 text-base'}
-    ${isFocused ? 'text-[#464646]' : ''}
-  `;
 
   useEffect(() => {
     const filtered = options.filter((option) =>
@@ -60,10 +44,37 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   }, [value, options]);
 
   useEffect(() => {
+    const updatePosition = () => {
+      if (containerRef.current && isOpen) {
+        const rect = containerRef.current.getBoundingClientRect();
+        setDropdownPosition({
+          top: rect.bottom + window.scrollY,
+          left: rect.left + window.scrollX,
+          width: rect.width,
+        });
+      }
+    };
+
+    updatePosition();
+    window.addEventListener('scroll', updatePosition);
+    window.addEventListener('resize', updatePosition);
+
+    return () => {
+      window.removeEventListener('scroll', updatePosition);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      const dropdownElement = document.getElementById('autocomplete-dropdown');
+
       if (
         containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
+        !containerRef.current.contains(target) &&
+        dropdownElement &&
+        !dropdownElement.contains(target)
       ) {
         setIsOpen(false);
       }
@@ -78,8 +89,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
     setIsOpen(true);
   };
 
-  const handleClear = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleClear = () => {
     onChange('');
   };
 
@@ -88,47 +98,125 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
     setIsOpen(false);
   };
 
-  return (
-    <div className={containerClasses} ref={containerRef}>
-      <label className={labelClasses}>
-        {isFocused || value ? focusedLabel || label : label}
-      </label>
-      <input
-        type="text"
-        value={value}
-        onChange={handleInputChange}
-        onFocus={(e) => {
-          setIsOpen(true);
-          onFocus?.();
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setHighlightedIndex((prev) =>
+        Math.min(prev + 1, filteredOptions.length - 1)
+      );
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setHighlightedIndex((prev) => Math.max(prev - 1, 0));
+    } else if (event.key === 'Enter' && highlightedIndex !== -1) {
+      event.preventDefault();
+      handleOptionClick(filteredOptions[highlightedIndex]);
+    }
+  };
+
+  const renderDropdown = () => {
+    if (!isOpen || !filteredOptions.length) return null;
+
+    const dropdown = (
+      <div
+        id="autocomplete-dropdown"
+        className="absolute bg-white rounded-xl shadow-lg border border-gray-200 max-h-60 overflow-y-auto z-[9999]"
+        style={{
+          top: dropdownPosition.top + 8,
+          left: dropdownPosition.left,
+          width: dropdownPosition.width,
         }}
-        onBlur={onBlur}
-        className={inputClasses}
-        placeholder=""
-      />
-      <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
-        {value && (
-          <button
-            onClick={handleClear}
-            className="p-1 pointer-events-auto"
+      >
+        {filteredOptions.map((option, index) => (
+          <div
+            key={option.value}
+            className={`px-4 py-3 hover:bg-gray-100 cursor-pointer text-[#4b616d] font-['Heebo'] ${
+              index === highlightedIndex ? 'bg-gray-100' : ''
+            }`}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOptionClick(option);
+            }}
           >
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 12 12"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M2 2L10 10M2 10L10 2"
-                stroke="#909090"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
-        )}
-        <div className="pointer-events-none">
+            <div className="flex items-center gap-2">
+              <span className="text-base font-medium">{option.label}</span>
+              <span className="text-sm text-gray-500">({option.value})</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+
+    return createPortal(dropdown, document.body);
+  };
+
+  return (
+    <div className={`relative ${className}`} ref={containerRef}>
+      <div className="relative p-[2px]">
+        <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+          {iconType === 'from' ? (
+            <PiAirplaneTakeoff size={20} />
+          ) : (
+            <PiAirplaneLanding size={20} />
+          )}
+        </div>
+        <input
+          type="text"
+          value={value}
+          onChange={handleInputChange}
+          onFocus={() => {
+            setIsOpen(true);
+            onFocus();
+          }}
+          onBlur={onBlur}
+          onKeyDown={handleKeyDown}
+          className={`
+            w-full h-14 pl-12 pr-4 pt-5 pb-2
+            text-[#4b616d] text-xl lg:text-[28px] font-medium font-['Heebo'] tracking-tight
+            bg-white rounded-xl
+            transition-[border-color,border-width] duration-[250ms] ease-in-out
+            ${
+              isFocused
+                ? 'border-2 border-[#F54538]'
+                : 'border border-[#e0e1e4]'
+            }
+            focus:outline-none
+          `}
+          placeholder=""
+        />
+        <label
+          className={`
+            absolute left-12
+            transition-all duration-[200ms] cubic-bezier(0.4, 0, 0.2, 1) pointer-events-none
+            text-[#909090] font-['Heebo'] after:content-['*'] after:text-[#F54538] after:ml-[1px] after:align-super after:text-[10px]
+            ${isFocused || value
+              ? 'translate-y-[-8px] text-[10px] px-1 bg-white'
+              : 'translate-y-[14px] text-base'
+            }
+            ${isFocused ? 'text-[#464646]' : ''}
+          `}
+        >
+          {label.replace(' *', '')}
+        </label>
+        <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+          {value && (
+            <button onClick={handleClear} className="p-1">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 12 12"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M2 2L10 10M2 10L10 2"
+                  stroke="#909090"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          )}
           <svg
             width="12"
             height="8"
@@ -149,20 +237,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
           </svg>
         </div>
       </div>
-      {isOpen && filteredOptions.length > 0 && (
-        <div className="absolute w-full mt-1 bg-white rounded-xl shadow-lg border border-gray-200 max-h-60 overflow-y-auto z-50">
-          {filteredOptions.map((option) => (
-            <div
-              key={option.value}
-              className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-[#4b616d] font-['Heebo']"
-              onClick={() => handleOptionClick(option)}
-            >
-              <span className="text-sm text-gray-500">{option.value}</span>
-              <span className="ml-2">{option.label}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      {renderDropdown()}
     </div>
   );
 };

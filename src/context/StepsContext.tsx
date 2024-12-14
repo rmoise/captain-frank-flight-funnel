@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback } from 'react';
 
 interface StepsContextType {
   availableSteps: Array<{ name: string; number: number }>;
@@ -11,28 +11,40 @@ interface StepsContextType {
 const StepsContext = createContext<StepsContextType | undefined>(undefined);
 
 export function StepsProvider({ children }: { children: React.ReactNode }) {
-  const [availableSteps, setAvailableSteps] = useState<Array<{ name: string; number: number }>>([]);
+  const [availableSteps, setAvailableSteps] = useState<
+    Array<{ name: string; number: number }>
+  >([]);
 
-  const registerStep = (componentName: string, stepNumber: number) => {
-    setAvailableSteps(prev => {
-      if (prev.some(step => step.name === componentName)) return prev;
-      return [...prev, { name: componentName, number: stepNumber }]
-        .sort((a, b) => a.number - b.number);
-    });
-  };
+  const registerStep = useCallback(
+    (componentName: string, stepNumber: number) => {
+      setAvailableSteps((prev) => {
+        const exists = prev.some((step) => step.name === componentName);
+        if (exists) return prev;
+        return [...prev, { name: componentName, number: stepNumber }].sort(
+          (a, b) => a.number - b.number
+        );
+      });
+    },
+    []
+  );
 
-  const unregisterStep = (componentName: string) => {
-    setAvailableSteps(prev => prev.filter(step => step.name !== componentName));
-  };
+  const unregisterStep = useCallback((componentName: string) => {
+    setAvailableSteps((prev) =>
+      prev.filter((step) => step.name !== componentName)
+    );
+  }, []);
 
-  return (
-    <StepsContext.Provider value={{
+  const value = React.useMemo(
+    () => ({
       availableSteps,
       registerStep,
-      unregisterStep
-    }}>
-      {children}
-    </StepsContext.Provider>
+      unregisterStep,
+    }),
+    [availableSteps, registerStep, unregisterStep]
+  );
+
+  return (
+    <StepsContext.Provider value={value}>{children}</StepsContext.Provider>
   );
 }
 

@@ -1,329 +1,277 @@
 'use client';
 
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import ClientLayout from '@/components/layouts/ClientLayout';
-import { Footer } from '@/components/Footer';
-import { socialLinks } from '@/data/socialLinks';
-import WelcomeSection from '@/components/booking/WelcomeSection';
-import { SpeechBubble } from '@/components/SpeechBubble';
-import { Headline } from '@/components/Headline';
-import FlightSelector from '@/components/booking/FlightSelector';
-import { AnimatedSection } from '@/components/AnimatedSection';
-import ProgressTracker from '@/components/booking/ProgressTracker';
-import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import React, { useEffect, useState } from 'react';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import {
   setStep,
-  completeStep,
-  markStepIncomplete,
-  setProgress,
   setSelectedFlight,
-  setWizardAnswers
-} from '@/store/bookingSlice';
+  setWizardAnswers,
+  setPersonalDetails,
+  completeStep,
+} from '@/store/slices/bookingSlice';
+import FlightSelector from '@/components/booking/FlightSelector';
 import { QAWizard } from '@/components/wizard/QAWizard';
-import type { Answer } from '@/types/wizard';
 import { useSteps } from '@/context/StepsContext';
-import { debounce } from '@/utils/debounce';
-import { useRouter } from 'next/navigation';
-import type { Flight } from '@/types';
-
-const wizardQuestions = [
-  {
-    id: 'issue_type',
-    text: 'What type of issue did you experience?',
-    type: 'radio' as const,
-    options: [
-      { id: 'delay', label: 'Delayed Flight', value: 'delay' },
-      { id: 'cancel', label: 'Canceled Flight', value: 'cancel' },
-      { id: 'missed', label: 'Missed Flight', value: 'missed' },
-      {
-        id: 'other',
-        label: 'Other Concern',
-        value: 'other',
-        externalLink: 'https://example.com',
-      },
-    ],
-  },
-  {
-    id: 'delay_duration',
-    text: 'How delayed was your flight?',
-    type: 'radio' as const,
-    showIf: (answers: Answer[]) =>
-      answers.find((a) => a.questionId === 'issue_type')?.value === 'delay',
-    options: [
-      { id: 'less3', label: 'Less than 3 hours', value: '<3' },
-      { id: 'more3', label: 'More than 3 hours', value: '>3' },
-    ],
-  },
-  {
-    id: 'cancellation_notice',
-    text: 'When were you informed about the flight change before your departure?',
-    type: 'radio' as const,
-    showIf: (answers: Answer[]) =>
-      answers.find((a) => a.questionId === 'issue_type')?.value === 'cancel',
-    options: [
-      { id: 'not_informed', label: 'Not at all', value: 'none' },
-      { id: '0_7', label: '0-7 days', value: '0-7' },
-      { id: '8_14', label: '8-14 days', value: '8-14' },
-      { id: 'over_14', label: 'Over 14 days', value: '>14' },
-    ],
-  },
-  {
-    id: 'additional_costs',
-    text: 'Did you have additional costs (e.g. hotel, taxi, food costs)?',
-    type: 'radio' as const,
-    showIf: (answers: Answer[]) =>
-      answers.find((a) => a.questionId === 'issue_type')?.value === 'missed',
-    options: [
-      { id: 'costs_yes', label: 'Yes', value: 'yes' },
-      { id: 'costs_no', label: 'No', value: 'no' },
-    ],
-  },
-  {
-    id: 'cost_amount',
-    text: "Let me know approximately how much you spent. We'll do the paperwork at the end.",
-    type: 'number' as const,
-    showIf: (answers: Answer[]) => {
-      const isMissed =
-        answers.find((a) => a.questionId === 'issue_type')?.value === 'missed';
-      const hasCosts =
-        answers.find((a) => a.questionId === 'additional_costs')?.value ===
-        'yes';
-      return isMissed && hasCosts;
-    },
-    placeholder: 'Enter amount',
-    min: 0,
-  },
-];
+import ProgressTracker from '@/components/booking/ProgressTracker';
+import WelcomeSection from '@/components/booking/WelcomeSection';
+import { wizardQuestions } from '@/constants/wizardQuestions';
+import { Navbar } from '@/components/Navbar';
+import { PhaseNavigation } from '@/components/PhaseNavigation';
+import { PersonalDetailsForm } from '@/components/forms/PersonalDetailsForm';
+import { ConsentCheckbox } from '@/components/ConsentCheckbox';
+import { AccordionCard } from '@/components/shared/AccordionCard';
 
 export default function Home() {
   const dispatch = useAppDispatch();
-  const { currentStep, completedSteps, progress } = useAppSelector(
-    (state) => state.booking
-  );
+  const state = useAppSelector((state) => state.booking);
+  const {
+    currentStep,
+    selectedFlight,
+    wizardAnswers,
+    completedSteps,
+    personalDetails,
+  } = state;
   const { registerStep } = useSteps();
-  const footerRef = useRef<HTMLDivElement>(null);
-  const trackerRef = useRef<HTMLDivElement>(null);
-  const lastStepRef = useRef(currentStep);
-  const router = useRouter();
+  const [interactedSteps, setInteractedSteps] = useState<number[]>([]);
 
-  // Automatically register steps based on data-step attributes
+  const handleStepInteraction = (stepId: number) => {
+    setInteractedSteps(prev => Array.from(new Set([...prev, stepId])));
+  };
+
+  // Define steps configuration
+  const STEPS = [
+    {
+      id: 1,
+      name: 'FlightSelector',
+      title: 'Tell us about your flight',
+      component: FlightSelector,
+      props: {
+        onSelect: (flight: any) => {
+          dispatch(setSelectedFlight(flight));
+          dispatch(completeStep(1));
+        },
+        onInteract: () => handleStepInteraction(1),
+      },
+      getSummary: (state: any) => state.selectedFlight ?
+        `${state.selectedFlight.flightNumber} • ${state.selectedFlight.departureCity} → ${state.selectedFlight.arrivalCity}` : '',
+    },
+    {
+      id: 2,
+      name: 'QAWizard',
+      title: 'What happened with your flight?',
+      component: QAWizard,
+      props: {
+        questions: wizardQuestions,
+        onComplete: (answers: any) => {
+          dispatch(setWizardAnswers(answers));
+          dispatch(completeStep(2));
+        },
+        onInteract: () => handleStepInteraction(2),
+      },
+      getSummary: (state: any) => state.wizardAnswers?.length ?
+        `${state.wizardAnswers.length} questions answered` : '',
+    },
+    {
+      id: 3,
+      name: 'PersonalDetails',
+      title: 'Personal Details',
+      component: PersonalDetailsForm,
+      props: {
+        onComplete: (details: any) => {
+          dispatch(setPersonalDetails(details));
+          dispatch(completeStep(3));
+        },
+        onInteract: () => handleStepInteraction(3),
+      },
+      getSummary: (state: any) => state.personalDetails ?
+        `${state.personalDetails.firstName} ${state.personalDetails.lastName} • ${state.personalDetails.email}` : '',
+      shouldStayOpen: true,
+    },
+  ] as const;
+
+  const canContinue = () => {
+    const allStepsCompleted =
+      !!selectedFlight && !!wizardAnswers?.length && !!personalDetails;
+    return allStepsCompleted;
+  };
+
+  const handleStepChange = () => {
+    if (!canContinue()) return;
+    dispatch(setStep(currentStep + 1));
+  };
+
+  const handleBack = () => {
+    dispatch(setStep(currentStep - 1));
+  };
+
+  // Register steps on mount
   useEffect(() => {
-    const sections = document.querySelectorAll('[data-step]');
-    const stepMap = new Map([
-      ['1', 'FlightSelector'],
-      ['2', 'QAWizard'],
-      ['3', 'FinalStep'],
-    ]);
-
-    sections.forEach((section) => {
-      const step = section.getAttribute('data-step');
-      if (step && stepMap.has(step)) {
-        registerStep(stepMap.get(step)!, parseInt(step));
-      }
+    STEPS.forEach((step) => {
+      registerStep(step.name, step.id);
     });
   }, [registerStep]);
 
-  useEffect(() => {
-    const handleScroll = () => {
-      if (!footerRef.current || !trackerRef.current) return;
+  // Define phases and their corresponding steps
+  const PHASES = [
+    { id: 1, name: 'Initial Details', steps: [1] },
+    { id: 2, name: 'Flight Details', steps: [2] },
+    { id: 3, name: 'Personal Info', steps: [3] },
+    { id: 4, name: 'Documentation', steps: [] },
+    { id: 5, name: 'Review', steps: [] },
+    { id: 6, name: 'Complete', steps: [] },
+  ];
 
-      const windowHeight = window.innerHeight;
-      const scrollPosition = window.scrollY;
-      const viewportMid = scrollPosition + (windowHeight / 2);
-      const documentHeight = document.documentElement.scrollHeight;
-
-      // Update tracker position
-      const footerRect = footerRef.current.getBoundingClientRect();
-      if (footerRect.top < windowHeight) {
-        trackerRef.current.style.position = 'absolute';
-        trackerRef.current.style.bottom = 'auto';
-        trackerRef.current.style.top = `${
-          documentHeight - footerRect.height - trackerRef.current.getBoundingClientRect().height - 20
-        }px`;
-      } else {
-        trackerRef.current.style.position = 'fixed';
-        trackerRef.current.style.bottom = '0';
-        trackerRef.current.style.top = 'auto';
+  // Calculate current phase based on current step
+  const getCurrentPhase = () => {
+    for (let i = 0; i < PHASES.length; i++) {
+      const phase = PHASES[i];
+      if (phase.steps.includes(currentStep)) {
+        return i + 1;
       }
+    }
+    return 1; // Default to first phase
+  };
 
-      // Find current step and check completion states
-      const sections = document.querySelectorAll('[data-step]');
-      let newStep = lastStepRef.current;
-      let hasIncompleteSteps = false;
-      let totalProgress = 0;
-
-      sections.forEach((section) => {
-        const rect = section.getBoundingClientRect();
-        const sectionTop = rect.top + window.scrollY;
-        const sectionBottom = sectionTop + rect.height;
-        const step = parseInt(section.getAttribute('data-step') || '1');
-
-        // Calculate progress based on viewport position
-        if (viewportMid > sectionTop) {
-          const progress = Math.min(1, (viewportMid - sectionTop) / rect.height);
-          totalProgress = ((step - 1) + progress) / (sections.length - 1);
-        }
-
-        // Check if we've passed any incomplete required steps
-        if (viewportMid > sectionBottom) {
-          if (step <= 2 && !completedSteps.includes(step)) {
-            dispatch(markStepIncomplete(step));
-            hasIncompleteSteps = true;
-          }
-        }
-
-        // Update current step
-        if (sectionTop <= viewportMid && sectionBottom >= viewportMid) {
-          if (hasIncompleteSteps) {
-            // If there are incomplete steps, stay at the first incomplete step
-            const firstIncomplete = Array.from(sections)
-              .find(s => {
-                const stepNum = parseInt(s.getAttribute('data-step') || '1');
-                return stepNum <= 2 && !completedSteps.includes(stepNum);
-              });
-            if (firstIncomplete) {
-              newStep = parseInt(firstIncomplete.getAttribute('data-step') || '1');
-            }
-          } else {
-            newStep = step;
-          }
-        }
-      });
-
-      // Update step if changed
-      if (newStep !== lastStepRef.current) {
-        lastStepRef.current = newStep;
-        dispatch(setStep(newStep));
-      }
-
-      // Update progress in Redux
-      dispatch(setProgress(Math.min(1, totalProgress) * 100));
-    };
-
-    // Use RAF for smoother updates
-    let rafId: number;
-    const smoothScroll = () => {
-      rafId = requestAnimationFrame(() => {
-        handleScroll();
-        smoothScroll();
-      });
-    };
-
-    smoothScroll();
-    return () => {
-      cancelAnimationFrame(rafId);
-    };
-  }, [dispatch, completedSteps]);
-
-  const handleWizardComplete = (answers: Answer[]) => {
-    dispatch(setWizardAnswers(answers));
-    dispatch(completeStep(2));
+  // Calculate completed phases based on completed steps
+  const getCompletedPhases = () => {
+    const currentPhase = getCurrentPhase();
+    return Array.from({ length: currentPhase - 1 }, (_, i) => i + 1);
   };
 
   return (
-    <ClientLayout>
-      <div className="min-h-screen bg-gray-50 flex flex-col relative">
-        <WelcomeSection />
+    <div className="min-h-screen bg-[#f5f7fa]">
+      <Navbar />
+      <WelcomeSection />
 
-        <div className="w-full max-w-7xl mx-auto px-4 flex-grow">
-          <div data-step="1">
-            <AnimatedSection delay={2} direction="right">
-              <Headline
-                text="Tell us about your travel plans"
-                isFirst={true}
-                step="step1"
-              />
-              <div>
-                <SpeechBubble message="How was your original trip planned?" />
-              </div>
-              <div className="mt-8">
-                <FlightSelector
-                  onViewModeChange={() => {}}
-                  onNotListedClick={() => {}}
-                  onSelect={(flight: Flight) => {
-                    dispatch(setSelectedFlight(flight));
-                    dispatch(completeStep(1));
-                    dispatch(setStep(2));
-                  }}
+      <PhaseNavigation
+        currentPhase={getCurrentPhase()}
+        completedPhases={getCompletedPhases()}
+      />
+
+      <div className="max-w-5xl mx-auto px-4 py-4">
+        <ProgressTracker currentStep={currentStep} />
+      </div>
+
+      <main className="max-w-3xl mx-auto px-4 pt-4 pb-8">
+        <div className="space-y-4">
+          {/* Captain Frank Avatar with Speech Bubble */}
+          <div className="flex flex-col items-start gap-2">
+            <div className="flex items-center gap-3">
+              <div className="w-14 h-14">
+                <img
+                  src="https://ik.imagekit.io/0adjo0tl4/Group%2079.svg?updatedAt=1733655584679"
+                  alt="Captain Frank"
+                  className="w-full h-full object-contain"
                 />
               </div>
-            </AnimatedSection>
-          </div>
+              <div className="flex flex-col">
+                <span className="text-gray-900 font-bold text-lg">
+                  Captain Frank
+                </span>
+                <span className="text-gray-500 text-sm">
+                  Your Flight Compensation Expert
+                </span>
+              </div>
+            </div>
 
-          <div data-step="2">
-            <AnimatedSection delay={3} direction="left">
-              <div className="w-full max-w-7xl mx-auto px-4">
-                <Headline
-                  text="Share your experience with us"
-                  isFirst={false}
-                  step="step2"
-                />
-                <div>
-                  <SpeechBubble message="Please provide more details about your experience" />
-                </div>
-                <div className="mt-8">
-                  <QAWizard
-                    questions={wizardQuestions}
-                    onComplete={handleWizardComplete}
-                    illustration="/images/qa-illustration.svg"
-                  />
+            {/* Speech Bubble */}
+            <div className="relative max-w-[500px] ml-[68px]">
+              <div className="bg-gradient-to-b from-white to-[#e8e8e8] rounded-[20px] p-4 shadow border">
+                <div className="text-[#464646] text-[15px] font-normal font-['Heebo'] leading-[21px]">
+                  Hi, my name is Captain Frank and I&apos;m dealing with your
+                  flight disaster. So that I can give you a free initial
+                  assessment of your possible claim, please answer three
+                  questions.
                 </div>
               </div>
-            </AnimatedSection>
+            </div>
           </div>
 
-          <div data-step="3">
-            <AnimatedSection delay={4} direction="right">
-              <div className="w-full max-w-7xl mx-auto px-4">
-                <Headline
-                  text="Final Step"
-                  isFirst={false}
-                  step="step3"
-                />
-                <div>
-                  <SpeechBubble message="This is step 3 for testing the progress tracker" />
-                </div>
-                <div className="mt-8 h-[500px] flex items-center justify-center bg-gray-100 rounded-lg">
-                  <p className="text-xl text-gray-600">Step 3 Content</p>
-                </div>
-                <div className="mt-8 flex justify-center">
-                  <button
-                    onClick={() => {
-                      dispatch(completeStep(3));
-                      // Store any necessary state in localStorage or your state management solution
-                      localStorage.setItem('bookingProgress', JSON.stringify({ currentStep, completedSteps, progress }));
-                      // Navigate to the next phase
-                      router.push('/booking/summary');
-                    }}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-8 rounded-lg transition-colors"
-                  >
-                    Continue to Summary
-                  </button>
-                </div>
-              </div>
-            </AnimatedSection>
-          </div>
-        </div>
+          {/* Spacer */}
+          <div className="h-4"></div>
 
-        <div className="pb-32"></div>
+          {/* Step Cards */}
+          {STEPS.map((step) => {
+            const StepComponent = step.component;
+            const hasInteracted = interactedSteps.includes(step.id);
+            const isCompleted = completedSteps.includes(step.id);
 
-        <footer ref={footerRef}>
-          <Footer socialLinks={socialLinks} />
-        </footer>
+            return (
+              <AccordionCard
+                key={step.id}
+                className={step.id === 1 ? '-mt-2' : 'mt-6'}
+                isCompleted={isCompleted}
+                isActive={currentStep === step.id}
+                title={step.title}
+                eyebrow={`Step ${step.id}`}
+                summary={step.getSummary(state)}
+                shouldStayOpen={step.shouldStayOpen}
+                hasInteracted={hasInteracted}
+              >
+                <div className="[&>section]:!p-0 [&>section]:!pb-0 [&>section]:!m-0">
+                  <StepComponent {...step.props} />
+                </div>
+              </AccordionCard>
+            );
+          })}
 
-        <div
-          ref={trackerRef}
-          className="fixed bottom-0 left-0 right-0 w-full bg-transparent pointer-events-none transition-all duration-500 ease-in-out will-change-transform"
-          style={{ zIndex: 10 }}
-        >
-          <div className="container mx-auto pointer-events-auto">
-            <ProgressTracker
-              currentStep={currentStep}
-              progress={progress}
+          {/* Consent Checkboxes */}
+          <div className="space-y-4 mt-6">
+            <ConsentCheckbox
+              text="I agree to the"
+              linkText="Terms and Conditions"
+              link="/terms"
+              required={true}
+            />
+            <ConsentCheckbox
+              text="I agree to the"
+              linkText="Privacy Policy"
+              link="/privacy"
+              required={true}
+            />
+            <ConsentCheckbox
+              text="I agree to receive marketing communications about"
+              linkText="Captain Frank's services"
+              link="/services"
             />
           </div>
+
+          {/* Navigation */}
+          <div className="flex justify-end items-center gap-4">
+            <button
+              onClick={handleBack}
+              disabled={currentStep === 1}
+              className={`w-[160px] px-12 py-4 rounded-lg transition-colors ${
+                currentStep === 1
+                  ? 'text-gray-400 cursor-not-allowed'
+                  : 'text-[#F54538] hover:bg-[#F54538]/10'
+              }`}
+            >
+              Back
+            </button>
+            <button
+              onClick={handleStepChange}
+              disabled={!canContinue()}
+              className={`w-[160px] px-12 py-4 rounded-lg transition-colors ${
+                canContinue()
+                  ? 'bg-[#F54538] hover:bg-[#E03F33] text-white'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              }`}
+            >
+              Continue
+            </button>
+          </div>
         </div>
-      </div>
-    </ClientLayout>
+      </main>
+
+      {/* Footer */}
+      <footer className="bg-white mt-auto">
+        <div className="max-w-5xl mx-auto px-4 py-6">
+          <div className="text-sm text-gray-500">
+            {new Date().getFullYear()} Captain Frank. All rights reserved.
+          </div>
+        </div>
+      </footer>
+    </div>
   );
 }

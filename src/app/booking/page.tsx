@@ -3,31 +3,40 @@
 import { QAWizard } from '@/components/wizard/QAWizard';
 import type { Answer } from '@/types/wizard';
 import { useAppDispatch } from '@/store/hooks';
-import { setWizardAnswers, completeStep, setProgress } from '@/store/bookingSlice';
+import { setWizardAnswers, completeStep } from '@/store/bookingSlice';
 import { wizardQuestions } from '@/constants/wizardQuestions';
 import { useEffect } from 'react';
+import { useFunnel } from '@/context/FunnelContext';
 
 export default function BookingPage() {
   const dispatch = useAppDispatch();
+  const { state } = useFunnel();
 
   // Update progress as user scrolls through the page
   useEffect(() => {
     const handleScroll = () => {
+      const { currentPhase } = state;
       const scrollPosition = window.scrollY;
       const windowHeight = window.innerHeight;
       const docHeight = document.documentElement.scrollHeight;
 
-      const progress = Math.min(
+      const phaseProgress = Math.min(
         100,
         (scrollPosition / (docHeight - windowHeight)) * 100
       );
 
-      dispatch(setProgress(progress));
+      dispatch({
+        type: 'UPDATE_PHASE_PROGRESS',
+        payload: {
+          phase: currentPhase,
+          progress: phaseProgress
+        }
+      });
     };
 
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [dispatch]);
+  }, [dispatch, state.currentPhase]);
 
   const handleComplete = (answers: Answer[]) => {
     dispatch(setWizardAnswers(answers));

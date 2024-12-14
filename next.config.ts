@@ -8,6 +8,11 @@ const nextConfig: NextConfig = {
         hostname: 'cdn.builder.io',
         pathname: '**',
       },
+      {
+        protocol: 'https',
+        hostname: 'ik.imagekit.io',
+        pathname: '**',
+      },
     ],
   },
 };
