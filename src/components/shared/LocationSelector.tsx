@@ -7,52 +7,43 @@ export interface LocationOption {
 }
 
 interface LocationSelectorProps {
-  fromLocation: string;
-  toLocation: string;
-  locationOptions: LocationOption[];
-  onFromLocationChange: (value: string) => void;
-  onToLocationChange: (value: string) => void;
-  onFocusInput?: (input: 'from' | 'to') => void;
-  onBlurInput?: () => void;
-  focusedInput?: 'from' | 'to' | null;
-  className?: string;
+  label: string;
+  value: string | null;
+  onChange: (value: string) => void;
+  onFocus?: () => void;
+  onBlur?: () => void;
+  placeholder?: string;
+  error?: string;
 }
 
 export const LocationSelector: React.FC<LocationSelectorProps> = ({
-  fromLocation,
-  toLocation,
-  locationOptions,
-  onFromLocationChange,
-  onToLocationChange,
-  onFocusInput,
-  onBlurInput,
-  focusedInput,
-  className = '',
+  label,
+  value,
+  onChange,
+  onFocus = () => {},
+  onBlur = () => {},
+  placeholder = 'Select location',
+  error,
 }) => {
   return (
-    <div className={`flex space-x-4 ${className}`}>
-      <AutocompleteInput
-        label="From *"
-        value={fromLocation}
-        options={locationOptions}
-        onChange={onFromLocationChange}
-        onFocus={() => onFocusInput?.('from')}
-        onBlur={onBlurInput}
-        isFocused={focusedInput === 'from'}
-        className="flex-1"
-        iconType="from"
+    <div className="relative">
+      <label className="block text-sm font-medium text-gray-700 mb-1">
+        {label}
+      </label>
+      <input
+        type="text"
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        placeholder={placeholder}
+        className={`block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm ${
+          error ? 'border-red-300' : ''
+        }`}
       />
-      <AutocompleteInput
-        label="To *"
-        value={toLocation}
-        options={locationOptions}
-        onChange={onToLocationChange}
-        onFocus={() => onFocusInput?.('to')}
-        onBlur={onBlurInput}
-        isFocused={focusedInput === 'to'}
-        className="flex-1"
-        iconType="to"
-      />
+      {error && (
+        <p className="mt-2 text-sm text-red-600">{error}</p>
+      )}
     </div>
   );
 };

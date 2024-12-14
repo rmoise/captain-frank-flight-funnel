@@ -14,6 +14,12 @@ interface Phase {
 
 interface ProgressTrackerProps {
   currentStep: number;
+  phaseProgress: {
+    'claim-details': number;
+    documentation: number;
+    review: number;
+    complete: number;
+  };
 }
 
 const TOTAL_PHASES = 6;
@@ -28,7 +34,7 @@ const PHASES: Phase[] = [
   { id: 6, name: 'Complete', steps: [] },
 ];
 
-export default function ProgressTracker({ currentStep }: ProgressTrackerProps) {
+export default function ProgressTracker({ currentStep, phaseProgress }: ProgressTrackerProps) {
   const { completedSteps } = useAppSelector((state) => state.booking);
   const { availableSteps } = useSteps();
   const totalSteps = availableSteps.length;

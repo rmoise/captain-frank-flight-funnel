@@ -1,7 +1,11 @@
+type DebouncedFunction<T extends (...args: any[]) => any> = T & {
+  cancel: () => void;
+};
+
 export function debounce<T extends (...args: any[]) => any>(
   func: T,
   wait: number
-): T & { cancel: () => void } {
+): DebouncedFunction<T> {
   let timeout: NodeJS.Timeout | null = null;
 
   const debounced = function (this: any, ...args: Parameters<T>) {
@@ -23,5 +27,5 @@ export function debounce<T extends (...args: any[]) => any>(
     }
   };
 
-  return debounced;
+  return debounced as DebouncedFunction<T>;
 }

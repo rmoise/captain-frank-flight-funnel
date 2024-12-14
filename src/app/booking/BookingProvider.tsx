@@ -7,7 +7,7 @@ import dynamic from 'next/dynamic';
 
 // Dynamically import ProgressTrackerWrapper with no SSR
 const ProgressTrackerWrapper = dynamic(
-  () => import('./ProgressTrackerWrapper'),
+  () => import('./ProgressTrackerWrapper').then(mod => ({ default: mod.ProgressTrackerWrapper })),
   { ssr: false }
 );
 

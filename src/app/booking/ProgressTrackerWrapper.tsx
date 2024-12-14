@@ -5,7 +5,7 @@ import ProgressTracker from '@/components/booking/ProgressTracker';
 import { useAppSelector } from '@/store/hooks';
 
 export function ProgressTrackerWrapper() {
-  const { currentStep, progress } = useAppSelector((state) => state.booking);
+  const { currentStep, phaseProgress } = useAppSelector((state) => state.booking);
 
   return (
     <div
@@ -15,7 +15,7 @@ export function ProgressTrackerWrapper() {
       <div className="container mx-auto pointer-events-auto">
         <ProgressTracker
           currentStep={currentStep}
-          progress={progress}
+          phaseProgress={phaseProgress}
         />
       </div>
     </div>
