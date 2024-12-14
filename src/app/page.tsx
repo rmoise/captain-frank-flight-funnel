@@ -204,7 +204,7 @@ export default function Home() {
 
       <main className="max-w-3xl mx-auto px-4 pt-4 pb-8">
         <div className="space-y-4">
-          <div className="mt-8">
+          <div className="mt-4 sm:mt-8">
             <SpeechBubble message="Hi, my name is Captain Frank and I'm dealing with your flight disaster. So that I can give you a free initial assessment of your possible claim, please answer three questions." />
           </div>
 

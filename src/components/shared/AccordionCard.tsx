@@ -56,7 +56,7 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
     <Card className={className}>
       <div className="relative">
         <div
-          className="flex items-center justify-between cursor-pointer"
+          className="flex items-start justify-between cursor-pointer"
           onClick={handleToggle}
         >
           <div className="flex-1">
@@ -67,10 +67,10 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
               <h3 className="text-2xl font-semibold text-gray-900">{title}</h3>
             </div>
             {subtitle && isExpanded && (
-              <p className="text-sm text-gray-500 mt-4">{subtitle}</p>
+              <p className="text-sm text-gray-500 mt-2">{subtitle}</p>
             )}
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 pt-1">
             {showSummary && summary && !isExpanded && (
               <motion.div
                 initial={{ opacity: 0, x: -10 }}
