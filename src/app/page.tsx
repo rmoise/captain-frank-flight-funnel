@@ -20,6 +20,7 @@ import { PhaseNavigation } from '@/components/PhaseNavigation';
 import { PersonalDetailsForm } from '@/components/forms/PersonalDetailsForm';
 import { ConsentCheckbox } from '@/components/ConsentCheckbox';
 import { AccordionCard } from '@/components/shared/AccordionCard';
+import { SpeechBubble } from '@/components/SpeechBubble';
 
 export default function Home() {
   const dispatch = useAppDispatch();
@@ -35,7 +36,7 @@ export default function Home() {
   const [interactedSteps, setInteractedSteps] = useState<number[]>([]);
 
   const handleStepInteraction = (stepId: number) => {
-    setInteractedSteps(prev => Array.from(new Set([...prev, stepId])));
+    setInteractedSteps((prev) => Array.from(new Set([...prev, stepId])));
   };
 
   // Define steps configuration
@@ -52,8 +53,10 @@ export default function Home() {
         },
         onInteract: () => handleStepInteraction(1),
       },
-      getSummary: (state: any) => state.selectedFlight ?
-        `${state.selectedFlight.flightNumber} • ${state.selectedFlight.departureCity} → ${state.selectedFlight.arrivalCity}` : '',
+      getSummary: (state: any) =>
+        state.selectedFlight
+          ? `${state.selectedFlight.flightNumber} • ${state.selectedFlight.departureCity} → ${state.selectedFlight.arrivalCity}`
+          : '',
     },
     {
       id: 2,
@@ -68,13 +71,17 @@ export default function Home() {
         },
         onInteract: () => handleStepInteraction(2),
       },
-      getSummary: (state: any) => state.wizardAnswers?.length ?
-        `${state.wizardAnswers.length} questions answered` : '',
+      getSummary: (state: any) =>
+        state.wizardAnswers?.length
+          ? `${state.wizardAnswers.length} questions answered`
+          : '',
     },
     {
       id: 3,
       name: 'PersonalDetails',
       title: 'Personal Details',
+      subtitle:
+        'Please provide your contact details so we can keep you updated about your claim.',
       component: PersonalDetailsForm,
       props: {
         onComplete: (details: any) => {
@@ -83,8 +90,10 @@ export default function Home() {
         },
         onInteract: () => handleStepInteraction(3),
       },
-      getSummary: (state: any) => state.personalDetails ?
-        `${state.personalDetails.firstName} ${state.personalDetails.lastName} • ${state.personalDetails.email}` : '',
+      getSummary: (state: any) =>
+        state.personalDetails
+          ? `${state.personalDetails.firstName} ${state.personalDetails.lastName} • ${state.personalDetails.email}`
+          : '',
       shouldStayOpen: true,
     },
   ] as const;
@@ -154,41 +163,7 @@ export default function Home() {
 
       <main className="max-w-3xl mx-auto px-4 pt-4 pb-8">
         <div className="space-y-4">
-          {/* Captain Frank Avatar with Speech Bubble */}
-          <div className="flex flex-col items-start gap-2">
-            <div className="flex items-center gap-3">
-              <div className="w-14 h-14">
-                <img
-                  src="https://ik.imagekit.io/0adjo0tl4/Group%2079.svg?updatedAt=1733655584679"
-                  alt="Captain Frank"
-                  className="w-full h-full object-contain"
-                />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-gray-900 font-bold text-lg">
-                  Captain Frank
-                </span>
-                <span className="text-gray-500 text-sm">
-                  Your Flight Compensation Expert
-                </span>
-              </div>
-            </div>
-
-            {/* Speech Bubble */}
-            <div className="relative max-w-[500px] ml-[68px]">
-              <div className="bg-gradient-to-b from-white to-[#e8e8e8] rounded-[20px] p-4 shadow border">
-                <div className="text-[#464646] text-[15px] font-normal font-['Heebo'] leading-[21px]">
-                  Hi, my name is Captain Frank and I&apos;m dealing with your
-                  flight disaster. So that I can give you a free initial
-                  assessment of your possible claim, please answer three
-                  questions.
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Spacer */}
-          <div className="h-4"></div>
+          <SpeechBubble message="Hi, my name is Captain Frank and I'm dealing with your flight disaster. So that I can give you a free initial assessment of your possible claim, please answer three questions." />
 
           {/* Step Cards */}
           {STEPS.map((step) => {
@@ -203,10 +178,11 @@ export default function Home() {
                 isCompleted={isCompleted}
                 isActive={currentStep === step.id}
                 title={step.title}
+                subtitle={step.subtitle}
                 eyebrow={`Step ${step.id}`}
                 summary={step.getSummary(state)}
                 shouldStayOpen={step.shouldStayOpen}
-                hasInteracted={hasInteracted}
+                hasInteracted={interactedSteps.includes(step.id)}
               >
                 <div className="[&>section]:!p-0 [&>section]:!pb-0 [&>section]:!m-0">
                   <StepComponent {...step.props} />

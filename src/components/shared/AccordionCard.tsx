@@ -1,30 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card } from './Card';
-import { ChevronUpIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
+import { ChevronUpIcon, CheckCircleIcon, XCircleIcon, CheckIcon } from '@heroicons/react/24/outline';
 
 interface AccordionCardProps {
+  title: string;
+  subtitle?: string;
   children: React.ReactNode;
-  className?: string;
-  isCompleted?: boolean;
-  isActive?: boolean;
-  onToggle?: () => void;
-  title?: string;
+  isActive: boolean;
+  isCompleted: boolean;
   eyebrow?: string;
-  summary?: string | React.ReactNode;
+  summary?: string;
+  className?: string;
   shouldStayOpen?: boolean;
   hasInteracted?: boolean;
 }
 
 export const AccordionCard: React.FC<AccordionCardProps> = ({
-  children,
-  className = '',
-  isCompleted = false,
-  isActive = false,
-  onToggle,
   title,
+  subtitle,
+  children,
+  isActive,
+  isCompleted,
   eyebrow,
   summary,
+  className = '',
   shouldStayOpen = false,
   hasInteracted = false,
 }) => {
@@ -46,13 +46,10 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
   }, [isCompleted, shouldStayOpen]);
 
   const handleToggle = () => {
-    if (onToggle) {
-      onToggle();
-    }
     setIsExpanded(!isExpanded);
   };
 
-  const showIcon = isCompleted || (hasInteracted && !isCompleted);
+  const showIcon = isCompleted || hasInteracted || !isExpanded;
   const showSummary = isCompleted || hasInteracted || shouldStayOpen;
 
   return (
@@ -62,16 +59,19 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
           className="flex items-center justify-between cursor-pointer"
           onClick={handleToggle}
         >
-          <div>
+          <div className="flex-1">
             {eyebrow && (
               <div className="text-sm text-gray-500 mb-1">{eyebrow}</div>
             )}
-            {title && (
-              <h2 className="text-xl font-bold text-gray-900">{title}</h2>
+            <div className="flex items-center gap-3">
+              <h3 className="text-2xl font-semibold text-gray-900">{title}</h3>
+            </div>
+            {subtitle && isExpanded && (
+              <p className="text-sm text-gray-500 mt-4">{subtitle}</p>
             )}
           </div>
           <div className="flex items-center gap-4">
-            {showSummary && summary && (
+            {showSummary && summary && !isExpanded && (
               <motion.div
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
