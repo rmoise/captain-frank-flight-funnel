@@ -31,8 +31,7 @@ export interface BookingDetails {
 
 export interface FlightSelectorProps {
   onSelect: (flight: Flight | Flight[]) => void;
-  onViewModeChange?: () => void;
-  onNotListedClick?: () => void;
+  onInteract?: () => void;
 }
 
 export interface ExperienceSelectionProps {

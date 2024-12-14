@@ -49,7 +49,7 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
     setIsExpanded(!isExpanded);
   };
 
-  const showIcon = isCompleted || hasInteracted || !isExpanded;
+  const showIcon = isCompleted || (hasInteracted && !isExpanded);
   const showSummary = isCompleted || hasInteracted || shouldStayOpen;
 
   return (

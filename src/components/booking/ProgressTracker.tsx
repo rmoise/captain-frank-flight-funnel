@@ -1,11 +1,16 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/solid';
 import { ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
-import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { useAppSelector } from '@/store/hooks';
 import { useSteps } from '@/context/StepsContext';
-import { setProgress } from '@/store/slices/bookingSlice';
+
+interface Phase {
+  id: number;
+  name: string;
+  steps: number[];
+}
 
 interface ProgressTrackerProps {
   currentStep: number;
@@ -14,23 +19,21 @@ interface ProgressTrackerProps {
 const TOTAL_PHASES = 6;
 
 // Define phases and their steps
-const PHASES = [
+const PHASES: Phase[] = [
   { id: 1, name: 'Initial Details', steps: [1] },
   { id: 2, name: 'Flight Details', steps: [2] },
   { id: 3, name: 'Personal Info', steps: [3] },
   { id: 4, name: 'Documentation', steps: [] },
   { id: 5, name: 'Review', steps: [] },
   { id: 6, name: 'Complete', steps: [] },
-] as const;
+];
 
 export default function ProgressTracker({ currentStep }: ProgressTrackerProps) {
-  const dispatch = useAppDispatch();
   const { completedSteps } = useAppSelector((state) => state.booking);
   const { availableSteps } = useSteps();
   const totalSteps = availableSteps.length;
   const [isExpanded, setIsExpanded] = useState(true);
-  const [scrollProgress, setScrollProgress] = useState(0);
-  const rafRef = useRef<number>();
+  const [scrollProgress, setScrollProgress] = useState<number>(0);
 
   // Handle scroll progress
   useEffect(() => {
@@ -38,7 +41,7 @@ export default function ProgressTracker({ currentStep }: ProgressTrackerProps) {
       const totalHeight =
         document.documentElement.scrollHeight - window.innerHeight;
       const progress = (window.scrollY / totalHeight) * 100;
-      setScrollProgress(progress);
+      setScrollProgress(Math.min(progress, 100));
     };
 
     window.addEventListener('scroll', handleScroll);
@@ -82,12 +85,6 @@ export default function ProgressTracker({ currentStep }: ProgressTrackerProps) {
       100
     );
   };
-
-  // Update progress in Redux whenever phase progress changes
-  useEffect(() => {
-    const newProgress = calculatePhaseProgress();
-    dispatch(setProgress(newProgress));
-  }, [completedSteps, currentStep, dispatch]);
 
   const phaseProgress = calculatePhaseProgress();
   const currentPhase = getCurrentPhase();

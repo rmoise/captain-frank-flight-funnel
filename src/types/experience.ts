@@ -1,3 +1,5 @@
+import { Answer } from './wizard';
+
 export interface Question {
   id: string;
   text: string;
@@ -12,8 +14,3 @@ export interface Question {
   placeholder?: string;
   min?: number;
 }
-
-export interface Answer {
-  questionId: string;
-  value: string;
-} 

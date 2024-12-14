@@ -36,7 +36,7 @@ export default function FlightSelector({ onSelect, onInteract }: FlightSelectorP
   const [hasInteracted, setHasInteracted] = useState(false);
 
   const dispatch = useAppDispatch();
-  const { fromLocation, toLocation, focusedInput } = useAppSelector(
+  const { focusedInput } = useAppSelector(
     (state) => state.booking
   );
   const { registerStep } = useSteps();
@@ -172,7 +172,7 @@ export default function FlightSelector({ onSelect, onInteract }: FlightSelectorP
 
       {/* Flight Search */}
       <div className="space-y-4">
-        {segments.map((segment, index) => (
+        {segments.map((segment) => (
           <div key={segment.id} className="flex items-start gap-4">
             <LocationSelector
               fromLocation={segment.fromLocation || ''}

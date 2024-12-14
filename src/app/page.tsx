@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import {
   setStep,
@@ -8,6 +8,7 @@ import {
   setWizardAnswers,
   setPersonalDetails,
   completeStep,
+  markStepIncomplete,
 } from '@/store/slices/bookingSlice';
 import FlightSelector from '@/components/booking/FlightSelector';
 import { QAWizard } from '@/components/wizard/QAWizard';
@@ -21,6 +22,31 @@ import { PersonalDetailsForm } from '@/components/forms/PersonalDetailsForm';
 import { ConsentCheckbox } from '@/components/ConsentCheckbox';
 import { AccordionCard } from '@/components/shared/AccordionCard';
 import { SpeechBubble } from '@/components/SpeechBubble';
+import { Flight, PassengerDetails } from '@/types';
+import { Answer } from '@/types/wizard';
+import { Question } from '@/types/experience';
+
+interface StepProps {
+  onSelect?: (flight: Flight | Flight[]) => void;
+  onComplete?: ((answers: Answer[]) => void) | ((details: PassengerDetails) => void);
+  onInteract?: () => void;
+  questions?: Question[];
+}
+
+interface Step {
+  id: number;
+  name: string;
+  title: string;
+  subtitle?: string;
+  component: React.ComponentType<StepProps>;
+  props: StepProps;
+  getSummary: (state: {
+    selectedFlight: Flight | null;
+    wizardAnswers: Answer[];
+    personalDetails: PassengerDetails | null;
+  }) => string;
+  shouldStayOpen?: boolean;
+}
 
 export default function Home() {
   const dispatch = useAppDispatch();
@@ -35,25 +61,25 @@ export default function Home() {
   const { registerStep } = useSteps();
   const [interactedSteps, setInteractedSteps] = useState<number[]>([]);
 
-  const handleStepInteraction = (stepId: number) => {
+  const handleStepInteraction = useCallback((stepId: number) => {
     setInteractedSteps((prev) => Array.from(new Set([...prev, stepId])));
-  };
+  }, []);
 
   // Define steps configuration
-  const STEPS = [
+  const STEPS = useMemo<Step[]>(() => [
     {
       id: 1,
       name: 'FlightSelector',
       title: 'Tell us about your flight',
-      component: FlightSelector,
+      component: FlightSelector as React.ComponentType<StepProps>,
       props: {
-        onSelect: (flight: any) => {
-          dispatch(setSelectedFlight(flight));
+        onSelect: (flight: Flight | Flight[]) => {
+          dispatch(setSelectedFlight(Array.isArray(flight) ? flight[0] : flight));
           dispatch(completeStep(1));
         },
         onInteract: () => handleStepInteraction(1),
       },
-      getSummary: (state: any) =>
+      getSummary: (state) =>
         state.selectedFlight
           ? `${state.selectedFlight.flightNumber} • ${state.selectedFlight.departureCity} → ${state.selectedFlight.arrivalCity}`
           : '',
@@ -62,16 +88,23 @@ export default function Home() {
       id: 2,
       name: 'QAWizard',
       title: 'What happened with your flight?',
-      component: QAWizard,
+      component: QAWizard as React.ComponentType<StepProps>,
       props: {
         questions: wizardQuestions,
-        onComplete: (answers: any) => {
+        onComplete: (answers: Answer[]) => {
           dispatch(setWizardAnswers(answers));
-          dispatch(completeStep(2));
+          if (answers.length > 0) {
+            dispatch(completeStep(2));
+          } else {
+            // Remove step 2 from completed steps if answers are cleared
+            if (completedSteps.includes(2)) {
+              dispatch(markStepIncomplete(2));
+            }
+          }
         },
         onInteract: () => handleStepInteraction(2),
       },
-      getSummary: (state: any) =>
+      getSummary: (state) =>
         state.wizardAnswers?.length
           ? `${state.wizardAnswers.length} questions answered`
           : '',
@@ -82,21 +115,29 @@ export default function Home() {
       title: 'Personal Details',
       subtitle:
         'Please provide your contact details so we can keep you updated about your claim.',
-      component: PersonalDetailsForm,
+      component: PersonalDetailsForm as React.ComponentType<StepProps>,
       props: {
-        onComplete: (details: any) => {
-          dispatch(setPersonalDetails(details));
-          dispatch(completeStep(3));
+        onComplete: (details: PassengerDetails | null) => {
+          if (details) {
+            dispatch(setPersonalDetails(details));
+            dispatch(completeStep(3));
+          } else {
+            dispatch(setPersonalDetails(null));
+            // Remove step 3 from completed steps if it was previously completed
+            if (completedSteps.includes(3)) {
+              dispatch(markStepIncomplete(3));
+            }
+          }
         },
         onInteract: () => handleStepInteraction(3),
       },
-      getSummary: (state: any) =>
+      getSummary: (state) =>
         state.personalDetails
           ? `${state.personalDetails.firstName} ${state.personalDetails.lastName} • ${state.personalDetails.email}`
           : '',
       shouldStayOpen: true,
     },
-  ] as const;
+  ], [dispatch, handleStepInteraction, completedSteps]);
 
   const canContinue = () => {
     const allStepsCompleted =
@@ -118,7 +159,7 @@ export default function Home() {
     STEPS.forEach((step) => {
       registerStep(step.name, step.id);
     });
-  }, [registerStep]);
+  }, [registerStep, STEPS]);
 
   // Define phases and their corresponding steps
   const PHASES = [
@@ -163,12 +204,13 @@ export default function Home() {
 
       <main className="max-w-3xl mx-auto px-4 pt-4 pb-8">
         <div className="space-y-4">
-          <SpeechBubble message="Hi, my name is Captain Frank and I'm dealing with your flight disaster. So that I can give you a free initial assessment of your possible claim, please answer three questions." />
+          <div className="mt-8">
+            <SpeechBubble message="Hi, my name is Captain Frank and I'm dealing with your flight disaster. So that I can give you a free initial assessment of your possible claim, please answer three questions." />
+          </div>
 
           {/* Step Cards */}
           {STEPS.map((step) => {
             const StepComponent = step.component;
-            const hasInteracted = interactedSteps.includes(step.id);
             const isCompleted = completedSteps.includes(step.id);
 
             return (

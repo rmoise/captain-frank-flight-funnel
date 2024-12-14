@@ -9,7 +9,7 @@ interface PersonalDetails {
 }
 
 interface PersonalDetailsFormProps {
-  onComplete: (details: PersonalDetails) => void;
+  onComplete: (details: PersonalDetails | null) => void;
   shouldStayOpen?: boolean;
   onInteract?: () => void;
 }
@@ -29,6 +29,16 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
   const [touchedFields, setTouchedFields] = useState<Partial<Record<keyof PersonalDetails, boolean>>>({});
   const [hasInteracted, setHasInteracted] = useState(false);
 
+  // Add effect to handle auto-filled values
+  useEffect(() => {
+    const isValid = Object.values(values).every(val => val.trim() !== '') &&
+      !getError('email') && !getError('phone');
+
+    if (isValid) {
+      onComplete(values);
+    }
+  }, [values]);
+
   const handleInputChange = (field: keyof PersonalDetails, value: string) => {
     const newValues = { ...values, [field]: value };
     setValues(newValues);
@@ -36,7 +46,11 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
     // Check if all fields are filled and valid
     const isValid = Object.values(newValues).every(val => val.trim() !== '') &&
       !getError('email') && !getError('phone');
-    if (isValid) {
+
+    // If any field becomes empty after being filled, notify parent of incomplete state
+    if (Object.values(newValues).some(val => val.trim() === '')) {
+      onComplete(null);
+    } else if (isValid) {
       onComplete(newValues);
     }
   };
@@ -49,8 +63,9 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
     setFocusedField(null);
     setTouchedFields(prev => ({ ...prev, [field]: true }));
 
-    // Mark as interacted if the field is empty after leaving it
-    if (!values[field]?.trim()) {
+    // Only mark as interacted if there's an actual error
+    const error = getError(field);
+    if (error) {
       if (!hasInteracted) {
         setHasInteracted(true);
         onInteract?.();

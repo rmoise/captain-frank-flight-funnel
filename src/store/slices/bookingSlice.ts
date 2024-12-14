@@ -1,38 +1,28 @@
-import { type PayloadAction, createSlice } from '@reduxjs/toolkit';
+import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import type { RootState } from '../store';
-import type { Answer } from '@/types/wizard';
-
-interface PersonalDetails {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-}
+import { Flight, PassengerDetails } from '@/types';
+import { Answer } from '@/types/wizard';
 
 interface BookingState {
   currentStep: number;
+  selectedFlight: Flight | null;
+  wizardAnswers: Answer[];
+  personalDetails: PassengerDetails | null;
   completedSteps: number[];
-  progress: number;
-  phaseProgress: number;
   fromLocation: string | null;
   toLocation: string | null;
-  focusedInput: string | null;
-  selectedFlight: any | null;
-  wizardAnswers: Answer[];
-  personalDetails: PersonalDetails | null;
+  focusedInput: 'from' | 'to' | null;
 }
 
 const initialState: BookingState = {
   currentStep: 1,
-  completedSteps: [],
-  progress: 0,
-  phaseProgress: 0,
-  fromLocation: null,
-  toLocation: null,
-  focusedInput: null,
   selectedFlight: null,
   wizardAnswers: [],
   personalDetails: null,
+  completedSteps: [],
+  fromLocation: null,
+  toLocation: null,
+  focusedInput: null,
 };
 
 export const bookingSlice = createSlice({
@@ -48,13 +38,9 @@ export const bookingSlice = createSlice({
       }
     },
     markStepIncomplete: (state, action: PayloadAction<number>) => {
-      state.completedSteps = state.completedSteps.filter(step => step !== action.payload);
-    },
-    setProgress: (state, action: PayloadAction<number>) => {
-      state.progress = action.payload;
-    },
-    setPhaseProgress: (state, action: PayloadAction<number>) => {
-      state.phaseProgress = action.payload;
+      state.completedSteps = state.completedSteps.filter(
+        (step) => step !== action.payload
+      );
     },
     setFromLocation: (state, action: PayloadAction<string | null>) => {
       state.fromLocation = action.payload;
@@ -62,17 +48,23 @@ export const bookingSlice = createSlice({
     setToLocation: (state, action: PayloadAction<string | null>) => {
       state.toLocation = action.payload;
     },
-    setFocusedInput: (state, action: PayloadAction<string | null>) => {
+    setFocusedInput: (state, action: PayloadAction<'from' | 'to' | null>) => {
       state.focusedInput = action.payload;
     },
-    setSelectedFlight: (state, action: PayloadAction<any | null>) => {
+    setSelectedFlight: (state, action: PayloadAction<Flight | null>) => {
       state.selectedFlight = action.payload;
     },
     setWizardAnswers: (state, action: PayloadAction<Answer[]>) => {
       state.wizardAnswers = action.payload;
+      if (action.payload.length === 0 && state.completedSteps.includes(2)) {
+        state.completedSteps = state.completedSteps.filter(step => step !== 2);
+      }
     },
-    setPersonalDetails: (state, action: PayloadAction<PersonalDetails>) => {
+    setPersonalDetails: (state, action: PayloadAction<PassengerDetails | null>) => {
       state.personalDetails = action.payload;
+      if (!action.payload && state.completedSteps.includes(3)) {
+        state.completedSteps = state.completedSteps.filter(step => step !== 3);
+      }
     },
   },
 });
@@ -81,8 +73,6 @@ export const {
   setStep,
   completeStep,
   markStepIncomplete,
-  setProgress,
-  setPhaseProgress,
   setFromLocation,
   setToLocation,
   setFocusedInput,
@@ -91,7 +81,6 @@ export const {
   setPersonalDetails,
 } = bookingSlice.actions;
 
-// Selectors
 export const selectBooking = (state: RootState) => state.booking;
 
 export default bookingSlice.reducer;

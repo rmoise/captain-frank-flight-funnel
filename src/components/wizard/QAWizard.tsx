@@ -2,29 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import Image from 'next/image';
 import type { Answer } from '@/types/wizard';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
 import { useSteps } from '@/context/StepsContext';
-import { useBookingContext } from '@/context/BookingContext';
-import { useFunnel } from '@/context/FunnelContext';
 import { QuestionAnswer } from '../shared/QuestionAnswer';
 import { PageHeader } from '../shared/PageHeader';
-
-interface Question {
-  id: string;
-  text: string;
-  type: 'radio' | 'text' | 'select' | 'number';
-  options?: Array<{
-    id: string;
-    label: string;
-    value: string;
-    externalLink?: string;
-  }>;
-  showIf?: (answers: Answer[]) => boolean;
-  placeholder?: string;
-  min?: number;
-}
+import type { Question } from '@/types/experience';
 
 export type { Question, Answer };
 
@@ -43,8 +26,6 @@ export const QAWizard: React.FC<QAWizardProps> = ({
   illustration,
   onInteract,
 }) => {
-  const { dispatch: bookingDispatch } = useBookingContext();
-  const { dispatch: funnelDispatch } = useFunnel();
   const { registerStep, unregisterStep } = useSteps();
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState<Answer[]>(initialAnswers);
@@ -63,6 +44,12 @@ export const QAWizard: React.FC<QAWizardProps> = ({
   const activeQuestions = questions.filter(
     (question) => !question.showIf || question.showIf(answers)
   );
+
+  useEffect(() => {
+    if (currentStep >= activeQuestions.length) {
+      setCurrentStep(Math.max(0, activeQuestions.length - 1));
+    }
+  }, [activeQuestions.length, currentStep]);
 
   const handleInteraction = () => {
     if (!hasInteracted) {
@@ -89,17 +76,27 @@ export const QAWizard: React.FC<QAWizardProps> = ({
 
     let newAnswers: Answer[];
     if (existingAnswerIndex >= 0) {
-      newAnswers = answers.map((answer, index) =>
-        index === existingAnswerIndex ? { ...answer, value } : answer
-      );
+      if (!value.trim()) {
+        newAnswers = answers.filter(
+          (_, index) => index !== existingAnswerIndex
+        );
+      } else {
+        newAnswers = answers.map((answer, index) =>
+          index === existingAnswerIndex ? { ...answer, value } : answer
+        );
+      }
     } else {
-      newAnswers = [
-        ...answers,
-        {
-          questionId: currentQuestion.id,
-          value,
-        },
-      ];
+      if (value.trim()) {
+        newAnswers = [
+          ...answers,
+          {
+            questionId: currentQuestion.id,
+            value,
+          },
+        ];
+      } else {
+        newAnswers = [...answers];
+      }
     }
 
     const filteredAnswers = newAnswers.filter((answer) => {
@@ -108,6 +105,18 @@ export const QAWizard: React.FC<QAWizardProps> = ({
     });
 
     setAnswers(filteredAnswers);
+
+    if (filteredAnswers.length === 0) {
+      onComplete([]);
+    } else if (isPathComplete()) {
+      onComplete(filteredAnswers);
+    }
+  };
+
+  const handleGoBack = () => {
+    setIsCompleted(false);
+    setAnswers([]);
+    onComplete([]);
   };
 
   const getCurrentAnswer = () => {
@@ -196,7 +205,7 @@ export const QAWizard: React.FC<QAWizardProps> = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 1 }}
-            onClick={() => setIsCompleted(false)}
+            onClick={handleGoBack}
             className="mt-6 px-6 py-2 text-red-500 hover:text-red-600 font-medium transition-colors"
           >
             ← Go Back to Questions
@@ -206,11 +215,21 @@ export const QAWizard: React.FC<QAWizardProps> = ({
     );
   }
 
+  if (activeQuestions.length === 0) {
+    return (
+      <section data-step="2" className="max-w-6xl mx-auto p-6 pb-24 mb-24">
+        <div className="flex flex-col items-center text-center">
+          <p className="text-gray-500">No questions available.</p>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section data-step="2" className="max-w-6xl mx-auto p-6 pb-24 mb-24">
       <QuestionAnswer
         questions={activeQuestions}
-        currentStep={currentStep}
+        currentStep={Math.min(currentStep, activeQuestions.length - 1)}
         direction={direction}
         getCurrentAnswer={getCurrentAnswer}
         handleAnswer={handleAnswer}
