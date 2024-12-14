@@ -28,7 +28,7 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
   shouldStayOpen = false,
   hasInteracted = false,
 }) => {
-  const [isExpanded, setIsExpanded] = useState(shouldStayOpen || false);
+  const [isExpanded, setIsExpanded] = useState(true);
 
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;

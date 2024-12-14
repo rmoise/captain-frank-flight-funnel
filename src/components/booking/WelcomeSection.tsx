@@ -2,7 +2,7 @@
 
 import React from 'react';
 
-const WelcomeSection = () => {
+export const WelcomeSection: React.FC = () => {
   const [screenSize, setScreenSize] = React.useState<
     'mobile' | 'tablet' | 'desktop'
   >('desktop');
@@ -126,5 +126,3 @@ const WelcomeSection = () => {
     </div>
   );
 };
-
-export default WelcomeSection;

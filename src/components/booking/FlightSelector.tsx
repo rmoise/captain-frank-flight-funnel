@@ -178,10 +178,10 @@ export default function FlightSelector({ onSelect, onInteract }: FlightSelectorP
               fromLocation={segment.fromLocation || ''}
               toLocation={segment.toLocation || ''}
               locationOptions={airportOptions}
-              onFromLocationChange={(value) =>
+              onFromLocationChange={(value: string) =>
                 handleSegmentChange(segment.id, 'fromLocation', value)
               }
-              onToLocationChange={(value) =>
+              onToLocationChange={(value: string) =>
                 handleSegmentChange(segment.id, 'toLocation', value)
               }
               onFocusInput={handleFocusInput}

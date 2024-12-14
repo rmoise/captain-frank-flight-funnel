@@ -215,60 +215,60 @@ export const QAWizard: React.FC<QAWizardProps> = ({
     );
   }
 
-  if (activeQuestions.length === 0) {
-    return (
-      <section data-step="2" className="max-w-6xl mx-auto p-6 pb-24 mb-24">
+  return (
+    <section data-step="2" className="max-w-6xl mx-auto p-6 pb-24 mb-24">
+      {activeQuestions.length > 0 ? (
+        <>
+          <QuestionAnswer
+            question={
+              activeQuestions[Math.min(currentStep, activeQuestions.length - 1)]
+            }
+            selectedOption={getCurrentAnswer()}
+            onSelect={handleAnswer}
+            currentStep={currentStep}
+            totalSteps={activeQuestions.length}
+            direction={direction}
+          />
+
+          {/* Navigation buttons */}
+          <div className="mt-8 flex justify-between">
+            <button
+              onClick={goToPrevious}
+              disabled={currentStep === 0}
+              className={`w-28 px-6 py-3 text-sm font-medium rounded-lg transition-colors
+                ${
+                  currentStep === 0
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'text-[#F54538] hover:bg-[#FEF2F2]'
+                }`}
+            >
+              Previous
+            </button>
+            <button
+              onClick={
+                currentStep === activeQuestions.length - 1 && isPathComplete()
+                  ? handleComplete
+                  : goToNext
+              }
+              disabled={!getCurrentAnswer()}
+              className={`w-28 px-6 py-3 text-sm font-medium rounded-lg transition-colors
+                ${
+                  !getCurrentAnswer()
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-[#F54538] hover:bg-[#E03F33] text-white'
+                }`}
+            >
+              {currentStep === activeQuestions.length - 1 && isPathComplete()
+                ? 'Complete'
+                : 'Next'}
+            </button>
+          </div>
+        </>
+      ) : (
         <div className="flex flex-col items-center text-center">
           <p className="text-gray-500">No questions available.</p>
         </div>
-      </section>
-    );
-  }
-
-  return (
-    <section data-step="2" className="max-w-6xl mx-auto p-6 pb-24 mb-24">
-      <QuestionAnswer
-        questions={activeQuestions}
-        currentStep={Math.min(currentStep, activeQuestions.length - 1)}
-        direction={direction}
-        getCurrentAnswer={getCurrentAnswer}
-        handleAnswer={handleAnswer}
-        illustration={illustration}
-      />
-
-      {/* Navigation buttons */}
-      <div className="mt-8 flex justify-between">
-        <button
-          onClick={goToPrevious}
-          disabled={currentStep === 0}
-          className={`px-6 py-2 rounded-lg transition-colors
-            ${
-              currentStep === 0
-                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-            }`}
-        >
-          Previous
-        </button>
-        <button
-          onClick={
-            currentStep === activeQuestions.length - 1 && isPathComplete()
-              ? handleComplete
-              : goToNext
-          }
-          disabled={!getCurrentAnswer()}
-          className={`px-8 py-3 text-lg rounded-lg transition-colors
-            ${
-              !getCurrentAnswer()
-                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                : 'bg-[#374151] hover:bg-[#4B5563] text-white'
-            }`}
-        >
-          {currentStep === activeQuestions.length - 1 && isPathComplete()
-            ? 'Complete'
-            : 'Next'}
-        </button>
-      </div>
+      )}
     </section>
   );
 };

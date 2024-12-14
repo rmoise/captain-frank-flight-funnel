@@ -82,10 +82,15 @@ export const Input: React.FC<InputProps> = ({
           className={`
             absolute left-4
             transition-all duration-[200ms] cubic-bezier(0.4, 0, 0.2, 1) pointer-events-none
-            text-[#909090] font-['Heebo'] font-normal ${required ? "after:content-['*'] after:text-[#F54538] after:ml-[1px] after:align-super after:text-[10px]" : ''}
-            ${isFocused || value || alwaysOpen
-              ? 'translate-y-[-8px] text-[10px] px-1 bg-white'
-              : 'translate-y-[14px] text-base'
+            text-[#909090] font-['Heebo'] font-normal ${
+              required
+                ? "after:content-['*'] after:text-[#F54538] after:ml-[1px] after:align-super after:text-[10px]"
+                : ''
+            }
+            ${
+              isFocused || value || alwaysOpen
+                ? 'translate-y-[-8px] text-[10px] px-1 bg-white'
+                : 'translate-y-[14px] text-base'
             }
             ${isFocused ? 'text-[#464646]' : ''}
           `}

@@ -14,12 +14,7 @@ interface Phase {
 
 interface ProgressTrackerProps {
   currentStep: number;
-  phaseProgress: {
-    'claim-details': number;
-    documentation: number;
-    review: number;
-    complete: number;
-  };
+  phaseProgressData: Record<number, number>;
 }
 
 const TOTAL_PHASES = 6;
@@ -34,7 +29,10 @@ const PHASES: Phase[] = [
   { id: 6, name: 'Complete', steps: [] },
 ];
 
-export default function ProgressTracker({ currentStep, phaseProgress }: ProgressTrackerProps) {
+const ProgressTracker: React.FC<ProgressTrackerProps> = ({
+  currentStep,
+  phaseProgressData,
+}) => {
   const { completedSteps } = useAppSelector((state) => state.booking);
   const { availableSteps } = useSteps();
   const totalSteps = availableSteps.length;
@@ -148,7 +146,7 @@ export default function ProgressTracker({ currentStep, phaseProgress }: Progress
             <div className="flex justify-between items-center mb-4 px-5">
               <div className="flex items-center gap-2">
                 <div className="text-sm font-medium text-gray-900">
-                  {Math.round(phaseProgress)}%
+                  {Math.round(calculatePhaseProgress())}%
                 </div>
                 <div className="text-sm text-gray-500">
                   Phase {currentPhase} of {TOTAL_PHASES} -{' '}
@@ -180,7 +178,8 @@ export default function ProgressTracker({ currentStep, phaseProgress }: Progress
                   const stepNumber = index + 1;
                   const status = getStepStatus(stepNumber);
                   const isCurrentStep =
-                    Math.ceil(scrollProgress / (100 / totalSteps)) === stepNumber;
+                    Math.ceil(scrollProgress / (100 / totalSteps)) ===
+                    stepNumber;
 
                   return (
                     <div
@@ -246,4 +245,6 @@ export default function ProgressTracker({ currentStep, phaseProgress }: Progress
       )}
     </>
   );
-}
+};
+
+export default ProgressTracker;

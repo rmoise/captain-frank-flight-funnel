@@ -1,8 +1,8 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { Flight } from '@/types';
-import { Answer } from '@/types/experience';
+import { Flight, PassengerDetails } from '@/types';
+import type { Answer } from '@/types/wizard';
 
-interface BookingState {
+export interface BookingState {
   currentStep: number;
   selectedFlight: Flight | null;
   wizardAnswers: Answer[];
@@ -10,6 +10,7 @@ interface BookingState {
   fromLocation: string | null;
   toLocation: string | null;
   focusedInput: string | null;
+  personalDetails: PassengerDetails | null;
   phaseProgress: {
     'claim-details': number;
     documentation: number;
@@ -26,6 +27,7 @@ const initialState: BookingState = {
   fromLocation: null,
   toLocation: null,
   focusedInput: null,
+  personalDetails: null,
   phaseProgress: {
     'claim-details': 0,
     documentation: 0,
@@ -60,6 +62,9 @@ const bookingSlice = createSlice({
     setWizardAnswers: (state, action: PayloadAction<Answer[]>) => {
       state.wizardAnswers = action.payload;
     },
+    setPersonalDetails: (state, action: PayloadAction<PassengerDetails | null>) => {
+      state.personalDetails = action.payload;
+    },
     setFromLocation: (state, action: PayloadAction<string | null>) => {
       state.fromLocation = action.payload;
     },
@@ -79,6 +84,7 @@ export const {
   setProgress,
   setSelectedFlight,
   setWizardAnswers,
+  setPersonalDetails,
   setFromLocation,
   setToLocation,
   setFocusedInput,

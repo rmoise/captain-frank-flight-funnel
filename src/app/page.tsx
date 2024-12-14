@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import type { RootState } from '@/store';
 import {
   setStep,
   setSelectedFlight,
@@ -9,12 +10,14 @@ import {
   setPersonalDetails,
   completeStep,
   markStepIncomplete,
-} from '@/store/slices/bookingSlice';
+  BookingState,
+} from '@/store/bookingSlice';
+import type { Flight, PassengerDetails } from '@/types';
 import FlightSelector from '@/components/booking/FlightSelector';
 import { QAWizard } from '@/components/wizard/QAWizard';
 import { useSteps } from '@/context/StepsContext';
 import ProgressTracker from '@/components/booking/ProgressTracker';
-import WelcomeSection from '@/components/booking/WelcomeSection';
+import { WelcomeSection } from '@/components/booking/WelcomeSection';
 import { wizardQuestions } from '@/constants/wizardQuestions';
 import { Navbar } from '@/components/Navbar';
 import { PhaseNavigation } from '@/components/PhaseNavigation';
@@ -22,13 +25,14 @@ import { PersonalDetailsForm } from '@/components/forms/PersonalDetailsForm';
 import { ConsentCheckbox } from '@/components/ConsentCheckbox';
 import { AccordionCard } from '@/components/shared/AccordionCard';
 import { SpeechBubble } from '@/components/SpeechBubble';
-import { Flight, PassengerDetails } from '@/types';
-import { Answer } from '@/types/wizard';
-import { Question } from '@/types/experience';
+import type { Answer } from '@/types/wizard';
+import type { Question } from '@/types/experience';
 
 interface StepProps {
   onSelect?: (flight: Flight | Flight[]) => void;
-  onComplete?: ((answers: Answer[]) => void) | ((details: PassengerDetails) => void);
+  onComplete?:
+    | ((answers: Answer[]) => void)
+    | ((details: PassengerDetails) => void);
   onInteract?: () => void;
   questions?: Question[];
 }
@@ -40,24 +44,21 @@ interface Step {
   subtitle?: string;
   component: React.ComponentType<StepProps>;
   props: StepProps;
-  getSummary: (state: {
-    selectedFlight: Flight | null;
-    wizardAnswers: Answer[];
-    personalDetails: PassengerDetails | null;
-  }) => string;
+  getSummary: (state: BookingState) => string;
   shouldStayOpen?: boolean;
 }
 
 export default function Home() {
   const dispatch = useAppDispatch();
-  const state = useAppSelector((state) => state.booking);
+  const bookingState = useAppSelector((state: RootState) => state.booking);
   const {
     currentStep,
     selectedFlight,
     wizardAnswers,
     completedSteps,
     personalDetails,
-  } = state;
+    phaseProgress,
+  } = bookingState;
   const { registerStep } = useSteps();
   const [interactedSteps, setInteractedSteps] = useState<number[]>([]);
 
@@ -66,78 +67,84 @@ export default function Home() {
   }, []);
 
   // Define steps configuration
-  const STEPS = useMemo<Step[]>(() => [
-    {
-      id: 1,
-      name: 'FlightSelector',
-      title: 'Tell us about your flight',
-      component: FlightSelector as React.ComponentType<StepProps>,
-      props: {
-        onSelect: (flight: Flight | Flight[]) => {
-          dispatch(setSelectedFlight(Array.isArray(flight) ? flight[0] : flight));
-          dispatch(completeStep(1));
+  const STEPS = useMemo<Step[]>(
+    () => [
+      {
+        id: 1,
+        name: 'FlightSelector',
+        title: 'Tell us about your flight',
+        component: FlightSelector as React.ComponentType<StepProps>,
+        props: {
+          onSelect: (flight: Flight | Flight[]) => {
+            dispatch(
+              setSelectedFlight(Array.isArray(flight) ? flight[0] : flight)
+            );
+            dispatch(completeStep(1));
+          },
+          onInteract: () => handleStepInteraction(1),
         },
-        onInteract: () => handleStepInteraction(1),
+        getSummary: (state) =>
+          state.selectedFlight
+            ? `${state.selectedFlight.flightNumber} • ${state.selectedFlight.departureCity} → ${state.selectedFlight.arrivalCity}`
+            : '',
       },
-      getSummary: (state) =>
-        state.selectedFlight
-          ? `${state.selectedFlight.flightNumber} • ${state.selectedFlight.departureCity} → ${state.selectedFlight.arrivalCity}`
-          : '',
-    },
-    {
-      id: 2,
-      name: 'QAWizard',
-      title: 'What happened with your flight?',
-      component: QAWizard as React.ComponentType<StepProps>,
-      props: {
-        questions: wizardQuestions,
-        onComplete: (answers: Answer[]) => {
-          dispatch(setWizardAnswers(answers));
-          if (answers.length > 0) {
-            dispatch(completeStep(2));
-          } else {
-            // Remove step 2 from completed steps if answers are cleared
-            if (completedSteps.includes(2)) {
-              dispatch(markStepIncomplete(2));
+      {
+        id: 2,
+        name: 'QAWizard',
+        title: 'What happened with your flight?',
+        component: QAWizard as React.ComponentType<StepProps>,
+        props: {
+          questions: wizardQuestions,
+          onComplete: (answers: Answer[]) => {
+            dispatch(setWizardAnswers(answers));
+            if (answers.length > 0) {
+              dispatch(completeStep(2));
+            } else {
+              // Remove step 2 from completed steps if answers are cleared
+              if (completedSteps.includes(2)) {
+                dispatch(markStepIncomplete(2));
+              }
             }
-          }
+          },
+          onInteract: () => handleStepInteraction(2),
         },
-        onInteract: () => handleStepInteraction(2),
+        getSummary: (state) =>
+          state.wizardAnswers?.length
+            ? `${state.wizardAnswers.length} questions answered`
+            : '',
+        shouldStayOpen: true,
       },
-      getSummary: (state) =>
-        state.wizardAnswers?.length
-          ? `${state.wizardAnswers.length} questions answered`
-          : '',
-    },
-    {
-      id: 3,
-      name: 'PersonalDetails',
-      title: 'Personal Details',
-      subtitle:
-        'Please provide your contact details so we can keep you updated about your claim.',
-      component: PersonalDetailsForm as React.ComponentType<StepProps>,
-      props: {
-        onComplete: (details: PassengerDetails | null) => {
-          if (details) {
-            dispatch(setPersonalDetails(details));
-            dispatch(completeStep(3));
-          } else {
-            dispatch(setPersonalDetails(null));
-            // Remove step 3 from completed steps if it was previously completed
-            if (completedSteps.includes(3)) {
-              dispatch(markStepIncomplete(3));
+      {
+        id: 3,
+        name: 'PersonalDetails',
+        title: 'Personal Details',
+        subtitle:
+          'Please provide your contact details so we can keep you updated about your claim.',
+        component: PersonalDetailsForm as React.ComponentType<StepProps>,
+        props: {
+          onComplete: (details: PassengerDetails | null) => {
+            if (details) {
+              dispatch(setPersonalDetails(details));
+              dispatch(completeStep(3));
+            } else {
+              dispatch(setPersonalDetails(null));
+              // Remove step 3 from completed steps if it was previously completed
+              if (completedSteps.includes(3)) {
+                dispatch(markStepIncomplete(3));
+              }
             }
-          }
+          },
+          onInteract: () => handleStepInteraction(3),
         },
-        onInteract: () => handleStepInteraction(3),
+        getSummary: (state) =>
+          state.personalDetails
+            ? `${state.personalDetails.firstName} ${state.personalDetails.lastName} • ${state.personalDetails.email}`
+            : '',
+        shouldStayOpen: true,
       },
-      getSummary: (state) =>
-        state.personalDetails
-          ? `${state.personalDetails.firstName} ${state.personalDetails.lastName} • ${state.personalDetails.email}`
-          : '',
-      shouldStayOpen: true,
-    },
-  ], [dispatch, handleStepInteraction, completedSteps]);
+    ],
+    [dispatch, handleStepInteraction, completedSteps]
+  );
 
   const canContinue = () => {
     const allStepsCompleted =
@@ -198,10 +205,6 @@ export default function Home() {
         completedPhases={getCompletedPhases()}
       />
 
-      <div className="max-w-5xl mx-auto px-4 py-4">
-        <ProgressTracker currentStep={currentStep} />
-      </div>
-
       <main className="max-w-3xl mx-auto px-4 pt-4 pb-8">
         <div className="space-y-4">
           <div className="mt-4 sm:mt-8">
@@ -222,7 +225,7 @@ export default function Home() {
                 title={step.title}
                 subtitle={step.subtitle}
                 eyebrow={`Step ${step.id}`}
-                summary={step.getSummary(state)}
+                summary={step.getSummary(bookingState)}
                 shouldStayOpen={step.shouldStayOpen}
                 hasInteracted={interactedSteps.includes(step.id)}
               >
@@ -236,21 +239,22 @@ export default function Home() {
           {/* Consent Checkboxes */}
           <div className="space-y-4 mt-6">
             <ConsentCheckbox
-              text="I agree to the"
-              linkText="Terms and Conditions"
+              text="I have read and agree to the"
+              linkText="terms and conditions"
               link="/terms"
               required={true}
             />
             <ConsentCheckbox
-              text="I agree to the"
-              linkText="Privacy Policy"
+              text="I have read and agree to the"
+              linkText="privacy policy"
               link="/privacy"
               required={true}
             />
             <ConsentCheckbox
-              text="I agree to receive marketing communications about"
-              linkText="Captain Frank's services"
-              link="/services"
+              text="I agree that Captain Frank may send me advertising about Captain Frank's services, promotions and satisfaction surveys by email. Captain Frank will process my personal data for this purpose (see"
+              linkText="privacy policy"
+              link="/privacy"
+              details="). I can revoke this consent at any time."
             />
           </div>
 
@@ -281,6 +285,12 @@ export default function Home() {
           </div>
         </div>
       </main>
+
+      {/* Progress Tracker */}
+      <ProgressTracker
+        currentStep={currentStep}
+        phaseProgressData={phaseProgress}
+      />
 
       {/* Footer */}
       <footer className="bg-white mt-auto">

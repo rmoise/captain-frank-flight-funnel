@@ -36,7 +36,7 @@ export default function BookingPage() {
 
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [dispatch, state.currentPhase]);
+  }, [dispatch, state]);
 
   const handleComplete = (answers: Answer[]) => {
     dispatch(setWizardAnswers(answers));
@@ -49,7 +49,6 @@ export default function BookingPage() {
         <QAWizard
           questions={wizardQuestions}
           onComplete={handleComplete}
-          illustration="/images/qa-illustration.svg"
         />
       </div>
     </div>

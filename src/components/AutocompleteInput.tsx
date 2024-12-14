@@ -33,12 +33,18 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [filteredOptions, setFilteredOptions] = useState<Option[]>([]);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
+  const [dropdownPosition, setDropdownPosition] = useState({
+    top: 0,
+    left: 0,
+    width: 0,
+  });
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const filtered = options.filter((option) =>
-      option.label.toLowerCase().includes(value.toLowerCase())
+    const filtered = options.filter(
+      (option) =>
+        option.label.toLowerCase().includes(value.toLowerCase()) ||
+        option.value.toLowerCase().includes(value.toLowerCase())
     );
     setFilteredOptions(filtered);
   }, [value, options]);
@@ -128,7 +134,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
       >
         {filteredOptions.map((option, index) => (
           <div
-            key={option.value}
+            key={`${option.value}-${index}`}
             className={`px-4 py-3 hover:bg-gray-100 cursor-pointer text-[#4b616d] font-['Heebo'] ${
               index === highlightedIndex ? 'bg-gray-100' : ''
             }`}
@@ -139,7 +145,9 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
           >
             <div className="flex items-center gap-2">
               <span className="text-base font-medium">{option.label}</span>
-              <span className="text-sm text-gray-500">({option.value})</span>
+              <span className="text-sm text-gray-500">
+                ({option.value.replace(/^(from-|to-)/, '')})
+              </span>
             </div>
           </div>
         ))}
@@ -148,6 +156,10 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
 
     return createPortal(dropdown, document.body);
   };
+
+  // Find the matching option to display the label
+  const selectedOption = options.find((opt) => opt.value === value);
+  const displayValue = selectedOption ? selectedOption.value : value;
 
   return (
     <div className={`relative ${className}`} ref={containerRef}>
@@ -161,7 +173,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
         </div>
         <input
           type="text"
-          value={value}
+          value={displayValue}
           onChange={handleInputChange}
           onFocus={() => {
             setIsOpen(true);
@@ -188,9 +200,10 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
             absolute left-12
             transition-all duration-[200ms] cubic-bezier(0.4, 0, 0.2, 1) pointer-events-none
             text-[#909090] font-['Heebo'] after:content-['*'] after:text-[#F54538] after:ml-[1px] after:align-super after:text-[10px]
-            ${isFocused || value
-              ? 'translate-y-[-8px] text-[10px] px-1 bg-white'
-              : 'translate-y-[14px] text-base'
+            ${
+              isFocused || displayValue
+                ? 'translate-y-[-8px] text-[10px] px-1 bg-white'
+                : 'translate-y-[14px] text-base'
             }
             ${isFocused ? 'text-[#464646]' : ''}
           `}
@@ -198,7 +211,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
           {label.replace(' *', '')}
         </label>
         <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
-          {value && (
+          {displayValue && (
             <button onClick={handleClear} className="p-1">
               <svg
                 width="12"
