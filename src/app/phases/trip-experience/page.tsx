@@ -48,11 +48,12 @@ export default function TripExperiencePage() {
     ]
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const formDataObj = Object.fromEntries(formData.entries());
+    const validationErrors = validateForm(formDataObj, validationRules);
 
-    // Validate form
-    const validationErrors = validateForm(formData, validationRules);
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
       return;
@@ -62,7 +63,12 @@ export default function TripExperiencePage() {
 
     try {
       // Save trip details
-      dispatch(setTripDetails(formData));
+      dispatch(setTripDetails({
+        whatHappened: formDataObj.whatHappened as string,
+        actualFlights: formDataObj.actualFlights as string,
+        tripCost: formDataObj.tripCost as string,
+        informedDate: formDataObj.informedDate as string
+      }));
       dispatch(completePhase(4));
 
       // Navigate to next phase

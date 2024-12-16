@@ -210,7 +210,6 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
               isFocused={focusedField === 'firstName'}
               required={true}
               error={getError('firstName')}
-              preventClose={true}
               autocomplete="given-name"
             />
             {getError('firstName') && (
@@ -235,7 +234,6 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
               isFocused={focusedField === 'lastName'}
               required={true}
               error={getError('lastName')}
-              preventClose={true}
               autocomplete="family-name"
             />
             {getError('lastName') && (
@@ -262,7 +260,6 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
             isFocused={focusedField === 'email'}
             required={true}
             error={getError('email')}
-            preventClose={true}
             autocomplete="email"
           />
           {getError('email') && (

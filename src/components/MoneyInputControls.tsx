@@ -1,27 +1,26 @@
-import React from 'react';
+import React, { RefObject } from 'react';
 
 interface MoneyInputControlsProps {
   value: string;
   onChange: (value: string) => void;
+  containerRef?: RefObject<HTMLDivElement | null>;
 }
 
 export const MoneyInputControls: React.FC<MoneyInputControlsProps> = ({
   value,
   onChange,
+  containerRef,
 }) => {
   const handleButtonClick = (action: 'increment' | 'decrement' | 'clear') => {
     const num = parseFloat(value) || 0;
     switch (action) {
       case 'increment':
-        console.log('Increment clicked');
         onChange((num + 1).toString());
         break;
       case 'decrement':
-        console.log('Decrement clicked');
         if (num > 0) onChange((num - 1).toString());
         break;
       case 'clear':
-        console.log('Clear clicked');
         onChange('');
         break;
     }
@@ -30,6 +29,7 @@ export const MoneyInputControls: React.FC<MoneyInputControlsProps> = ({
   return (
     <div
       className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2"
+      ref={containerRef}
     >
       {value && (
         <button

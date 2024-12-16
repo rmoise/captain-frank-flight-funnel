@@ -73,18 +73,12 @@ export default function FlightDetailsPage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const formDataObj = Object.fromEntries(formData.entries());
+    const validationErrors = validateForm(formDataObj, validationRules);
 
-    // Mark all fields as touched
-    setTouched({
-      flightDate: true,
-      flightNumber: true,
-      bookingReference: true
-    });
-
-    // Validate form
-    const validationErrors = validateForm(formData, validationRules);
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
       return;
@@ -94,7 +88,11 @@ export default function FlightDetailsPage() {
 
     try {
       // Save flight details
-      dispatch(setFlightDetails(formData));
+      dispatch(setFlightDetails({
+        flightDate: formDataObj.flightDate as string,
+        flightNumber: formDataObj.flightNumber as string,
+        bookingReference: formDataObj.bookingReference as string
+      }));
       dispatch(completePhase(3));
 
       // Navigate to next phase

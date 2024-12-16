@@ -39,10 +39,14 @@ export default function ContactForm() {
     ]
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    const validationErrors = validateForm(formData, validationRules);
+    const validationErrors = validateForm({
+      subject: formData.subject,
+      message: formData.message
+    }, validationRules);
+
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
       return;

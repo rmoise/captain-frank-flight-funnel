@@ -36,13 +36,13 @@ export default function AgreementPage() {
   const validationRules = {
     hasAcceptedTerms: [
       {
-        test: (value: boolean) => value === true,
-        message: 'You must accept the terms and conditions to proceed',
+        test: (value: unknown) => value === true,
+        message: 'You must accept the terms and conditions',
       },
     ],
     signature: [
       {
-        test: (value: string) => value.length > 0,
+        test: (value: unknown) => typeof value === 'string' && value.trim().length > 0,
         message: 'Please provide your signature',
       },
     ],

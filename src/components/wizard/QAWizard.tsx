@@ -1,28 +1,18 @@
+'use client';
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import type { Answer } from '@/types/wizard';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
 import { QuestionAnswer } from '@/components/shared/QuestionAnswer';
 import { PageHeader } from '@/components/shared/PageHeader';
+import type { Question } from '@/types/experience';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import {
   setWizardAnswers,
   completeStep,
   markStepIncomplete,
 } from '@/store/bookingSlice';
-
-interface QuestionOption {
-  value: string;
-  label: string;
-}
-
-interface Question {
-  id: string;
-  type: 'radio' | 'number';
-  text: string;
-  options?: QuestionOption[];
-  showIf?: (answers: Answer[]) => boolean;
-}
 
 export type { Question, Answer };
 
@@ -55,6 +45,7 @@ export const QAWizard: React.FC<QAWizardProps> = ({
     return '';
   });
   const [initialized, setInitialized] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   // Get Redux state
   const { wizardAnswers: storedAnswers } = useAppSelector(
@@ -102,8 +93,9 @@ export const QAWizard: React.FC<QAWizardProps> = ({
 
   // Initialize answers from Redux state
   useEffect(() => {
-    if (!initialized) {
+    if (!initialized && isInitialLoad) {
       setInitialized(true);
+      setIsInitialLoad(false);
 
       // Check if we need to mark the step as complete based on existing data
       if (answers.length > 0) {
@@ -146,7 +138,7 @@ export const QAWizard: React.FC<QAWizardProps> = ({
         }
       }
     }
-  }, [initialized, answers, dispatch, questions]);
+  }, [initialized, isInitialLoad, answers, dispatch, questions]);
 
   // Handle step restoration - only run when initialized changes
   useEffect(() => {
@@ -162,30 +154,32 @@ export const QAWizard: React.FC<QAWizardProps> = ({
 
   // Save answers to localStorage - only when answers change and not during initial load
   useEffect(() => {
-    if (answers.length > 0) {
+    if (!isInitialLoad && answers.length > 0) {
       try {
         localStorage.setItem('qaWizard_answers', JSON.stringify(answers));
       } catch (error) {
         console.error('Failed to save answers to localStorage:', error);
       }
     }
-  }, [answers]);
+  }, [answers, isInitialLoad]);
 
   // Handle step changes - only when activeQuestions length or currentStep changes
   useEffect(() => {
-    if (currentStep >= activeQuestions.length) {
+    if (!isInitialLoad && currentStep >= activeQuestions.length) {
       setCurrentStep(Math.max(0, activeQuestions.length - 1));
     }
-  }, [activeQuestions.length, currentStep]);
+  }, [activeQuestions.length, currentStep, isInitialLoad]);
 
   // Save current step to localStorage - only when currentStep changes and not during initial load
   useEffect(() => {
-    try {
-      localStorage.setItem('wizardCurrentStep', currentStep.toString());
-    } catch (error) {
-      console.error('Failed to save current step:', error);
+    if (!isInitialLoad) {
+      try {
+        localStorage.setItem('wizardCurrentStep', currentStep.toString());
+      } catch (error) {
+        console.error('Failed to save current step:', error);
+      }
     }
-  }, [currentStep]);
+  }, [currentStep, isInitialLoad]);
 
   const handleInteraction = useCallback(() => {
     if (!hasInteracted) {

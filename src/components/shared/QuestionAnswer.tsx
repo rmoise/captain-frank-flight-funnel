@@ -5,7 +5,7 @@ import { MoneyInput } from '@/components/MoneyInput';
 
 interface QuestionAnswerProps {
   question: Question;
-  selectedOption: string | null;
+  selectedOption: string;
   onSelect: (questionId: string, value: string) => void;
   currentStep: number;
   totalSteps: number;
@@ -20,7 +20,6 @@ export const QuestionAnswer: React.FC<QuestionAnswerProps> = ({
   totalSteps,
   direction,
 }) => {
-  const [isFocused, setIsFocused] = useState(false);
   const [localValue, setLocalValue] = useState(selectedOption);
 
   useEffect(() => {
@@ -99,13 +98,6 @@ export const QuestionAnswer: React.FC<QuestionAnswerProps> = ({
               label="Amount"
               value={localValue || ''}
               onChange={handleMoneyInputChange}
-              isFocused={isFocused}
-              onFocus={() => {
-                setIsFocused(true);
-              }}
-              onBlur={() => {
-                setIsFocused(false);
-              }}
               className="w-full"
             />
           </div>

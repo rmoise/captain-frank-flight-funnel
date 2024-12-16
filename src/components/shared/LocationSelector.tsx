@@ -35,26 +35,24 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
       onClick={(e) => e.stopPropagation()}
     >
       <AutocompleteInput
-        label="From *"
-        value={fromLocation}
+        label="From"
+        value={fromLocation || ''}
         options={locationOptions}
         onChange={onFromLocationChange}
         onFocus={() => onFocusInput('from')}
-        onBlur={onBlurInput}
+        onBlur={() => onBlurInput()}
         isFocused={focusedInput === 'from'}
-        className="flex-1"
-        iconType="from"
+        className={className}
       />
       <AutocompleteInput
-        label="To *"
-        value={toLocation}
+        label="To"
+        value={toLocation || ''}
         options={locationOptions}
         onChange={onToLocationChange}
         onFocus={() => onFocusInput('to')}
-        onBlur={onBlurInput}
+        onBlur={() => onBlurInput()}
         isFocused={focusedInput === 'to'}
-        className="flex-1"
-        iconType="to"
+        className={className}
       />
     </div>
   );

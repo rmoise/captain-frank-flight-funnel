@@ -54,11 +54,12 @@ export default function ClaimEligibilityPage() {
     nationality: [rules.required(), rules.minLength(2)]
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const formDataObj = Object.fromEntries(formData.entries());
+    const validationErrors = validateForm(formDataObj, validationRules);
 
-    // Validate form
-    const validationErrors = validateForm(formData, validationRules);
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
       return;
@@ -68,7 +69,16 @@ export default function ClaimEligibilityPage() {
 
     try {
       // Save extended personal details
-      dispatch(setExtendedPersonalDetails(formData));
+      dispatch(setExtendedPersonalDetails({
+        phone: formDataObj.phone as string,
+        street: formDataObj.street as string,
+        houseNumber: formDataObj.houseNumber as string,
+        zipCode: formDataObj.zipCode as string,
+        city: formDataObj.city as string,
+        country: formDataObj.country as string,
+        dateOfBirth: formDataObj.dateOfBirth as string,
+        nationality: formDataObj.nationality as string
+      }));
       dispatch(completePhase(5));
 
       // Navigate to next phase
