@@ -1,5 +1,4 @@
 import React from 'react';
-import type { EyebrowProps } from '@/types/components';
 
 interface SectionProps {
   eyebrow?: string;

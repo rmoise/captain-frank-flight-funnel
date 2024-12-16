@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Input } from '../Input';
 import { AutocompleteInput } from '../AutocompleteInput';
-import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { useAppDispatch } from '@/store/hooks';
 import { setPersonalDetails, completeStep, markStepIncomplete } from '@/store/bookingSlice';
 import type { PassengerDetails } from '@/types';
 
@@ -22,20 +22,14 @@ const SALUTATION_OPTIONS = [
 
 interface PersonalDetailsFormProps {
   onComplete: (details: PassengerDetails | null) => void;
-  shouldStayOpen?: boolean;
   onInteract?: () => void;
 }
 
 export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
   onComplete,
-  shouldStayOpen = true,
   onInteract,
 }) => {
   const dispatch = useAppDispatch();
-  const savedDetails = useAppSelector((state) => state.booking.personalDetails);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-
-  // Initialize form state
   const [values, setValues] = useState<FormPersonalDetails>({
     firstName: '',
     lastName: '',
@@ -100,10 +94,8 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
 
   // Handle form changes
   useEffect(() => {
-    if (!isInitialLoad) {
-      updateState();
-    }
-  }, [values, isInitialLoad, updateState]);
+    updateState();
+  }, [values, updateState]);
 
   // Handle interaction
   const handleInteraction = useCallback(() => {
@@ -157,18 +149,16 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
 
   // Save form values to localStorage
   useEffect(() => {
-    if (!isInitialLoad && values) {
-      try {
-        localStorage.setItem('personalDetails', JSON.stringify({ ...values, phone: '' }));
-      } catch (error) {
-        console.error('Failed to save form values:', error);
-      }
-    }
-  }, [values, isInitialLoad]);
+    localStorage.setItem('personalDetails', JSON.stringify(values));
+  }, [values]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const { salutation, ...passengerDetails } = values;
+    const passengerDetails = {
+      firstName: values.firstName,
+      lastName: values.lastName,
+      email: values.email
+    };
     onComplete?.(passengerDetails);
     dispatch(setPersonalDetails(passengerDetails));
     localStorage.setItem('personalDetails', JSON.stringify(values));
@@ -176,7 +166,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
 
   return (
     <div className="w-full max-w-4xl mx-auto p-6" onClick={(e) => e.stopPropagation()} data-step="3">
-      <div className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6">
         {/* Salutation */}
         <div onClick={(e) => e.stopPropagation()}>
           <AutocompleteInput
@@ -279,7 +269,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
             <p className="mt-1 text-sm text-[#F54538]">{getError('email')}</p>
           )}
         </div>
-      </div>
+      </form>
     </div>
   );
 };

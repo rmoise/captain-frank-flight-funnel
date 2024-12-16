@@ -1,10 +1,6 @@
 'use client';
 
-import { useFunnel } from '@/context/FunnelContext';
-
 export const DocumentationPhase = () => {
-  const { dispatch } = useFunnel();
-
   return (
     <section className="mt-8">
       <div className="space-y-8">

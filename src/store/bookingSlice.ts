@@ -1,7 +1,6 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import type { Flight, PassengerDetails } from '@/types';
 import type { Answer } from '@/types/wizard';
-import { PHASES } from '@/constants/phases';
 
 interface TripDetails {
   whatHappened: string;
@@ -158,7 +157,7 @@ const bookingSlice = createSlice({
           break;
       }
     },
-    resetBooking: (state) => {
+    resetBooking: () => {
       return initialState;
     }
   },

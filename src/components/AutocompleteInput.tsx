@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { PiAirplaneTakeoff, PiAirplaneLanding } from 'react-icons/pi';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
 
 interface Option {
@@ -17,7 +16,6 @@ export interface AutocompleteInputProps {
   onBlur?: () => void;
   isFocused?: boolean;
   className?: string;
-  iconType?: 'from' | 'to';
   required?: boolean;
   error?: string | null;
 }
@@ -31,7 +29,6 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   onBlur,
   isFocused = false,
   className = '',
-  iconType = 'from',
   required = false,
   error = null,
 }) => {
@@ -46,6 +43,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   });
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Filter options based on input value
   useEffect(() => {
     if (!inputValue.trim()) {
       setFilteredOptions(options);
@@ -59,11 +57,13 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
     }
   }, [inputValue, options]);
 
+  // Update input value when value prop changes
   useEffect(() => {
-    const selectedOption = options.find(opt => opt.value === value);
+    const selectedOption = options.find((opt) => opt.value === value);
     setInputValue(selectedOption ? selectedOption.value : value || '');
   }, [value, options]);
 
+  // Update dropdown position
   useEffect(() => {
     const updatePosition = () => {
       if (containerRef.current && isOpen) {
@@ -86,6 +86,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
     };
   }, [isOpen]);
 
+  // Handle click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;

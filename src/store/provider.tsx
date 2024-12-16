@@ -21,7 +21,6 @@ function ClientProviders({ children }: { children: React.ReactNode }) {
     </Provider>
   );
 }
-
 // Export a dynamic version that only renders on client
 export const Providers = dynamic(() => Promise.resolve(ClientProviders), {
   ssr: false,

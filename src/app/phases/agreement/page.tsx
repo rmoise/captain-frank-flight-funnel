@@ -28,7 +28,7 @@ export default function AgreementPage() {
 
   const [formData, setFormData] = useState<FormData>({
     hasAcceptedTerms: savedAgreement?.hasAcceptedTerms || false,
-    signature: savedAgreement?.signature || ''
+    signature: savedAgreement?.signature || '',
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
@@ -37,22 +37,22 @@ export default function AgreementPage() {
     hasAcceptedTerms: [
       {
         test: (value: boolean) => value === true,
-        message: 'You must accept the terms and conditions to proceed'
-      }
+        message: 'You must accept the terms and conditions to proceed',
+      },
     ],
     signature: [
       {
         test: (value: string) => value.length > 0,
-        message: 'Please provide your signature'
-      }
-    ]
+        message: 'Please provide your signature',
+      },
+    ],
   };
 
   const clearSignature = () => {
     if (signatureRef.current) {
       signatureRef.current.clear();
-      setFormData(prev => ({ ...prev, signature: '' }));
-      setErrors(prev => ({ ...prev, signature: [] }));
+      setFormData((prev) => ({ ...prev, signature: '' }));
+      setErrors((prev) => ({ ...prev, signature: [] }));
     }
   };
 
@@ -63,7 +63,7 @@ export default function AgreementPage() {
     const signatureData = signatureRef.current?.toDataURL('image/png') || '';
     const updatedFormData = {
       ...formData,
-      signature: signatureData
+      signature: signatureData,
     };
 
     // Validate form
@@ -77,10 +77,12 @@ export default function AgreementPage() {
 
     try {
       // Save agreement details
-      dispatch(setAgreement({
-        ...updatedFormData,
-        signedAt: new Date().toISOString()
-      }));
+      dispatch(
+        setAgreement({
+          ...updatedFormData,
+          signedAt: new Date().toISOString(),
+        })
+      );
       dispatch(completePhase(6));
 
       // Navigate to success page
@@ -88,7 +90,7 @@ export default function AgreementPage() {
     } catch (error) {
       console.error('Failed to submit claim:', error);
       setErrors({
-        submit: ['Failed to submit your claim. Please try again.']
+        submit: ['Failed to submit your claim. Please try again.'],
       });
     } finally {
       hideLoading();
@@ -106,16 +108,16 @@ export default function AgreementPage() {
     if (!canvas) return;
 
     const handleBeginStroke = () => {
-      setErrors(prev => ({ ...prev, signature: [] }));
+      setErrors((prev) => ({ ...prev, signature: [] }));
     };
 
     const handleEndStroke = () => {
       const currentPad = signatureRef.current;
       if (currentPad) {
         const signatureData = currentPad.toDataURL('image/png');
-        setFormData(prev => ({
+        setFormData((prev) => ({
           ...prev,
-          signature: signatureData
+          signature: signatureData,
         }));
       }
     };
@@ -153,7 +155,7 @@ export default function AgreementPage() {
                       minWidth: 0.5,
                       maxWidth: 2.5,
                       throttle: 16,
-                      minDistance: 1
+                      minDistance: 1,
                     }}
                     height={160}
                     width={600}

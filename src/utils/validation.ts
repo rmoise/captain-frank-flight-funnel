@@ -1,5 +1,5 @@
 export interface ValidationRule {
-  test: (value: any) => boolean;
+  test: (value: unknown) => boolean;
   message: string;
 }
 
@@ -11,7 +11,11 @@ export interface ValidationErrors {
   [key: string]: string[];
 }
 
-export const validateForm = (data: any, rules: ValidationRules): ValidationErrors => {
+export interface FormData {
+  [key: string]: unknown;
+}
+
+export const validateForm = (data: FormData, rules: ValidationRules): ValidationErrors => {
   const errors: ValidationErrors = {};
 
   Object.entries(rules).forEach(([field, fieldRules]) => {
@@ -31,7 +35,7 @@ export const validateForm = (data: any, rules: ValidationRules): ValidationError
 // Common validation rules
 export const rules = {
   required: (message = 'This field is required'): ValidationRule => ({
-    test: (value: any) => {
+    test: (value: unknown) => {
       if (typeof value === 'string') return value.trim().length > 0;
       if (Array.isArray(value)) return value.length > 0;
       return value !== null && value !== undefined;

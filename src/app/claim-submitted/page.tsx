@@ -29,7 +29,7 @@ export default function ClaimSubmittedPage() {
           </h1>
 
           <p className="text-lg text-gray-600 mb-8">
-            Thank you for submitting your claim. We'll start processing it right away.
+            Thank you for submitting your claim. We&apos;ll start processing it right away.
           </p>
 
           <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
@@ -48,7 +48,7 @@ export default function ClaimSubmittedPage() {
                   2
                 </div>
                 <p className="text-gray-700">
-                  We'll contact the airline and start the compensation process
+                  We&apos;ll contact the airline and start the compensation process
                 </p>
               </div>
               <div className="flex items-start space-x-3">
@@ -56,7 +56,7 @@ export default function ClaimSubmittedPage() {
                   3
                 </div>
                 <p className="text-gray-700">
-                  You'll receive regular updates about your claim status via email
+                  You&apos;ll receive regular updates about your claim status via email
                 </p>
               </div>
             </div>
@@ -64,7 +64,7 @@ export default function ClaimSubmittedPage() {
 
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
             <p className="text-sm text-blue-800">
-              We've sent a confirmation email to <strong>{personalDetails?.email}</strong> with your claim details.
+              We&apos;ve sent a confirmation email to <strong>{personalDetails?.email}</strong> with your claim details.
             </p>
           </div>
 

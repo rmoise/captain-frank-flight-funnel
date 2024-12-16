@@ -10,6 +10,6 @@ export interface EyebrowProps {
 }
 
 // Add type for debounced function
-export type DebouncedFunction<T extends (...args: any[]) => any> = T & {
+export type DebouncedFunction<T extends (...args: unknown[]) => unknown> = T & {
   cancel: () => void;
 };

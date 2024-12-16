@@ -6,7 +6,7 @@ import { useAppSelector } from '@/store/hooks';
 
 export default function CompensationEstimatePage() {
   const router = useRouter();
-  const { selectedFlight, wizardAnswers, personalDetails, completedSteps } = useAppSelector(
+  const { selectedFlight, wizardAnswers, personalDetails } = useAppSelector(
     (state) => state.booking
   );
 

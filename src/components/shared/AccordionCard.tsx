@@ -5,7 +5,6 @@ import {
   ChevronUpIcon,
   CheckCircleIcon,
   XCircleIcon,
-  EllipsisHorizontalCircleIcon,
 } from '@heroicons/react/24/outline';
 import { AccordionProvider, useAccordion } from './AccordionContext';
 import { useAppDispatch } from '@/store/hooks';
@@ -35,6 +34,9 @@ const getStorageKey = (title: string) => {
   return `accordion_${title.toLowerCase().replace(/\s+/g, '_')}`;
 };
 
+// Add this type for the debounce function
+type DebouncedFunction<T extends unknown[]> = (...args: T) => void;
+
 const AccordionCardInner: React.FC<AccordionCardProps> = ({
   title,
   subtitle,
@@ -52,7 +54,6 @@ const AccordionCardInner: React.FC<AccordionCardProps> = ({
   const dispatch = useAppDispatch();
   const stepId = parseInt(eyebrow?.replace('Step ', '') || '1');
   const storageKey = getStorageKey(title);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [isExpanded, setIsExpanded] = useState(() => {
     if (typeof window !== 'undefined') {
       const savedState = localStorage.getItem(`${storageKey}_expanded`);
@@ -60,7 +61,11 @@ const AccordionCardInner: React.FC<AccordionCardProps> = ({
         return savedState === 'true';
       }
     }
-    return isOpenByDefault || title.includes('Tell us about your flight') || title.includes('What happened with your flight?');
+    return (
+      isOpenByDefault ||
+      title.includes('Tell us about your flight') ||
+      title.includes('What happened with your flight?')
+    );
   });
 
   const [localHasInteracted, setLocalHasInteracted] = useState(() => {
@@ -74,9 +79,6 @@ const AccordionCardInner: React.FC<AccordionCardProps> = ({
   });
 
   const { canToggle } = useAccordion();
-
-  const [wasCompletedBefore, setWasCompletedBefore] = useState(false);
-  const [lastCompletionTime, setLastCompletionTime] = useState(0);
   const [prevCompletedState, setPrevCompletedState] = useState(isCompleted);
 
   useEffect(() => {
@@ -94,6 +96,7 @@ const AccordionCardInner: React.FC<AccordionCardProps> = ({
     }
   }, [localHasInteracted, storageKey]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const findNextOpenStep = () => {
     let nextStep = stepId + 1;
     while (nextStep <= 3) {
@@ -160,13 +163,8 @@ const AccordionCardInner: React.FC<AccordionCardProps> = ({
         clearTimeout(timeoutId);
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCompleted, shouldStayOpen, stepId, dispatch]);
-
-  useEffect(() => {
-    if (!isCompleted) {
-      setLastCompletionTime(0);
-    }
-  }, [isCompleted]);
 
   useEffect(() => {
     if (hasInteracted && !localHasInteracted) {
@@ -176,12 +174,16 @@ const AccordionCardInner: React.FC<AccordionCardProps> = ({
 
   useEffect(() => {
     if (isActive && !isExpanded) {
+      // Empty effect for tracking active state
     }
   }, [isActive, isExpanded]);
 
-  const debounce = (func: Function, wait: number) => {
+  const debounce = <T extends unknown[]>(
+    func: (...args: T) => void,
+    wait: number
+  ): DebouncedFunction<T> => {
     let timeout: NodeJS.Timeout;
-    return (...args: any[]) => {
+    return (...args: T) => {
       clearTimeout(timeout);
       timeout = setTimeout(() => func(...args), wait);
     };
@@ -191,7 +193,7 @@ const AccordionCardInner: React.FC<AccordionCardProps> = ({
     let lastIntersectionTime = 0;
     const minTimeBetweenUpdates = 300;
 
-    const handleIntersection = debounce((entries: IntersectionObserverEntry[]) => {
+    const handleIntersection = debounce<[IntersectionObserverEntry[]]>((entries) => {
       const now = Date.now();
       entries.forEach((entry) => {
         if (entry.isIntersecting &&
@@ -236,7 +238,11 @@ const AccordionCardInner: React.FC<AccordionCardProps> = ({
 
   const handleHeaderClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
-    if (target.closest('input, button, select, textarea, [role="listbox"], [role="option"]')) {
+    if (
+      target.closest(
+        'input, button, select, textarea, [role="listbox"], [role="option"]'
+      )
+    ) {
       return;
     }
 
@@ -249,19 +255,20 @@ const AccordionCardInner: React.FC<AccordionCardProps> = ({
           setIsExpanded(false);
           setTimeout(() => {
             dispatch(setStep(nextStepId));
-            const nextStep = document.querySelector(`[data-step="${nextStepId}"]`);
+            const nextStep = document.querySelector(
+              `[data-step="${nextStepId}"]`
+            );
             if (nextStep) {
-              const headerHeight = 80;
               const windowHeight = window.innerHeight;
               const cardHeight = nextStep.getBoundingClientRect().height;
               const scrollPosition =
                 nextStep.getBoundingClientRect().top +
                 window.pageYOffset -
-                ((windowHeight - cardHeight) / 2);
+                (windowHeight - cardHeight) / 2;
 
               window.scrollTo({
                 top: Math.max(0, scrollPosition),
-                behavior: 'smooth'
+                behavior: 'smooth',
               });
             }
           }, 100);
@@ -275,17 +282,16 @@ const AccordionCardInner: React.FC<AccordionCardProps> = ({
       if (!isExpanded) {
         const card = cardRef.current;
         if (card) {
-          const headerHeight = 80;
           const windowHeight = window.innerHeight;
           const cardHeight = card.getBoundingClientRect().height;
           const scrollPosition =
             card.getBoundingClientRect().top +
             window.pageYOffset -
-            ((windowHeight - cardHeight) / 2);
+            (windowHeight - cardHeight) / 2;
 
           window.scrollTo({
             top: Math.max(0, scrollPosition),
-            behavior: 'smooth'
+            behavior: 'smooth',
           });
         }
       }
@@ -305,15 +311,13 @@ const AccordionCardInner: React.FC<AccordionCardProps> = ({
       initial={false}
       animate={{
         y: isActive ? -4 : 0,
-        transition: { duration: 0.2 }
+        transition: { duration: 0.2 },
       }}
     >
       <Card
         ref={cardRef}
         className={`${className} transition-shadow duration-300 ${
-          isActive
-            ? 'shadow-lg'
-            : 'shadow-sm hover:shadow-md'
+          isActive ? 'shadow-lg' : 'shadow-sm hover:shadow-md'
         }`}
       >
         <div className="relative">
@@ -326,7 +330,9 @@ const AccordionCardInner: React.FC<AccordionCardProps> = ({
                 <div className="text-sm text-gray-500 mb-1">{eyebrow}</div>
               )}
               <div className="flex items-center gap-3">
-                <h3 className="text-2xl font-semibold text-gray-900">{title}</h3>
+                <h3 className="text-2xl font-semibold text-gray-900">
+                  {title}
+                </h3>
               </div>
               {subtitle && isExpanded && (
                 <p className="text-sm text-gray-500 mt-2">{subtitle}</p>

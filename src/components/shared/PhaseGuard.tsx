@@ -37,7 +37,7 @@ export default function PhaseGuard({ children, requiredPhase, requiredPreviousPh
     }
 
     setIsLoading(false);
-  }, [currentPhase, completedPhases, selectedFlight, wizardAnswers, personalDetails, requiredPhase, requiredPreviousPhases]);
+  }, [currentPhase, completedPhases, selectedFlight, wizardAnswers, personalDetails, requiredPhase, requiredPreviousPhases, router]);
 
   if (isLoading) {
     return (

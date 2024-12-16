@@ -1,16 +1,13 @@
 import React from 'react';
-import { createPortal } from 'react-dom';
 
 interface MoneyInputControlsProps {
   value: string;
   onChange: (value: string) => void;
-  containerRef: React.RefObject<HTMLDivElement | null>;
 }
 
 export const MoneyInputControls: React.FC<MoneyInputControlsProps> = ({
   value,
   onChange,
-  containerRef,
 }) => {
   const handleButtonClick = (action: 'increment' | 'decrement' | 'clear') => {
     const num = parseFloat(value) || 0;

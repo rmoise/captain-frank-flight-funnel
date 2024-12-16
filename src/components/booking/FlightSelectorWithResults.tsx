@@ -6,7 +6,6 @@ import { FlightTypeSelector } from '../shared/FlightTypeSelector';
 import { LocationSelector } from '../shared/LocationSelector';
 import { FlightResultsList } from '../shared/FlightResultsList';
 import { PageHeader } from '../shared/PageHeader';
-import type { FlightType } from '@/types/flight';
 
 const flightTypes = [
   { id: 'direct' as const, label: 'Direct Flight' },
@@ -22,8 +21,12 @@ const locationOptions = [
 export function FlightSelectorWithResults() {
   const dispatch = useAppDispatch();
   const { selectedFlight } = useAppSelector((state) => state.booking);
-  const [focusedInput, setFocusedInput] = React.useState<'from' | 'to' | null>(null);
-  const [selectedType, setSelectedType] = React.useState<'direct' | 'multi'>('direct');
+  const [focusedInput, setFocusedInput] = React.useState<'from' | 'to' | null>(
+    null
+  );
+  const [selectedType, setSelectedType] = React.useState<'direct' | 'multi'>(
+    'direct'
+  );
 
   const handleFlightSelect = (flight: Flight) => {
     dispatch(setSelectedFlight(flight));
@@ -84,7 +87,9 @@ export function FlightSelectorWithResults() {
           <FlightResultsList
             flights={[]}
             onFlightSelect={handleFlightSelect}
-            onNotListedClick={() => {/* Handle not listed click */}}
+            onNotListedClick={() => {
+              /* Handle not listed click */
+            }}
             className="w-full"
           />
         )}

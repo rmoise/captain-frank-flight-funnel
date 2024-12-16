@@ -16,9 +16,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={heebo.variable}>
       <body className="font-heebo" suppressHydrationWarning>
-        <ClientProviders>
-          {children}
-        </ClientProviders>
+        <ClientProviders>{children}</ClientProviders>
       </body>
     </html>
   );

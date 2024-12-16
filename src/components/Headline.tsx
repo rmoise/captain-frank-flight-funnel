@@ -1,5 +1,4 @@
 import React from 'react';
-import type { BadgeProps } from '@/types/components';
 
 interface HeadlineProps {
   text: string;

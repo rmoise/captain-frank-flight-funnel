@@ -47,7 +47,7 @@ export default function ClaimRejectedPage() {
           </h1>
 
           <p className="text-lg text-gray-600 mb-8">
-            We're sorry, but we are unable to process your claim at this time.
+            We&apos;re sorry, but we are unable to process your claim at this time.
           </p>
 
           <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
@@ -68,7 +68,7 @@ export default function ClaimRejectedPage() {
 
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
             <p className="text-sm text-blue-800">
-              We've sent an email to <strong>{personalDetails?.email}</strong> with detailed information about this decision.
+              We&apos;ve sent an email to <strong>{personalDetails?.email}</strong> with detailed information about this decision.
             </p>
           </div>
 

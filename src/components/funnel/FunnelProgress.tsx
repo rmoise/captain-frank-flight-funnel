@@ -10,9 +10,6 @@ const phases = PHASES.map((phase) => ({
 
 export const FunnelProgress: React.FC = () => {
   const { state } = useFunnel();
-  const currentPhaseIndex = phases.findIndex(
-    (phase) => phase.id === state.currentPhase
-  );
 
   return (
     <div className="w-full max-w-4xl mx-auto mb-8">

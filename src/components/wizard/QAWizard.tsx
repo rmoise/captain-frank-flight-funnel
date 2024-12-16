@@ -1,21 +1,28 @@
-'use client';
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import type { Answer } from '@/types/wizard';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
-import { useSteps } from '@/context/StepsContext';
 import { QuestionAnswer } from '@/components/shared/QuestionAnswer';
 import { PageHeader } from '@/components/shared/PageHeader';
-import type { Question } from '@/types/experience';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import {
   setWizardAnswers,
   completeStep,
   markStepIncomplete,
 } from '@/store/bookingSlice';
-import { useDispatch } from 'react-redux';
-import { MoneyInput } from '@/components/MoneyInput';
+
+interface QuestionOption {
+  value: string;
+  label: string;
+}
+
+interface Question {
+  id: string;
+  type: 'radio' | 'number';
+  text: string;
+  options?: QuestionOption[];
+  showIf?: (answers: Answer[]) => boolean;
+}
 
 export type { Question, Answer };
 
@@ -23,7 +30,6 @@ interface QAWizardProps {
   questions: Question[];
   onComplete: (answers: Answer[]) => void;
   initialAnswers?: Answer[];
-  illustration?: string;
   onInteract?: () => void;
 }
 
@@ -31,7 +37,6 @@ export const QAWizard: React.FC<QAWizardProps> = ({
   questions,
   onComplete,
   initialAnswers = [],
-  illustration,
   onInteract,
 }) => {
   const [currentStep, setCurrentStep] = useState(0);
@@ -50,13 +55,9 @@ export const QAWizard: React.FC<QAWizardProps> = ({
     return '';
   });
   const [initialized, setInitialized] = useState(false);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const [focusedQuestionId, setFocusedQuestionId] = useState<string | null>(
-    null
-  );
 
   // Get Redux state
-  const { wizardAnswers: storedAnswers, completedSteps } = useAppSelector(
+  const { wizardAnswers: storedAnswers } = useAppSelector(
     (state) => state.booking
   );
   const dispatch = useAppDispatch();
@@ -101,9 +102,8 @@ export const QAWizard: React.FC<QAWizardProps> = ({
 
   // Initialize answers from Redux state
   useEffect(() => {
-    if (!initialized && isInitialLoad) {
+    if (!initialized) {
       setInitialized(true);
-      setIsInitialLoad(false);
 
       // Check if we need to mark the step as complete based on existing data
       if (answers.length > 0) {
@@ -146,7 +146,7 @@ export const QAWizard: React.FC<QAWizardProps> = ({
         }
       }
     }
-  }, [initialized, isInitialLoad, answers, dispatch, questions]);
+  }, [initialized, answers, dispatch, questions]);
 
   // Handle step restoration - only run when initialized changes
   useEffect(() => {
@@ -162,32 +162,30 @@ export const QAWizard: React.FC<QAWizardProps> = ({
 
   // Save answers to localStorage - only when answers change and not during initial load
   useEffect(() => {
-    if (!isInitialLoad && answers.length > 0) {
+    if (answers.length > 0) {
       try {
         localStorage.setItem('qaWizard_answers', JSON.stringify(answers));
       } catch (error) {
         console.error('Failed to save answers to localStorage:', error);
       }
     }
-  }, [answers, isInitialLoad]);
+  }, [answers]);
 
   // Handle step changes - only when activeQuestions length or currentStep changes
   useEffect(() => {
-    if (!isInitialLoad && currentStep >= activeQuestions.length) {
+    if (currentStep >= activeQuestions.length) {
       setCurrentStep(Math.max(0, activeQuestions.length - 1));
     }
-  }, [activeQuestions.length, currentStep, isInitialLoad]);
+  }, [activeQuestions.length, currentStep]);
 
   // Save current step to localStorage - only when currentStep changes and not during initial load
   useEffect(() => {
-    if (!isInitialLoad) {
-      try {
-        localStorage.setItem('wizardCurrentStep', currentStep.toString());
-      } catch (error) {
-        console.error('Failed to save current step:', error);
-      }
+    try {
+      localStorage.setItem('wizardCurrentStep', currentStep.toString());
+    } catch (error) {
+      console.error('Failed to save current step:', error);
     }
-  }, [currentStep, isInitialLoad]);
+  }, [currentStep]);
 
   const handleInteraction = useCallback(() => {
     if (!hasInteracted) {
@@ -371,62 +369,6 @@ export const QAWizard: React.FC<QAWizardProps> = ({
       setCurrentStep((prev) => Math.max(0, prev - 1));
     }
   }, [currentStep]);
-
-  const handleStepCompletion = () => {
-    dispatch(completeStep(currentStep));
-    // ... rest of your completion logic
-  };
-
-  const renderQuestion = (question: Question) => {
-    const answer = answers.find((a) => a.questionId === question.id);
-
-    if (question.type === 'radio' && question.options) {
-      return (
-        <div className="space-y-3">
-          {question.options.map((option) => (
-            <label
-              key={option.value}
-              className={`flex items-center w-full p-3 rounded-lg border cursor-pointer transition-all duration-200
-                ${
-                  answer?.value === option.value
-                    ? 'border-[#F54538] bg-[#FEF2F2]'
-                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                }`}
-            >
-              <input
-                type="radio"
-                name={question.id}
-                value={option.value}
-                checked={answer?.value === option.value}
-                onChange={() => handleAnswer(question.id, option.value)}
-                className="w-4 h-4 border-gray-300 text-[#F54538] focus:ring-[#F54538] focus:ring-offset-0 accent-[#F54538]"
-              />
-              <span className="ml-3 text-base text-gray-900">
-                {option.label}
-              </span>
-            </label>
-          ))}
-        </div>
-      );
-    }
-
-    if (question.type === 'number') {
-      return (
-        <div className="mt-2">
-          <MoneyInput
-            label="Amount"
-            value={answer?.value || ''}
-            onChange={(value: string) => handleAnswer(question.id, value)}
-            isFocused={focusedQuestionId === question.id}
-            onFocus={() => setFocusedQuestionId(question.id)}
-            onBlur={() => setFocusedQuestionId(null)}
-          />
-        </div>
-      );
-    }
-
-    return null;
-  };
 
   if (isCompleted) {
     return (

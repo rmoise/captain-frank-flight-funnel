@@ -101,9 +101,7 @@ export const MoneyInput: React.FC<MoneyInputProps> = ({
             bg-white rounded-xl
             transition-[border-color,border-width] duration-[250ms] ease-in-out
             ${
-              isFocused
-                ? 'border-2 border-blue-500'
-                : 'border border-[#e0e1e4]'
+              isFocused ? 'border-2 border-blue-500' : 'border border-[#e0e1e4]'
             }
             ${value ? 'pr-10' : ''}
             focus:outline-none

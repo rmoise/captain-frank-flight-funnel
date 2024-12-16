@@ -12,7 +12,6 @@ interface InputProps {
   required?: boolean;
   alwaysOpen?: boolean;
   error?: string | null;
-  preventClose?: boolean;
   autocomplete?: string;
 }
 
@@ -28,7 +27,6 @@ export const Input: React.FC<InputProps> = ({
   required = false,
   alwaysOpen = false,
   error = null,
-  preventClose = false,
   autocomplete,
 }) => {
   const handleContainerClick = (e: React.MouseEvent) => {

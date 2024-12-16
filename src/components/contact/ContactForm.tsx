@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAppSelector } from '@/store/hooks';
 import { validateForm, rules } from '@/utils/validation';
 import FormError from '@/components/shared/FormError';
 import { useLoading } from '@/providers/LoadingProvider';
@@ -20,7 +19,6 @@ interface FormErrors {
 export default function ContactForm() {
   const router = useRouter();
   const { showLoading, hideLoading } = useLoading();
-  const { personalDetails } = useAppSelector((state) => state.booking);
 
   const [formData, setFormData] = useState<FormData>({
     subject: '',

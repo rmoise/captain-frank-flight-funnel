@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import type { RootState } from '@/store';
 import {
@@ -16,7 +16,6 @@ import type { BookingState } from '@/types/store';
 import type { Flight, PassengerDetails } from '@/types';
 import FlightSelector from '@/components/booking/FlightSelector';
 import { QAWizard } from '@/components/wizard/QAWizard';
-import { useSteps } from '@/context/StepsContext';
 import { ProgressTracker } from '@/components/booking/ProgressTracker';
 import { wizardQuestions } from '@/constants/wizardQuestions';
 import { PersonalDetailsForm } from '@/components/forms/PersonalDetailsForm';
@@ -49,10 +48,9 @@ interface Step {
 
 // Define steps configuration outside component to prevent unnecessary re-renders
 const createSteps = (
-  dispatch: any,
-  handleStepInteraction: (stepId: number) => void,
-  pathname: string
-) => [
+  dispatch: ReturnType<typeof useAppDispatch>,
+  handleStepInteraction: (stepId: number) => void
+): Step[] => [
   {
     id: 1,
     name: 'FlightSelector',
@@ -191,7 +189,6 @@ const createSteps = (
 
 export default function InitialAssessmentPage() {
   const router = useRouter();
-  const pathname = usePathname();
   const dispatch = useAppDispatch();
   const bookingState = useAppSelector((state: RootState) => state.booking);
   const {
@@ -204,77 +201,7 @@ export default function InitialAssessmentPage() {
   const [interactedSteps, setInteractedSteps] = useState<number[]>([]);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
-  const [marketingAccepted, setMarketingAccepted] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
-
-  const handleStepInteraction = useCallback((stepId: number) => {
-    setInteractedSteps((prev) => {
-      if (prev.includes(stepId)) return prev;
-      return [...prev, stepId];
-    });
-  }, []);
-
-  // Create steps with memoized callbacks
-  const STEPS = useMemo(
-    () => createSteps(dispatch, handleStepInteraction, pathname),
-    [dispatch, handleStepInteraction, pathname]
-  );
-
-  // Force step 1 on mount
-  useEffect(() => {
-    dispatch(setStep(1));
-  }, [dispatch]);
-
-  // Update current step based on scroll position
-  useEffect(() => {
-    const handleScroll = () => {
-      const stepElements = document.querySelectorAll('[data-step]');
-      const viewportHeight = window.innerHeight;
-      const scrollPosition = window.scrollY;
-
-      stepElements.forEach((element) => {
-        const rect = element.getBoundingClientRect();
-        const stepId = parseInt(element.getAttribute('data-step') || '1');
-
-        // Check if element is in viewport
-        if (
-          rect.top <= viewportHeight / 2 &&
-          rect.bottom >= viewportHeight / 2
-        ) {
-          dispatch(setStep(stepId));
-        }
-      });
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    handleScroll(); // Initial check
-
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [dispatch]);
-
-  // Prevent navigation on mount
-  useEffect(() => {
-    const preventNavigation = () => {
-      window.history.pushState(null, '', window.location.pathname);
-    };
-
-    // Push initial state
-    preventNavigation();
-
-    // Handle popstate
-    window.addEventListener('popstate', preventNavigation);
-    return () => window.removeEventListener('popstate', preventNavigation);
-  }, []);
-
-  // Handle back navigation
-  const handleBack = useCallback(() => {
-    if (currentStep > 1) {
-      dispatch(setStep(currentStep - 1));
-    }
-  }, [currentStep, dispatch]);
-
-  // Compute disabled state based on current step
-  const showBackButton = useMemo(() => currentStep > 1, [currentStep]);
 
   // Compute continue state
   const canContinue = useMemo(() => {
@@ -316,6 +243,74 @@ export default function InitialAssessmentPage() {
     if (!canContinue) return;
     router.push('/phases/compensation-estimate');
   }, [canContinue, router, termsAccepted, privacyAccepted]);
+
+  // Handle back navigation
+  const handleBack = useCallback(() => {
+    if (currentStep > 1) {
+      dispatch(setStep(currentStep - 1));
+    }
+  }, [currentStep, dispatch]);
+
+  // Compute disabled state based on current step
+  const showBackButton = useMemo(() => currentStep > 1, [currentStep]);
+
+  const handleStepInteraction = useCallback((stepId: number) => {
+    setInteractedSteps((prev) => {
+      if (prev.includes(stepId)) return prev;
+      return [...prev, stepId];
+    });
+  }, []);
+
+  // Create steps with memoized callbacks
+  const STEPS = useMemo(
+    () => createSteps(dispatch, handleStepInteraction),
+    [dispatch, handleStepInteraction]
+  );
+
+  // Force step 1 on mount
+  useEffect(() => {
+    dispatch(setStep(1));
+  }, [dispatch]);
+
+  // Update current step based on scroll position
+  useEffect(() => {
+    const handleScroll = () => {
+      const stepElements = document.querySelectorAll('[data-step]');
+      const viewportHeight = window.innerHeight;
+
+      stepElements.forEach((element) => {
+        const rect = element.getBoundingClientRect();
+        const stepId = parseInt(element.getAttribute('data-step') || '1');
+
+        // Check if element is in viewport
+        if (
+          rect.top <= viewportHeight / 2 &&
+          rect.bottom >= viewportHeight / 2
+        ) {
+          dispatch(setStep(stepId));
+        }
+      });
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll(); // Initial check
+
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [dispatch]);
+
+  // Prevent navigation on mount
+  useEffect(() => {
+    const preventNavigation = () => {
+      window.history.pushState(null, '', window.location.pathname);
+    };
+
+    // Push initial state
+    preventNavigation();
+
+    // Handle popstate
+    window.addEventListener('popstate', preventNavigation);
+    return () => window.removeEventListener('popstate', preventNavigation);
+  }, []);
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -370,13 +365,6 @@ export default function InitialAssessmentPage() {
               required={true}
               error={showErrors && !privacyAccepted}
               onChange={setPrivacyAccepted}
-            />
-            <ConsentCheckbox
-              text="I agree that Captain Frank may send me advertising about Captain Frank's services, promotions and satisfaction surveys by email. Captain Frank will process my personal data for this purpose (see"
-              linkText="privacy policy"
-              link="/privacy"
-              details="). I can revoke this consent at any time."
-              onChange={setMarketingAccepted}
             />
           </div>
 
