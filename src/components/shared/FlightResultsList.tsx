@@ -33,7 +33,9 @@ export const FlightResultsList: React.FC<FlightResultsListProps> = ({
                   <p className="text-sm font-medium text-gray-900">
                     {flight.departureTime}
                   </p>
-                  <p className="text-sm text-gray-500">{flight.departureCity}</p>
+                  <p className="text-sm text-gray-500">
+                    {flight.departureCity}
+                  </p>
                 </div>
                 <div className="flex-1 border-t border-gray-300 relative">
                   <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-2">

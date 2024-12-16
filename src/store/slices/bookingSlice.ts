@@ -1,20 +1,11 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import type { RootState } from '../store';
+import type { RootState } from '@/types/store';
 import { Flight, PassengerDetails } from '@/types';
 import { Answer } from '@/types/wizard';
-
-interface BookingState {
-  currentStep: number;
-  selectedFlight: Flight | null;
-  wizardAnswers: Answer[];
-  personalDetails: PassengerDetails | null;
-  completedSteps: number[];
-  fromLocation: string | null;
-  toLocation: string | null;
-  focusedInput: 'from' | 'to' | null;
-}
+import type { BookingState } from '@/types/store';
 
 const initialState: BookingState = {
+  progress: 0,
   currentStep: 1,
   selectedFlight: null,
   wizardAnswers: [],
@@ -23,6 +14,13 @@ const initialState: BookingState = {
   fromLocation: null,
   toLocation: null,
   focusedInput: null,
+  flightTypes: [],
+  phaseProgress: {
+    'claim-details': 0,
+    documentation: 0,
+    review: 0,
+    complete: 0,
+  },
 };
 
 export const bookingSlice = createSlice({
@@ -30,7 +28,7 @@ export const bookingSlice = createSlice({
   initialState,
   reducers: {
     setStep: (state, action: PayloadAction<number>) => {
-      state.currentStep = action.payload;
+      state.currentStep = Math.max(1, action.payload);
     },
     completeStep: (state, action: PayloadAction<number>) => {
       if (!state.completedSteps.includes(action.payload)) {
@@ -48,7 +46,7 @@ export const bookingSlice = createSlice({
     setToLocation: (state, action: PayloadAction<string | null>) => {
       state.toLocation = action.payload;
     },
-    setFocusedInput: (state, action: PayloadAction<'from' | 'to' | null>) => {
+    setFocusedInput: (state, action: PayloadAction<string | null>) => {
       state.focusedInput = action.payload;
     },
     setSelectedFlight: (state, action: PayloadAction<Flight | null>) => {

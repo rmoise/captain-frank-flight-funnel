@@ -1,15 +1,39 @@
 import { configureStore } from '@reduxjs/toolkit';
-import bookingReducer, { BookingState } from './bookingSlice';
+import { persistStore, persistReducer } from 'redux-persist';
+import storage from 'redux-persist/lib/storage';
+import bookingReducer from './bookingSlice';
+import type { BookingState } from '@/types/store';
 
-const reducer = {
-  booking: bookingReducer,
+const persistConfig = {
+  key: 'root',
+  storage,
+  whitelist: [
+    'booking',
+    'completedSteps',
+    'wizardAnswers',
+    'selectedFlight',
+    'personalDetails',
+    'currentStep',
+    'phaseProgress',
+    'completedPhases'
+  ]
 };
 
+const persistedReducer = persistReducer(persistConfig, bookingReducer);
+
 export const store = configureStore({
-  reducer,
+  reducer: {
+    booking: persistedReducer,
+  },
+  middleware: (getDefaultMiddleware) =>
+    getDefaultMiddleware({
+      serializableCheck: {
+        ignoredActions: ['persist/PERSIST', 'persist/REHYDRATE'],
+      },
+    }),
 });
+
+export const persistor = persistStore(store);
 
 export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;
-
-export type { BookingState };

@@ -9,6 +9,7 @@ interface ConsentCheckboxProps {
   onChange?: (checked: boolean) => void;
   required?: boolean;
   details?: string;
+  error?: boolean;
 }
 
 export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
@@ -18,6 +19,7 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
   onChange,
   required = false,
   details,
+  error = false,
 }) => {
   const [isChecked, setIsChecked] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -38,27 +40,28 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
   };
 
   return (
-    <div className="flex flex-col bg-white rounded-xl border border-[#e0e1e4] transition-colors hover:bg-gray-50">
+    <div className={`flex flex-col bg-white rounded-xl border transition-colors hover:bg-gray-50 ${error ? 'border-[#F54538]' : 'border-[#e0e1e4]'}`}>
       <div
-        className={`flex items-start gap-4 p-4 ${!isExpanded ? 'max-h-[56px] overflow-hidden' : ''} ${details ? 'cursor-pointer' : ''}`}
+        className={`flex items-start gap-4 p-4 ${
+          !isExpanded ? 'max-h-[56px] overflow-hidden' : ''
+        } ${details ? 'cursor-pointer' : ''}`}
         onClick={details ? toggleAccordion : undefined}
       >
         <div
           className={`
             mt-1 w-4 h-4 rounded border transition-colors cursor-pointer
-            ${isChecked
-              ? 'bg-[#F54538] border-[#F54538]'
-              : 'border-zinc-300 hover:border-[#F54538]'
+            ${
+              isChecked
+                ? 'bg-[#F54538] border-[#F54538]'
+                : error
+                  ? 'border-[#F54538] hover:border-[#F54538]'
+                  : 'border-zinc-300 hover:border-[#F54538]'
             }
           `}
           onClick={handleChange}
         >
           {isChecked && (
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              className="w-4 h-4 text-white"
-            >
+            <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-white">
               <path
                 d="M20 6L9 17L4 12"
                 stroke="currentColor"
@@ -98,7 +101,7 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
             initial={false}
             animate={{
               height: isExpanded ? 'auto' : 0,
-              opacity: isExpanded ? 1 : 0
+              opacity: isExpanded ? 1 : 0,
             }}
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
@@ -109,6 +112,11 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
               </div>
             )}
           </motion.div>
+          {error && (
+            <div className="text-[#F54538] text-xs mt-1">
+              This checkbox is required
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -6,19 +6,47 @@ import { FlightTypeSelector } from '../shared/FlightTypeSelector';
 import { LocationSelector } from '../shared/LocationSelector';
 import { FlightResultsList } from '../shared/FlightResultsList';
 import { PageHeader } from '../shared/PageHeader';
+import type { FlightType } from '@/types/flight';
 
 const flightTypes = [
-  { id: 'delayed', label: 'Delayed Flight' },
-  { id: 'cancelled', label: 'Cancelled Flight' },
-  { id: 'overbooked', label: 'Overbooked Flight' },
+  { id: 'direct' as const, label: 'Direct Flight' },
+  { id: 'multi' as const, label: 'Multi City' },
+] as const;
+
+const locationOptions = [
+  { value: 'NYC', label: 'New York City' },
+  { value: 'LAX', label: 'Los Angeles' },
+  { value: 'CHI', label: 'Chicago' },
 ];
 
 export function FlightSelectorWithResults() {
   const dispatch = useAppDispatch();
   const { selectedFlight } = useAppSelector((state) => state.booking);
+  const [focusedInput, setFocusedInput] = React.useState<'from' | 'to' | null>(null);
+  const [selectedType, setSelectedType] = React.useState<'direct' | 'multi'>('direct');
 
   const handleFlightSelect = (flight: Flight) => {
     dispatch(setSelectedFlight(flight));
+  };
+
+  const handleTypeSelect = (type: 'direct' | 'multi') => {
+    setSelectedType(type);
+    if (selectedFlight) {
+      const updatedFlight: Flight = {
+        ...selectedFlight,
+        id: selectedFlight.id || '1',
+        airline: selectedFlight.airline || '',
+        flightNumber: selectedFlight.flightNumber || '',
+        departureTime: selectedFlight.departureTime || '',
+        arrivalTime: selectedFlight.arrivalTime || '',
+        departureCity: selectedFlight.departureCity || '',
+        arrivalCity: selectedFlight.arrivalCity || '',
+        departure: selectedFlight.departure || '',
+        arrival: selectedFlight.arrival || '',
+        price: selectedFlight.price || 0,
+      };
+      handleFlightSelect(updatedFlight);
+    }
   };
 
   return (
@@ -29,25 +57,35 @@ export function FlightSelectorWithResults() {
       />
       <div className="space-y-6">
         <FlightTypeSelector
-          options={flightTypes}
-          selectedOption={selectedFlight?.type}
-          onSelect={(type) => handleFlightSelect({ ...selectedFlight, type } as Flight)}
+          types={flightTypes}
+          selectedType={selectedType}
+          onTypeSelect={handleTypeSelect}
         />
         <LocationSelector
-          label="From"
-          value={selectedFlight?.from || ''}
-          onChange={(from) => handleFlightSelect({ ...selectedFlight, from } as Flight)}
+          fromLocation={selectedFlight?.departureCity || ''}
+          toLocation={selectedFlight?.arrivalCity || ''}
+          locationOptions={locationOptions}
+          onFromLocationChange={(value) => {
+            if (selectedFlight) {
+              handleFlightSelect({ ...selectedFlight, departureCity: value });
+            }
+          }}
+          onToLocationChange={(value) => {
+            if (selectedFlight) {
+              handleFlightSelect({ ...selectedFlight, arrivalCity: value });
+            }
+          }}
+          onFocusInput={setFocusedInput}
+          onBlurInput={() => setFocusedInput(null)}
+          focusedInput={focusedInput}
+          className="w-full"
         />
-        <LocationSelector
-          label="To"
-          value={selectedFlight?.to || ''}
-          onChange={(to) => handleFlightSelect({ ...selectedFlight, to } as Flight)}
-        />
-        {selectedFlight?.from && selectedFlight?.to && (
+        {selectedFlight?.departureCity && selectedFlight?.arrivalCity && (
           <FlightResultsList
             flights={[]}
-            selectedFlight={selectedFlight}
-            onSelect={handleFlightSelect}
+            onFlightSelect={handleFlightSelect}
+            onNotListedClick={() => {/* Handle not listed click */}}
+            className="w-full"
           />
         )}
       </div>

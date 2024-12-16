@@ -10,16 +10,15 @@ import {
   setFocusedInput,
   completeStep,
   markStepIncomplete,
-} from '@/store/slices/bookingSlice';
-import { useSteps } from '@/context/StepsContext';
+} from '@/store/bookingSlice';
 import { FlightTypeSelector } from '../shared/FlightTypeSelector';
 import { LocationSelector } from '../shared/LocationSelector';
 import { PlusIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
 const flightTypes = [
-  { id: 'direct', label: 'Direct Flight' },
-  { id: 'multi', label: 'Multi City' },
-];
+  { id: 'direct' as const, label: 'Direct Flight' },
+  { id: 'multi' as const, label: 'Multi City' },
+] as const;
 
 const airportOptions = [
   { value: 'LHR', label: 'London Heathrow' },
@@ -30,22 +29,63 @@ const airportOptions = [
 
 export default function FlightSelector({ onSelect, onInteract }: FlightSelectorProps) {
   const [flightType, setFlightType] = useState<'direct' | 'multi'>('direct');
-  const [segments, setSegments] = useState<FlightSegment[]>([
-    { id: '1', fromLocation: null, toLocation: null },
-  ]);
   const [hasInteracted, setHasInteracted] = useState(false);
 
   const dispatch = useAppDispatch();
-  const { focusedInput } = useAppSelector(
+  const { selectedFlight, fromLocation, toLocation, focusedInput } = useAppSelector(
     (state) => state.booking
   );
-  const { registerStep } = useSteps();
 
+  // Initialize segments from Redux state and localStorage
+  const [segments, setSegments] = useState<FlightSegment[]>(() => {
+    // First try to get from localStorage
+    if (typeof window !== 'undefined') {
+      const savedSegments = localStorage.getItem('flightSelector_segments');
+      if (savedSegments) {
+        return JSON.parse(savedSegments);
+      }
+    }
+
+    // If not in localStorage, use Redux state
+    if (selectedFlight) {
+      return [{
+        id: '1',
+        fromLocation: selectedFlight.departureCity || null,
+        toLocation: selectedFlight.arrivalCity || null
+      }];
+    }
+    // If we have fromLocation or toLocation in Redux but no selected flight,
+    // initialize with those values
+    if (fromLocation || toLocation) {
+      return [{
+        id: '1',
+        fromLocation: fromLocation || null,
+        toLocation: toLocation || null
+      }];
+    }
+    return [{ id: '1', fromLocation: null, toLocation: null }];
+  });
+
+  // Save segments to localStorage whenever they change
   useEffect(() => {
-    const STEP_ID = 'FlightSelector';
-    const STEP_NUMBER = 1;
-    registerStep(STEP_ID, STEP_NUMBER);
-  }, [registerStep]);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('flightSelector_segments', JSON.stringify(segments));
+    }
+  }, [segments]);
+
+  // Restore flight type based on selected flight
+  useEffect(() => {
+    if (selectedFlight) {
+      setFlightType('direct'); // For now, we only support direct flights in persistence
+    }
+  }, [selectedFlight]);
+
+  // Check if we need to mark the step as complete based on existing data
+  useEffect(() => {
+    if (selectedFlight && fromLocation && toLocation) {
+      dispatch(completeStep(1));
+    }
+  }, [selectedFlight, fromLocation, toLocation, dispatch]);
 
   const handleInteraction = () => {
     if (!hasInteracted) {
@@ -74,7 +114,8 @@ export default function FlightSelector({ onSelect, onInteract }: FlightSelectorP
           price: 0,
         };
         dispatch(setSelectedFlight(mockFlight));
-        onSelect(mockFlight);
+        onSelect?.(mockFlight);
+        dispatch(completeStep(1));
       } else {
         const mockFlights: Flight[] = segments.map((segment, index) => ({
           id: (index + 1).toString(),
@@ -89,10 +130,11 @@ export default function FlightSelector({ onSelect, onInteract }: FlightSelectorP
           price: 0,
         }));
         dispatch(setSelectedFlight(mockFlights[0])); // Store first flight for now
-        onSelect(mockFlights);
+        onSelect?.(mockFlights[0]);
+        dispatch(completeStep(1));
       }
-      dispatch(completeStep(1));
     } else {
+      // Clear selected flight and mark step as incomplete
       dispatch(markStepIncomplete(1));
       dispatch(setSelectedFlight(null));
     }
@@ -101,25 +143,41 @@ export default function FlightSelector({ onSelect, onInteract }: FlightSelectorP
   const handleSegmentChange = (
     segmentId: string,
     field: 'fromLocation' | 'toLocation',
-    value: string
+    value: string | null
   ) => {
     handleInteraction();
+
+    // Update segments state
     const newSegments = segments.map((segment) => {
       if (segment.id === segmentId) {
-        return { ...segment, [field]: value || null };
+        return { ...segment, [field]: value };
       }
       return segment;
     });
     setSegments(newSegments);
-    updateFlightSelection(newSegments);
 
-    // Update redux state for compatibility with existing code
+    // Save to localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('flightSelector_segments', JSON.stringify(newSegments));
+    }
+
+    // Always update Redux state for location fields, even if incomplete
     if (segmentId === '1') {
       if (field === 'fromLocation') {
-        dispatch(setFromLocation(value || null));
+        dispatch(setFromLocation(value));
       } else {
-        dispatch(setToLocation(value || null));
+        dispatch(setToLocation(value));
       }
+    }
+
+    // Only update flight selection if both fields are filled
+    const segment = newSegments.find(s => s.id === segmentId);
+    if (segment?.fromLocation && segment?.toLocation) {
+      updateFlightSelection(newSegments);
+    } else {
+      // Clear selected flight but keep the locations
+      dispatch(markStepIncomplete(1));
+      dispatch(setSelectedFlight(null));
     }
   };
 
@@ -154,15 +212,19 @@ export default function FlightSelector({ onSelect, onInteract }: FlightSelectorP
     }
   };
 
-  const handleFlightTypeChange = (type: string) => {
-    setFlightType(type as 'direct' | 'multi');
+  const handleFlightTypeChange = (type: 'direct' | 'multi') => {
+    setFlightType(type);
     if (type === 'direct') {
-      setSegments([segments[0]]);
+      // When switching to direct, keep only the first segment
+      const firstSegment = segments[0];
+      setSegments([firstSegment]);
+      // Update flight selection with the single segment
+      updateFlightSelection([firstSegment]);
     }
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8" onClick={(e) => e.stopPropagation()} data-step="1">
       {/* Flight Type Selection */}
       <FlightTypeSelector
         types={flightTypes}
@@ -179,10 +241,10 @@ export default function FlightSelector({ onSelect, onInteract }: FlightSelectorP
               toLocation={segment.toLocation || ''}
               locationOptions={airportOptions}
               onFromLocationChange={(value: string) =>
-                handleSegmentChange(segment.id, 'fromLocation', value)
+                handleSegmentChange(segment.id, 'fromLocation', value || null)
               }
               onToLocationChange={(value: string) =>
-                handleSegmentChange(segment.id, 'toLocation', value)
+                handleSegmentChange(segment.id, 'toLocation', value || null)
               }
               onFocusInput={handleFocusInput}
               onBlurInput={handleBlurInput}
@@ -191,7 +253,10 @@ export default function FlightSelector({ onSelect, onInteract }: FlightSelectorP
             />
             {flightType === 'multi' && segments.length > 1 && (
               <button
-                onClick={() => removeSegment(segment.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeSegment(segment.id);
+                }}
                 className="mt-7 p-2 text-gray-400 hover:text-gray-600 transition-colors"
                 aria-label="Remove flight segment"
               >
@@ -203,7 +268,10 @@ export default function FlightSelector({ onSelect, onInteract }: FlightSelectorP
 
         {flightType === 'multi' && segments.length < 4 && (
           <button
-            onClick={addSegment}
+            onClick={(e) => {
+              e.stopPropagation();
+              addSegment();
+            }}
             className="flex items-center gap-2 text-[#F54538] hover:text-[#E03F33] transition-colors"
           >
             <PlusIcon className="w-5 h-5" />

@@ -1,10 +1,5 @@
 import React from 'react';
-import { Badge } from './Badge';
-
-interface BadgeProps {
-  label: string;
-  variant: 'step1' | 'step2' | 'step3' | 'step4';
-}
+import type { BadgeProps } from '@/types/components';
 
 interface HeadlineProps {
   text: string;
@@ -15,7 +10,9 @@ interface HeadlineProps {
 export const Headline: React.FC<HeadlineProps> = ({ text, isFirst = false, step }) => {
   return (
     <div className="flex items-center gap-4">
-      <Badge label={`Step ${step.slice(-1)}`} variant={step} />
+      <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-${step}-100 text-${step}-800`}>
+        Step {step.slice(-1)}
+      </div>
       <h2 className={`text-2xl font-bold ${isFirst ? 'text-gray-900' : 'text-gray-700'}`}>
         {text}
       </h2>

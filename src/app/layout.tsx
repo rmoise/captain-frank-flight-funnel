@@ -1,6 +1,6 @@
-import './globals.css';
-import { Providers } from '@/store/provider';
 import { Heebo } from 'next/font/google';
+import ClientProviders from '@/components/providers/ClientProviders';
+import './globals.css';
 
 const heebo = Heebo({
   subsets: ['latin'],
@@ -16,9 +16,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={heebo.variable}>
       <body className="font-heebo" suppressHydrationWarning>
-        <Providers>
+        <ClientProviders>
           {children}
-        </Providers>
+        </ClientProviders>
       </body>
     </html>
   );

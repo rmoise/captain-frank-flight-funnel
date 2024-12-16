@@ -3,14 +3,14 @@ import { Answer } from './wizard';
 export interface Question {
   id: string;
   text: string;
-  type: 'radio' | 'text' | 'select' | 'number';
-  options?: Array<{
-    id: string;
-    label: string;
+  type: 'radio' | 'number';
+  options?: {
     value: string;
+    label: string;
     externalLink?: string;
-  }>;
-  showIf?: (answers: Answer[]) => boolean;
+    id?: string;
+  }[];
+  showIf?: (answers: Array<{ questionId: string; value: string }>) => boolean;
   placeholder?: string;
   min?: number;
 }

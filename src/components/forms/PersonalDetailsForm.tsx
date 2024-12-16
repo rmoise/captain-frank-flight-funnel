@@ -1,15 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Input } from '../Input';
+import { AutocompleteInput } from '../AutocompleteInput';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { setPersonalDetails, completeStep, markStepIncomplete } from '@/store/bookingSlice';
+import type { PassengerDetails } from '@/types';
 
-interface PersonalDetails {
+interface FormPersonalDetails {
   firstName: string;
   lastName: string;
   email: string;
+  salutation: string;
   phone: string;
 }
 
+const SALUTATION_OPTIONS = [
+  { value: 'Mr.', label: 'Mr.' },
+  { value: 'Mrs.', label: 'Mrs.' },
+  { value: 'Ms.', label: 'Ms.' },
+  { value: 'Dr.', label: 'Dr.' },
+];
+
 interface PersonalDetailsFormProps {
-  onComplete: (details: PersonalDetails | null) => void;
+  onComplete: (details: PassengerDetails | null) => void;
   shouldStayOpen?: boolean;
   onInteract?: () => void;
 }
@@ -19,96 +31,197 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
   shouldStayOpen = true,
   onInteract,
 }) => {
-  const [values, setValues] = useState<PersonalDetails>({
+  const dispatch = useAppDispatch();
+  const savedDetails = useAppSelector((state) => state.booking.personalDetails);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
+  // Initialize form state
+  const [values, setValues] = useState<FormPersonalDetails>({
     firstName: '',
     lastName: '',
     email: '',
+    salutation: '',
     phone: '',
   });
-  const [focusedField, setFocusedField] = useState<keyof PersonalDetails | null>(null);
-  const [touchedFields, setTouchedFields] = useState<Partial<Record<keyof PersonalDetails, boolean>>>({});
+
+  const [focusedField, setFocusedField] = useState<keyof FormPersonalDetails | null>(null);
+  const [touchedFields, setTouchedFields] = useState<Partial<Record<keyof FormPersonalDetails, boolean>>>({});
   const [hasInteracted, setHasInteracted] = useState(false);
+  const [dirtyFields, setDirtyFields] = useState<Partial<Record<keyof FormPersonalDetails, boolean>>>({});
 
-  // Add effect to handle auto-filled values
-  useEffect(() => {
-    const isValid = Object.values(values).every(val => val.trim() !== '') &&
-      !getError('email') && !getError('phone');
-
-    if (isValid) {
-      onComplete(values);
-    }
+  // Validation functions
+  const isFormValid = useCallback(() => {
+    const hasValidEmail = values.email && /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(values.email);
+    const hasRequiredFields = values.salutation?.trim() && values.firstName?.trim() && values.lastName?.trim() && hasValidEmail;
+    return hasRequiredFields;
   }, [values]);
 
-  const handleInputChange = (field: keyof PersonalDetails, value: string) => {
-    const newValues = { ...values, [field]: value };
-    setValues(newValues);
+  // Update parent and Redux state
+  const updateState = useCallback(() => {
+    const isValid = isFormValid();
+    // Add a default phone value when sending to parent/Redux
+    const detailsWithPhone = isValid ? { ...values, phone: '' } : null;
+    onComplete?.(detailsWithPhone);
+    dispatch(setPersonalDetails(detailsWithPhone));
 
-    // Check if all fields are filled and valid
-    const isValid = Object.values(newValues).every(val => val.trim() !== '') &&
-      !getError('email') && !getError('phone');
-
-    // If any field becomes empty after being filled, notify parent of incomplete state
-    if (Object.values(newValues).some(val => val.trim() === '')) {
-      onComplete(null);
-    } else if (isValid) {
-      onComplete(newValues);
+    // Update step completion status
+    if (isValid) {
+      dispatch(completeStep(3));
+    } else {
+      dispatch(markStepIncomplete(3));
     }
-  };
+  }, [isFormValid, values, onComplete, dispatch]);
 
-  const handleFocus = (field: keyof PersonalDetails) => {
-    setFocusedField(field);
-  };
-
-  const handleBlur = (field: keyof PersonalDetails) => {
-    setFocusedField(null);
-    setTouchedFields(prev => ({ ...prev, [field]: true }));
-
-    // Only mark as interacted if there's an actual error
-    const error = getError(field);
-    if (error) {
-      if (!hasInteracted) {
-        setHasInteracted(true);
-        onInteract?.();
+  // Handle initial load
+  useEffect(() => {
+    const savedDetailsStr = localStorage.getItem('personalDetails');
+    if (savedDetailsStr) {
+      try {
+        const savedDetails = JSON.parse(savedDetailsStr);
+        if (
+          savedDetails &&
+          savedDetails.firstName?.trim() &&
+          savedDetails.lastName?.trim() &&
+          savedDetails.email?.trim()
+        ) {
+          setValues({
+            firstName: savedDetails.firstName,
+            lastName: savedDetails.lastName,
+            email: savedDetails.email,
+            salutation: savedDetails.salutation || '',
+            phone: savedDetails.phone || '',
+          });
+        }
+      } catch (error) {
+        console.error('Failed to parse localStorage values:', error);
       }
     }
-  };
+  }, []);
 
-  const getError = (field: keyof PersonalDetails): string | null => {
-    if (!touchedFields[field]) return null;
+  // Handle form changes
+  useEffect(() => {
+    if (!isInitialLoad) {
+      updateState();
+    }
+  }, [values, isInitialLoad, updateState]);
 
-    if (!values[field]?.trim()) {
+  // Handle interaction
+  const handleInteraction = useCallback(() => {
+    if (!hasInteracted) {
+      setHasInteracted(true);
+      onInteract?.();
+    }
+    updateState();
+  }, [hasInteracted, onInteract, updateState]);
+
+  const handleInputChange = useCallback((field: keyof FormPersonalDetails, value: string) => {
+    setValues(prev => ({ ...prev, [field]: value }));
+    setTouchedFields(prev => ({ ...prev, [field]: true }));
+
+    if (value.trim() === '') {
+      setDirtyFields(prev => ({ ...prev, [field]: true }));
+    }
+
+    handleInteraction();
+  }, [handleInteraction]);
+
+  const handleBlur = useCallback((field: keyof FormPersonalDetails) => {
+    setFocusedField(null);
+    setTouchedFields(prev => ({ ...prev, [field]: true }));
+    handleInteraction();
+  }, [handleInteraction]);
+
+  const getError = useCallback((field: keyof FormPersonalDetails): string | null => {
+    if (!touchedFields[field] && !dirtyFields[field]) return null;
+
+    const value = values[field]?.trim();
+    if (!value) {
       const fieldName = field === 'firstName' ? 'First Name' :
                        field === 'lastName' ? 'Last Name' :
-                       field.charAt(0).toUpperCase() + field.slice(1);
+                       field === 'salutation' ? 'Salutation' :
+                       'Email';
       return `${fieldName} is required`;
     }
 
-    if (field === 'email' && !/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(values.email)) {
+    if (field === 'email' && value && !/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(value)) {
       return 'Invalid email address';
     }
 
-    if (field === 'phone' && !/^[0-9+\-\s()]*$/.test(values.phone)) {
-      return 'Invalid phone number';
-    }
-
     return null;
+  }, [values, touchedFields, dirtyFields]);
+
+  const handleFocus = useCallback((field: keyof FormPersonalDetails) => {
+    setFocusedField(field);
+    handleInteraction();
+  }, [handleInteraction]);
+
+  // Save form values to localStorage
+  useEffect(() => {
+    if (!isInitialLoad && values) {
+      try {
+        localStorage.setItem('personalDetails', JSON.stringify({ ...values, phone: '' }));
+      } catch (error) {
+        console.error('Failed to save form values:', error);
+      }
+    }
+  }, [values, isInitialLoad]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const { salutation, ...passengerDetails } = values;
+    onComplete?.(passengerDetails);
+    dispatch(setPersonalDetails(passengerDetails));
+    localStorage.setItem('personalDetails', JSON.stringify(values));
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto p-6">
+    <div className="w-full max-w-4xl mx-auto p-6" onClick={(e) => e.stopPropagation()} data-step="3">
       <div className="space-y-6">
+        {/* Salutation */}
+        <div onClick={(e) => e.stopPropagation()}>
+          <AutocompleteInput
+            label="Salutation"
+            value={values.salutation}
+            options={SALUTATION_OPTIONS}
+            onChange={(value) => {
+              handleInputChange('salutation', value);
+            }}
+            onFocus={() => {
+              handleFocus('salutation');
+            }}
+            onBlur={() => {
+              handleBlur('salutation');
+            }}
+            isFocused={focusedField === 'salutation'}
+            required={true}
+            error={getError('salutation')}
+          />
+          {getError('salutation') && (
+            <p className="mt-1 text-sm text-[#F54538]">{getError('salutation')}</p>
+          )}
+        </div>
+
         {/* Names Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* First Name */}
-          <div>
+          <div onClick={(e) => e.stopPropagation()}>
             <Input
               label="First Name"
               value={values.firstName}
-              onChange={(value) => handleInputChange('firstName', value)}
-              onFocus={() => handleFocus('firstName')}
-              onBlur={() => handleBlur('firstName')}
+              onChange={(value) => {
+                handleInputChange('firstName', value);
+              }}
+              onFocus={() => {
+                handleFocus('firstName');
+              }}
+              onBlur={() => {
+                handleBlur('firstName');
+              }}
               isFocused={focusedField === 'firstName'}
               required={true}
+              error={getError('firstName')}
+              preventClose={true}
+              autocomplete="given-name"
             />
             {getError('firstName') && (
               <p className="mt-1 text-sm text-[#F54538]">{getError('firstName')}</p>
@@ -116,15 +229,24 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
           </div>
 
           {/* Last Name */}
-          <div>
+          <div onClick={(e) => e.stopPropagation()}>
             <Input
               label="Last Name"
               value={values.lastName}
-              onChange={(value) => handleInputChange('lastName', value)}
-              onFocus={() => handleFocus('lastName')}
-              onBlur={() => handleBlur('lastName')}
+              onChange={(value) => {
+                handleInputChange('lastName', value);
+              }}
+              onFocus={() => {
+                handleFocus('lastName');
+              }}
+              onBlur={() => {
+                handleBlur('lastName');
+              }}
               isFocused={focusedField === 'lastName'}
               required={true}
+              error={getError('lastName')}
+              preventClose={true}
+              autocomplete="family-name"
             />
             {getError('lastName') && (
               <p className="mt-1 text-sm text-[#F54538]">{getError('lastName')}</p>
@@ -132,41 +254,30 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
           </div>
         </div>
 
-        {/* Contact Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Email */}
-          <div>
-            <Input
-              type="email"
-              label="Email Address"
-              value={values.email}
-              onChange={(value) => handleInputChange('email', value)}
-              onFocus={() => handleFocus('email')}
-              onBlur={() => handleBlur('email')}
-              isFocused={focusedField === 'email'}
-              required={true}
-            />
-            {getError('email') && (
-              <p className="mt-1 text-sm text-[#F54538]">{getError('email')}</p>
-            )}
-          </div>
-
-          {/* Phone */}
-          <div>
-            <Input
-              type="tel"
-              label="Phone Number"
-              value={values.phone}
-              onChange={(value) => handleInputChange('phone', value)}
-              onFocus={() => handleFocus('phone')}
-              onBlur={() => handleBlur('phone')}
-              isFocused={focusedField === 'phone'}
-              required={true}
-            />
-            {getError('phone') && (
-              <p className="mt-1 text-sm text-[#F54538]">{getError('phone')}</p>
-            )}
-          </div>
+        {/* Email */}
+        <div onClick={(e) => e.stopPropagation()}>
+          <Input
+            type="email"
+            label="Email Address"
+            value={values.email}
+            onChange={(value) => {
+              handleInputChange('email', value);
+            }}
+            onFocus={() => {
+              handleFocus('email');
+            }}
+            onBlur={() => {
+              handleBlur('email');
+            }}
+            isFocused={focusedField === 'email'}
+            required={true}
+            error={getError('email')}
+            preventClose={true}
+            autocomplete="email"
+          />
+          {getError('email') && (
+            <p className="mt-1 text-sm text-[#F54538]">{getError('email')}</p>
+          )}
         </div>
       </div>
     </div>

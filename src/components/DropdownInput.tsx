@@ -36,7 +36,7 @@ export const DropdownInput: React.FC<DropdownInputProps> = ({
     bg-[#eceef1] rounded-xl
     border border-[#e0e1e4]
     transition-all duration-200
-    ${isFocused ? 'border-[#464646] border-2' : ''}
+    ${isFocused ? 'border-blue-500 border-2' : ''}
     focus:outline-none
     appearance-none
   `;
@@ -89,4 +89,4 @@ export const DropdownInput: React.FC<DropdownInputProps> = ({
       </div>
     </div>
   );
-}; 
+};

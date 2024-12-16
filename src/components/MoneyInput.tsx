@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { MoneyInputControls } from './MoneyInputControls';
 
 interface MoneyInputProps {
   label: string;
@@ -22,39 +23,40 @@ export const MoneyInput: React.FC<MoneyInputProps> = ({
   className = '',
 }) => {
   const [showWarning, setShowWarning] = useState(false);
-
-  const handleClear = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onChange('');
-  };
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.preventDefault();
     e.stopPropagation();
-    const newValue = e.target.value;
 
-    // Check if input contains any letters
+    const newValue = e.target.value;
     if (/[a-zA-Z]/.test(newValue)) {
       setShowWarning(true);
       return;
     }
-
     setShowWarning(false);
     onChange(newValue);
   };
 
-  const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+  const handleInputFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    e.preventDefault();
     e.stopPropagation();
     onFocus?.();
   };
 
-  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+  const handleInputBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    e.preventDefault();
     e.stopPropagation();
     setShowWarning(false);
     onBlur?.();
   };
 
   return (
-    <div className={`relative ${className}`}>
+    <div
+      className={`relative money-input-container ${className}`}
+      ref={wrapperRef}
+    >
       <div className="relative p-[2px]">
         <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
           <svg
@@ -85,12 +87,12 @@ export const MoneyInput: React.FC<MoneyInputProps> = ({
           </svg>
         </div>
         <input
+          ref={inputRef}
           type="text"
           value={value}
           onChange={handleChange}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
-          onClick={(e) => e.stopPropagation()}
+          onFocus={handleInputFocus}
+          onBlur={handleInputBlur}
           aria-label={label}
           placeholder={placeholder}
           className={`
@@ -100,7 +102,7 @@ export const MoneyInput: React.FC<MoneyInputProps> = ({
             transition-[border-color,border-width] duration-[250ms] ease-in-out
             ${
               isFocused
-                ? 'border-2 border-[#F54538]'
+                ? 'border-2 border-blue-500'
                 : 'border border-[#e0e1e4]'
             }
             ${value ? 'pr-10' : ''}
@@ -125,53 +127,17 @@ export const MoneyInput: React.FC<MoneyInputProps> = ({
         >
           {isFocused || value ? 'Amount' : 'Enter amount'}
         </label>
-        <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
-          <div className="flex flex-col gap-0.5">
-            <button onClick={(e) => {
-              e.stopPropagation();
-              const num = parseFloat(value) || 0;
-              onChange((num + 1).toString());
-            }} className="p-1 hover:bg-gray-100 rounded">
-              <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M1 5L5 1L9 5" stroke="#909090" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
-            <button onClick={(e) => {
-              e.stopPropagation();
-              const num = parseFloat(value) || 0;
-              if (num > 0) onChange((num - 1).toString());
-            }} className="p-1 hover:bg-gray-100 rounded">
-              <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M1 1L5 5L9 1" stroke="#909090" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
-          </div>
-          {value && (
-            <button onClick={handleClear} className="p-1">
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 12 12"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M2 2L10 10M2 10L10 2"
-                  stroke="#909090"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-          )}
-        </div>
       </div>
       {showWarning && (
         <div className="absolute -bottom-6 left-0 text-sm text-[#F54538]">
           Please enter numbers only
         </div>
       )}
+      <MoneyInputControls
+        value={value}
+        onChange={onChange}
+        containerRef={wrapperRef}
+      />
     </div>
   );
 };

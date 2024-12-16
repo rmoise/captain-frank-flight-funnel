@@ -1,8 +1,8 @@
 'use client';
 
 import { Provider } from 'react-redux';
-import { store } from './';
-import { StepsProvider } from '@/context/StepsContext';
+import { PersistGate } from 'redux-persist/integration/react';
+import { store, persistor } from './';
 import { FunnelProvider } from '@/context/FunnelContext';
 import { BookingProvider } from '@/context/BookingContext';
 import dynamic from 'next/dynamic';
@@ -11,13 +11,13 @@ import dynamic from 'next/dynamic';
 function ClientProviders({ children }: { children: React.ReactNode }) {
   return (
     <Provider store={store}>
-      <FunnelProvider>
-        <StepsProvider>
+      <PersistGate loading={null} persistor={persistor}>
+        <FunnelProvider>
           <BookingProvider>
             {children}
           </BookingProvider>
-        </StepsProvider>
-      </FunnelProvider>
+        </FunnelProvider>
+      </PersistGate>
     </Provider>
   );
 }

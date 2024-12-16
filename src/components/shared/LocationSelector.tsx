@@ -30,7 +30,10 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
   className = '',
 }) => {
   return (
-    <div className={`flex space-x-4 ${className}`}>
+    <div
+      className={`flex space-x-4 ${className}`}
+      onClick={(e) => e.stopPropagation()}
+    >
       <AutocompleteInput
         label="From *"
         value={fromLocation}

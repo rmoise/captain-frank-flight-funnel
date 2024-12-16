@@ -1,4 +1,5 @@
 import React from 'react';
+import { TOTAL_PHASES } from '@/constants/phases';
 
 interface PhaseNavigationProps {
   currentPhase: number;
@@ -9,7 +10,7 @@ export const PhaseNavigation: React.FC<PhaseNavigationProps> = ({
   currentPhase,
   completedPhases,
 }) => {
-  const totalPhases = 6;
+  const totalPhases = TOTAL_PHASES;
 
   return (
     <div className="w-full py-4 mt-8">

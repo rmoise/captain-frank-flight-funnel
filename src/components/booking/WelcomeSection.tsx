@@ -30,8 +30,6 @@ export const WelcomeSection: React.FC = () => {
     { text: 'Flight Issues' },
   ];
 
-  console.log('Message content:', greetingMessages[1].text);
-
   return (
     <div className={`w-full relative overflow-hidden`}>
       {screenSize === 'mobile' || screenSize === 'tablet' ? (

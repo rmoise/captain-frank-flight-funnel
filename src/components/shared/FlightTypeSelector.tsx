@@ -1,14 +1,14 @@
 import React from 'react';
 
 interface FlightType {
-  id: string;
+  id: 'direct' | 'multi';
   label: string;
 }
 
 interface FlightTypeSelectorProps {
-  types: FlightType[];
-  selectedType: string;
-  onTypeSelect: (typeId: string) => void;
+  types: readonly FlightType[];
+  selectedType: 'direct' | 'multi';
+  onTypeSelect: (typeId: 'direct' | 'multi') => void;
   className?: string;
 }
 

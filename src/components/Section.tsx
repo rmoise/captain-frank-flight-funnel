@@ -1,24 +1,33 @@
 import React from 'react';
-import { Eyebrow } from './Eyebrow';
+import type { EyebrowProps } from '@/types/components';
 
 interface SectionProps {
-  step?: number;
+  eyebrow?: string;
   title: string;
+  subtitle?: string;
   children: React.ReactNode;
   className?: string;
 }
 
 export const Section: React.FC<SectionProps> = ({
-  step,
+  eyebrow,
   title,
+  subtitle,
   children,
   className = '',
 }) => {
   return (
-    <div className={`space-y-6 ${className}`}>
-      {step && <Eyebrow text={`Step ${step}`} />}
-      <h2 className="text-2xl font-bold text-gray-900">{title}</h2>
+    <section className={`space-y-6 ${className}`}>
+      <div className="space-y-2">
+        {eyebrow && (
+          <div className="text-sm font-medium text-gray-500 uppercase tracking-wide">
+            {eyebrow}
+          </div>
+        )}
+        <h2 className="text-2xl font-bold text-gray-900">{title}</h2>
+        {subtitle && <p className="text-gray-600">{subtitle}</p>}
+      </div>
       {children}
-    </div>
+    </section>
   );
 };

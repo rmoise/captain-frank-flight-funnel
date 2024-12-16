@@ -11,6 +11,9 @@ interface InputProps {
   type?: string;
   required?: boolean;
   alwaysOpen?: boolean;
+  error?: string | null;
+  preventClose?: boolean;
+  autocomplete?: string;
 }
 
 export const Input: React.FC<InputProps> = ({
@@ -24,21 +27,49 @@ export const Input: React.FC<InputProps> = ({
   type = 'text',
   required = false,
   alwaysOpen = false,
+  error = null,
+  preventClose = false,
+  autocomplete,
 }) => {
+  const handleContainerClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onChange(e.target.value);
+  };
+
+  const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onFocus?.();
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onBlur?.();
+  };
+
   const handleClear = (e: React.MouseEvent) => {
+    e.preventDefault();
     e.stopPropagation();
     onChange('');
   };
 
   return (
-    <div className={`relative ${className}`}>
+    <div className={`relative ${className}`} onClick={handleContainerClick}>
       <div className="relative">
         <input
           type={type}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onFocus={onFocus}
-          onBlur={onBlur}
+          onChange={handleChange}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+          autoComplete={autocomplete}
           className={`
             w-full h-14 px-4 pt-5 pb-2
             text-[#4b616d] text-base font-normal font-['Heebo']
@@ -46,12 +77,13 @@ export const Input: React.FC<InputProps> = ({
             transition-[border-color,border-width] duration-[250ms] ease-in-out
             ${
               isFocused
-                ? 'border-2 border-[#F54538]'
+                ? 'border-2 border-blue-500'
                 : alwaysOpen
-                ? 'border border-[#e0e1e4] hover:border-[#F54538]'
+                ? 'border border-[#e0e1e4] hover:border-blue-500'
                 : 'border border-[#e0e1e4]'
             }
             ${value ? 'pr-10' : ''}
+            ${error ? 'border-[#F54538]' : ''}
             focus:outline-none
           `}
           placeholder=""
@@ -92,7 +124,6 @@ export const Input: React.FC<InputProps> = ({
                 ? 'translate-y-[-8px] text-[10px] px-1 bg-white'
                 : 'translate-y-[14px] text-base'
             }
-            ${isFocused ? 'text-[#464646]' : ''}
           `}
         >
           {label}
