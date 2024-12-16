@@ -154,10 +154,10 @@ export const QuestionAnswer: React.FC<QuestionAnswerProps> = ({
             ease: 'easeOut',
           }}
           className="space-y-6"
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e: React.MouseEvent) => e.stopPropagation()}
         >
           <h3 className="text-lg font-medium text-gray-900">{question.text}</h3>
-          <div onClick={(e) => e.stopPropagation()}>
+          <div onClick={(e: React.MouseEvent) => e.stopPropagation()}>
             {renderQuestionInput()}
           </div>
         </motion.div>

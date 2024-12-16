@@ -1,14 +1,14 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setAgreement, completePhase } from '@/store/bookingSlice';
-import { validateForm, rules } from '@/utils/validation';
+import { validateForm } from '@/utils/validation';
 import FormError from '@/components/shared/FormError';
 import { useLoading } from '@/providers/LoadingProvider';
 import PhaseGuard from '@/components/shared/PhaseGuard';
-import SignatureCanvas from 'react-signature-canvas';
+import SignaturePad from 'react-signature-pad-wrapper';
 
 interface FormData {
   hasAcceptedTerms: boolean;
@@ -24,7 +24,7 @@ export default function AgreementPage() {
   const dispatch = useAppDispatch();
   const { showLoading, hideLoading } = useLoading();
   const savedAgreement = useAppSelector((state) => state.booking.agreement);
-  const signatureRef = useRef<SignatureCanvas>(null);
+  const signatureRef = useRef<SignaturePad>(null);
 
   const [formData, setFormData] = useState<FormData>({
     hasAcceptedTerms: savedAgreement?.hasAcceptedTerms || false,
@@ -60,7 +60,7 @@ export default function AgreementPage() {
     e.preventDefault();
 
     // Get signature data
-    const signatureData = signatureRef.current?.toDataURL() || '';
+    const signatureData = signatureRef.current?.toDataURL('image/png') || '';
     const updatedFormData = {
       ...formData,
       signature: signatureData
@@ -95,6 +95,44 @@ export default function AgreementPage() {
     }
   };
 
+  useEffect(() => {
+    const signaturePad = signatureRef.current;
+    if (!signaturePad) return;
+
+    const canvasRef = signaturePad.canvas;
+    if (!canvasRef) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const handleBeginStroke = () => {
+      setErrors(prev => ({ ...prev, signature: [] }));
+    };
+
+    const handleEndStroke = () => {
+      const currentPad = signatureRef.current;
+      if (currentPad) {
+        const signatureData = currentPad.toDataURL('image/png');
+        setFormData(prev => ({
+          ...prev,
+          signature: signatureData
+        }));
+      }
+    };
+
+    canvas.addEventListener('mousedown', handleBeginStroke);
+    canvas.addEventListener('touchstart', handleBeginStroke);
+    canvas.addEventListener('mouseup', handleEndStroke);
+    canvas.addEventListener('touchend', handleEndStroke);
+
+    return () => {
+      canvas.removeEventListener('mousedown', handleBeginStroke);
+      canvas.removeEventListener('touchstart', handleBeginStroke);
+      canvas.removeEventListener('mouseup', handleEndStroke);
+      canvas.removeEventListener('touchend', handleEndStroke);
+    };
+  }, []);
+
   return (
     <PhaseGuard requiredPhase={6} requiredPreviousPhases={[1, 2, 3, 4, 5]}>
       <div className="min-h-screen bg-[#f5f7fa]">
@@ -103,53 +141,24 @@ export default function AgreementPage() {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-xl font-semibold mb-4">Terms and Conditions</h2>
-              <div className="prose prose-sm max-w-none mb-4">
-                <p>By signing this agreement, you confirm that:</p>
-                <ul className="list-disc pl-5 space-y-2">
-                  <li>All information provided is accurate and complete</li>
-                  <li>You authorize Captain Frank to act on your behalf</li>
-                  <li>You understand our fee structure and payment terms</li>
-                  <li>You agree to cooperate with any necessary follow-up</li>
-                </ul>
-              </div>
-
-              <div className="mt-4">
-                <label className="flex items-start space-x-3">
-                  <input
-                    type="checkbox"
-                    checked={formData.hasAcceptedTerms}
-                    onChange={(e) => {
-                      setFormData(prev => ({ ...prev, hasAcceptedTerms: e.target.checked }));
-                      setErrors(prev => ({ ...prev, hasAcceptedTerms: [] }));
-                    }}
-                    className="mt-1"
-                  />
-                  <span className="text-sm text-gray-700">
-                    I have read and agree to the terms and conditions, and I authorize Captain Frank to process my claim
-                  </span>
-                </label>
-                <FormError errors={errors.hasAcceptedTerms} />
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-xl font-semibold mb-4">Digital Signature</h2>
-              <div className="border rounded-lg p-2">
-                <SignatureCanvas
-                  ref={signatureRef}
-                  canvasProps={{
-                    className: 'w-full h-40 border rounded cursor-crosshair',
-                  }}
-                  backgroundColor="white"
-                  onEnded={() => {
-                    setFormData(prev => ({
-                      ...prev,
-                      signature: signatureRef.current?.toDataURL() || ''
-                    }));
-                    setErrors(prev => ({ ...prev, signature: [] }));
-                  }}
-                />
+              <div className="border rounded-lg p-2 bg-white">
+                <div className="w-full">
+                  <SignaturePad
+                    ref={signatureRef}
+                    options={{
+                      backgroundColor: 'rgb(255, 255, 255)',
+                      penColor: 'rgb(0, 0, 0)',
+                      velocityFilterWeight: 0.7,
+                      minWidth: 0.5,
+                      maxWidth: 2.5,
+                      throttle: 16,
+                      minDistance: 1
+                    }}
+                    height={160}
+                    width={600}
+                  />
+                </div>
               </div>
               <FormError errors={errors.signature} />
               <button
