@@ -2,7 +2,16 @@
 const nextConfig = {
   reactStrictMode: true,
   images: {
-    domains: ['ik.imagekit.io', 'cdn.builder.io'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'ik.imagekit.io',
+      },
+      {
+        protocol: 'https',
+        hostname: 'cdn.builder.io',
+      },
+    ],
   },
   async rewrites() {
     return [
@@ -18,9 +27,6 @@ const nextConfig = {
         destination: '/phases/:path*',
       },
     ];
-  },
-  experimental: {
-    appDir: true,
   },
 };
 
