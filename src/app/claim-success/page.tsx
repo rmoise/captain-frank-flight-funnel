@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback } from 'react';
+import React, { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { RootState } from '@/store';
@@ -19,7 +19,7 @@ import { PersonalDetailsForm } from '@/components/forms/PersonalDetailsForm';
 import { accordionConfig } from '@/config/accordion';
 import { store } from '@/store';
 
-export default function ClaimSuccessPage() {
+function ClaimSuccessContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const dispatch = useAppDispatch();
@@ -294,7 +294,7 @@ export default function ClaimSuccessPage() {
     }
   };
 
-  const handleContinue = useCallback(async () => {
+  const handleContinue = React.useCallback(async () => {
     try {
       // Get all necessary state from Redux
       const state = store.getState();
@@ -474,5 +474,13 @@ export default function ClaimSuccessPage() {
         </footer>
       </div>
     </PhaseGuard>
+  );
+}
+
+export default function ClaimSuccessPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ClaimSuccessContent />
+    </Suspense>
   );
 }

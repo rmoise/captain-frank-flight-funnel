@@ -6,30 +6,36 @@ interface CompensationState {
   compensationError: string | null;
 }
 
-// Try to get initial compensation amount from localStorage
-const getInitialCompensationAmount = (): number | null => {
+const getInitialState = (): CompensationState => {
+  if (typeof window === 'undefined') {
+    return {
+      compensationAmount: null,
+      compensationLoading: false,
+      compensationError: null,
+    };
+  }
+
   try {
     const savedAmount = localStorage.getItem('compensationAmount');
-    if (savedAmount) {
-      const amount = JSON.parse(savedAmount);
-      if (typeof amount === 'number' && amount > 0) {
-        return amount;
-      }
-    }
+    return {
+      compensationAmount: savedAmount ? JSON.parse(savedAmount) : null,
+      compensationLoading: false,
+      compensationError: null,
+    };
   } catch (error) {
     console.error(
       'Error reading compensation amount from localStorage:',
       error
     );
+    return {
+      compensationAmount: null,
+      compensationLoading: false,
+      compensationError: null,
+    };
   }
-  return null;
 };
 
-const initialState: CompensationState = {
-  compensationAmount: getInitialCompensationAmount(),
-  compensationLoading: false,
-  compensationError: null,
-};
+const initialState: CompensationState = getInitialState();
 
 const compensationSlice = createSlice({
   name: 'compensation',
