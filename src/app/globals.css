@@ -2,26 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  html {
+    font-family: 'Heebo', system-ui, sans-serif;
+  }
+}
+
 :root,
 html,
 body {
-  background-color: #F4F7FA !important;
+  background-color: #f4f7fa !important;
   min-height: 100vh;
   width: 100%;
   margin: 0;
   padding: 0;
+  font-family: 'Heebo', system-ui, sans-serif;
 }
 
 :root {
   --foreground: #171717;
   /* Progress bar specific variables */
-  --progress-bg: #F5F5F5;
-  --progress-fill: #22C55E;
+  --progress-bg: #f5f5f5;
+  --progress-fill: #22c55e;
   --progress-height: 12px;
-  --progress-transition: all 500ms ease-out;
-  --step-active: #22C55E;
-  --step-pending: #C6C6C6;
-  --step-error: #EF4444;
+  /* Font variables */
+  --font-family: 'Heebo', system-ui, sans-serif;
 }
 
 html {
@@ -30,11 +35,12 @@ html {
 
 body {
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-family);
 }
 
 * {
   box-sizing: border-box;
+  font-family: 'Heebo', system-ui, sans-serif;
 }
 
 /* Progress bar specific styles */
@@ -47,11 +53,11 @@ body {
 }
 
 .progress-bar-bg {
-  background-color: #E5E7EB;  /* Light gray background */
+  background-color: #e5e7eb; /* Light gray background */
 }
 
 .progress-bar-fill {
-  background-color: #22C55E;  /* Green fill color */
+  background-color: #22c55e; /* Green fill color */
   transition: width 100ms linear;
   box-shadow: 0 2px 4px rgba(34, 197, 94, 0.2);
 }
@@ -87,8 +93,8 @@ body {
 
 /* Hide scrollbar for IE, Edge and Firefox */
 .scrollbar-hide {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
 }
 
 /* Date Picker Styles */
@@ -108,7 +114,8 @@ body {
   font-family: inherit !important;
   border-radius: 0.5rem !important;
   border: 1px solid #e5e7eb !important;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
 }
 
 .react-datepicker__header {
@@ -124,7 +131,7 @@ body {
 
 .react-datepicker__day--selected,
 .react-datepicker__day--keyboard-selected {
-  background-color: #F54538 !important;
+  background-color: #f54538 !important;
   color: white !important;
 }
 
@@ -168,6 +175,6 @@ body {
 .react-datepicker__month-select:focus,
 .react-datepicker__year-select:focus {
   outline: none !important;
-  border-color: #F54538 !important;
-  box-shadow: 0 0 0 1px #F54538 !important;
+  border-color: #f54538 !important;
+  box-shadow: 0 0 0 1px #f54538 !important;
 }

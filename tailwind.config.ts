@@ -1,7 +1,7 @@
 import type { Config } from 'tailwindcss';
 import forms from '@tailwindcss/forms';
 
-export default {
+const config: Config = {
   content: [
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -9,6 +9,10 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['Heebo', 'system-ui', 'sans-serif'],
+        heebo: ['Heebo', 'system-ui', 'sans-serif'],
+      },
       colors: {
         primary: {
           50: '#EBF5FF',
@@ -40,13 +44,9 @@ export default {
             text: '#464646',
             muted: '#8d8d8d',
             step: '#6f6f6f',
-            bg: '#f1f1f1'
-          }
+            bg: '#f1f1f1',
+          },
         },
-      },
-      fontFamily: {
-        heebo: ['var(--font-heebo)', 'system-ui', 'sans-serif'],
-        sans: ['var(--font-heebo)', 'system-ui', 'sans-serif'],
       },
       keyframes: {
         fadeIn: {
@@ -56,7 +56,7 @@ export default {
         slideIn: {
           '0%': { opacity: '0', transform: 'translateY(20px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
-        }
+        },
       },
       animation: {
         fadeIn: 'fadeIn 0.5s ease-in-out forwards',
@@ -66,10 +66,12 @@ export default {
         'slide-up-4': 'slideIn 0.6s ease-out 0.6s forwards',
       },
       transitionProperty: {
-        'height': 'height',
-        'spacing': 'margin, padding',
-      }
+        height: 'height',
+        spacing: 'margin, padding',
+      },
     },
   },
   plugins: [forms],
-} satisfies Config;
+};
+
+export default config;

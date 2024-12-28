@@ -13,7 +13,14 @@ const nextConfig = {
             ? 'http://localhost:3000/api/:path*'
             : '/api/:path*',
       },
+      {
+        source: '/phases/:path*',
+        destination: '/phases/:path*',
+      },
     ];
+  },
+  experimental: {
+    appDir: true,
   },
 };
 

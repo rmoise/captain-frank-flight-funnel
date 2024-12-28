@@ -3,7 +3,7 @@ import React, { RefObject } from 'react';
 interface MoneyInputControlsProps {
   value: string;
   onChange: (value: string) => void;
-  containerRef?: RefObject<HTMLDivElement | null>;
+  containerRef?: RefObject<HTMLDivElement>;
 }
 
 export const MoneyInputControls: React.FC<MoneyInputControlsProps> = ({
@@ -41,7 +41,7 @@ export const MoneyInputControls: React.FC<MoneyInputControlsProps> = ({
   return (
     <div
       className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2"
-      ref={containerRef}
+      ref={containerRef || null}
     >
       {value && (
         <button

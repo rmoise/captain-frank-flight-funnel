@@ -17,7 +17,7 @@ interface SignaturePadProps {
 
 const SignaturePad = React.forwardRef<SignaturePadRef, SignaturePadProps>(
   ({ width = 1000, height = 400, onBegin, onChange, onEnd }, ref) => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const contextRef = useRef<CanvasRenderingContext2D | null>(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const [isReady, setIsReady] = useState(false);
@@ -173,12 +173,7 @@ const SignaturePad = React.forwardRef<SignaturePadRef, SignaturePadProps>(
 
     return (
       <canvas
-        ref={(canvas) => {
-          if (canvas) {
-            canvas.setAttribute('willReadFrequently', 'true');
-            canvasRef.current = canvas;
-          }
-        }}
+        ref={canvasRef}
         width={width}
         height={height}
         onMouseDown={startDrawing}

@@ -9,7 +9,7 @@ import '@/styles/autofill.css';
 
 const heebo = Heebo({
   subsets: ['latin'],
-  variable: '--font-heebo',
+  weight: ['300', '400', '500', '600', '700'],
   display: 'swap',
 });
 
@@ -19,8 +19,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={heebo.className}>
+    <html lang="en" className={heebo.className}>
+      <body>
         <Provider store={store}>
           <LoadingProvider>{children}</LoadingProvider>
         </Provider>
