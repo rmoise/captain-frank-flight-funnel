@@ -11,6 +11,10 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'cdn.builder.io',
       },
+      {
+        protocol: 'https',
+        hostname: 'cdn.sanity.io',
+      },
     ],
   },
   async rewrites() {
@@ -25,6 +29,14 @@ const nextConfig = {
       {
         source: '/phases/:path*',
         destination: '/phases/:path*',
+      },
+    ];
+  },
+  async headers() {
+    return [
+      {
+        source: '/studio/:path*',
+        headers: [{ key: 'Access-Control-Allow-Origin', value: '*' }],
       },
     ];
   },
