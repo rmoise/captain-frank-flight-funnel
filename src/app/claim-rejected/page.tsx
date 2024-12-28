@@ -1,93 +1,147 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { XCircleIcon } from '@heroicons/react/24/solid';
-import { useAppSelector } from '@/store/hooks';
+import { SpeechBubble } from '@/components/SpeechBubble';
+import { BackButton } from '@/components/shared/BackButton';
+import { ContinueButton } from '@/components/shared/ContinueButton';
 
 export default function ClaimRejectedPage() {
   const router = useRouter();
-  const { personalDetails, tripDetails } = useAppSelector((state) => state.booking);
+  const [mounted, setMounted] = React.useState(false);
+  const [rejectionReasons, setRejectionReasons] = React.useState<
+    Record<string, string>
+  >({});
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Check if user should be allowed on this page
   React.useEffect(() => {
-    if (!personalDetails || !tripDetails) {
-      router.push('/');
+    setMounted(true);
+    // Get rejection reasons from URL parameters
+    const searchParams = new URLSearchParams(window.location.search);
+    const reasonsParam = searchParams.get('reasons');
+    if (reasonsParam) {
+      try {
+        const reasons = JSON.parse(decodeURIComponent(reasonsParam));
+        setRejectionReasons(reasons);
+      } catch (error) {
+        console.error('Error parsing rejection reasons:', error);
+        setRejectionReasons({ error: 'Failed to parse rejection reasons' });
+      }
     }
-  }, [personalDetails, tripDetails, router]);
+  }, []);
 
-  // Function to get rejection reason based on trip details
-  const getRejectionReason = () => {
-    if (!tripDetails) return '';
-
-    switch (tripDetails.whatHappened) {
-      case 'delayed':
-        return 'The delay duration does not meet the minimum requirement for compensation under EU regulation 261/2004.';
-      case 'cancelled':
-        return 'The cancellation was due to extraordinary circumstances which could not have been avoided by the airline.';
-      case 'overbooked':
-        return 'The airline provided alternative arrangements within the acceptable timeframe.';
-      case 'missed-connection':
-        return 'The connection time was outside the minimum connection time requirement.';
-      default:
-        return 'Your claim does not meet the eligibility criteria for compensation.';
+  const handleContinue = async () => {
+    setIsLoading(true);
+    try {
+      router.push('/');
+    } catch (error) {
+      console.error('Error during continue:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  if (!mounted) {
+    return null;
+  }
+
   return (
-    <div className="min-h-screen bg-[#f5f7fa]">
-      <main className="max-w-3xl mx-auto px-4 pt-16 pb-24">
-        <div className="text-center">
-          <div className="flex justify-center mb-6">
-            <XCircleIcon className="w-20 h-20 text-red-500" />
+    <div className="min-h-screen flex flex-col bg-[#f5f7fa]">
+      <main className="flex-grow">
+        <div className="max-w-3xl mx-auto px-4 pt-8 pb-24">
+          <div className="mt-4 sm:mt-8 mb-8">
+            <SpeechBubble message="Unfortunately it didn't work this time!" />
           </div>
 
-          <h1 className="text-3xl font-bold mb-4">
-            Unable to Process Claim
-          </h1>
-
-          <p className="text-lg text-gray-600 mb-8">
-            We&apos;re sorry, but we are unable to process your claim at this time.
-          </p>
-
-          <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
-            <h2 className="text-xl font-semibold mb-4">Why was my claim rejected?</h2>
-            <p className="text-gray-700 mb-6">
-              {getRejectionReason()}
-            </p>
-
-            <div className="bg-gray-50 rounded-lg p-4">
-              <h3 className="font-medium mb-2">What you can do next:</h3>
-              <ul className="text-left text-gray-700 space-y-2">
-                <li>• Contact the airline directly for more information</li>
-                <li>• Check if you have travel insurance coverage</li>
-                <li>• Keep your documentation for future reference</li>
-              </ul>
+          <div className="space-y-6">
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h2 className="text-xl font-semibold mb-4">
+                Why Your Claim Was Rejected
+              </h2>
+              {rejectionReasons.error ? (
+                <div className="text-red-600 mb-4 p-4 bg-red-50 rounded-lg">
+                  <p className="font-medium">Error Processing Claim</p>
+                  <p className="mt-1">{rejectionReasons.error}</p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-gray-600 mb-4">
+                    According to the EU flight regulations (EC 261/2004),
+                    compensation is only available in specific circumstances:
+                  </p>
+                  <ul className="list-disc pl-5 text-gray-600 space-y-2 mb-6">
+                    <li>Flight delays of more than 3 hours</li>
+                    <li>Flight cancellations with less than 14 days notice</li>
+                    <li>Denied boarding due to overbooking</li>
+                    <li>Missed connections due to airline&apos;s fault</li>
+                  </ul>
+                  <div className="mt-6 p-4 bg-red-50 rounded-lg border border-red-100">
+                    <h3 className="text-lg font-medium text-red-800 mb-2">
+                      Rejection Details
+                    </h3>
+                    {Object.entries(rejectionReasons).map(([key, reason]) => (
+                      <div key={key} className="text-red-700">
+                        <p className="whitespace-pre-wrap">{reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
-          </div>
 
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
-            <p className="text-sm text-blue-800">
-              We&apos;ve sent an email to <strong>{personalDetails?.email}</strong> with detailed information about this decision.
-            </p>
-          </div>
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h2 className="text-xl font-semibold mb-4">
+                What You Can Do Next
+              </h2>
+              <div className="text-left space-y-4">
+                <div className="flex items-start space-x-3">
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#F54538] text-white flex items-center justify-center text-sm">
+                    1
+                  </div>
+                  <p className="text-gray-700">
+                    Check if you have another flight within the last 3 years
+                    that might be eligible
+                  </p>
+                </div>
+                <div className="flex items-start space-x-3">
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#F54538] text-white flex items-center justify-center text-sm">
+                    2
+                  </div>
+                  <p className="text-gray-700">
+                    Contact your travel insurance provider for possible coverage
+                  </p>
+                </div>
+                <div className="flex items-start space-x-3">
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#F54538] text-white flex items-center justify-center text-sm">
+                    3
+                  </div>
+                  <p className="text-gray-700">
+                    Keep your travel documents for future reference
+                  </p>
+                </div>
+              </div>
+            </div>
 
-          <div className="space-x-4">
-            <button
-              onClick={() => router.push('/')}
-              className="px-6 py-3 bg-[#F54538] text-white rounded-lg hover:bg-[#E03F33] transition-colors"
-            >
-              Return to Home
-            </button>
-            <button
-              onClick={() => router.push('/contact-support')}
-              className="px-6 py-3 border border-[#F54538] text-[#F54538] rounded-lg hover:bg-[#FEF2F2] transition-colors"
-            >
-              Contact Support
-            </button>
+            <div className="mt-8 flex justify-between">
+              <BackButton
+                onClick={() => router.push('/phases/trip-experience')}
+              />
+              <ContinueButton
+                onClick={handleContinue}
+                isLoading={isLoading}
+                text="Check Another Flight"
+              />
+            </div>
           </div>
         </div>
       </main>
+      <footer className="bg-white">
+        <div className="max-w-5xl mx-auto px-4 py-6">
+          <div className="text-sm text-gray-500">
+            {new Date().getFullYear()} Captain Frank. All rights reserved.
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

@@ -1,37 +1,44 @@
 'use client';
 
-import React from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import Image from 'next/image';
 
-export const WelcomeSection: React.FC = () => {
-  const [screenSize, setScreenSize] = React.useState<
-    'mobile' | 'tablet' | 'desktop'
-  >('desktop');
+type ScreenSize = 'mobile' | 'tablet' | 'desktop';
 
-  React.useEffect(() => {
-    const checkScreenSize = () => {
-      const width = window.innerWidth;
-      if (width <= 768) {
-        setScreenSize('mobile');
-      } else if (width <= 1024) {
-        setScreenSize('tablet');
-      } else {
-        setScreenSize('desktop');
-      }
-    };
+interface GreetingMessage {
+  text: string;
+  emoji?: string;
+  highlight?: boolean;
+}
 
+export const WelcomeSection = () => {
+  const [screenSize, setScreenSize] = useState<ScreenSize>('desktop');
+
+  const checkScreenSize = useCallback(() => {
+    const width = window.innerWidth;
+    if (width <= 768) {
+      setScreenSize('mobile');
+    } else if (width <= 1024) {
+      setScreenSize('tablet');
+    } else {
+      setScreenSize('desktop');
+    }
+  }, []);
+
+  useEffect(() => {
     checkScreenSize();
     window.addEventListener('resize', checkScreenSize);
     return () => window.removeEventListener('resize', checkScreenSize);
-  }, []);
+  }, [checkScreenSize]);
 
-  const greetingMessages = [
+  const greetingMessages: GreetingMessage[] = [
     { text: 'Hi there', emoji: '👋' },
     { text: "I'm here to help with", highlight: true },
     { text: 'Flight Issues' },
   ];
 
   return (
-    <div className={`w-full relative overflow-hidden`}>
+    <div className="w-full relative overflow-hidden">
       {screenSize === 'mobile' || screenSize === 'tablet' ? (
         <svg
           className="absolute top-0 left-0 w-full h-[317px]"
@@ -74,10 +81,12 @@ export const WelcomeSection: React.FC = () => {
             <div className="flex flex-col w-full">
               <div className="w-full flex items-center mb-0 lg:mb-4">
                 <div className="w-[124px] h-[120px] relative z-20">
-                  <img
-                    src="https://ik.imagekit.io/0adjo0tl4/Mask%20group.svg?updatedAt=1733619926412"
+                  <Image
+                    src="https://ik.imagekit.io/0adjo0tl4/Mask%20group.svg"
                     alt="Captain Frank"
-                    className="absolute left-0 top-0 w-full h-full lg:scale-[1.25] object-contain origin-left"
+                    fill
+                    priority
+                    className="lg:scale-[1.25] object-contain origin-left"
                   />
                 </div>
                 <div className="flex flex-col ml-4 lg:ml-14 z-10">

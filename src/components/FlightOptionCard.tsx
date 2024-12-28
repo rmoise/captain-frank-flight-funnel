@@ -1,31 +1,47 @@
 import React from 'react';
-import { FlightOption } from '@/types';
+import clsx from 'clsx';
+
+interface FlightOption {
+  id: string;
+  flightNumber: string;
+  departureTime: string;
+  arrivalTime: string;
+  airline: string;
+}
 
 interface FlightOptionCardProps {
-  option: FlightOption;
+  flight: FlightOption;
+  isSelected: boolean;
+  onClick: () => void;
 }
 
 export const FlightOptionCard: React.FC<FlightOptionCardProps> = ({
-  option,
+  flight,
+  isSelected,
+  onClick,
 }) => {
   return (
-    <div className="w-[90%] max-w-[589px] h-[169px] relative">
-      <div className="w-full h-[169px] left-0 top-0 absolute">
-        <div className="w-full h-[169px] left-0 top-0 absolute bg-[#eceef1] rounded-[10px] border" />
-        <div className="left-[16px] top-[61px] absolute text-[#121212] text-xl font-bold font-['Heebo']">
-          {option.title}
+    <div
+      className={clsx(
+        'p-4 rounded-lg border cursor-pointer transition-all duration-200',
+        isSelected
+          ? 'border-[#F54538] bg-[#FEF2F2]'
+          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+      )}
+      onClick={onClick}
+    >
+      <div className="flex justify-between items-center">
+        <div>
+          <h3 className="text-lg font-medium">{flight.airline}</h3>
+          <p className="text-sm text-gray-500">Flight {flight.flightNumber}</p>
         </div>
-        <div className="w-[161.23px] h-[87.16px] absolute right-4 lg:right-auto lg:left-[407px] top-[54px]">
-          <img
-            loading="lazy"
-            src={option.icon}
-            alt={`${option.title} illustration`}
-            className="w-full h-full object-contain"
-          />
+        <div className="text-right">
+          <p className="text-sm text-gray-500">
+            {new Date(flight.departureTime).toLocaleTimeString()} -{' '}
+            {new Date(flight.arrivalTime).toLocaleTimeString()}
+          </p>
         </div>
       </div>
-      <div className="w-7 h-[29px] left-[1px] top-[16px] absolute rounded-tl-[9px] rounded-br-[5px]" />
-      <div className="w-4 h-4 left-[8px] top-[8px] absolute bg-white rounded-lg border border-[#d5d6da]" />
     </div>
   );
 };

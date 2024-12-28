@@ -1,21 +1,22 @@
-import React, { forwardRef } from 'react';
+import React from 'react';
 
-interface CardProps {
+interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
   className?: string;
 }
 
-export const Card = forwardRef<HTMLDivElement, CardProps>(({ children, className = '' }, ref) => {
-  return (
-    <div
-      ref={ref}
-      className={`bg-white rounded-tr-2xl rounded-bl-2xl rounded-br-2xl [border-top-left-radius:0] will-change-transform ${className}`}
-    >
-      <div className="pt-6 px-6 pb-6">
+export const Card = React.forwardRef<HTMLDivElement, CardProps>(
+  ({ children, className = '', ...props }, ref) => {
+    return (
+      <div
+        ref={ref}
+        className={`rounded-2xl ${className}`}
+        {...props}
+      >
         {children}
       </div>
-    </div>
-  );
-});
+    );
+  }
+);
 
 Card.displayName = 'Card';

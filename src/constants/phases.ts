@@ -12,29 +12,28 @@ export const PHASES: Phase[] = [
   },
   {
     id: 2,
-    name: 'Compensation Estimate',
-    steps: [4, 5],
+    name: 'Summary',
+    steps: [4],
   },
   {
     id: 3,
-    name: 'Documentation',
-    steps: [6, 7],
+    name: 'Flight Details',
+    steps: [5, 6],
   },
   {
     id: 4,
-    name: 'Review & Submit',
-    steps: [8],
+    name: 'Trip Experience',
+    steps: [7, 8, 9, 10],
   },
   {
     id: 5,
-    name: 'Processing',
-    steps: [9],
+    name: 'Claim Status',
+    steps: [11],
   },
   {
     id: 6,
-    name: 'Payment',
-    steps: [10],
+    name: 'Agreement',
+    steps: [12],
   },
 ];
-
 export const TOTAL_PHASES = PHASES.length;

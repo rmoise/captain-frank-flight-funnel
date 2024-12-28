@@ -1,9 +1,12 @@
+import type { Flight } from '@/types';
+import type { Answer } from '@/types/wizard';
+
 export interface ValidationRule {
   test: (value: unknown) => boolean;
   message: string;
 }
 
-export interface ValidationRules {
+export interface FormValidationRules {
   [key: string]: ValidationRule[];
 }
 
@@ -17,17 +20,23 @@ export interface FormData {
 
 export type ValidatableFormData = FormData | globalThis.FormData;
 
-export const validateForm = (data: ValidatableFormData, rules: ValidationRules): ValidationErrors => {
+export const validateForm = (
+  data: ValidatableFormData,
+  rules: FormValidationRules
+): ValidationErrors => {
   const errors: ValidationErrors = {};
-  const formDataObj: FormData = data instanceof globalThis.FormData
-    ? Object.fromEntries(Array.from(data.entries()).map(([key, value]) => [key, value]))
-    : data;
+  const formDataObj: FormData =
+    data instanceof globalThis.FormData
+      ? Object.fromEntries(
+          Array.from(data.entries()).map(([key, value]) => [key, value])
+        )
+      : data;
 
   Object.entries(rules).forEach(([field, fieldRules]) => {
     const value = formDataObj[field];
     const fieldErrors = fieldRules
-      .filter(rule => !rule.test(value))
-      .map(rule => rule.message);
+      .filter((rule: ValidationRule) => !rule.test(value))
+      .map((rule: ValidationRule) => rule.message);
 
     if (fieldErrors.length > 0) {
       errors[field] = fieldErrors;
@@ -46,7 +55,7 @@ export const rules = {
       if (Array.isArray(value)) return value.length > 0;
       return value !== null && value !== undefined;
     },
-    message
+    message,
   }),
 
   email: (message = 'Please enter a valid email address'): ValidationRule => ({
@@ -54,7 +63,7 @@ export const rules = {
       if (typeof value !== 'string') return false;
       return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
     },
-    message
+    message,
   }),
 
   phone: (message = 'Please enter a valid phone number'): ValidationRule => ({
@@ -62,23 +71,29 @@ export const rules = {
       if (typeof value !== 'string') return false;
       return /^\+?[\d\s-]{10,}$/.test(value);
     },
-    message
+    message,
   }),
 
-  minLength: (length: number, message = `Must be at least ${length} characters`): ValidationRule => ({
+  minLength: (
+    length: number,
+    message = `Must be at least ${length} characters`
+  ): ValidationRule => ({
     test: (value: unknown): boolean => {
       if (typeof value !== 'string') return false;
       return value.length >= length;
     },
-    message
+    message,
   }),
 
-  maxLength: (length: number, message = `Must be no more than ${length} characters`): ValidationRule => ({
+  maxLength: (
+    length: number,
+    message = `Must be no more than ${length} characters`
+  ): ValidationRule => ({
     test: (value: unknown): boolean => {
       if (typeof value !== 'string') return false;
       return value.length <= length;
     },
-    message
+    message,
   }),
 
   numeric: (message = 'Must be a number'): ValidationRule => ({
@@ -86,7 +101,7 @@ export const rules = {
       if (typeof value !== 'string') return false;
       return !isNaN(Number(value));
     },
-    message
+    message,
   }),
 
   date: (message = 'Please enter a valid date'): ValidationRule => ({
@@ -94,23 +109,27 @@ export const rules = {
       if (typeof value !== 'string') return false;
       return !isNaN(Date.parse(value));
     },
-    message
+    message,
   }),
 
-  flightNumber: (message = 'Please enter a valid flight number'): ValidationRule => ({
+  flightNumber: (
+    message = 'Please enter a valid flight number'
+  ): ValidationRule => ({
     test: (value: unknown): boolean => {
       if (typeof value !== 'string') return false;
       return /^[A-Z0-9]{2,3}\s*\d{1,4}[A-Z]?$/i.test(value);
     },
-    message
+    message,
   }),
 
-  bookingReference: (message = 'Please enter a valid booking reference'): ValidationRule => ({
+  bookingReference: (
+    message = 'Please enter a valid booking reference'
+  ): ValidationRule => ({
     test: (value: unknown): boolean => {
       if (typeof value !== 'string') return false;
       return /^[A-Z0-9]{5,8}$/i.test(value);
     },
-    message
+    message,
   }),
 
   zipCode: (message = 'Please enter a valid postal code'): ValidationRule => ({
@@ -118,6 +137,23 @@ export const rules = {
       if (typeof value !== 'string') return false;
       return /^[A-Z0-9\s-]{3,10}$/i.test(value);
     },
-    message
-  })
+    message,
+  }),
+};
+
+export interface StepValidationRules {
+  flight: (flight: Flight | Flight[] | null) => boolean;
+  wizardAnswers: (answers: Answer[]) => boolean;
+}
+
+export const validationRules: StepValidationRules = {
+  flight: (flight: Flight | Flight[] | null) => {
+    if (Array.isArray(flight)) {
+      return flight.length > 0;
+    }
+    return !!flight;
+  },
+  wizardAnswers: (answers: Answer[]) => {
+    return answers.length > 0 && answers.every((answer) => answer.value !== '');
+  },
 };

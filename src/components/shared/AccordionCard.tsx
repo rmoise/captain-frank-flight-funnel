@@ -1,400 +1,174 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Card } from './Card';
-import {
-  ChevronUpIcon,
-  CheckCircleIcon,
-  XCircleIcon,
-} from '@heroicons/react/24/outline';
-import { AccordionProvider, useAccordion } from './AccordionContext';
-import { useAppDispatch } from '@/store/hooks';
-import { setStep } from '@/store/bookingSlice';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { ChevronDownIcon } from '@heroicons/react/24/outline';
+import { CheckCircleIcon } from '@heroicons/react/24/outline';
 
-interface AccordionCardProps {
+export interface AccordionCardProps {
   title: string;
-  subtitle?: string;
   children: React.ReactNode;
-  isActive: boolean;
   isCompleted: boolean;
-  eyebrow?: string;
-  summary?: string;
-  className?: string;
   shouldStayOpen?: boolean;
-  hasInteracted?: boolean;
   isOpenByDefault?: boolean;
+  className?: string;
+  eyebrow?: string;
+  subtitle?: string;
+  summary?: string;
+  showError?: boolean;
+  hasInteracted?: boolean;
+  stepId?: string;
+  isOpen?: boolean;
+  onToggle?: () => void;
 }
 
-const AccordionContent: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => {
-  return <div className="pt-4 relative">{children}</div>;
-};
-
-const getStorageKey = (title: string) => {
-  return `accordion_${title.toLowerCase().replace(/\s+/g, '_')}`;
-};
-
-// Add this type for the debounce function
-type DebouncedFunction<T extends unknown[]> = (...args: T) => void;
-
-const AccordionCardInner: React.FC<AccordionCardProps> = ({
+export const AccordionCard: React.FC<AccordionCardProps> = ({
   title,
-  subtitle,
   children,
-  isActive,
   isCompleted,
-  eyebrow,
-  summary,
-  className = '',
   shouldStayOpen = false,
-  hasInteracted = false,
   isOpenByDefault = false,
+  className = '',
+  eyebrow,
+  subtitle,
+  summary,
+  showError = false,
+  hasInteracted = false,
+  stepId,
+  isOpen: controlledIsOpen,
+  onToggle,
 }) => {
-  const cardRef = useRef<HTMLDivElement>(null);
-  const dispatch = useAppDispatch();
-  const stepId = parseInt(eyebrow?.replace('Step ', '') || '1');
-  const storageKey = getStorageKey(title);
-  const [isExpanded, setIsExpanded] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const savedState = localStorage.getItem(`${storageKey}_expanded`);
-      if (savedState !== null) {
-        return savedState === 'true';
-      }
-    }
-    return (
-      isOpenByDefault ||
-      title.includes('Tell us about your flight') ||
-      title.includes('What happened with your flight?')
-    );
-  });
-
-  const [localHasInteracted, setLocalHasInteracted] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const savedInteraction = localStorage.getItem(`${storageKey}_interacted`);
-      if (savedInteraction !== null) {
-        return savedInteraction === 'true';
-      }
-    }
-    return hasInteracted;
-  });
-
-  const { canToggle } = useAccordion();
-  const [prevCompletedState, setPrevCompletedState] = useState(isCompleted);
+  const [isAccordionOpen, setIsAccordionOpen] = useState(isOpenByDefault);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(`${storageKey}_expanded`, isExpanded.toString());
-    }
-  }, [isExpanded, storageKey]);
+    setMounted(true);
+  }, []);
 
+  // Persist accordion state in localStorage
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(
-        `${storageKey}_interacted`,
-        localHasInteracted.toString()
-      );
+    if (stepId) {
+      const storedState = localStorage.getItem(`accordion_${stepId}`);
+      if (storedState !== null) {
+        setIsAccordionOpen(JSON.parse(storedState));
+      }
     }
-  }, [localHasInteracted, storageKey]);
+  }, [stepId]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const findNextOpenStep = () => {
-    let nextStep = stepId + 1;
-    while (nextStep <= 3) {
-      const stepElement = document.querySelector(`[data-step="${nextStep}"]`);
-      if (stepElement) {
-        const isStepOpen = stepElement.querySelector('[aria-expanded="true"]');
-        if (isStepOpen) {
-          return nextStep;
+  // Memoize state updates to prevent unnecessary re-renders
+  const updateAccordionState = useCallback(
+    (newState: boolean) => {
+      console.log('\n=== AccordionCard State Update ===');
+      console.log('Step ID:', stepId);
+      console.log('Is Completed:', isCompleted);
+      console.log('Should Stay Open:', shouldStayOpen);
+      console.log('Is Open By Default:', isOpenByDefault);
+      console.log('Current State:', isAccordionOpen);
+      console.log('New State:', newState);
+
+      if (isAccordionOpen !== newState) {
+        setIsAccordionOpen(newState);
+        if (stepId) {
+          localStorage.setItem(`accordion_${stepId}`, JSON.stringify(newState));
         }
+        console.log('State updated to:', newState);
+      } else {
+        console.log('State unchanged, skipping update');
       }
-      nextStep++;
-    }
+      console.log('=== End AccordionCard State Update ===\n');
+    },
+    [isAccordionOpen, stepId, isCompleted, shouldStayOpen, isOpenByDefault]
+  );
 
-    nextStep = stepId + 1;
-    while (nextStep <= 3) {
-      const stepElement = document.querySelector(`[data-step="${nextStep}"]`);
-      if (stepElement) {
-        const isStepCompleted = stepElement.querySelector('.text-green-500');
-        if (!isStepCompleted) {
-          return nextStep;
-        }
-      }
-      nextStep++;
-    }
-
-    return stepId + 1;
-  };
-
+  // Handle controlled state
   useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
-    if (isCompleted && !prevCompletedState && !shouldStayOpen) {
-      timeoutId = setTimeout(() => {
-        setIsExpanded(false);
-
-        setTimeout(() => {
-          const nextStepId = findNextOpenStep();
-          if (nextStepId <= 3) {
-            dispatch(setStep(nextStepId));
-
-            const nextStep = document.querySelector(`[data-step="${nextStepId}"]`);
-            if (nextStep) {
-              setTimeout(() => {
-                const windowHeight = window.innerHeight;
-                const cardHeight = nextStep.getBoundingClientRect().height;
-                const scrollPosition =
-                  nextStep.getBoundingClientRect().top +
-                  window.pageYOffset -
-                  ((windowHeight - cardHeight) / 2);
-
-                window.scrollTo({
-                  top: Math.max(0, scrollPosition),
-                  behavior: 'smooth'
-                });
-              }, 100);
-            }
-          }
-        }, 300);
-      }, title.includes('Tell us about your flight') ? 1500 : 2500);
+    if (controlledIsOpen !== undefined) {
+      updateAccordionState(controlledIsOpen);
     }
-    setPrevCompletedState(isCompleted);
+  }, [controlledIsOpen, updateAccordionState]);
 
-    return () => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCompleted, shouldStayOpen, stepId, dispatch]);
-
+  // Handle default open state and shouldStayOpen
   useEffect(() => {
-    if (hasInteracted && !localHasInteracted) {
-      setLocalHasInteracted(true);
+    if (shouldStayOpen || isOpenByDefault) {
+      updateAccordionState(true);
     }
-  }, [hasInteracted, localHasInteracted]);
+  }, [shouldStayOpen, isOpenByDefault, updateAccordionState]);
 
-  useEffect(() => {
-    if (isActive && !isExpanded) {
-      // Empty effect for tracking active state
-    }
-  }, [isActive, isExpanded]);
+  const toggleAccordion = useCallback(() => {
+    console.log('\n=== AccordionCard Toggle ===');
+    console.log('Step ID:', stepId);
+    console.log('Should Stay Open:', shouldStayOpen);
+    console.log('Current Is Open:', isAccordionOpen);
 
-  const debounce = <T extends unknown[]>(
-    func: (...args: T) => void,
-    wait: number
-  ): DebouncedFunction<T> => {
-    let timeout: NodeJS.Timeout;
-    return (...args: T) => {
-      clearTimeout(timeout);
-      timeout = setTimeout(() => func(...args), wait);
-    };
-  };
-
-  useEffect(() => {
-    let lastIntersectionTime = 0;
-    const minTimeBetweenUpdates = 300;
-
-    const handleIntersection = debounce<[IntersectionObserverEntry[]]>((entries) => {
-      const now = Date.now();
-      entries.forEach((entry) => {
-        if (entry.isIntersecting &&
-            entry.intersectionRatio > 0.5 &&
-            (now - lastIntersectionTime) > minTimeBetweenUpdates) {
-
-          const rect = entry.boundingClientRect;
-          const windowHeight = window.innerHeight;
-          const elementCenter = rect.top + (rect.height / 2);
-          const viewportCenter = windowHeight / 2;
-
-          if (Math.abs(elementCenter - viewportCenter) < windowHeight * 0.2) {
-            const newStepId = parseInt(eyebrow?.replace('Step ', '') || '1');
-            dispatch(setStep(newStepId));
-            lastIntersectionTime = now;
-          }
-        }
-      });
-    }, 50);
-
-    const observer = new IntersectionObserver(
-      handleIntersection,
-      {
-        root: null,
-        rootMargin: '-20% 0px -20% 0px',
-        threshold: [0, 0.25, 0.5, 0.75, 1.0]
-      }
-    );
-
-    const currentCard = cardRef.current;
-    if (currentCard) {
-      observer.observe(currentCard);
-    }
-
-    return () => {
-      if (currentCard) {
-        observer.unobserve(currentCard);
-      }
-      observer.disconnect();
-    };
-  }, [dispatch, eyebrow]);
-
-  const handleHeaderClick = (e: React.MouseEvent) => {
-    const target = e.target as HTMLElement;
-    if (
-      target.closest(
-        'input, button, select, textarea, [role="listbox"], [role="option"]'
-      )
-    ) {
+    if (shouldStayOpen) {
+      console.log('Toggle prevented due to shouldStayOpen');
       return;
     }
 
-    if (!canToggle) return;
-
-    if (isActive && isExpanded) {
-      const nextStepId = findNextOpenStep();
-      if (nextStepId <= 3) {
-        setTimeout(() => {
-          setIsExpanded(false);
-          setTimeout(() => {
-            dispatch(setStep(nextStepId));
-            const nextStep = document.querySelector(
-              `[data-step="${nextStepId}"]`
-            );
-            if (nextStep) {
-              const windowHeight = window.innerHeight;
-              const cardHeight = nextStep.getBoundingClientRect().height;
-              const scrollPosition =
-                nextStep.getBoundingClientRect().top +
-                window.pageYOffset -
-                (windowHeight - cardHeight) / 2;
-
-              window.scrollTo({
-                top: Math.max(0, scrollPosition),
-                behavior: 'smooth',
-              });
-            }
-          }, 100);
-        }, 300);
-      } else {
-        setIsExpanded(false);
-      }
+    if (onToggle) {
+      console.log('Using controlled toggle');
+      onToggle();
     } else {
-      setIsExpanded(!isExpanded);
+      console.log('Using uncontrolled toggle');
+      updateAccordionState(!isAccordionOpen);
+    }
+    console.log('=== End AccordionCard Toggle ===\n');
+  }, [shouldStayOpen, isAccordionOpen, onToggle, stepId, updateAccordionState]);
 
-      if (!isExpanded) {
-        const card = cardRef.current;
-        if (card) {
-          const windowHeight = window.innerHeight;
-          const cardHeight = card.getBoundingClientRect().height;
-          const scrollPosition =
-            card.getBoundingClientRect().top +
-            window.pageYOffset -
-            (windowHeight - cardHeight) / 2;
-
-          window.scrollTo({
-            top: Math.max(0, scrollPosition),
-            behavior: 'smooth',
-          });
-        }
-      }
+  const getStatusIcon = useMemo(() => {
+    if (!mounted) {
+      return <div className="w-2 h-2 rounded-full bg-gray-300" />;
     }
 
-    if (!localHasInteracted) {
-      setLocalHasInteracted(true);
+    if (isCompleted) {
+      return <CheckCircleIcon className="w-5 h-5 text-green-500 stroke-2" />;
     }
-  };
-
-  const showIcon = !isExpanded && (isCompleted || hasInteracted || localHasInteracted);
-  const showSummary = (isCompleted || localHasInteracted || shouldStayOpen) && summary;
+    if (hasInteracted) {
+      return <div className="w-2 h-2 rounded-full bg-[#F54538]" />;
+    }
+    return <div className="w-2 h-2 rounded-full bg-gray-300" />;
+  }, [isCompleted, hasInteracted, mounted]);
 
   return (
-    <motion.div
+    <div
+      className={`bg-white rounded-lg transition-all duration-500 ${
+        showError ? 'border-2 border-red-500' : ''
+      } ${className}`}
       data-step={stepId}
-      initial={false}
-      animate={{
-        y: isActive ? -4 : 0,
-        transition: { duration: 0.2 },
-      }}
     >
-      <Card
-        ref={cardRef}
-        className={`${className} transition-shadow duration-300 ${
-          isActive ? 'shadow-lg' : 'shadow-sm hover:shadow-md'
+      <button
+        onClick={toggleAccordion}
+        className="w-full flex items-start justify-between cursor-pointer text-left px-8 py-6 transition-all duration-300"
+      >
+        <div className="flex-1">
+          {eyebrow && (
+            <p className="text-sm font-medium text-[#F54538] mb-2">{eyebrow}</p>
+          )}
+          <div className="flex items-center space-x-3">
+            <h3 className="text-2xl font-semibold text-gray-900">{title}</h3>
+          </div>
+          {isAccordionOpen && subtitle && (
+            <p className="text-sm text-gray-500 mt-1">{subtitle}</p>
+          )}
+          {!isAccordionOpen && summary && (
+            <p className="text-sm text-gray-500 mt-2">{summary}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-4 pt-1">
+          <div className="flex items-center gap-2">
+            {getStatusIcon}
+            <ChevronDownIcon
+              className={`w-5 h-5 text-gray-500 transition-transform duration-300 ${
+                isAccordionOpen ? 'transform rotate-180' : ''
+              }`}
+            />
+          </div>
+        </div>
+      </button>
+      <div
+        className={`transition-all duration-300 overflow-hidden ${
+          isAccordionOpen ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
         }`}
       >
-        <div className="relative">
-          <div
-            className="w-full flex items-start justify-between cursor-pointer text-left p-4"
-            onClick={handleHeaderClick}
-          >
-            <div className="flex-1">
-              {eyebrow && (
-                <div className="text-sm text-gray-500 mb-1">{eyebrow}</div>
-              )}
-              <div className="flex items-center gap-3">
-                <h3 className="text-2xl font-semibold text-gray-900">
-                  {title}
-                </h3>
-              </div>
-              {subtitle && isExpanded && (
-                <p className="text-sm text-gray-500 mt-2">{subtitle}</p>
-              )}
-            </div>
-            <div className="flex items-center gap-4 pt-1">
-              {showSummary && !isExpanded && (
-                <motion.div
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="text-sm text-gray-600"
-                >
-                  {summary}
-                </motion.div>
-              )}
-              <div className="flex items-center gap-2">
-                {showIcon && (
-                  <motion.div
-                    initial={{ scale: 0, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    {isCompleted ? (
-                      <CheckCircleIcon className="w-6 h-6 text-green-500" />
-                    ) : (
-                      <XCircleIcon className="w-6 h-6 text-[#F54538]" />
-                    )}
-                  </motion.div>
-                )}
-                <motion.div
-                  animate={{ rotate: isExpanded ? 180 : 0 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <ChevronUpIcon className="w-6 h-6 text-gray-400" />
-                </motion.div>
-              </div>
-            </div>
-          </div>
-
-          <AnimatePresence initial={false}>
-            {isExpanded && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="overflow-hidden px-4 pb-4"
-              >
-                <AccordionContent>{children}</AccordionContent>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </Card>
-    </motion.div>
-  );
-};
-
-export const AccordionCard: React.FC<AccordionCardProps> = (props) => {
-  return (
-    <AccordionProvider>
-      <AccordionCardInner {...props} />
-    </AccordionProvider>
+        <div className="px-8 pb-8 pt-4">{children}</div>
+      </div>
+    </div>
   );
 };

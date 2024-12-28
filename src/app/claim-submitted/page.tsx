@@ -1,81 +1,115 @@
 'use client';
 
 import React from 'react';
-import { useRouter } from 'next/navigation';
-import { CheckCircleIcon } from '@heroicons/react/24/solid';
 import { useAppSelector } from '@/store/hooks';
+import { Card } from '@/components/shared/Card';
+import { formatCurrency } from '@/utils/helpers';
 
 export default function ClaimSubmittedPage() {
-  const router = useRouter();
-  const { personalDetails } = useAppSelector((state) => state.booking);
-
-  // Check if user should be allowed on this page
-  React.useEffect(() => {
-    if (!personalDetails) {
-      router.push('/');
-    }
-  }, [personalDetails, router]);
+  const personalDetails = useAppSelector((state) => state.user.personalDetails);
+  const selectedFlights = useAppSelector(
+    (state) => state.flight.selectedFlights
+  );
+  const compensationAmount = useAppSelector(
+    (state) => state.compensation.compensationAmount
+  );
 
   return (
     <div className="min-h-screen bg-[#f5f7fa]">
-      <main className="max-w-3xl mx-auto px-4 pt-16 pb-24">
-        <div className="text-center">
-          <div className="flex justify-center mb-6">
-            <CheckCircleIcon className="w-20 h-20 text-green-500" />
-          </div>
-
-          <h1 className="text-3xl font-bold mb-4">
-            Claim Successfully Submitted!
-          </h1>
-
-          <p className="text-lg text-gray-600 mb-8">
-            Thank you for submitting your claim. We&apos;ll start processing it right away.
-          </p>
-
-          <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
-            <h2 className="text-xl font-semibold mb-4">What happens next?</h2>
-            <div className="text-left space-y-4">
-              <div className="flex items-start space-x-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#F54538] text-white flex items-center justify-center text-sm">
-                  1
-                </div>
-                <p className="text-gray-700">
-                  Our team will review your claim within the next 24 hours
-                </p>
-              </div>
-              <div className="flex items-start space-x-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#F54538] text-white flex items-center justify-center text-sm">
-                  2
-                </div>
-                <p className="text-gray-700">
-                  We&apos;ll contact the airline and start the compensation process
-                </p>
-              </div>
-              <div className="flex items-start space-x-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#F54538] text-white flex items-center justify-center text-sm">
-                  3
-                </div>
-                <p className="text-gray-700">
-                  You&apos;ll receive regular updates about your claim status via email
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
-            <p className="text-sm text-blue-800">
-              We&apos;ve sent a confirmation email to <strong>{personalDetails?.email}</strong> with your claim details.
+      <div className="max-w-3xl mx-auto px-4 py-8">
+        <Card className="bg-white p-6">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-gray-900 mb-4">
+              Claim Submitted Successfully
+            </h1>
+            <p className="text-lg text-gray-600">
+              Thank you for submitting your claim. We&apos;ll be in touch soon.
             </p>
           </div>
 
-          <button
-            onClick={() => router.push('/')}
-            className="px-6 py-3 bg-[#F54538] text-white rounded-lg hover:bg-[#E03F33] transition-colors"
-          >
-            Return to Home
-          </button>
-        </div>
-      </main>
+          <div className="space-y-8">
+            <div>
+              <h2 className="text-xl font-semibold mb-4">Claim Summary</h2>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Reference Number</p>
+                    <p className="font-medium">
+                      {selectedFlights[0]?.id || 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">
+                      Estimated Compensation
+                    </p>
+                    <p className="font-medium">
+                      {formatCurrency(compensationAmount || 0)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h2 className="text-xl font-semibold mb-4">Flight Details</h2>
+              <div className="space-y-4">
+                {selectedFlights.map((flight) => (
+                  <div
+                    key={flight.id}
+                    className="bg-gray-50 rounded-lg p-4 space-y-2"
+                  >
+                    <div className="flex justify-between">
+                      <div>
+                        <p className="font-medium">
+                          {flight.departureCity} to {flight.arrivalCity}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          {flight.departure} - {flight.arrival}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-medium">Flight {flight.id}</p>
+                        <p className="text-sm text-gray-600">{flight.date}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h2 className="text-xl font-semibold mb-4">Personal Details</h2>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Name</p>
+                    <p className="font-medium">
+                      {personalDetails?.firstName} {personalDetails?.lastName}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Email</p>
+                    <p className="font-medium">{personalDetails?.email}</p>
+                  </div>
+                  {personalDetails?.phone && (
+                    <div>
+                      <p className="text-sm text-gray-600">Phone</p>
+                      <p className="font-medium">{personalDetails.phone}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="text-center text-gray-600">
+              <p>
+                We&apos;ll send you an email confirmation shortly with more
+                details about your claim.
+              </p>
+            </div>
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }

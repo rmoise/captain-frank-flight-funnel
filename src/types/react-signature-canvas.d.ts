@@ -1,7 +1,8 @@
 declare module 'react-signature-canvas' {
   import * as React from 'react';
 
-  export interface SignatureCanvasProps extends React.CanvasHTMLAttributes<HTMLCanvasElement> {
+  export interface SignatureCanvasProps
+    extends React.CanvasHTMLAttributes<HTMLCanvasElement> {
     canvasProps?: React.CanvasHTMLAttributes<HTMLCanvasElement>;
     clearOnResize?: boolean;
     minWidth?: number;

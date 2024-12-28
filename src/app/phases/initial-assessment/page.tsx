@@ -1,29 +1,57 @@
 'use client';
 
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+} from 'react';
 import type { RootState } from '@/store';
+import { AccordionCard } from '@/components/shared/AccordionCard';
 import {
-  setStep,
-  setSelectedFlight,
-  setWizardAnswers,
+  setWizardAnswers as setWizardAnswersAction,
   setPersonalDetails,
+  setTermsAccepted,
+  setPrivacyAccepted,
+  setMarketingAccepted,
+  setSelectedFlight,
+  setFromLocation,
+  setToLocation,
+} from '@/store/slices/bookingSlice';
+import {
+  setCurrentPhase,
   completeStep,
   markStepIncomplete,
-} from '@/store/bookingSlice';
-import type { BookingState } from '@/types/store';
-import type { Flight, PassengerDetails } from '@/types';
-import FlightSelector from '@/components/booking/FlightSelector';
-import { QAWizard } from '@/components/wizard/QAWizard';
-import { ProgressTracker } from '@/components/booking/ProgressTracker';
+  completePhase,
+} from '@/store/slices/progressSlice';
+import type { Flight, Answer, PassengerDetails } from '@/types/store';
+import { FlightSelector } from '@/components/booking/FlightSelector';
+import { QAWizardWrapper } from '@/components/wizard/QAWizardWrapper';
 import { wizardQuestions } from '@/constants/wizardQuestions';
 import { PersonalDetailsForm } from '@/components/forms/PersonalDetailsForm';
 import { ConsentCheckbox } from '@/components/ConsentCheckbox';
-import { AccordionCard } from '@/components/shared/AccordionCard';
 import { SpeechBubble } from '@/components/SpeechBubble';
-import type { Answer } from '@/types/wizard';
 import type { Question } from '@/types/experience';
+import { accordionConfig } from '@/config/accordion';
+import { useStepValidation } from '@/hooks/useStepValidation';
+import { ContinueButton } from '@/components/shared/ContinueButton';
+import { PhaseNavigation } from '@/components/PhaseNavigation';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { usePhaseManagement } from '@/hooks/usePhaseManagement';
+import {
+  selectFromLocation,
+  selectToLocation,
+} from '@/store/selectors/locationSelectors';
+import { useRouter } from 'next/navigation';
+
+// Extend the existing RootState type instead of redeclaring it
+declare module '@/store' {
+  interface BookingState {
+    fromLocation: LocationData | null;
+    toLocation: LocationData | null;
+  }
+}
 
 interface StepProps {
   onSelect?: (flight: Flight | Flight[]) => void;
@@ -32,6 +60,14 @@ interface StepProps {
     | ((details: PassengerDetails) => void);
   onInteract?: () => void;
   questions?: Question[];
+  phase?: number;
+  stepNumber?: number;
+  showResults?: boolean;
+  showFlightSearch?: boolean;
+  showFlightDetails?: boolean;
+  disabled?: boolean;
+  selectedFlight?: Flight | null;
+  currentPhase?: number;
 }
 
 interface Step {
@@ -41,372 +77,1083 @@ interface Step {
   subtitle?: string;
   component: React.ComponentType<StepProps>;
   props: StepProps;
-  getSummary: (state: BookingState) => string;
+  getSummary: (state: RootState['booking']) => string;
   shouldStayOpen?: boolean;
   isOpenByDefault?: boolean;
 }
 
-// Define steps configuration outside component to prevent unnecessary re-renders
-const createSteps = (
-  dispatch: ReturnType<typeof useAppDispatch>,
-  handleStepInteraction: (stepId: number) => void
-): Step[] => [
-  {
-    id: 1,
-    name: 'FlightSelector',
-    title: 'Tell us about your flight',
-    component: FlightSelector as React.ComponentType<StepProps>,
-    props: {
-      onSelect: (flight: Flight | Flight[]) => {
-        dispatch(setSelectedFlight(Array.isArray(flight) ? flight[0] : flight));
-        dispatch(completeStep(1));
-        setTimeout(() => {
-          dispatch(setStep(2));
-          const nextStep = document.querySelector('[data-step="2"]');
-          if (nextStep) {
-            const windowHeight = window.innerHeight;
-            const cardHeight = nextStep.getBoundingClientRect().height;
-            const scrollPosition =
-              nextStep.getBoundingClientRect().top +
-              window.pageYOffset -
-              (windowHeight - cardHeight) / 2;
-
-            window.scrollTo({
-              top: Math.max(0, scrollPosition),
-              behavior: 'smooth',
-            });
-          }
-        }, 500);
-      },
-      onInteract: () => handleStepInteraction(1),
-    },
-    getSummary: (state: BookingState) =>
-      state.selectedFlight
-        ? `${state.selectedFlight.flightNumber} • ${state.selectedFlight.departureCity} → ${state.selectedFlight.arrivalCity}`
-        : '',
-  },
-  {
-    id: 2,
-    name: 'QAWizard',
-    title: 'What happened with your flight?',
-    component: QAWizard as React.ComponentType<StepProps>,
-    props: {
-      questions: wizardQuestions,
-      onComplete: (answers: Answer[]) => {
-        dispatch(setWizardAnswers(answers));
-        if (answers.length > 0) {
-          const activeQuestions = wizardQuestions.filter(
-            (q) => !q.showIf || q.showIf(answers)
-          );
-          const allQuestionsAnswered = activeQuestions.every((q) =>
-            answers.some((a) => {
-              if (a.questionId === q.id && a.value) {
-                if (a.value.startsWith('€')) {
-                  const amount = parseFloat(a.value.slice(1));
-                  return !isNaN(amount) && amount > 0;
-                }
-                return true;
-              }
-              return false;
-            })
-          );
-          if (allQuestionsAnswered) {
-            dispatch(completeStep(2));
-            // Let the accordion close animation finish before moving to next step
-            setTimeout(() => {
-              dispatch(setStep(3));
-            }, 1000);
-          } else {
-            dispatch(markStepIncomplete(2));
-          }
-        } else {
-          dispatch(markStepIncomplete(2));
-        }
-      },
-      onInteract: () => handleStepInteraction(2),
-    },
-    getSummary: (state: BookingState) => {
-      if (!state.wizardAnswers?.length) return '';
-
-      // Get active questions based on current answers
-      const activeQuestions = wizardQuestions.filter(
-        (q) => !q.showIf || q.showIf(state.wizardAnswers)
-      );
-
-      // Count answers that match active questions
-      const answeredCount = activeQuestions.filter((q) =>
-        state.wizardAnswers.some((a) => a.questionId === q.id && a.value)
-      ).length;
-
-      return answeredCount ? `${answeredCount} questions answered` : '';
-    },
-    shouldStayOpen: false,
-  },
-  {
-    id: 3,
-    name: 'PersonalDetails',
-    title: 'Personal Details',
-    subtitle:
-      'Please provide your contact details so we can keep you updated about your claim.',
-    component: PersonalDetailsForm as unknown as React.ComponentType<StepProps>,
-    props: {
-      onComplete: (details: PassengerDetails | null) => {
-        dispatch(setPersonalDetails(details || null));
-
-        if (details) {
-          const isComplete = !!(
-            details.firstName?.trim() &&
-            details.lastName?.trim() &&
-            details.email?.trim() &&
-            /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(details.email)
-          );
-
-          if (isComplete) {
-            dispatch(completeStep(3));
-          } else {
-            dispatch(markStepIncomplete(3));
-          }
-        } else {
-          dispatch(markStepIncomplete(3));
-        }
-      },
-      onInteract: () => handleStepInteraction(3),
-    },
-    getSummary: (state: BookingState) =>
-      state.personalDetails
-        ? `${state.personalDetails.firstName} ${
-            state.personalDetails.lastName
-          }${
-            state.personalDetails.email
-              ? ` • ${state.personalDetails.email}`
-              : ''
-          }`
-        : '',
-    shouldStayOpen: true,
-    isOpenByDefault: true,
-  },
-];
+interface LocationData {
+  value: string;
+  label: string;
+  description?: string;
+  city?: string;
+  fromLocation?: {
+    value: string;
+    label: string;
+    description?: string;
+    city?: string;
+  };
+  toLocation?: {
+    value: string;
+    label: string;
+    description?: string;
+    city?: string;
+  };
+}
 
 export default function InitialAssessmentPage() {
-  const router = useRouter();
   const dispatch = useAppDispatch();
-  const bookingState = useAppSelector((state: RootState) => state.booking);
-  const {
-    currentStep,
-    selectedFlight,
-    wizardAnswers,
-    completedSteps,
-    personalDetails,
-  } = bookingState;
-  const [interactedSteps, setInteractedSteps] = useState<number[]>([]);
-  const [termsAccepted, setTermsAccepted] = useState(false);
-  const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const router = useRouter();
+  const [mounted, setMounted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
+  const [currentStep, setCurrentStep] = useState(1);
+  const { completedPhases } = usePhaseManagement();
+  const bookingState = useAppSelector((state: RootState) => state.booking);
+  const fromLocation = useAppSelector(selectFromLocation);
+  const toLocation = useAppSelector(selectToLocation);
+  const {
+    wizardAnswers = [],
+    termsAccepted = false,
+    privacyAccepted = false,
+    marketingAccepted = false,
+    selectedFlight = null,
+    personalDetails = null,
+  } = bookingState;
 
-  // Compute continue state
-  const canContinue = useMemo(() => {
-    const hasValidPersonalDetails = !!(
-      personalDetails?.firstName?.trim() &&
-      personalDetails?.lastName?.trim() &&
-      personalDetails?.email?.trim() &&
-      /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(personalDetails.email)
-    );
+  const bookingStateForStorage = useMemo(
+    () => ({
+      ...bookingState,
+    }),
+    [bookingState]
+  );
 
-    const allStepsComplete = [1, 2, 3].every((stepId) =>
-      completedSteps.includes(stepId)
-    );
+  const { validationRules, isStepCompleted } = useStepValidation();
 
-    const requiredCheckboxesAccepted = termsAccepted && privacyAccepted;
+  const [interactedSteps, setInteractedSteps] = useState<number[]>([]);
 
-    return (
-      !!selectedFlight &&
-      !!wizardAnswers?.length &&
-      hasValidPersonalDetails &&
-      allStepsComplete &&
-      requiredCheckboxesAccepted
-    );
+  // Track current validation state to prevent unnecessary updates
+  const validationStateRef = useRef({
+    isFlightValid: false,
+    isWizardValid: false,
+    isPersonalValid: false,
+    isTermsValid: false,
+  });
+
+  const handleComplete = useCallback(
+    (answers: Answer[]) => {
+      console.log('QAWizard onComplete called with:', answers);
+
+      // Always save answers to both Redux and localStorage, even if empty
+      dispatch(setWizardAnswersAction(answers));
+      localStorage.setItem('wizardAnswers', JSON.stringify(answers));
+
+      // Check if answers are valid for step completion
+      const activeQuestions = wizardQuestions.filter(
+        (q) => !q.showIf || q.showIf(answers)
+      );
+
+      const allQuestionsAnswered = activeQuestions.every((q) =>
+        answers.some((a) => {
+          if (a.questionId === q.id && a.value) {
+            if (a.value.startsWith('€')) {
+              const amount = parseFloat(a.value.slice(1));
+              return !isNaN(amount) && amount > 0;
+            }
+            return true;
+          }
+          return false;
+        })
+      );
+
+      // Update step completion status
+      if (allQuestionsAnswered) {
+        dispatch(completeStep(2));
+        // Save completed steps
+        const existingSteps = JSON.parse(
+          localStorage.getItem('completedSteps') || '[]'
+        );
+        if (!existingSteps.includes(2)) {
+          existingSteps.push(2);
+          existingSteps.sort((a: number, b: number) => a - b);
+          localStorage.setItem('completedSteps', JSON.stringify(existingSteps));
+        }
+      } else {
+        dispatch(markStepIncomplete(2));
+        // Remove step 2 from completed steps
+        const existingSteps = JSON.parse(
+          localStorage.getItem('completedSteps') || '[]'
+        );
+        const updatedSteps = existingSteps.filter((step: number) => step !== 2);
+        localStorage.setItem('completedSteps', JSON.stringify(updatedSteps));
+      }
+
+      // Save entire booking state
+      const updatedBookingState = {
+        ...bookingStateForStorage,
+        wizardAnswers: answers,
+      };
+      localStorage.setItem('bookingState', JSON.stringify(updatedBookingState));
+
+      // Log the saved state for debugging
+      console.log('=== Saved QA State ===', {
+        answers,
+        bookingState: updatedBookingState,
+        localStorage: {
+          wizardAnswers: localStorage.getItem('wizardAnswers'),
+          bookingState: localStorage.getItem('bookingState'),
+          completedSteps: localStorage.getItem('completedSteps'),
+        },
+      });
+    },
+    [dispatch, bookingStateForStorage]
+  );
+
+  // Effect to handle step completion status updates
+  useEffect(() => {
+    if (!mounted) return;
+
+    // Check and update personal details step completion
+    if (personalDetails) {
+      const hasValidEmail =
+        personalDetails.email &&
+        /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(personalDetails.email);
+
+      const isComplete = !!(
+        personalDetails.firstName?.trim() &&
+        personalDetails.lastName?.trim() &&
+        hasValidEmail &&
+        personalDetails.salutation?.trim()
+      );
+
+      if (isComplete) {
+        dispatch(completeStep(3));
+      } else {
+        dispatch(markStepIncomplete(3));
+      }
+    }
+
+    // Check and update wizard step completion
+    if (wizardAnswers?.length) {
+      const activeQuestions = wizardQuestions.filter(
+        (q) => !q.showIf || q.showIf(wizardAnswers)
+      );
+
+      const allQuestionsAnswered = activeQuestions.every((q) =>
+        wizardAnswers.some((a) => {
+          if (a.questionId === q.id && a.value) {
+            if (a.value.startsWith('€')) {
+              const amount = parseFloat(a.value.slice(1));
+              return !isNaN(amount) && amount > 0;
+            }
+            return true;
+          }
+          return false;
+        })
+      );
+
+      if (allQuestionsAnswered) {
+        dispatch(completeStep(2));
+      }
+    }
+  }, [mounted, personalDetails, wizardAnswers, dispatch]);
+
+  // Define steps configuration
+  const createSteps = useCallback((): Step[] => {
+    const allSteps = [
+      {
+        id: 1,
+        name: 'FlightSelection',
+        title: 'Tell us about your flight',
+        component: FlightSelector as unknown as React.ComponentType<StepProps>,
+        props: {
+          onSelect: (flight: Flight | Flight[]) => {
+            console.log('Flight selection handler called with:', flight);
+
+            if (!flight) {
+              console.log('No flight data provided');
+              dispatch(markStepIncomplete(1));
+              return;
+            }
+
+            const flightData = Array.isArray(flight) ? flight[0] : flight;
+
+            // Create location data from flight
+            const fromLocationData = {
+              value: flightData.departure || '',
+              label: flightData.departureCity || '',
+              description: flightData.departureCity || '',
+              city: flightData.departureCity || '',
+            };
+
+            const toLocationData = {
+              value: flightData.arrival || '',
+              label: flightData.arrivalCity || '',
+              description: flightData.arrivalCity || '',
+              city: flightData.arrivalCity || '',
+            };
+
+            // Save flight data with proper date handling
+            const flightToSave = Array.isArray(flight)
+              ? {
+                  ...flight[0],
+                  date: flight[0].date
+                    ? new Date(flight[0].date).toISOString()
+                    : new Date().toISOString(),
+                  price: flight[0].price || 0,
+                }
+              : {
+                  ...flightData,
+                  date: flightData.date
+                    ? new Date(flightData.date).toISOString()
+                    : new Date().toISOString(),
+                  price: flightData.price || 0,
+                };
+
+            localStorage.setItem(
+              'selectedFlights',
+              JSON.stringify([flightToSave])
+            );
+            dispatch(setSelectedFlight(flightToSave));
+
+            // Save locations
+            dispatch(setFromLocation(JSON.stringify(fromLocationData)));
+            dispatch(setToLocation(JSON.stringify(toLocationData)));
+            setInteractedSteps((prev) => [...new Set([...prev, 1])]);
+
+            // Mark step as complete if we have valid locations
+            if (
+              fromLocationData.value &&
+              toLocationData.value &&
+              fromLocationData.value !== toLocationData.value
+            ) {
+              dispatch(completeStep(1));
+            } else {
+              dispatch(markStepIncomplete(1));
+            }
+          },
+          onInteract: () =>
+            setInteractedSteps((prev) => [...new Set([...prev, 1])]),
+          showFlightSearch: !selectedFlight,
+          showResults: !selectedFlight,
+          showFlightDetails: !selectedFlight,
+          selectedFlight,
+          currentPhase: 1,
+        },
+        getSummary: (state: RootState['booking']) => {
+          const from = state.fromLocation as string | LocationData | null;
+          const to = state.toLocation as string | LocationData | null;
+          if (!from || !to) return '';
+
+          const fromLabel =
+            typeof from === 'string' ? JSON.parse(from).label : from.label;
+          const toLabel =
+            typeof to === 'string' ? JSON.parse(to).label : to.label;
+
+          return `${fromLabel} → ${toLabel}`;
+        },
+        shouldStayOpen: false,
+        isOpenByDefault: true,
+      },
+      {
+        id: 2,
+        name: 'QAWizard',
+        title: 'What happened with your flight?',
+        component: QAWizardWrapper as React.ComponentType<StepProps>,
+        props: {
+          questions: wizardQuestions,
+          onComplete: handleComplete,
+          onInteract: () => {
+            console.log('QAWizard onInteract called');
+            setInteractedSteps((prev) => [...new Set([...prev, 2])]);
+          },
+          phase: 1,
+          stepNumber: 2,
+          selectedFlight: selectedFlight,
+        },
+        getSummary: (state: RootState['booking']) => {
+          if (!state.wizardAnswers?.length) return '';
+
+          const activeQuestions = wizardQuestions.filter(
+            (q) => !q.showIf || q.showIf(state.wizardAnswers)
+          );
+
+          const answeredCount = activeQuestions.filter((q) =>
+            state.wizardAnswers.some(
+              (a: Answer) => a.questionId === q.id && a.value
+            )
+          ).length;
+
+          return answeredCount ? `${answeredCount} questions answered` : '';
+        },
+        shouldStayOpen: true,
+        isOpenByDefault: true,
+      },
+      {
+        id: 3,
+        name: 'PersonalDetails',
+        title: 'Personal Details',
+        subtitle:
+          'Please provide your contact details so we can keep you updated about your claim.',
+        component:
+          PersonalDetailsForm as unknown as React.ComponentType<StepProps>,
+        props: {
+          onComplete: (details: PassengerDetails | null) => {
+            if (!details) {
+              dispatch(markStepIncomplete(3));
+              return;
+            }
+
+            const hasValidEmail =
+              details.email &&
+              /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(details.email);
+
+            const isComplete = !!(
+              details.firstName?.trim() &&
+              details.lastName?.trim() &&
+              hasValidEmail &&
+              details.salutation?.trim()
+            );
+
+            if (isComplete) {
+              dispatch(setPersonalDetails(details));
+              dispatch(completeStep(3));
+            } else {
+              dispatch(setPersonalDetails(details));
+              dispatch(markStepIncomplete(3));
+            }
+          },
+          onInteract: () =>
+            setInteractedSteps((prev) => [...new Set([...prev, 3])]),
+        },
+        getSummary: (state: RootState['booking']) => {
+          const details = state.personalDetails;
+          if (!details) return '';
+
+          return details.firstName && details.lastName
+            ? `${details.firstName} ${details.lastName}`
+            : '';
+        },
+        shouldStayOpen: false,
+        isOpenByDefault: true,
+      },
+    ];
+
+    return allSteps;
+  }, [dispatch, selectedFlight, handleComplete, setInteractedSteps]);
+
+  // Define steps with memoization
+  const steps = useMemo(() => createSteps(), [createSteps]);
+
+  // Track current validation state to prevent unnecessary updates
+  useEffect(() => {
+    // Skip during initialization
+    if (!mounted) return;
+
+    // Get current validation state
+    const newValidationState = {
+      isFlightValid: isStepCompleted(1),
+      isWizardValid: isStepCompleted(2),
+      isPersonalValid: isStepCompleted(3),
+      isTermsValid: isStepCompleted(4),
+    };
+
+    // Only update if validation state has changed
+    if (
+      JSON.stringify(validationStateRef.current) !==
+      JSON.stringify(newValidationState)
+    ) {
+      console.log('\n=== Validation State Update ===');
+      console.log('Current:', validationStateRef.current);
+      console.log('New:', newValidationState);
+      console.log('=== End Update ===\n');
+
+      validationStateRef.current = newValidationState;
+
+      // Log overall state
+      console.log('\n=== Initial Assessment Step State ===');
+      console.log('Completed Steps:', completedPhases);
+      console.log('Current Step:', currentStep);
+      console.log('Booking State:', bookingState);
+      console.log('Validation State:', newValidationState);
+      console.log('=== End Initial Assessment Step State ===\n');
+    }
+  }, [isStepCompleted, bookingState, completedPhases, currentStep, mounted]);
+
+  // Initialize component
+  useEffect(() => {
+    if (mounted) return;
+
+    const initializeState = async () => {
+      try {
+        // Set current phase to 1 (Initial Assessment)
+        dispatch(setCurrentPhase(1));
+        localStorage.setItem('currentPhase', '1');
+
+        // Restore saved state in order of priority: bookingState > individual states
+        const savedBookingState = localStorage.getItem('bookingState');
+        const savedWizardAnswers = localStorage.getItem('wizardAnswers');
+        const savedPersonalDetails = localStorage.getItem('personalDetails');
+        const savedConsent = localStorage.getItem('userConsent');
+        const savedCompletedSteps = localStorage.getItem('completedSteps');
+
+        // First try to restore from bookingState
+        if (savedBookingState) {
+          try {
+            const parsedBookingState = JSON.parse(savedBookingState);
+            console.log('Restoring from bookingState:', parsedBookingState);
+
+            if (parsedBookingState.wizardAnswers) {
+              dispatch(
+                setWizardAnswersAction(parsedBookingState.wizardAnswers)
+              );
+              // Validate wizard answers
+              const activeQuestions = wizardQuestions.filter(
+                (q) => !q.showIf || q.showIf(parsedBookingState.wizardAnswers)
+              );
+              const allQuestionsAnswered = activeQuestions.every((q) =>
+                parsedBookingState.wizardAnswers.some((a: Answer) => {
+                  if (a.questionId === q.id && a.value) {
+                    if (a.value.startsWith('€')) {
+                      const amount = parseFloat(a.value.slice(1));
+                      return !isNaN(amount) && amount > 0;
+                    }
+                    return true;
+                  }
+                  return false;
+                })
+              );
+              if (allQuestionsAnswered) {
+                dispatch(completeStep(2));
+              }
+            }
+            if (parsedBookingState.personalDetails) {
+              dispatch(setPersonalDetails(parsedBookingState.personalDetails));
+            }
+            if (parsedBookingState.selectedFlight) {
+              dispatch(setSelectedFlight(parsedBookingState.selectedFlight));
+            }
+            if (parsedBookingState.fromLocation) {
+              dispatch(setFromLocation(parsedBookingState.fromLocation));
+            }
+            if (parsedBookingState.toLocation) {
+              dispatch(setToLocation(parsedBookingState.toLocation));
+            }
+            if (parsedBookingState.termsAccepted) {
+              dispatch(setTermsAccepted(parsedBookingState.termsAccepted));
+            }
+            if (parsedBookingState.privacyAccepted) {
+              dispatch(setPrivacyAccepted(parsedBookingState.privacyAccepted));
+            }
+            if (parsedBookingState.marketingAccepted) {
+              dispatch(
+                setMarketingAccepted(parsedBookingState.marketingAccepted)
+              );
+            }
+          } catch (error) {
+            console.error('Error parsing bookingState:', error);
+          }
+        }
+
+        // Then try to restore from individual states if not already restored
+        if (savedWizardAnswers) {
+          try {
+            const parsedBookingState = savedBookingState
+              ? JSON.parse(savedBookingState)
+              : null;
+            if (!parsedBookingState?.wizardAnswers) {
+              const answers = JSON.parse(savedWizardAnswers);
+              console.log('Restoring from individual wizardAnswers:', answers);
+              dispatch(setWizardAnswersAction(answers));
+
+              // Validate wizard answers
+              const activeQuestions = wizardQuestions.filter(
+                (q) => !q.showIf || q.showIf(answers)
+              );
+              const allQuestionsAnswered = activeQuestions.every((q) =>
+                answers.some((a: Answer) => {
+                  if (a.questionId === q.id && a.value) {
+                    if (a.value.startsWith('€')) {
+                      const amount = parseFloat(a.value.slice(1));
+                      return !isNaN(amount) && amount > 0;
+                    }
+                    return true;
+                  }
+                  return false;
+                })
+              );
+              if (allQuestionsAnswered) {
+                dispatch(completeStep(2));
+              }
+            }
+          } catch (error) {
+            console.error('Error parsing wizardAnswers:', error);
+          }
+        }
+
+        if (savedPersonalDetails) {
+          try {
+            const parsedBookingState = savedBookingState
+              ? JSON.parse(savedBookingState)
+              : null;
+            if (!parsedBookingState?.personalDetails) {
+              const details = JSON.parse(savedPersonalDetails);
+              if (
+                details?.firstName?.trim() &&
+                details?.lastName?.trim() &&
+                details?.email?.trim()
+              ) {
+                dispatch(setPersonalDetails(details));
+                dispatch(completeStep(3));
+              }
+            }
+          } catch (error) {
+            console.error('Error parsing personalDetails:', error);
+          }
+        }
+
+        if (savedConsent) {
+          try {
+            const parsedBookingState = savedBookingState
+              ? JSON.parse(savedBookingState)
+              : null;
+            if (!parsedBookingState?.termsAccepted) {
+              const { terms, privacy, marketing } = JSON.parse(savedConsent);
+              dispatch(setTermsAccepted(!!terms));
+              dispatch(setPrivacyAccepted(!!privacy));
+              dispatch(setMarketingAccepted(!!marketing));
+
+              // If terms and privacy are accepted, mark step 4 as complete
+              if (terms && privacy) {
+                dispatch(completeStep(4));
+              }
+            }
+          } catch (error) {
+            console.error('Error parsing consent:', error);
+          }
+        }
+
+        if (savedCompletedSteps) {
+          try {
+            const completedSteps = JSON.parse(savedCompletedSteps);
+            completedSteps.forEach((step: number) => {
+              dispatch(completeStep(step));
+            });
+          } catch (error) {
+            console.error('Error parsing completedSteps:', error);
+          }
+        }
+
+        // Log the restored state
+        console.log('=== Restored Initial Assessment State ===', {
+          bookingState: savedBookingState
+            ? JSON.parse(savedBookingState)
+            : null,
+          wizardAnswers: savedWizardAnswers
+            ? JSON.parse(savedWizardAnswers)
+            : null,
+          personalDetails: savedPersonalDetails
+            ? JSON.parse(savedPersonalDetails)
+            : null,
+          consent: savedConsent ? JSON.parse(savedConsent) : null,
+          completedSteps: savedCompletedSteps
+            ? JSON.parse(savedCompletedSteps)
+            : null,
+        });
+
+        setMounted(true);
+      } catch (error) {
+        console.error('Error initializing state:', error);
+        setMounted(true);
+      }
+    };
+
+    initializeState();
+  }, [dispatch, mounted]);
+
+  // Update the useEffect for consent state changes
+  useEffect(() => {
+    // Skip during initialization
+    if (!mounted) return;
+
+    console.log('=== Consent State Changed ===');
+    console.log('Current consent state:', {
+      terms: termsAccepted,
+      privacy: privacyAccepted,
+      marketing: marketingAccepted,
+    });
+
+    try {
+      const consentState = {
+        terms: termsAccepted,
+        privacy: privacyAccepted,
+        marketing: marketingAccepted,
+      };
+      localStorage.setItem('userConsent', JSON.stringify(consentState));
+      console.log('Saved consent state to localStorage');
+
+      // Update step completion based on terms acceptance
+      console.log('Validating step 4:', {
+        terms: termsAccepted,
+        privacy: privacyAccepted,
+        isValid: termsAccepted && privacyAccepted,
+      });
+
+      if (termsAccepted && privacyAccepted) {
+        dispatch(completeStep(4));
+        // Ensure step 4 is saved in localStorage
+        const existingSteps = JSON.parse(
+          localStorage.getItem('completedSteps') || '[]'
+        );
+        if (!existingSteps.includes(4)) {
+          existingSteps.push(4);
+          existingSteps.sort((a: number, b: number) => a - b);
+          localStorage.setItem('completedSteps', JSON.stringify(existingSteps));
+        }
+      } else {
+        dispatch(markStepIncomplete(4));
+        // Remove step 4 from localStorage
+        const existingSteps = JSON.parse(
+          localStorage.getItem('completedSteps') || '[]'
+        );
+        const updatedSteps = existingSteps.filter((step: number) => step !== 4);
+        localStorage.setItem('completedSteps', JSON.stringify(updatedSteps));
+      }
+
+      // Save entire booking state
+      localStorage.setItem(
+        'bookingState',
+        JSON.stringify(bookingStateForStorage)
+      );
+    } catch (error) {
+      console.error('Failed to save consent states:', error);
+    }
+    console.log('=== Consent Update Complete ===');
   }, [
-    selectedFlight,
-    wizardAnswers,
-    personalDetails,
-    completedSteps,
     termsAccepted,
     privacyAccepted,
+    marketingAccepted,
+    dispatch,
+    mounted,
+    bookingStateForStorage,
   ]);
 
-  // Handle navigation
-  const handleStepChange = useCallback(() => {
-    if (!termsAccepted || !privacyAccepted) {
+  // Memoized continue button state
+  const canContinue = useMemo(() => {
+    // Check each step's validation
+    const isStep1Valid = Boolean(
+      fromLocation &&
+        toLocation &&
+        validationRules.locations(fromLocation, toLocation) &&
+        isStepCompleted(1)
+    );
+
+    const isStep2Valid = Boolean(
+      wizardAnswers?.length > 0 &&
+        validationRules.wizardAnswers(wizardAnswers) &&
+        isStepCompleted(2)
+    );
+
+    const isStep3Valid = Boolean(
+      personalDetails &&
+        validationRules.personalDetails(personalDetails) &&
+        isStepCompleted(3)
+    );
+
+    const isStep4Valid = Boolean(
+      termsAccepted &&
+        privacyAccepted &&
+        validationRules.terms(termsAccepted) &&
+        validationRules.privacy(privacyAccepted) &&
+        isStepCompleted(4)
+    );
+
+    // Detailed validation logging
+    console.log('=== Continue Button Validation ===', {
+      step1: {
+        isValid: isStep1Valid,
+        fromLocation,
+        toLocation,
+        isCompleted: isStepCompleted(1),
+      },
+      step2: {
+        isValid: isStep2Valid,
+        answersLength: wizardAnswers?.length,
+        isCompleted: isStepCompleted(2),
+      },
+      step3: {
+        isValid: isStep3Valid,
+        hasPersonalDetails: !!personalDetails,
+        isCompleted: isStepCompleted(3),
+      },
+      step4: {
+        isValid: isStep4Valid,
+        terms: termsAccepted,
+        privacy: privacyAccepted,
+        isCompleted: isStepCompleted(4),
+      },
+    });
+
+    const canProceed =
+      isStep1Valid && isStep2Valid && isStep3Valid && isStep4Valid;
+    console.log('Can proceed:', canProceed);
+    return canProceed;
+  }, [
+    fromLocation,
+    toLocation,
+    wizardAnswers,
+    personalDetails,
+    termsAccepted,
+    privacyAccepted,
+    validationRules,
+    isStepCompleted,
+  ]);
+
+  // Handle continue button click
+  const handleContinue = useCallback(async () => {
+    if (!canContinue) {
       setShowErrors(true);
       return;
     }
-    if (!canContinue) return;
-    router.push('/phases/compensation-estimate');
-  }, [canContinue, router, termsAccepted, privacyAccepted]);
 
-  // Handle back navigation
-  const handleBack = useCallback(() => {
-    if (currentStep > 1) {
-      dispatch(setStep(currentStep - 1));
+    try {
+      setIsLoading(true);
+
+      // Save current state before proceeding
+      const currentState = {
+        wizardAnswers,
+        personalDetails,
+        selectedFlight,
+        termsAccepted,
+        privacyAccepted,
+        marketingAccepted,
+        fromLocation,
+        toLocation,
+      };
+
+      // Save to localStorage
+      localStorage.setItem('bookingState', JSON.stringify(currentState));
+
+      // Complete current phase and set up next phase
+      dispatch(completePhase(1));
+      dispatch(setCurrentPhase(2));
+
+      // Get existing completed phases and add phase 1
+      const existingCompletedPhases = JSON.parse(
+        localStorage.getItem('completedPhases') || '[]'
+      );
+      const updatedCompletedPhases = [
+        ...new Set([...existingCompletedPhases, 1]),
+      ];
+
+      // Save states to localStorage
+      localStorage.setItem('currentPhase', '2');
+      localStorage.setItem(
+        'completedPhases',
+        JSON.stringify(updatedCompletedPhases)
+      );
+
+      // Navigate to next phase
+      await router.push('/phases/compensation-estimate');
+    } catch (error) {
+      console.error('Failed to proceed to next phase:', error);
+      setShowErrors(true);
+    } finally {
+      setIsLoading(false);
     }
-  }, [currentStep, dispatch]);
+  }, [
+    canContinue,
+    wizardAnswers,
+    personalDetails,
+    selectedFlight,
+    termsAccepted,
+    privacyAccepted,
+    marketingAccepted,
+    fromLocation,
+    toLocation,
+    dispatch,
+    router,
+  ]);
 
-  // Compute disabled state based on current step
-  const showBackButton = useMemo(() => currentStep > 1, [currentStep]);
+  useEffect(() => {
+    // Try to load saved answers from localStorage
+    try {
+      const savedAnswers = localStorage.getItem('wizardAnswers');
+      if (savedAnswers) {
+        const parsed = JSON.parse(savedAnswers);
+        dispatch(setWizardAnswersAction(parsed));
+      }
+    } catch (error) {
+      console.error('Failed to load saved answers:', error);
+    }
+  }, [dispatch]);
 
-  const handleStepInteraction = useCallback((stepId: number) => {
-    setInteractedSteps((prev) => {
-      if (prev.includes(stepId)) return prev;
-      return [...prev, stepId];
-    });
-  }, []);
+  // Determine which steps should be open
+  const getStepOpenState = useCallback(
+    (stepId: number, shouldStayOpen: boolean, isOpenByDefault: boolean) => {
+      // Always keep the current step open
+      if (currentStep === stepId) return true;
 
-  // Create steps with memoized callbacks
-  const STEPS = useMemo(
-    () => createSteps(dispatch, handleStepInteraction),
-    [dispatch, handleStepInteraction]
+      // Keep steps open based on their configuration
+      if (shouldStayOpen) return true;
+      if (isOpenByDefault) return true;
+
+      // Keep incomplete steps open if they're the first incomplete step
+      if (!isStepCompleted(stepId)) {
+        const firstIncompleteStep = [1, 2, 3, 4].find(
+          (id) => !isStepCompleted(id)
+        );
+        return stepId === firstIncompleteStep;
+      }
+
+      return false;
+    },
+    [currentStep, isStepCompleted]
   );
 
-  // Force step 1 on mount
+  // Add logging to step rendering
+  const renderStep = (step: Step) => {
+    const isCompleted = isStepCompleted(step.id);
+    const hasInteracted = interactedSteps.includes(step.id);
+    const summary = step.getSummary(bookingState);
+    const isOpen = getStepOpenState(
+      step.id,
+      step.shouldStayOpen || false,
+      step.isOpenByDefault || false
+    );
+
+    // Add logging to track step state
+    console.log('\n=== Step Render State ===', {
+      stepId: step.id,
+      name: step.name,
+      isCompleted,
+      hasInteracted,
+      summary,
+      isOpen,
+      currentStep,
+      shouldStayOpen: step.shouldStayOpen,
+      isOpenByDefault: step.isOpenByDefault,
+    });
+
+    return (
+      <div
+        key={step.id}
+        className="mb-6"
+        data-step={step.id}
+        style={{
+          scrollMarginTop: '1rem',
+          scrollSnapAlign: 'start',
+          scrollSnapStop: 'always',
+        }}
+      >
+        <AccordionCard
+          title={step.title}
+          subtitle={step.subtitle}
+          eyebrow={`Step ${step.id}`}
+          isOpen={isOpen}
+          isCompleted={isCompleted}
+          hasInteracted={hasInteracted}
+          summary={summary}
+          shouldStayOpen={step.shouldStayOpen}
+          isOpenByDefault={step.isOpenByDefault}
+          className={accordionConfig.padding.wrapper}
+          stepId={
+            step.id === 1
+              ? 'flight-selection'
+              : step.id === 2
+              ? 'qa-wizard'
+              : step.id === 3
+              ? 'passenger-info'
+              : `step-${step.id}`
+          }
+          onToggle={() => {
+            // Only allow toggling if not forced open
+            if (!step.shouldStayOpen) {
+              setCurrentStep(step.id);
+            }
+          }}
+        >
+          <div className={accordionConfig.padding.content}>
+            <step.component {...step.props} />
+          </div>
+        </AccordionCard>
+      </div>
+    );
+  };
+
   useEffect(() => {
-    dispatch(setStep(1));
-  }, [dispatch]);
+    if (typeof window === 'undefined') return;
 
-  // Update current step based on scroll position
-  useEffect(() => {
-    const handleScroll = () => {
-      const stepElements = document.querySelectorAll('[data-step]');
-      const viewportHeight = window.innerHeight;
+    // Save booking state to localStorage
+    localStorage.setItem(
+      'bookingState',
+      JSON.stringify(bookingStateForStorage)
+    );
+  }, [bookingStateForStorage]);
 
-      stepElements.forEach((element) => {
-        const rect = element.getBoundingClientRect();
-        const stepId = parseInt(element.getAttribute('data-step') || '1');
-
-        // Check if element is in viewport
-        if (
-          rect.top <= viewportHeight / 2 &&
-          rect.bottom >= viewportHeight / 2
-        ) {
-          dispatch(setStep(stepId));
-        }
-      });
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    handleScroll(); // Initial check
-
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [dispatch]);
-
-  // Prevent navigation on mount
-  useEffect(() => {
-    const preventNavigation = () => {
-      window.history.pushState(null, '', window.location.pathname);
-    };
-
-    // Push initial state
-    preventNavigation();
-
-    // Handle popstate
-    window.addEventListener('popstate', preventNavigation);
-    return () => window.removeEventListener('popstate', preventNavigation);
-  }, []);
+  if (!mounted) {
+    return null;
+  }
 
   return (
-    <div className="flex flex-col min-h-screen">
-      <main className="max-w-3xl mx-auto px-4 pt-4 pb-32 flex-grow">
-        <div className="space-y-4">
-          <div className="mt-4 sm:mt-8">
-            <SpeechBubble message="Hi, my name is Captain Frank and I'm dealing with your flight disaster. So that I can give you a free initial assessment of your possible claim, please answer three questions." />
+    <div className="min-h-screen bg-[#f5f7fa]">
+      <PhaseNavigation currentPhase={1} completedPhases={completedPhases} />
+      <div className="relative">
+        <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
+          <div className="mt-4 sm:mt-8 mb-8">
+            <SpeechBubble message="Hi, I'm Captain Frank. I'll help you check if you're entitled to compensation for your flight disruption. Let's get started!" />
           </div>
 
-          {/* Step Cards */}
-          {STEPS.map((step) => {
-            const StepComponent = step.component;
-            const isCompleted = completedSteps.includes(step.id);
-            const hasInteracted = interactedSteps.includes(step.id);
-            const isCurrentStep = currentStep === step.id;
+          <div className="space-y-4">
+            {steps.map(renderStep)}
 
-            return (
-              <AccordionCard
-                key={step.id}
-                className={step.id === 1 ? '-mt-2' : 'mt-6'}
-                isCompleted={isCompleted}
-                isActive={isCurrentStep}
-                title={step.title}
-                subtitle={step.subtitle}
-                eyebrow={`Step ${step.id}`}
-                summary={step.getSummary(bookingState)}
-                shouldStayOpen={step.shouldStayOpen}
-                hasInteracted={hasInteracted}
-                isOpenByDefault={step.isOpenByDefault}
-              >
-                <div className="[&>section]:!p-0 [&>section]:!pb-0 [&>section]:!m-0">
-                  <StepComponent {...step.props} />
-                </div>
-              </AccordionCard>
-            );
-          })}
-
-          {/* Consent Checkboxes */}
-          <div className="space-y-4 mt-6">
-            <ConsentCheckbox
-              text="I have read and agree to the"
-              linkText="terms and conditions"
-              link="/terms"
-              required={true}
-              error={showErrors && !termsAccepted}
-              onChange={setTermsAccepted}
-            />
-            <ConsentCheckbox
-              text="I have read and agree to the"
-              linkText="privacy policy"
-              link="/privacy"
-              required={true}
-              error={showErrors && !privacyAccepted}
-              onChange={setPrivacyAccepted}
-            />
-          </div>
-
-          {/* Navigation */}
-          <div className="flex justify-end items-center gap-4 mt-12">
-            {showBackButton ? (
-              <button
-                type="button"
-                onClick={handleBack}
-                className="w-[160px] px-12 py-4 rounded-lg transition-colors text-[#F54538] hover:bg-[#F54538]/10"
-              >
-                Back
-              </button>
-            ) : null}
-            <button
-              onClick={handleStepChange}
-              disabled={!canContinue}
-              className={`w-[160px] px-12 py-4 rounded-lg transition-colors ${
-                canContinue
-                  ? 'bg-[#F54538] hover:bg-[#E03F33] text-white'
-                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-              }`}
+            {/* Terms and Conditions */}
+            <AccordionCard
+              title="Terms and Conditions"
+              subtitle="Please review and accept the terms to proceed."
+              eyebrow="Step 4"
+              isCompleted={isStepCompleted(4)}
+              hasInteracted={showErrors}
+              className={accordionConfig.padding.wrapper}
+              stepId="terms-and-conditions"
+              isOpenByDefault={true}
             >
-              Continue
-            </button>
-          </div>
-        </div>
-      </main>
+              <div className={accordionConfig.padding.content}>
+                <div className="space-y-4">
+                  <ConsentCheckbox
+                    id="terms"
+                    label="I have read and agree to the terms and conditions."
+                    checked={termsAccepted}
+                    onChange={(checked) => {
+                      dispatch(setTermsAccepted(checked));
+                      // Save to localStorage
+                      const newConsent = {
+                        terms: checked,
+                        privacy: privacyAccepted,
+                        marketing: marketingAccepted,
+                      };
+                      localStorage.setItem(
+                        'userConsent',
+                        JSON.stringify(newConsent)
+                      );
 
-      {/* Progress Tracker */}
-      <div className="mt-auto">
-        <ProgressTracker
-          phaseData={{
-            currentPhase: 1,
-            totalPhases: 6,
-            phaseName: 'Initial Assessment',
-            completedSteps,
-            totalStepsInPhase: STEPS.length,
-            phaseProgress: bookingState.phaseProgress['claim-details'],
-            stepInPhase: currentStep,
-          }}
-        />
+                      // Update step 4 completion
+                      if (checked && privacyAccepted) {
+                        dispatch(completeStep(4));
+                        // Ensure step 4 is saved in localStorage
+                        const existingSteps = JSON.parse(
+                          localStorage.getItem('completedSteps') || '[]'
+                        );
+                        if (!existingSteps.includes(4)) {
+                          existingSteps.push(4);
+                          existingSteps.sort((a: number, b: number) => a - b);
+                          localStorage.setItem(
+                            'completedSteps',
+                            JSON.stringify(existingSteps)
+                          );
+                        }
+                      } else {
+                        dispatch(markStepIncomplete(4));
+                        // Remove step 4 from localStorage
+                        const existingSteps = JSON.parse(
+                          localStorage.getItem('completedSteps') || '[]'
+                        );
+                        const updatedSteps = existingSteps.filter(
+                          (step: number) => step !== 4
+                        );
+                        localStorage.setItem(
+                          'completedSteps',
+                          JSON.stringify(updatedSteps)
+                        );
+                      }
+                    }}
+                    required={true}
+                    error={showErrors && !termsAccepted}
+                  />
+                  <ConsentCheckbox
+                    id="privacy"
+                    label="I have read and agree to the privacy policy."
+                    checked={privacyAccepted}
+                    onChange={(checked) => {
+                      dispatch(setPrivacyAccepted(checked));
+                      // Save to localStorage
+                      const newConsent = {
+                        terms: termsAccepted,
+                        privacy: checked,
+                        marketing: marketingAccepted,
+                      };
+                      localStorage.setItem(
+                        'userConsent',
+                        JSON.stringify(newConsent)
+                      );
+
+                      // Update step 4 completion
+                      if (termsAccepted && checked) {
+                        dispatch(completeStep(4));
+                        // Ensure step 4 is saved in localStorage
+                        const existingSteps = JSON.parse(
+                          localStorage.getItem('completedSteps') || '[]'
+                        );
+                        if (!existingSteps.includes(4)) {
+                          existingSteps.push(4);
+                          existingSteps.sort((a: number, b: number) => a - b);
+                          localStorage.setItem(
+                            'completedSteps',
+                            JSON.stringify(existingSteps)
+                          );
+                        }
+                      } else {
+                        dispatch(markStepIncomplete(4));
+                        // Remove step 4 from localStorage
+                        const existingSteps = JSON.parse(
+                          localStorage.getItem('completedSteps') || '[]'
+                        );
+                        const updatedSteps = existingSteps.filter(
+                          (step: number) => step !== 4
+                        );
+                        localStorage.setItem(
+                          'completedSteps',
+                          JSON.stringify(updatedSteps)
+                        );
+                      }
+                    }}
+                    required={true}
+                    error={showErrors && !privacyAccepted}
+                  />
+                  <ConsentCheckbox
+                    id="marketing"
+                    label="I agree that Captain Frank may send me advertising about Captain Frank's services, promotions and satisfaction surveys by email. Captain Frank will process my personal data for this purpose (see privacy policy). I can revoke this consent at any time."
+                    checked={marketingAccepted}
+                    onChange={(checked) => {
+                      dispatch(setMarketingAccepted(checked));
+                      // Save to localStorage
+                      const newConsent = {
+                        terms: termsAccepted,
+                        privacy: privacyAccepted,
+                        marketing: checked,
+                      };
+                      localStorage.setItem(
+                        'userConsent',
+                        JSON.stringify(newConsent)
+                      );
+                    }}
+                    details="Stay updated with our latest services and travel tips. You can unsubscribe at any time."
+                  />
+                </div>
+              </div>
+            </AccordionCard>
+
+            {/* Continue Button */}
+            <div className="mt-8 flex justify-end">
+              <ContinueButton
+                onClick={handleContinue}
+                disabled={!canContinue}
+                isLoading={isLoading}
+                text="Continue to Compensation Estimate"
+              />
+            </div>
+          </div>
+        </main>
       </div>
     </div>
   );

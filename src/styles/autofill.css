@@ -1,0 +1,45 @@
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: #4b616d !important;
+  -webkit-box-shadow: 0 0 0 30px white inset !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+select:-webkit-autofill,
+select:-webkit-autofill:hover,
+select:-webkit-autofill:focus,
+select:-webkit-autofill:active {
+  -webkit-text-fill-color: #4b616d !important;
+  -webkit-box-shadow: 0 0 0 30px white inset !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Date input styles */
+input[type='date'],
+input[type='date']:focus,
+input[type='date']:active,
+input[type='date']:hover,
+input[type='date']::-webkit-datetime-edit,
+input[type='date']::-webkit-datetime-edit-fields-wrapper,
+input[type='date']::-webkit-datetime-edit-text,
+input[type='date']::-webkit-datetime-edit-month-field,
+input[type='date']::-webkit-datetime-edit-day-field,
+input[type='date']::-webkit-datetime-edit-year-field {
+  color: #4b616d !important;
+  -webkit-text-fill-color: #4b616d !important;
+}
+
+/* Calendar icon */
+input[type='date']::-webkit-calendar-picker-indicator {
+  filter: invert(45%) sepia(12%) saturate(544%) hue-rotate(167deg)
+    brightness(92%) contrast(87%);
+  cursor: pointer;
+}
+
+/* Clear button */
+input[type='date']::-webkit-clear-button {
+  color: #4b616d !important;
+  -webkit-text-fill-color: #4b616d !important;
+}

@@ -1,21 +1,34 @@
+import type { Answer } from './wizard';
+
+export interface ExperienceState {
+  answers: Answer[];
+  currentStep: number;
+  isComplete: boolean;
+}
+
 export interface Question {
   id: string;
-  type: 'radio' | 'number';
   text: string;
-  options?: Option[];
+  type: 'radio' | 'money' | 'date' | 'flight_selector';
+  label?: string;
   placeholder?: string;
-  min?: number;
-  max?: number;
-  showIf?: (answers: Array<{ questionId: string; value: string }>) => boolean;
+  required?: boolean;
+  options?: Array<{
+    id: string;
+    value: string;
+    label: string;
+    showConfetti?: boolean;
+    showCheck?: boolean;
+    externalLink?: string;
+    openInNewTab?: boolean;
+  }>;
+  showIf?: (answers: Answer[]) => boolean;
+  relatedQuestions?: Question[];
 }
 
-export interface Answer {
-  questionId: string;
-  value: string;
-}
-
-export interface Option {
+export interface ExperienceStep {
   id: string;
-  value: string;
-  label: string;
+  title: string;
+  questions: Question[];
+  isComplete: boolean;
 }

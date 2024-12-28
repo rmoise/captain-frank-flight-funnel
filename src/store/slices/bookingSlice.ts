@@ -1,44 +1,46 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import type { RootState } from '@/types/store';
-import { Flight, PassengerDetails } from '@/types';
-import { Answer } from '@/types/wizard';
-import type { BookingState } from '@/types/store';
+import type { Flight, Answer, PassengerDetails } from '@/types/store';
+
+interface BookingState {
+  wizardAnswers: Answer[];
+  termsAccepted: boolean;
+  privacyAccepted: boolean;
+  marketingAccepted: boolean;
+  selectedFlight: Flight | null;
+  personalDetails: PassengerDetails | null;
+  fromLocation: string | null;
+  toLocation: string | null;
+  completedSteps: number[];
+  completedPhases: number[];
+  bookingNumber: string | null;
+}
 
 const initialState: BookingState = {
-  progress: 0,
-  currentStep: 1,
-  selectedFlight: null,
   wizardAnswers: [],
+  termsAccepted: false,
+  privacyAccepted: false,
+  marketingAccepted: false,
+  selectedFlight: null,
   personalDetails: null,
-  completedSteps: [],
   fromLocation: null,
   toLocation: null,
-  focusedInput: null,
-  flightTypes: [],
-  phaseProgress: {
-    'claim-details': 0,
-    documentation: 0,
-    review: 0,
-    complete: 0,
-  },
+  completedSteps: [],
+  completedPhases: [],
+  bookingNumber: null,
 };
 
-export const bookingSlice = createSlice({
+const bookingSlice = createSlice({
   name: 'booking',
   initialState,
   reducers: {
-    setStep: (state, action: PayloadAction<number>) => {
-      state.currentStep = Math.max(1, action.payload);
+    setWizardAnswers: (state, action: PayloadAction<Answer[]>) => {
+      state.wizardAnswers = action.payload;
     },
-    completeStep: (state, action: PayloadAction<number>) => {
-      if (!state.completedSteps.includes(action.payload)) {
-        state.completedSteps.push(action.payload);
-      }
+    setPersonalDetails: (state, action: PayloadAction<PassengerDetails>) => {
+      state.personalDetails = action.payload;
     },
-    markStepIncomplete: (state, action: PayloadAction<number>) => {
-      state.completedSteps = state.completedSteps.filter(
-        (step) => step !== action.payload
-      );
+    setSelectedFlight: (state, action: PayloadAction<Flight | null>) => {
+      state.selectedFlight = action.payload;
     },
     setFromLocation: (state, action: PayloadAction<string | null>) => {
       state.fromLocation = action.payload;
@@ -46,39 +48,30 @@ export const bookingSlice = createSlice({
     setToLocation: (state, action: PayloadAction<string | null>) => {
       state.toLocation = action.payload;
     },
-    setFocusedInput: (state, action: PayloadAction<string | null>) => {
-      state.focusedInput = action.payload;
+    setTermsAccepted: (state, action: PayloadAction<boolean>) => {
+      state.termsAccepted = action.payload;
     },
-    setSelectedFlight: (state, action: PayloadAction<Flight | null>) => {
-      state.selectedFlight = action.payload;
+    setPrivacyAccepted: (state, action: PayloadAction<boolean>) => {
+      state.privacyAccepted = action.payload;
     },
-    setWizardAnswers: (state, action: PayloadAction<Answer[]>) => {
-      state.wizardAnswers = action.payload;
-      if (action.payload.length === 0 && state.completedSteps.includes(2)) {
-        state.completedSteps = state.completedSteps.filter(step => step !== 2);
-      }
+    setMarketingAccepted: (state, action: PayloadAction<boolean>) => {
+      state.marketingAccepted = action.payload;
     },
-    setPersonalDetails: (state, action: PayloadAction<PassengerDetails | null>) => {
-      state.personalDetails = action.payload;
-      if (!action.payload && state.completedSteps.includes(3)) {
-        state.completedSteps = state.completedSteps.filter(step => step !== 3);
-      }
+    setBookingNumber: (state, action: PayloadAction<string | null>) => {
+      state.bookingNumber = action.payload;
     },
   },
 });
 
 export const {
-  setStep,
-  completeStep,
-  markStepIncomplete,
-  setFromLocation,
-  setToLocation,
-  setFocusedInput,
-  setSelectedFlight,
   setWizardAnswers,
   setPersonalDetails,
+  setSelectedFlight,
+  setFromLocation,
+  setToLocation,
+  setTermsAccepted,
+  setPrivacyAccepted,
+  setMarketingAccepted,
+  setBookingNumber,
 } = bookingSlice.actions;
-
-export const selectBooking = (state: RootState) => state.booking;
-
 export default bookingSlice.reducer;

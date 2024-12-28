@@ -6,6 +6,7 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 interface LoadingContextType {
   showLoading: (message?: string) => void;
   hideLoading: () => void;
+  setLoading: (isLoading: boolean, message?: string) => void;
 }
 
 const LoadingContext = createContext<LoadingContextType | undefined>(undefined);
@@ -28,16 +29,19 @@ export function LoadingProvider({ children }: LoadingProviderProps) {
     setMessage(undefined);
   };
 
+  const setLoading = (isLoading: boolean, message?: string) => {
+    setIsLoading(isLoading);
+    setMessage(message);
+  };
+
   return (
-    <LoadingContext.Provider value={{ showLoading, hideLoading }}>
+    <LoadingContext.Provider value={{ showLoading, hideLoading, setLoading }}>
       {children}
       {isLoading && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4 text-center">
             <LoadingSpinner size="large" />
-            {message && (
-              <p className="mt-4 text-gray-600">{message}</p>
-            )}
+            {message && <p className="mt-4 text-gray-600">{message}</p>}
           </div>
         </div>
       )}

@@ -1,38 +1,21 @@
 import { configureStore } from '@reduxjs/toolkit';
-import { persistStore, persistReducer } from 'redux-persist';
-import storage from 'redux-persist/lib/storage';
-import bookingReducer from './bookingSlice';
-
-const persistConfig = {
-  key: 'root',
-  storage,
-  whitelist: [
-    'booking',
-    'completedSteps',
-    'wizardAnswers',
-    'selectedFlight',
-    'personalDetails',
-    'currentStep',
-    'phaseProgress',
-    'completedPhases'
-  ]
-};
-
-const persistedReducer = persistReducer(persistConfig, bookingReducer);
+import bookingReducer from './slices/bookingSlice';
+import progressReducer from './slices/progressSlice';
+import locationReducer from './slices/locationSlice';
+import flightReducer from './slices/flightSlice';
+import compensationReducer from './slices/compensationSlice';
+import userReducer from './slices/userSlice';
 
 export const store = configureStore({
   reducer: {
-    booking: persistedReducer,
+    booking: bookingReducer,
+    progress: progressReducer,
+    location: locationReducer,
+    flight: flightReducer,
+    compensation: compensationReducer,
+    user: userReducer,
   },
-  middleware: (getDefaultMiddleware) =>
-    getDefaultMiddleware({
-      serializableCheck: {
-        ignoredActions: ['persist/PERSIST', 'persist/REHYDRATE'],
-      },
-    }),
 });
-
-export const persistor = persistStore(store);
 
 export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;

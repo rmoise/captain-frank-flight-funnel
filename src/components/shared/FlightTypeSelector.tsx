@@ -1,14 +1,12 @@
 import React from 'react';
 
-interface FlightType {
-  id: 'direct' | 'multi';
-  label: string;
-}
-
 interface FlightTypeSelectorProps {
-  types: readonly FlightType[];
+  types: readonly {
+    id: 'direct' | 'multi';
+    label: string;
+  }[];
   selectedType: 'direct' | 'multi';
-  onTypeSelect: (typeId: 'direct' | 'multi') => void;
+  onTypeSelect: (type: 'direct' | 'multi') => void;
   className?: string;
 }
 
@@ -19,17 +17,16 @@ export const FlightTypeSelector: React.FC<FlightTypeSelectorProps> = ({
   className = '',
 }) => {
   return (
-    <div className={`flex space-x-4 ${className}`}>
+    <div className={className}>
       {types.map((type) => (
         <button
           key={type.id}
           onClick={() => onTypeSelect(type.id)}
-          className={`flex-1 py-3 px-4 rounded-lg border-2 transition-colors
-            ${
-              selectedType === type.id
-                ? 'border-[#F54538] bg-red-50 text-[#F54538]'
-                : 'border-gray-200 hover:border-gray-300 text-gray-600'
-            }`}
+          className={`w-full h-12 px-4 rounded-lg border-2 transition-colors ${
+            selectedType === type.id
+              ? 'border-[#F54538] bg-red-50 text-[#F54538]'
+              : 'border-gray-200 text-gray-700 hover:border-[#F54538]'
+          }`}
         >
           {type.label}
         </button>
@@ -37,3 +34,5 @@ export const FlightTypeSelector: React.FC<FlightTypeSelectorProps> = ({
     </div>
   );
 };
+
+export default FlightTypeSelector;

@@ -16,7 +16,11 @@ export const formatTime = (time: string): string => {
 };
 
 // Price formatting
-export const formatPrice = (price: number, currency: string = '€'): string => {
+export const formatPrice = (
+  price: number | undefined,
+  currency: string = '€'
+): string => {
+  if (price === undefined) return '';
   return `${currency}${price.toFixed(2)}`;
 };
 
@@ -98,4 +102,11 @@ export const storage = {
       console.error('Error removing from localStorage:', e);
     }
   },
+};
+
+export const formatCurrency = (amount: number): string => {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'EUR',
+  }).format(amount);
 };

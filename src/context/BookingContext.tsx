@@ -1,17 +1,18 @@
 'use client';
 
 import React, { createContext, useContext, useReducer } from 'react';
-import { Flight, PassengerDetails } from '@/types';
+import type { Flight } from '../types';
+import type { PassengerDetails } from '../types/store';
 
 interface BookingState {
   currentStep: number;
-  selectedFlight: Flight | null;
+  selectedFlights: Flight[];
   experienceType: string | null;
   passengerDetails: PassengerDetails | null;
   completedSteps: number[];
   skippedSteps: number[];
-  fromLocation: string | null;
-  toLocation: string | null;
+  fromLocations: string[];
+  toLocations: string[];
   focusedInput: string | null;
   progress: number;
   phaseProgress: {
@@ -47,13 +48,13 @@ interface BookingContextType {
 
 const initialState: BookingState = {
   currentStep: 1,
-  selectedFlight: null,
+  selectedFlights: [],
   experienceType: null,
   passengerDetails: null,
   completedSteps: [],
   skippedSteps: [],
-  fromLocation: null,
-  toLocation: null,
+  fromLocations: [],
+  toLocations: [],
   focusedInput: null,
   progress: 0,
   phaseProgress: {
@@ -75,10 +76,9 @@ function bookingReducer(
     case 'SET_FLIGHT':
       return {
         ...state,
-        selectedFlight: action.payload,
-        completedSteps: action.payload
-          ? [...state.completedSteps, 1].filter((v, i, a) => a.indexOf(v) === i)
-          : state.completedSteps.filter((step) => step !== 1),
+        selectedFlights: action.payload
+          ? [...state.selectedFlights, action.payload]
+          : state.selectedFlights.filter((flight) => flight !== action.payload),
         currentStep: action.payload ? state.currentStep : 1,
       };
 
@@ -132,13 +132,19 @@ function bookingReducer(
     case 'SET_FROM_LOCATION':
       return {
         ...state,
-        fromLocation: action.payload,
+        fromLocations: action.payload
+          ? [...state.fromLocations, action.payload]
+          : state.fromLocations.filter(
+              (location) => location !== action.payload
+            ),
       };
 
     case 'SET_TO_LOCATION':
       return {
         ...state,
-        toLocation: action.payload,
+        toLocations: action.payload
+          ? [...state.toLocations, action.payload]
+          : state.toLocations.filter((location) => location !== action.payload),
       };
 
     case 'SET_FOCUSED_INPUT':

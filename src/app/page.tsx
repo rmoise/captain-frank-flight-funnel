@@ -1,3 +1,14 @@
 'use client';
 
-export { default } from './phases/initial-assessment/page';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+
+export default function HomePage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace('/phases/initial-assessment');
+  }, [router]);
+
+  return null;
+}

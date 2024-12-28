@@ -1,4 +1,7 @@
+'use client';
+
 import * as React from 'react';
+import Image from 'next/image';
 
 interface LogoProps {
   imageUrl: string;
@@ -8,12 +11,16 @@ interface LogoProps {
 const Logo: React.FC<LogoProps> = ({ imageUrl, altText }) => {
   return (
     <div className="flex z-10 flex-col justify-center items-start px-8 py-7 bg-white max-md:px-5 max-md:max-w-full">
-      <img
-        loading="lazy"
-        src={imageUrl}
-        alt={altText}
-        className="object-contain w-56 max-w-full aspect-[5.46]"
-      />
+      <div className="relative w-56 aspect-[5.46]">
+        <Image
+          src={imageUrl}
+          alt={altText}
+          fill
+          priority
+          className="object-contain"
+          sizes="(max-width: 768px) 100vw, 224px"
+        />
+      </div>
     </div>
   );
 };

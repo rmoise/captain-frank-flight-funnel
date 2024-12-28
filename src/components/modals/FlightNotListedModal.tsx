@@ -1,132 +1,155 @@
-import React from 'react';
-import { useForm } from 'react-hook-form';
-import { FlightNotListedData } from '@/types';
+import React, { useState } from 'react';
+import { Dialog } from '@headlessui/react';
 
-interface FlightNotListedModalProps {
+interface FlightNotListedData {
+  flightNumber: string;
+  departureDate: string;
+  departureAirport: string;
+  arrivalAirport: string;
+}
+
+interface Props {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: FlightNotListedData) => Promise<void>;
 }
 
-export default function FlightNotListedModal({
-  isOpen,
-  onClose,
-  onSubmit,
-}: FlightNotListedModalProps) {
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<FlightNotListedData>();
+export const FlightNotListedModal: React.FC<Props> = ({ isOpen, onClose }) => {
+  const [formData, setFormData] = useState<FlightNotListedData>({
+    flightNumber: '',
+    departureDate: '',
+    departureAirport: '',
+    arrivalAirport: '',
+  });
 
-  if (!isOpen) return null;
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Handle form submission
+    onClose();
+  };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-        <div className="p-6 border-b">
-          <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-semibold text-gray-800">
-              Submit Flight Details
-            </h2>
-            <button
-              onClick={onClose}
-              className="text-gray-500 hover:text-gray-700"
-            >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        </div>
+    <Dialog
+      open={isOpen}
+      onClose={onClose}
+      className="fixed inset-0 z-50 overflow-y-auto"
+    >
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="fixed inset-0 bg-black opacity-30" />
+        <Dialog.Panel className="relative bg-white rounded-lg p-6 max-w-md w-full mx-4">
+          <Dialog.Title className="text-lg font-semibold mb-4">
+            Flight Not Listed?
+          </Dialog.Title>
+          <Dialog.Description className="text-gray-600 mb-6">
+            Please provide your flight details and we&apos;ll help you find it.
+          </Dialog.Description>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-4">
-          <div>
-            <label htmlFor="flightNumber" className="block text-sm font-medium text-gray-700">
-              Flight Number
-            </label>
-            <input
-              type="text"
-              id="flightNumber"
-              {...register('flightNumber', { required: 'Flight number is required' })}
-              className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 ${
-                errors.flightNumber ? 'border-red-500' : ''
-              }`}
-            />
-            {errors.flightNumber && (
-              <p className="mt-1 text-sm text-red-600">{errors.flightNumber.message}</p>
-            )}
-          </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label
+                htmlFor="flightNumber"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Flight Number
+              </label>
+              <input
+                type="text"
+                id="flightNumber"
+                value={formData.flightNumber}
+                onChange={(e) =>
+                  setFormData((prev: FlightNotListedData) => ({
+                    ...prev,
+                    flightNumber: e.target.value,
+                  }))
+                }
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                required
+              />
+            </div>
 
-          <div>
-            <label htmlFor="departureCity" className="block text-sm font-medium text-gray-700">
-              Departure City
-            </label>
-            <input
-              type="text"
-              id="departureCity"
-              {...register('departureCity', { required: 'Departure city is required' })}
-              className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 ${
-                errors.departureCity ? 'border-red-500' : ''
-              }`}
-            />
-            {errors.departureCity && (
-              <p className="mt-1 text-sm text-red-600">{errors.departureCity.message}</p>
-            )}
-          </div>
+            <div>
+              <label
+                htmlFor="departureDate"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Departure Date
+              </label>
+              <input
+                type="date"
+                id="departureDate"
+                value={formData.departureDate}
+                onChange={(e) =>
+                  setFormData((prev: FlightNotListedData) => ({
+                    ...prev,
+                    departureDate: e.target.value,
+                  }))
+                }
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                required
+              />
+            </div>
 
-          <div>
-            <label htmlFor="arrivalCity" className="block text-sm font-medium text-gray-700">
-              Arrival City
-            </label>
-            <input
-              type="text"
-              id="arrivalCity"
-              {...register('arrivalCity', { required: 'Arrival city is required' })}
-              className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 ${
-                errors.arrivalCity ? 'border-red-500' : ''
-              }`}
-            />
-            {errors.arrivalCity && (
-              <p className="mt-1 text-sm text-red-600">{errors.arrivalCity.message}</p>
-            )}
-          </div>
+            <div>
+              <label
+                htmlFor="departureAirport"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Departure Airport
+              </label>
+              <input
+                type="text"
+                id="departureAirport"
+                value={formData.departureAirport}
+                onChange={(e) =>
+                  setFormData((prev: FlightNotListedData) => ({
+                    ...prev,
+                    departureAirport: e.target.value,
+                  }))
+                }
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                required
+              />
+            </div>
 
-          <div>
-            <label htmlFor="date" className="block text-sm font-medium text-gray-700">
-              Date
-            </label>
-            <input
-              type="date"
-              id="date"
-              {...register('date', { required: 'Date is required' })}
-              className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 ${
-                errors.date ? 'border-red-500' : ''
-              }`}
-            />
-            {errors.date && (
-              <p className="mt-1 text-sm text-red-600">{errors.date.message}</p>
-            )}
-          </div>
+            <div>
+              <label
+                htmlFor="arrivalAirport"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Arrival Airport
+              </label>
+              <input
+                type="text"
+                id="arrivalAirport"
+                value={formData.arrivalAirport}
+                onChange={(e) =>
+                  setFormData((prev: FlightNotListedData) => ({
+                    ...prev,
+                    arrivalAirport: e.target.value,
+                  }))
+                }
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                required
+              />
+            </div>
 
-          <div className="flex justify-end space-x-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-gray-700 hover:text-gray-900"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
-            >
-              {isSubmitting ? 'Submitting...' : 'Submit'}
-            </button>
-          </div>
-        </form>
+            <div className="flex justify-end space-x-4 mt-6">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                Submit
+              </button>
+            </div>
+          </form>
+        </Dialog.Panel>
       </div>
-    </div>
+    </Dialog>
   );
-}
+};

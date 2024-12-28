@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { XMarkIcon } from '@heroicons/react/20/solid';
 
 interface InputProps {
   label: string;
@@ -10,9 +11,9 @@ interface InputProps {
   className?: string;
   type?: string;
   required?: boolean;
-  alwaysOpen?: boolean;
   error?: string | null;
   autocomplete?: string;
+  maxLength?: number;
 }
 
 export const Input: React.FC<InputProps> = ({
@@ -25,41 +26,34 @@ export const Input: React.FC<InputProps> = ({
   className = '',
   type = 'text',
   required = false,
-  alwaysOpen = false,
   error = null,
   autocomplete,
+  maxLength,
 }) => {
-  const handleContainerClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
+  const [isTouched, setIsTouched] = useState(false);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onChange(e.target.value);
-  };
-
-  const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleFocus = () => {
     onFocus?.();
   };
 
-  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleBlur = () => {
+    setIsTouched(true);
     onBlur?.();
   };
 
-  const handleClear = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onChange(e.target.value);
+  };
+
+  const handleClear = () => {
     onChange('');
   };
 
+  const showError = error && isTouched;
+  const showRequiredError = required && isTouched && !value;
+
   return (
-    <div className={`relative ${className}`} onClick={handleContainerClick}>
+    <div className={`relative ${className}`}>
       <div className="relative">
         <input
           type={type}
@@ -68,65 +62,66 @@ export const Input: React.FC<InputProps> = ({
           onFocus={handleFocus}
           onBlur={handleBlur}
           autoComplete={autocomplete}
+          maxLength={maxLength}
           className={`
             w-full h-14 px-4 pt-5 pb-2
-            text-[#4b616d] text-base font-normal font-['Heebo']
+            text-[#4B616D] text-base font-medium font-heebo
             bg-white rounded-xl
-            transition-[border-color,border-width] duration-[250ms] ease-in-out
+            transition-all duration-[250ms] ease-in-out
             ${
               isFocused
                 ? 'border-2 border-blue-500'
-                : alwaysOpen
-                ? 'border border-[#e0e1e4] hover:border-blue-500'
-                : 'border border-[#e0e1e4]'
+                : error
+                ? 'border border-[#F54538]'
+                : 'border border-[#e0e1e4] group-hover:border-blue-500'
             }
-            ${value ? 'pr-10' : ''}
-            ${error ? 'border-[#F54538]' : ''}
             focus:outline-none
+            ${className}
           `}
-          placeholder=""
+          aria-invalid={showError || showRequiredError}
+          aria-describedby={
+            showError || showRequiredError ? `${label}-error` : undefined
+          }
         />
         {value && (
           <button
             onClick={handleClear}
-            className="absolute right-4 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded-full transition-colors"
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#F54538] transition-colors"
           >
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 12 12"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M2 2L10 10M2 10L10 2"
-                stroke="#909090"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <XMarkIcon className="w-5 h-5" />
           </button>
         )}
         <label
           className={`
             absolute left-4
             transition-all duration-[200ms] cubic-bezier(0.4, 0, 0.2, 1) pointer-events-none
-            text-[#909090] font-['Heebo'] font-normal ${
+            text-[#9BA3AF] font-heebo ${
               required
                 ? "after:content-['*'] after:text-[#F54538] after:ml-[1px] after:align-super after:text-[10px]"
                 : ''
             }
             ${
-              isFocused || value || alwaysOpen
+              isFocused || value
                 ? 'translate-y-[-8px] text-[10px] px-1 bg-white'
                 : 'translate-y-[14px] text-base'
             }
+            ${isFocused ? 'text-[#464646]' : ''}
           `}
         >
           {label}
         </label>
       </div>
+      {(showError || showRequiredError) && (
+        <div className="h-6 relative z-10">
+          <p
+            className="mt-1 text-sm text-[#F54538]"
+            id={`${label}-error`}
+            role="alert"
+          >
+            {showError ? error : 'This field is required'}
+          </p>
+        </div>
+      )}
     </div>
   );
 };

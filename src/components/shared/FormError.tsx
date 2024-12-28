@@ -12,10 +12,7 @@ export default function FormError({ errors, className = '' }: FormErrorProps) {
   return (
     <div className={`mt-1 ${className}`}>
       {errors.map((error, index) => (
-        <div
-          key={index}
-          className="flex items-center text-sm text-red-600"
-        >
+        <div key={index} className="flex items-center text-sm text-red-600">
           <ExclamationCircleIcon className="w-4 h-4 mr-1 flex-shrink-0" />
           <span>{error}</span>
         </div>

@@ -1,11 +1,16 @@
+'use client';
+
 import { Heebo } from 'next/font/google';
-import ClientProviders from '@/components/providers/ClientProviders';
+import { Provider } from 'react-redux';
+import { store } from '@/store';
+import { LoadingProvider } from '@/providers/LoadingProvider';
 import './globals.css';
+import '@/styles/autofill.css';
 
 const heebo = Heebo({
   subsets: ['latin'],
-  display: 'swap',
   variable: '--font-heebo',
+  display: 'swap',
 });
 
 export default function RootLayout({
@@ -14,9 +19,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={heebo.variable}>
-      <body className="font-heebo" suppressHydrationWarning>
-        <ClientProviders>{children}</ClientProviders>
+    <html lang="en">
+      <body className={heebo.className}>
+        <Provider store={store}>
+          <LoadingProvider>{children}</LoadingProvider>
+        </Provider>
       </body>
     </html>
   );

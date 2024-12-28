@@ -12,18 +12,30 @@ export const MoneyInputControls: React.FC<MoneyInputControlsProps> = ({
   containerRef,
 }) => {
   const handleButtonClick = (action: 'increment' | 'decrement' | 'clear') => {
-    const num = parseFloat(value) || 0;
+    console.log('=== MoneyInputControls handleButtonClick ===', {
+      action,
+      currentValue: value,
+    });
+
     switch (action) {
       case 'increment':
-        onChange((num + 1).toString());
+        console.log('Sending increment signal');
+        onChange('+');
         break;
       case 'decrement':
-        if (num > 0) onChange((num - 1).toString());
+        console.log('Sending decrement signal');
+        onChange('-');
         break;
       case 'clear':
+        console.log('Sending clear signal');
         onChange('');
         break;
     }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    // Prevent the button from stealing focus
+    e.preventDefault();
   };
 
   return (
@@ -35,6 +47,7 @@ export const MoneyInputControls: React.FC<MoneyInputControlsProps> = ({
         <button
           type="button"
           onClick={() => handleButtonClick('clear')}
+          onMouseDown={handleMouseDown}
           className="p-1 bg-white"
         >
           <svg
@@ -58,19 +71,45 @@ export const MoneyInputControls: React.FC<MoneyInputControlsProps> = ({
         <button
           type="button"
           onClick={() => handleButtonClick('increment')}
+          onMouseDown={handleMouseDown}
           className="p-1 hover:bg-gray-100 rounded cursor-pointer bg-white"
         >
-          <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M1 5L5 1L9 5" stroke="#909090" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <svg
+            width="10"
+            height="6"
+            viewBox="0 0 10 6"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M1 5L5 1L9 5"
+              stroke="#909090"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
         </button>
         <button
           type="button"
           onClick={() => handleButtonClick('decrement')}
+          onMouseDown={handleMouseDown}
           className="p-1 hover:bg-gray-100 rounded cursor-pointer bg-white"
         >
-          <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M1 1L5 5L9 1" stroke="#909090" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <svg
+            width="10"
+            height="6"
+            viewBox="0 0 10 6"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M1 1L5 5L9 1"
+              stroke="#909090"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
         </button>
       </div>
