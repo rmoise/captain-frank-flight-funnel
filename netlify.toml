@@ -7,7 +7,4 @@
 
 [build.environment]
   NEXT_PUBLIC_SANITY_PROJECT_ID = "6zuqzp5l"
-  NEXT_PUBLIC_SANITY_DATASET = "production"
-
-[functions]
-  directory = "netlify/functions"
+  NEXT_PUBLIC_SANITY_DATASET = "staging"
