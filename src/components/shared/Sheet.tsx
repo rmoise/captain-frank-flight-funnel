@@ -92,9 +92,15 @@ export const Sheet: React.FC<SheetProps> = ({
   };
 
   const handleDragEnd = (
-    _: MouseEvent | TouchEvent | PointerEvent,
+    event: MouseEvent | TouchEvent | PointerEvent,
     info: PanInfo
   ) => {
+    // Only handle drag if we're not scrolling the content
+    if (contentRef.current) {
+      const isScrolling = contentRef.current.scrollTop > 0;
+      if (isScrolling) return;
+    }
+
     const shouldClose =
       info.velocity.y > 500 || (info.offset.y > 100 && info.velocity.y > 0);
 
@@ -158,6 +164,7 @@ export const Sheet: React.FC<SheetProps> = ({
             drag="y"
             dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={0.1}
+            dragMomentum={false}
             onDragEnd={handleDragEnd}
             style={{ height }}
             variants={sheetVariants}
@@ -192,8 +199,13 @@ export const Sheet: React.FC<SheetProps> = ({
                 transform: 'translate3d(0,0,0)',
                 willChange: 'transform',
                 overscrollBehavior: 'contain',
+                touchAction: 'pan-y',
               }}
               className="px-4 overflow-x-hidden"
+              onScroll={(e) => {
+                // Prevent drag when scrolling
+                e.stopPropagation();
+              }}
             >
               {children}
             </div>
