@@ -12,6 +12,7 @@ const heebo = Heebo({
   subsets: ['latin'],
   weight: ['300', '400', '500', '600', '700'],
   display: 'swap',
+  variable: '--font-heebo',
 });
 
 export default function RootLayout({
@@ -20,7 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={heebo.className}>
+    <html lang="en" className={`${heebo.variable}`}>
       <head>
         <Script id="google-tag-manager" strategy="afterInteractive">
           {`

@@ -4,7 +4,7 @@
 
 @layer base {
   html {
-    font-family: 'Heebo', system-ui, sans-serif;
+    font-family: var(--font-heebo), 'Heebo', system-ui, sans-serif;
   }
 }
 
@@ -16,7 +16,7 @@ body {
   width: 100%;
   margin: 0;
   padding: 0;
-  font-family: 'Heebo', system-ui, sans-serif;
+  font-family: var(--font-heebo), 'Heebo', system-ui, sans-serif;
 }
 
 :root {
@@ -26,7 +26,7 @@ body {
   --progress-fill: #22c55e;
   --progress-height: 12px;
   /* Font variables */
-  --font-family: 'Heebo', system-ui, sans-serif;
+  --font-family: var(--font-heebo), 'Heebo', system-ui, sans-serif;
 }
 
 html {
@@ -35,12 +35,12 @@ html {
 
 body {
   color: var(--foreground);
-  font-family: var(--font-family);
+  font-family: var(--font-heebo), 'Heebo', system-ui, sans-serif;
 }
 
 * {
   box-sizing: border-box;
-  font-family: 'Heebo', system-ui, sans-serif;
+  font-family: var(--font-heebo), 'Heebo', system-ui, sans-serif;
 }
 
 /* Progress bar specific styles */

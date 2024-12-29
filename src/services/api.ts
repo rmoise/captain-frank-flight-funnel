@@ -1,5 +1,6 @@
 // Types
 import type { Flight } from '@/types';
+import type { Location } from '@/components/shared/AutocompleteInput';
 
 export interface ApiResponse<T> {
   data: T[];
@@ -184,52 +185,33 @@ class ApiClient {
   }
 
   // API Methods
-  async searchAirports(term: string): Promise<ApiResponse<Airport>> {
+  async searchAirports(term: string): Promise<Location[]> {
     try {
-      console.log('Searching airports with term:', term);
-
-      // Validate search term length
-      if (!term || term.length < 3) {
-        return {
-          data: [],
-          status: 'success',
-          message: 'Please enter at least 3 characters',
-        };
-      }
-
-      const response = await this.makeRequest<{ data: Airport[] }>(
-        `${BASE_URL}/searchairportsbyterm?${new URLSearchParams({
-          term: term.trim(),
-          lang: 'en',
-        })}`
+      const response = await this.makeRequest<ApiResponse<Airport>>(
+        `/airports/search?term=${encodeURIComponent(term)}`
       );
 
-      if (!response.data || !Array.isArray(response.data)) {
-        console.error('Invalid response format:', response);
-        return {
-          data: [],
-          status: 'error',
-          message: 'Invalid response format',
-        };
+      const { data } = response;
+
+      if (!data || !Array.isArray(data)) {
+        console.warn('No airports found or invalid response format');
+        return [];
       }
 
-      return {
-        data: response.data.map((airport) => ({
-          iata_code: airport.iata_code,
-          name: airport.name,
-          lat: airport.lat,
-          lng: airport.lng,
-        })),
-        status: 'success',
-      };
+      // Transform the airports into Location objects
+      const transformedResults = data
+        .filter((airport) => airport.iata_code) // Only include airports with IATA codes
+        .map((airport) => ({
+          value: airport.iata_code,
+          label: airport.iata_code,
+          description: airport.name,
+        }));
+
+      console.log('Transformed results:', transformedResults);
+      return transformedResults;
     } catch (error) {
       console.error('Search Airports Error:', error);
-      return {
-        data: [],
-        status: 'error',
-        message:
-          error instanceof Error ? error.message : 'Failed to search airports',
-      };
+      return [];
     }
   }
 
