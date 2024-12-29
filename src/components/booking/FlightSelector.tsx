@@ -1031,19 +1031,44 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
 
   const searchAirports = async (term: string): Promise<Location[]> => {
     try {
-      const response = await fetch(
-        '/api/searchairportsbyterm?term=' + term + '&lang=en'
-      );
-      if (!response.ok) {
-        throw new Error('Failed to fetch airports');
+      if (!term || term.length < 3) {
+        return [];
       }
-      const data = await response.json();
-      return data.data.map((airport: Airport) => ({
-        value: airport.iata_code,
-        label: airport.iata_code,
-        description: airport.city || airport.name,
-        city: airport.city || airport.name,
-      }));
+
+      const params = new URLSearchParams({
+        term: term.trim(),
+        lang: 'en',
+      });
+
+      const response = await fetch(
+        `/.netlify/functions/searchAirports?${params}`
+      );
+
+      if (!response.ok) {
+        console.error('API request failed:', response.status);
+        return [];
+      }
+
+      const airports = await response.json();
+      console.log('Parsed airports:', airports);
+
+      if (!Array.isArray(airports)) {
+        console.error('Invalid response format, expected array:', airports);
+        return [];
+      }
+
+      // Transform the airports into Location objects
+      const transformedResults = airports
+        .filter((airport) => airport.iata_code) // Only include airports with IATA codes
+        .map((airport) => ({
+          value: airport.iata_code,
+          label: airport.iata_code,
+          description: airport.name,
+          city: airport.name,
+        }));
+
+      console.log('Transformed results:', transformedResults);
+      return transformedResults;
     } catch (error) {
       console.error('Error fetching airports:', error);
       return [];

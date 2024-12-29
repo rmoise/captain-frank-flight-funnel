@@ -264,7 +264,9 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
           <div className="px-4 py-3 text-gray-500">Loading...</div>
         ) : options.length === 0 ? (
           <div className="px-4 py-3 text-gray-500">
-            Type to search airports...
+            {inputValue && inputValue.length < 3
+              ? 'Please enter at least 3 characters...'
+              : 'No airports found'}
           </div>
         ) : (
           options.map((option, index) => (
@@ -272,7 +274,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
               key={`${option.value}-${index}`}
               className={`
                 px-4 py-3 hover:bg-gray-100 cursor-pointer
-                text-[#4B616D] font-['Heebo'] font-medium
+                text-[#4B616D] font-medium
                 ${highlightedIndex === index ? 'bg-gray-100' : ''}
               `}
               onClick={(e) => handleOptionSelect(option, e)}
@@ -301,7 +303,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
       mounted && value && !isFocused && !isTyping
         ? 'text-xl lg:text-[28px] font-medium'
         : 'text-base font-medium'
-    } font-['Heebo'] tracking-tight
+    } tracking-tight
     bg-white rounded-xl
     transition-all duration-[250ms] ease-in-out
     ${
@@ -317,7 +319,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   const labelClassName = `
     absolute left-12
     transition-all duration-[200ms] cubic-bezier(0.4, 0, 0.2, 1) pointer-events-none
-    text-[#9BA3AF] font-['Heebo'] after:content-['*'] after:text-[#F54538] after:ml-[1px] after:align-super after:text-[10px]
+    text-[#9BA3AF] after:content-['*'] after:text-[#F54538] after:ml-[1px] after:align-super after:text-[10px]
     ${
       mounted && (isFocused || inputValue)
         ? 'translate-y-[-8px] text-[10px] px-1 bg-white'
@@ -332,11 +334,11 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
         <div className="relative p-[2px] group">
           <input
             type="text"
-            className="w-full h-14 pl-12 pr-12 pt-5 pb-2 text-base font-medium font-['Heebo'] tracking-tight bg-white rounded-xl border border-[#e0e1e4]"
+            className="w-full h-14 pl-12 pr-12 pt-5 pb-2 text-base font-medium tracking-tight bg-white rounded-xl border border-[#e0e1e4]"
             value=""
             readOnly
           />
-          <label className="absolute left-12 translate-y-[14px] text-base text-[#9BA3AF] font-['Heebo']">
+          <label className="absolute left-12 translate-y-[14px] text-base text-[#9BA3AF]">
             {label.replace(' *', '')}
           </label>
         </div>
