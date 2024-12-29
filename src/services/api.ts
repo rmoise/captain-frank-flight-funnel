@@ -517,7 +517,7 @@ class ApiClient {
     guid: string;
     recommendation_guid: string;
   }> {
-    const response = await fetch('/api/ordereuflightclaim', {
+    const response = await fetch('/.netlify/functions/orderEuFlightClaim', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

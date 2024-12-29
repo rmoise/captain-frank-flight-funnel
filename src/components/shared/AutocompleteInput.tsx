@@ -273,7 +273,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
           <div className="px-4 py-3 text-gray-500">
             {inputValue && inputValue.length < 3
               ? 'Please enter at least 3 characters...'
-              : 'Type to search airports...'}
+              : 'No airports found'}
           </div>
         ) : (
           options.map((option, index) => (

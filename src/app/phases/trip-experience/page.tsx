@@ -584,18 +584,21 @@ export default function TripExperiencePage() {
       });
 
       // Evaluate the claim
-      const response = await fetch('/api/evaluateeuflightclaim', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          journey_booked_flightids: bookedFlightIds,
-          information_received_at: informationReceivedAt,
-          delay_duration: delayDuration || 'gt3', // Default to >3 hours if not specified
-          travel_status: mapTravelStatus(travelStatus || ''),
-        }),
-      });
+      const response = await fetch(
+        '/.netlify/functions/evaluateeuflightclaim',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            journey_booked_flightids: bookedFlightIds,
+            information_received_at: informationReceivedAt,
+            delay_duration: delayDuration || 'gt3', // Default to >3 hours if not specified
+            travel_status: mapTravelStatus(travelStatus || ''),
+          }),
+        }
+      );
 
       if (!response.ok) {
         throw new Error(`API request failed with status ${response.status}`);

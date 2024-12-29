@@ -1049,10 +1049,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
         return [];
       }
 
-      const responseText = await response.text();
-      console.log('Raw response:', responseText);
-
-      const airports = JSON.parse(responseText);
+      const airports = await response.json();
       console.log('Parsed airports:', airports);
 
       if (!Array.isArray(airports)) {
