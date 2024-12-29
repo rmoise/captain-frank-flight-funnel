@@ -110,7 +110,7 @@ export default function CompensationEstimatePage() {
         }
 
         const data = await response.json();
-        const amount = data.amount || 600;
+        const amount = data.amount || 0;
 
         dispatch({
           type: 'compensation/setCompensationAmount',

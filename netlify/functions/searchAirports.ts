@@ -22,13 +22,50 @@ const handler: Handler = async (event: HandlerEvent) => {
 
   try {
     const apiUrl = `${API_BASE_URL}/searchairportsbyterm?term=${encodeURIComponent(term)}${lang ? `&lang=${lang}` : ''}`;
-    const response = await fetch(apiUrl);
+    console.log('Making request to:', apiUrl);
+
+    const response = await fetch(apiUrl, {
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+
+    console.log('Response status:', response.status);
+    const responseText = await response.text();
+    console.log('Raw API response:', responseText);
 
     if (!response.ok) {
-      throw new Error(`API responded with status ${response.status}`);
+      console.error('API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: responseText,
+      });
+      return {
+        statusCode: response.status,
+        body: JSON.stringify({
+          error: `API Error: ${response.status} ${response.statusText}`,
+          details: responseText,
+        }),
+      };
     }
 
-    const airports: Airport[] = await response.json();
+    let result;
+    try {
+      result = JSON.parse(responseText);
+      console.log('Parsed response:', JSON.stringify(result, null, 2));
+    } catch (parseError) {
+      console.error('Failed to parse API response:', parseError);
+      return {
+        statusCode: 500,
+        body: JSON.stringify({
+          error: 'Invalid JSON response from API',
+          details: responseText,
+        }),
+      };
+    }
+
+    // Extract airports from response data
+    const airports: Airport[] = Array.isArray(result.data) ? result.data : [];
 
     return {
       statusCode: 200,
@@ -41,7 +78,10 @@ const handler: Handler = async (event: HandlerEvent) => {
     console.error('Error searching airports:', error);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: 'Internal Server Error' }),
+      body: JSON.stringify({
+        error: 'Internal Server Error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      }),
     };
   }
 };

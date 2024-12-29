@@ -29,14 +29,20 @@ const handler: Handler = async (event: HandlerEvent) => {
       throw new Error(`API responded with status ${response.status}`);
     }
 
-    const result: CompensationResult = await response.json();
+    const result = await response.json();
+    const amount = result.data || 0;
+
+    const compensationResult: CompensationResult = {
+      amount,
+      currency: 'EUR',
+    };
 
     return {
       statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(result),
+      body: JSON.stringify(compensationResult),
     };
   } catch (error) {
     console.error('Error calculating compensation:', error);
