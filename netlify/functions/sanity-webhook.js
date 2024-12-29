@@ -1,6 +1,6 @@
 const fetch = require('node-fetch');
 
-exports.handler = async (event, context) => {
+exports.handler = async (event) => {
   // Only process webhooks in production environment
   if (process.env.NEXT_PUBLIC_SANITY_DATASET !== 'production') {
     console.log('Webhook skipped - not in production environment');
