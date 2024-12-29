@@ -26,8 +26,10 @@ export const Sheet: React.FC<SheetProps> = ({
   const contentRef = useRef<HTMLDivElement>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const sheetProgress = useMotionValue(0);
-  const height = useTransform(sheetProgress, [0, 1], ['50vh', '100vh']);
+  const height = useTransform(sheetProgress, [0, 1], ['50vh', '90vh']);
   const [mounted, setMounted] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartY = useRef(0);
 
   useEffect(() => {
     setMounted(true);
@@ -91,18 +93,58 @@ export const Sheet: React.FC<SheetProps> = ({
     onClose();
   };
 
+  const handleDragStart = (
+    event: MouseEvent | TouchEvent | PointerEvent,
+    info: PanInfo
+  ) => {
+    setIsDragging(true);
+    dragStartY.current = info.point.y;
+  };
+
+  const handleDrag = (
+    event: MouseEvent | TouchEvent | PointerEvent,
+    info: PanInfo
+  ) => {
+    if (!isDragging) return;
+
+    const deltaY = info.point.y - dragStartY.current;
+    if (deltaY < 0 && contentRef.current) {
+      // If dragging up and content is scrollable, let it scroll
+      if (
+        contentRef.current.scrollHeight > contentRef.current.clientHeight &&
+        contentRef.current.scrollTop <
+          contentRef.current.scrollHeight - contentRef.current.clientHeight
+      ) {
+        event.preventDefault();
+      }
+    }
+  };
+
   const handleDragEnd = (
     event: MouseEvent | TouchEvent | PointerEvent,
     info: PanInfo
   ) => {
-    // Only handle drag if we're not scrolling the content
+    setIsDragging(false);
+
+    // If we're scrolling content and dragging up, don't close
     if (contentRef.current) {
-      const isScrolling = contentRef.current.scrollTop > 0;
-      if (isScrolling) return;
+      const isScrollingUp = info.velocity.y < 0;
+      const isContentScrollable =
+        contentRef.current.scrollHeight > contentRef.current.clientHeight;
+
+      if (isScrollingUp && isContentScrollable) {
+        animate(sheetProgress, 1, {
+          type: 'spring',
+          stiffness: 300,
+          damping: 30,
+          mass: 0.2,
+        });
+        return;
+      }
     }
 
     const shouldClose =
-      info.velocity.y > 500 || (info.offset.y > 100 && info.velocity.y > 0);
+      info.velocity.y > 300 || (info.offset.y > 100 && info.velocity.y > 0);
 
     if (shouldClose) {
       handleClose();
@@ -165,6 +207,8 @@ export const Sheet: React.FC<SheetProps> = ({
             dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={0.1}
             dragMomentum={false}
+            onDragStart={handleDragStart}
+            onDrag={handleDrag}
             onDragEnd={handleDragEnd}
             style={{ height }}
             variants={sheetVariants}
@@ -199,12 +243,13 @@ export const Sheet: React.FC<SheetProps> = ({
                 transform: 'translate3d(0,0,0)',
                 willChange: 'transform',
                 overscrollBehavior: 'contain',
-                touchAction: 'pan-y',
+                touchAction: isExpanded ? 'pan-y' : 'none',
               }}
               className="px-4 overflow-x-hidden"
               onScroll={(e) => {
-                // Prevent drag when scrolling
-                e.stopPropagation();
+                if (isDragging) {
+                  e.preventDefault();
+                }
               }}
             >
               {children}
