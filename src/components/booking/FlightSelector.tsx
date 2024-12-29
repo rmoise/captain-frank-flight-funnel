@@ -2758,14 +2758,14 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                         Select your preferred flight
                       </p>
                     </div>
-                    <div className="w-full sm:w-64">
+                    <div className="w-full">
                       <div className="relative w-full">
                         <input
                           type="text"
                           placeholder="Search by flight number"
                           value={searchTerm}
                           onChange={(e) => handleSheetSearch(e.target.value)}
-                          className="w-full h-10 px-3 pl-10 pr-10 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F54538] focus:border-transparent transition-colors"
+                          className="w-full h-12 px-3 pl-10 pr-10 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F54538] focus:border-transparent transition-colors"
                         />
                         <MagnifyingGlassIcon className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                       </div>
@@ -2828,20 +2828,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                   </div>
                 ) : (
                   <>
-                    {/* Mobile Search */}
-                    <div className="sm:hidden px-6 py-3">
-                      <div className="relative w-full">
-                        <input
-                          type="text"
-                          placeholder="Search by flight number"
-                          value={searchTerm}
-                          onChange={(e) => handleSheetSearch(e.target.value)}
-                          className="w-full h-10 px-3 pl-10 pr-10 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F54538] focus:border-transparent transition-colors"
-                        />
-                        <MagnifyingGlassIcon className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      </div>
-                    </div>
-
+                    {/* Remove duplicate Mobile Search */}
                     <div className="px-6 py-2 border-b border-gray-200 bg-white">
                       <div className="flex items-center justify-between">
                         <h3 className="text-base font-medium text-gray-900">
