@@ -1040,77 +1040,8 @@ export default function AgreementPage() {
       <div className="min-h-screen bg-[#f5f7fa]">
         <PhaseNavigation currentPhase={6} completedPhases={completedPhases} />
         <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
-          <div className="mt-4 sm:mt-8 mb-8">
-            <SpeechBubble
-              message={`I, ${personalDetails?.salutation || ''} ${
-                personalDetails?.firstName || ''
-              } ${personalDetails?.lastName || ''}, residing at ${
-                personalDetails?.address || ''
-              }, ${personalDetails?.zipCode || ''} ${
-                personalDetails?.city || ''
-              }, ${
-                personalDetails?.country || ''
-              }, hereby assign my claims for compensation from the flight connection with PNR/booking number ${
-                bookingNumber || ''
-              } from ${
-                Array.isArray(flightDetails) && flightDetails.length > 0
-                  ? flightDetails[0].departure ||
-                    flightDetails[0].departureAirport ||
-                    ''
-                  : flightDetails?.departure ||
-                    flightDetails?.departureAirport ||
-                    ''
-              } to ${
-                Array.isArray(flightDetails) && flightDetails.length > 0
-                  ? flightDetails[0].arrival ||
-                    flightDetails[0].arrivalAirport ||
-                    ''
-                  : flightDetails?.arrival ||
-                    flightDetails?.arrivalAirport ||
-                    ''
-              } on ${
-                Array.isArray(flightDetails) && flightDetails.length > 0
-                  ? flightDetails[0].date
-                    ? new Date(
-                        flightDetails[0].date.split('T')[0]
-                      ).toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                      })
-                    : flightDetails[0].departureTime
-                    ? new Date(
-                        flightDetails[0].departureTime.split(' ')[0]
-                      ).toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                      })
-                    : ''
-                  : flightDetails?.date
-                  ? new Date(
-                      flightDetails.date.split('T')[0]
-                    ).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    })
-                  : flightDetails?.departureTime
-                  ? new Date(
-                      flightDetails.departureTime.split(' ')[0]
-                    ).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    })
-                  : ''
-              } to Captain Frank GmbH.
-
-Captain Frank GmbH accepts the declaration of assignment.`}
-            />
-          </div>
-
           <form onSubmit={handleSubmit} className="space-y-6">
+            <SpeechBubble message="Great! Let's finalize your claim. Please review and sign the agreement below." />
             <AccordionCard
               title="Digital Signature"
               subtitle="Please sign to confirm your agreement"

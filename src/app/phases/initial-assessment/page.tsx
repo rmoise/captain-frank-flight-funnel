@@ -952,7 +952,7 @@ export default function InitialAssessmentPage() {
     return (
       <div
         key={step.id}
-        className="mb-6"
+        className="mb-0"
         data-step={step.id}
         style={{
           scrollMarginTop: '1rem',
@@ -1032,7 +1032,7 @@ export default function InitialAssessmentPage() {
             <SpeechBubble message="Hi, I'm Captain Frank. I'll help you check if you're entitled to compensation for your flight disruption. Let's get started!" />
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-6">
             {steps.map(renderStep)}
 
             {/* Terms and Conditions */}

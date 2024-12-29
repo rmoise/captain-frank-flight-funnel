@@ -194,15 +194,8 @@ export default function CompensationEstimatePage() {
       <div className="min-h-screen bg-[#f5f7fa]">
         <PhaseNavigation currentPhase={2} completedPhases={completedPhases} />
         <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
-          <div className="mt-4 sm:mt-8 mb-8">
-            <SpeechBubble message="There's a good chance that you're entitled to a claim! Let me help you. Completely risk-free: I only receive a commission fee of 30% (including VAT) if I'm successful." />
-          </div>
-
-          <h1 className="text-3xl font-bold mb-8">
-            Your Potential Compensation
-          </h1>
-
           <div className="space-y-6">
+            <SpeechBubble message="There's a good chance that you're entitled to a claim! Let me help you. Completely risk-free: I only receive a commission fee of 30% (including VAT) if I'm successful." />
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-xl font-semibold mb-4">Flight Summary</h2>
               {routeInfo ? (
@@ -215,10 +208,10 @@ export default function CompensationEstimatePage() {
                   )}
                   <div className="space-y-2">
                     <p>
-                      From: {routeInfo.departureCity} ({routeInfo.departure})
+                      From: {routeInfo.departureCity} - {routeInfo.departure}
                     </p>
                     <p>
-                      To: {routeInfo.arrivalCity} ({routeInfo.arrival})
+                      To: {routeInfo.arrivalCity} - {routeInfo.arrival}
                     </p>
                   </div>
                 </div>
@@ -291,7 +284,7 @@ export default function CompensationEstimatePage() {
             </div>
           </div>
 
-          <div className="mt-8 flex justify-between">
+          <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
             <BackButton onClick={handleBack} />
             <ContinueButton
               onClick={handleContinue}

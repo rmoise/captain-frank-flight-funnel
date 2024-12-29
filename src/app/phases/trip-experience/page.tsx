@@ -550,11 +550,38 @@ export default function TripExperiencePage() {
           )?.value
         : undefined;
 
-      // Format the informed date
+      // Format the informed date as YYYY-MM-DD
       const informationReceivedAt =
         informedDate === 'on_departure'
-          ? new Date().toISOString() // Use current date for "on departure"
-          : specificDate || new Date().toISOString();
+          ? new Date().toISOString().split('T')[0] // Use current date for "on departure"
+          : specificDate
+            ? new Date(specificDate).toISOString().split('T')[0]
+            : new Date().toISOString().split('T')[0];
+
+      // Map travel status to API values
+      const mapTravelStatus = (status: string) => {
+        switch (status) {
+          case 'took_booked':
+            return 'took_booked';
+          case 'airline_expense':
+            return 'took_alternative_airline';
+          case 'own_expense':
+            return 'took_alternative_own';
+          case 'no_travel':
+            return 'no_travel';
+          default:
+            console.error('Unknown travel status:', status);
+            return 'took_booked'; // Default to took_booked as fallback
+        }
+      };
+
+      // Log the request data before sending
+      console.log('Sending evaluation request:', {
+        journey_booked_flightids: bookedFlightIds,
+        information_received_at: informationReceivedAt,
+        delay_duration: delayDuration || 'gt3',
+        travel_status: mapTravelStatus(travelStatus || ''),
+      });
 
       // Evaluate the claim
       const response = await fetch('/api/evaluateeuflightclaim', {
@@ -565,8 +592,8 @@ export default function TripExperiencePage() {
         body: JSON.stringify({
           journey_booked_flightids: bookedFlightIds,
           information_received_at: informationReceivedAt,
-          delay_duration: delayDuration,
-          travel_status: travelStatus,
+          delay_duration: delayDuration || 'gt3', // Default to >3 hours if not specified
+          travel_status: mapTravelStatus(travelStatus || ''),
         }),
       });
 
@@ -649,8 +676,7 @@ export default function TripExperiencePage() {
       <div className="min-h-screen bg-[#f5f7fa]">
         <PhaseNavigation currentPhase={4} completedPhases={completedPhases} />
         <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
-          <div className="space-y-8">
-            {/* Speech Bubble */}
+          <div className="space-y-6">
             <SpeechBubble message="Let's talk about your trip experience. This will help us understand what happened and how we can help you." />
 
             {/* Step 1: Travel Status */}
@@ -709,7 +735,7 @@ export default function TripExperiencePage() {
             </AccordionCard>
 
             {/* Navigation */}
-            <div className="flex justify-between pt-8">
+            <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
               <BackButton onClick={handleBack} />
               <ContinueButton
                 onClick={handleContinue}

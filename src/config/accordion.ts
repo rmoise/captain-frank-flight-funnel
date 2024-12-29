@@ -156,7 +156,7 @@ export const accordionConfig: AccordionConfig = {
   // Accordion specific styling
   isOpenByDefault: true,
   padding: {
-    content: 'overflow-visible px-4 pb-4',
+    content: 'overflow-visible px-0 pb-4',
     wrapper: '-mt-2',
   },
   styling: {

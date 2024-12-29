@@ -272,6 +272,9 @@ export default function FlightDetailsPage() {
 
   const handleFlightSelect = useCallback(
     (flights: Flight | Flight[] | null) => {
+      // Mark step 1 as interacted with
+      setInteractedSteps((prev) => [...new Set([...prev, 1])]);
+
       if (!flights) {
         // Get current completed phases and locations before resetting
         const currentState = store.getState().booking;
@@ -512,11 +515,9 @@ export default function FlightDetailsPage() {
       <div className="min-h-screen bg-[#f5f7fa]">
         <PhaseNavigation currentPhase={3} completedPhases={completedPhases} />
         <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
-          <div className="mt-4 sm:mt-8 mb-8">
-            <SpeechBubble message="In order for your airline to correctly assign your planned trip, we need a little more information about your originally booked trip." />
-          </div>
+          <div className="space-y-6">
+            <SpeechBubble message="Please provide some additional details about your flight." />
 
-          <div className="space-y-4">
             <AccordionCard
               title="Select your flight"
               eyebrow="Step 1"
@@ -528,10 +529,7 @@ export default function FlightDetailsPage() {
                   validationRules.flight(selectedFlight) &&
                   completedSteps.includes(1)
               )}
-              hasInteracted={Boolean(
-                (selectedFlight?.departure || selectedFlight?.arrival) &&
-                  !completedSteps.includes(1)
-              )}
+              hasInteracted={interactedSteps.includes(1)}
               className={accordionConfig.padding.wrapper}
               shouldStayOpen={false}
               isOpenByDefault={true}
@@ -618,7 +616,7 @@ export default function FlightDetailsPage() {
 
           {/* Navigation */}
           {mounted && (
-            <div className="mt-8 flex flex-col-reverse sm:flex-row justify-between gap-4">
+            <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
               <BackButton onClick={handleBack} />
               <ContinueButton
                 onClick={handleContinue}

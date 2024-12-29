@@ -384,7 +384,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
       data-step="3"
     >
       <form
-        className="flex flex-col gap-4 sm:gap-8 px-4 sm:px-0"
+        className="flex flex-col gap-4 sm:gap-8 px-0 sm:px-0"
         onSubmit={handleSubmit}
       >
         {/* Salutation */}

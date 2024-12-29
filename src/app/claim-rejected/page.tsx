@@ -6,6 +6,8 @@ import { SpeechBubble } from '@/components/SpeechBubble';
 import { BackButton } from '@/components/shared/BackButton';
 import { ContinueButton } from '@/components/shared/ContinueButton';
 import { pushToDataLayer } from '@/utils/gtm';
+import { Navbar } from '@/components/Navbar';
+import { WelcomeSection } from '@/components/booking/WelcomeSection';
 
 export default function ClaimRejectedPage() {
   const router = useRouter();
@@ -52,6 +54,8 @@ export default function ClaimRejectedPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#f5f7fa]">
+      <Navbar />
+      <WelcomeSection />
       <main className="flex-grow">
         <div className="max-w-3xl mx-auto px-4 pt-8 pb-24">
           <div className="mt-4 sm:mt-8 mb-8">
@@ -127,7 +131,7 @@ export default function ClaimRejectedPage() {
               </div>
             </div>
 
-            <div className="mt-8 flex justify-between">
+            <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
               <BackButton
                 onClick={() => router.push('/phases/trip-experience')}
               />

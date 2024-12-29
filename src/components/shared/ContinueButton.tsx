@@ -92,34 +92,39 @@ export function ContinueButton({
   const isDisabled = disabled || isLoading;
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      disabled={isDisabled}
-      className={`
-        px-6 py-3
-        rounded-lg
-        flex items-center justify-center
-        min-w-[180px]
-        font-medium
-        transition-all duration-200
-        ${
-          isDisabled
-            ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            : 'bg-[#F54538] hover:bg-[#E03F33] text-white shadow-sm hover:shadow-md active:shadow-sm'
-        }
-      `}
-    >
-      {isLoading ? (
-        <div className="flex items-center space-x-2">
-          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          <span>{loadingText}</span>
-        </div>
-      ) : (
-        <div className="flex items-center space-x-2">
-          <span>{children || text}</span>
-        </div>
-      )}
-    </button>
+    <div className="mt-8 flex order-first sm:order-none sm:flex justify-center sm:justify-end w-full">
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={isDisabled}
+        className={`
+          px-8 py-4
+          rounded-lg
+          flex items-center justify-center
+          w-full sm:w-auto
+          min-w-[200px]
+          font-medium
+          text-lg
+          transition-all duration-200
+          ${
+            isDisabled
+              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              : 'bg-[#F54538] hover:bg-[#E03F33] text-white shadow-sm hover:shadow-md active:shadow-sm'
+          }
+        `}
+      >
+        {isLoading ? (
+          <div className="flex items-center space-x-2">
+            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            <span>{loadingText}</span>
+          </div>
+        ) : (
+          <div className="flex items-center space-x-2">
+            <span className="block sm:hidden">Continue</span>
+            <span className="hidden sm:block">{children || text}</span>
+          </div>
+        )}
+      </button>
+    </div>
   );
 }

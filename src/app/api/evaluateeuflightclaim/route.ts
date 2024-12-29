@@ -40,16 +40,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Set journey_fact_flightids based on travel status
-    let journey_fact_flightids = [];
-    if (travel_status === 'took_booked') {
-      // If passenger took the booked flight, use the same flight IDs
-      journey_fact_flightids = journey_booked_flightids;
-    }
-
-    const apiUrl = `${API_BASE_URL}/evaluateeuflightclaim`;
-    console.log('Making request to external API:', apiUrl);
-
     // Convert delay duration to minutes for the API
     let delay_minutes = 0;
     if (delay_duration === '>3' || delay_duration === 'gt3') {
@@ -60,19 +50,47 @@ export async function POST(request: Request) {
       delay_minutes = 90; // Less than 2 hours
     }
 
+    // Set journey_fact_flightids based on travel status
+    let journey_fact_flightids = [];
+    switch (travel_status) {
+      case 'took_booked':
+        // If passenger took the booked flight, use the same flight IDs
+        journey_fact_flightids = journey_booked_flightids;
+        break;
+      case 'took_alternative_airline':
+      case 'took_alternative_own':
+      case 'no_travel':
+        // For alternative flights or no travel, leave journey_fact_flightids empty
+        journey_fact_flightids = [];
+        break;
+      default:
+        console.warn('Unexpected travel status:', travel_status);
+        journey_fact_flightids = journey_booked_flightids;
+    }
+
+    const apiUrl = `${API_BASE_URL}/evaluateeuflightclaim`;
+    console.log('Making request to external API:', apiUrl);
+
+    // Log the final request body before sending
+    const requestBody = {
+      journey_booked_flightids,
+      journey_fact_flightids,
+      information_received_at,
+      delay_minutes,
+      lang: 'en',
+    };
+    console.log(
+      'Sending request to external API:',
+      JSON.stringify(requestBody, null, 2)
+    );
+
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      body: JSON.stringify({
-        journey_booked_flightids,
-        journey_fact_flightids,
-        information_received_at,
-        delay_minutes,
-        lang: 'en',
-      }),
+      body: JSON.stringify(requestBody),
       cache: 'no-store',
     });
 
@@ -84,6 +102,7 @@ export async function POST(request: Request) {
         status: response.status,
         statusText: response.statusText,
         body: responseText,
+        requestBody, // Log the request body that caused the error
       });
       return NextResponse.json(
         {

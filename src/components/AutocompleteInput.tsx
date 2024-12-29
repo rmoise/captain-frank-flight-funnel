@@ -332,8 +332,8 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
           disabled={disabled}
           className={`
             w-full h-14 ${iconType ? 'pl-12' : 'pl-4'} pr-10 ${
-            iconType ? 'pt-5 pb-2' : 'py-2'
-          }
+              iconType ? 'pt-5 pb-2' : 'py-2'
+            }
             text-[#4B616D] ${
               iconType
                 ? 'text-xl lg:text-[28px] font-medium tracking-tight uppercase'
@@ -346,8 +346,8 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
               isInputFocused
                 ? 'border-2 border-blue-500'
                 : error && isTouched && !isOpen
-                ? 'border border-[#F54538]'
-                : 'border border-[#e0e1e4] hover:border-blue-500'
+                  ? 'border border-[#F54538]'
+                  : 'border border-[#e0e1e4] hover:border-blue-500'
             }
             ${disabled ? 'bg-gray-100 cursor-not-allowed' : ''}
             focus:outline-none
