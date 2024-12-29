@@ -2,6 +2,9 @@
   "name": "captain-frank-flight-funnel",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -44,6 +47,7 @@
     "tailwind-merge": "^1.14.0"
   },
   "devDependencies": {
+    "@netlify/functions": "^3.0.0",
     "@types/lodash": "^4.14.198",
     "@types/node": "^20.17.10",
     "@types/react": "^18.3.18",

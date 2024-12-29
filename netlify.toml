@@ -1,13 +1,35 @@
 [build]
-  command = "npm ci && next build"
+  command = "npm run build"
   publish = ".next"
-
-[[plugins]]
-  package = "@netlify/plugin-nextjs"
-
-[functions]
-  directory = "netlify/functions"
+  functions = "netlify/functions"
 
 [build.environment]
-  NEXT_PUBLIC_SANITY_PROJECT_ID = "6zuqzp5l"
-  NEXT_PUBLIC_SANITY_DATASET = "staging"
+  NODE_VERSION = "20"
+
+[functions]
+  node_bundler = "esbuild"
+
+[[redirects]]
+  from = "/api/searchairportsbyterm"
+  to = "/.netlify/functions/searchAirports"
+  status = 200
+
+[[redirects]]
+  from = "/api/searchflightsbyfromiatatoiatadatenumber"
+  to = "/.netlify/functions/searchFlights"
+  status = 200
+
+[[redirects]]
+  from = "/api/calculatecompensationbyfromiatatoiata"
+  to = "/.netlify/functions/calculateCompensation"
+  status = 200
+
+[[redirects]]
+  from = "/api/evaluateeuflightclaim"
+  to = "/.netlify/functions/evaluateEuFlightClaim"
+  status = 200
+
+[[redirects]]
+  from = "/api/ordereuflightclaim"
+  to = "/.netlify/functions/orderEuFlightClaim"
+  status = 200
