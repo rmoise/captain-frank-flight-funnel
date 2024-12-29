@@ -36,11 +36,11 @@ export const Sheet: React.FC<SheetProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      // Lock scroll
+      // Lock scroll and handle viewport
       document.body.style.overflow = 'hidden';
-      document.body.style.paddingRight = `${
-        window.innerWidth - document.documentElement.clientWidth
-      }px`;
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
+      document.body.style.top = `-${window.scrollY}px`;
 
       // Reset state
       setIsExpanded(false);
@@ -64,13 +64,19 @@ export const Sheet: React.FC<SheetProps> = ({
 
       return () => {
         clearTimeout(timeoutId);
+        const scrollY = document.body.style.top;
+        document.body.style.position = '';
+        document.body.style.width = '';
+        document.body.style.top = '';
         document.body.style.overflow = '';
-        document.body.style.paddingRight = '';
+        window.scrollTo(0, parseInt(scrollY || '0') * -1);
       };
     } else {
       // Unlock scroll
       document.body.style.overflow = '';
-      document.body.style.paddingRight = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+      document.body.style.top = '';
       setIsExpanded(false);
       sheetProgress.set(0);
     }
@@ -78,7 +84,9 @@ export const Sheet: React.FC<SheetProps> = ({
 
   const handleClose = () => {
     document.body.style.overflow = '';
-    document.body.style.paddingRight = '';
+    document.body.style.position = '';
+    document.body.style.width = '';
+    document.body.style.top = '';
     setIsExpanded(false);
     onClose();
   };
@@ -137,7 +145,7 @@ export const Sheet: React.FC<SheetProps> = ({
   const sheet = (
     <AnimatePresence mode="wait">
       {isOpen && (
-        <div className="fixed inset-0 z-[9999]">
+        <div className="fixed inset-0 z-[9999] overscroll-none">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 0.5 }}
@@ -156,7 +164,7 @@ export const Sheet: React.FC<SheetProps> = ({
             initial="hidden"
             animate="visible"
             exit="exit"
-            className="fixed inset-x-0 bottom-0 rounded-t-[20px] bg-white shadow-2xl will-change-transform"
+            className="fixed inset-x-0 bottom-0 rounded-t-[20px] bg-white shadow-2xl will-change-transform overscroll-none"
           >
             <div className="absolute right-4 top-4 z-10">
               <button
@@ -181,8 +189,9 @@ export const Sheet: React.FC<SheetProps> = ({
                 overflowY: isExpanded ? 'auto' : 'hidden',
                 WebkitOverflowScrolling: 'touch',
                 paddingBottom: 'env(safe-area-inset-bottom)',
-                transform: 'translate3d(0,0,0)', // Force GPU acceleration
-                willChange: 'transform', // Optimize for animations
+                transform: 'translate3d(0,0,0)',
+                willChange: 'transform',
+                overscrollBehavior: 'contain',
               }}
               className="px-4 overflow-x-hidden"
             >
