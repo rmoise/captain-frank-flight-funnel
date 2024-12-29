@@ -109,6 +109,7 @@ export default function InitialAssessmentPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
+  const [openSteps, setOpenSteps] = useState<number[]>([]);
   const { completedPhases } = usePhaseManagement();
   const bookingState = useAppSelector((state: RootState) => state.booking);
   const fromLocation = useAppSelector(selectFromLocation);
@@ -141,6 +142,31 @@ export default function InitialAssessmentPage() {
     isTermsValid: false,
   });
 
+  // Add new effect to watch for step 2 completion
+  useEffect(() => {
+    if (isStepCompleted(2)) {
+      setOpenSteps((prev) => {
+        const newSteps = [...new Set([...prev, 2, 3])];
+        return newSteps;
+      });
+      setCurrentStep(3);
+    }
+  }, [isStepCompleted]);
+
+  // Add new effect to watch for step 3 completion
+  useEffect(() => {
+    if (isStepCompleted(3)) {
+      console.log('Step 3 completed, opening step 4');
+      setOpenSteps((prev) => {
+        const newSteps = [...new Set([...prev, 4])];
+        console.log('New open steps:', newSteps);
+        return newSteps;
+      });
+      setCurrentStep(4);
+    }
+  }, [isStepCompleted]);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const handleComplete = useCallback(
     (answers: Answer[]) => {
       console.log('QAWizard onComplete called with:', answers);
@@ -167,9 +193,11 @@ export default function InitialAssessmentPage() {
         })
       );
 
-      // Update step completion status
-      if (allQuestionsAnswered) {
+      // Only mark as complete if all questions are answered AND the user clicked Complete
+      if (allQuestionsAnswered && answers.length === activeQuestions.length) {
+        // Mark step 2 as complete first
         dispatch(completeStep(2));
+
         // Save completed steps
         const existingSteps = JSON.parse(
           localStorage.getItem('completedSteps') || '[]'
@@ -179,6 +207,18 @@ export default function InitialAssessmentPage() {
           existingSteps.sort((a: number, b: number) => a - b);
           localStorage.setItem('completedSteps', JSON.stringify(existingSteps));
         }
+
+        // Wait for completion message to show, then open step 3
+        setTimeout(() => {
+          setOpenSteps((prev) => {
+            // Keep step 2 open and add step 3
+            const newSteps = [...prev];
+            if (!newSteps.includes(2)) newSteps.push(2);
+            if (!newSteps.includes(3)) newSteps.push(3);
+            return newSteps;
+          });
+          setCurrentStep(3);
+        }, 100); // Small delay to ensure completion message shows first
       } else {
         dispatch(markStepIncomplete(2));
         // Remove step 2 from completed steps
@@ -207,7 +247,7 @@ export default function InitialAssessmentPage() {
         },
       });
     },
-    [dispatch, bookingStateForStorage]
+    [dispatch, bookingStateForStorage, setOpenSteps, setCurrentStep]
   );
 
   // Effect to handle step completion status updates
@@ -234,30 +274,9 @@ export default function InitialAssessmentPage() {
       }
     }
 
-    // Check and update wizard step completion
-    if (wizardAnswers?.length) {
-      const activeQuestions = wizardQuestions.filter(
-        (q) => !q.showIf || q.showIf(wizardAnswers)
-      );
-
-      const allQuestionsAnswered = activeQuestions.every((q) =>
-        wizardAnswers.some((a) => {
-          if (a.questionId === q.id && a.value) {
-            if (a.value.startsWith('€')) {
-              const amount = parseFloat(a.value.slice(1));
-              return !isNaN(amount) && amount > 0;
-            }
-            return true;
-          }
-          return false;
-        })
-      );
-
-      if (allQuestionsAnswered) {
-        dispatch(completeStep(2));
-      }
-    }
-  }, [mounted, personalDetails, wizardAnswers, dispatch]);
+    // Remove automatic wizard step completion from here
+    // The step should only complete when handleComplete is called
+  }, [mounted, personalDetails, dispatch]);
 
   // Define steps configuration
   const createSteps = useCallback((): Step[] => {
@@ -408,7 +427,7 @@ export default function InitialAssessmentPage() {
           return answeredCount ? `${answeredCount} questions answered` : '';
         },
         shouldStayOpen: false,
-        isOpenByDefault: true,
+        isOpenByDefault: false,
       },
       {
         id: 3,
@@ -456,12 +475,162 @@ export default function InitialAssessmentPage() {
             : '';
         },
         shouldStayOpen: false,
-        isOpenByDefault: true,
+        isOpenByDefault: false,
+      },
+      {
+        id: 4,
+        name: 'TermsAndConditions',
+        title: 'Terms and Conditions',
+        subtitle: 'Please review and accept the terms to proceed.',
+        component: function TermsAndConditions() {
+          return (
+            <div className="space-y-4">
+              <ConsentCheckbox
+                id="terms"
+                label="I have read and agree to the terms and conditions."
+                checked={termsAccepted}
+                onChange={(checked) => {
+                  dispatch(setTermsAccepted(checked));
+                  // Save to localStorage
+                  const newConsent = {
+                    terms: checked,
+                    privacy: privacyAccepted,
+                    marketing: marketingAccepted,
+                  };
+                  localStorage.setItem(
+                    'userConsent',
+                    JSON.stringify(newConsent)
+                  );
+
+                  // Update step 4 completion
+                  if (checked && privacyAccepted) {
+                    dispatch(completeStep(4));
+                    // Ensure step 4 is saved in localStorage
+                    const existingSteps = JSON.parse(
+                      localStorage.getItem('completedSteps') || '[]'
+                    );
+                    if (!existingSteps.includes(4)) {
+                      existingSteps.push(4);
+                      existingSteps.sort((a: number, b: number) => a - b);
+                      localStorage.setItem(
+                        'completedSteps',
+                        JSON.stringify(existingSteps)
+                      );
+                    }
+                  } else {
+                    dispatch(markStepIncomplete(4));
+                    // Remove step 4 from localStorage
+                    const existingSteps = JSON.parse(
+                      localStorage.getItem('completedSteps') || '[]'
+                    );
+                    const updatedSteps = existingSteps.filter(
+                      (step: number) => step !== 4
+                    );
+                    localStorage.setItem(
+                      'completedSteps',
+                      JSON.stringify(updatedSteps)
+                    );
+                  }
+                }}
+                required={true}
+                error={showErrors && !termsAccepted}
+              />
+              <ConsentCheckbox
+                id="privacy"
+                label="I have read and agree to the privacy policy."
+                checked={privacyAccepted}
+                onChange={(checked) => {
+                  dispatch(setPrivacyAccepted(checked));
+                  // Save to localStorage
+                  const newConsent = {
+                    terms: termsAccepted,
+                    privacy: checked,
+                    marketing: marketingAccepted,
+                  };
+                  localStorage.setItem(
+                    'userConsent',
+                    JSON.stringify(newConsent)
+                  );
+
+                  // Update step 4 completion
+                  if (termsAccepted && checked) {
+                    dispatch(completeStep(4));
+                    // Ensure step 4 is saved in localStorage
+                    const existingSteps = JSON.parse(
+                      localStorage.getItem('completedSteps') || '[]'
+                    );
+                    if (!existingSteps.includes(4)) {
+                      existingSteps.push(4);
+                      existingSteps.sort((a: number, b: number) => a - b);
+                      localStorage.setItem(
+                        'completedSteps',
+                        JSON.stringify(existingSteps)
+                      );
+                    }
+                  } else {
+                    dispatch(markStepIncomplete(4));
+                    // Remove step 4 from localStorage
+                    const existingSteps = JSON.parse(
+                      localStorage.getItem('completedSteps') || '[]'
+                    );
+                    const updatedSteps = existingSteps.filter(
+                      (step: number) => step !== 4
+                    );
+                    localStorage.setItem(
+                      'completedSteps',
+                      JSON.stringify(updatedSteps)
+                    );
+                  }
+                }}
+                required={true}
+                error={showErrors && !privacyAccepted}
+              />
+              <ConsentCheckbox
+                id="marketing"
+                label="I agree that Captain Frank may send me advertising about Captain Frank's services, promotions and satisfaction surveys by email. Captain Frank will process my personal data for this purpose (see privacy policy). I can revoke this consent at any time."
+                checked={marketingAccepted}
+                onChange={(checked) => {
+                  dispatch(setMarketingAccepted(checked));
+                  // Save to localStorage
+                  const newConsent = {
+                    terms: termsAccepted,
+                    privacy: privacyAccepted,
+                    marketing: checked,
+                  };
+                  localStorage.setItem(
+                    'userConsent',
+                    JSON.stringify(newConsent)
+                  );
+                }}
+                details="Stay updated with our latest services and travel tips. You can unsubscribe at any time."
+              />
+            </div>
+          );
+        } as unknown as React.ComponentType<StepProps>,
+        props: {
+          onInteract: () =>
+            setInteractedSteps((prev) => [...new Set([...prev, 4])]),
+        },
+        getSummary: (state: RootState['booking']) => {
+          if (!state.termsAccepted || !state.privacyAccepted) return '';
+          return 'Terms and Privacy Policy accepted';
+        },
+        shouldStayOpen: false,
+        isOpenByDefault: false,
       },
     ];
 
     return allSteps;
-  }, [dispatch, selectedFlight, handleComplete, setInteractedSteps]);
+  }, [
+    dispatch,
+    selectedFlight,
+    handleComplete,
+    setInteractedSteps,
+    marketingAccepted,
+    privacyAccepted,
+    showErrors,
+    termsAccepted,
+  ]);
 
   // Define steps with memoization
   const steps = useMemo(() => createSteps(), [createSteps]);
@@ -528,26 +697,9 @@ export default function InitialAssessmentPage() {
               dispatch(
                 setWizardAnswersAction(parsedBookingState.wizardAnswers)
               );
-              // Validate wizard answers
-              const activeQuestions = wizardQuestions.filter(
-                (q) => !q.showIf || q.showIf(parsedBookingState.wizardAnswers)
-              );
-              const allQuestionsAnswered = activeQuestions.every((q) =>
-                parsedBookingState.wizardAnswers.some((a: Answer) => {
-                  if (a.questionId === q.id && a.value) {
-                    if (a.value.startsWith('€')) {
-                      const amount = parseFloat(a.value.slice(1));
-                      return !isNaN(amount) && amount > 0;
-                    }
-                    return true;
-                  }
-                  return false;
-                })
-              );
-              if (allQuestionsAnswered) {
-                dispatch(completeStep(2));
-              }
+              // Remove automatic step completion during initialization
             }
+
             if (parsedBookingState.personalDetails) {
               dispatch(setPersonalDetails(parsedBookingState.personalDetails));
             }
@@ -586,29 +738,10 @@ export default function InitialAssessmentPage() {
               const answers = JSON.parse(savedWizardAnswers);
               console.log('Restoring from individual wizardAnswers:', answers);
               dispatch(setWizardAnswersAction(answers));
-
-              // Validate wizard answers
-              const activeQuestions = wizardQuestions.filter(
-                (q) => !q.showIf || q.showIf(answers)
-              );
-              const allQuestionsAnswered = activeQuestions.every((q) =>
-                answers.some((a: Answer) => {
-                  if (a.questionId === q.id && a.value) {
-                    if (a.value.startsWith('€')) {
-                      const amount = parseFloat(a.value.slice(1));
-                      return !isNaN(amount) && amount > 0;
-                    }
-                    return true;
-                  }
-                  return false;
-                })
-              );
-              if (allQuestionsAnswered) {
-                dispatch(completeStep(2));
-              }
+              // Remove automatic step completion during initialization
             }
           } catch (error) {
-            console.error('Error parsing wizardAnswers:', error);
+            console.error('Failed to parse wizardAnswers:', error);
           }
         }
 
@@ -684,8 +817,7 @@ export default function InitialAssessmentPage() {
 
         setMounted(true);
       } catch (error) {
-        console.error('Error initializing state:', error);
-        setMounted(true);
+        console.error('Failed to initialize state:', error);
       }
     };
 
@@ -795,22 +927,27 @@ export default function InitialAssessmentPage() {
         isValid: isStep1Valid,
         fromLocation,
         toLocation,
+        locationValidation: validationRules.locations(fromLocation, toLocation),
         isCompleted: isStepCompleted(1),
       },
       step2: {
         isValid: isStep2Valid,
         answersLength: wizardAnswers?.length,
+        answersValidation: validationRules.wizardAnswers(wizardAnswers),
         isCompleted: isStepCompleted(2),
       },
       step3: {
         isValid: isStep3Valid,
         hasPersonalDetails: !!personalDetails,
+        detailsValidation: validationRules.personalDetails(personalDetails),
         isCompleted: isStepCompleted(3),
       },
       step4: {
         isValid: isStep4Valid,
         terms: termsAccepted,
         privacy: privacyAccepted,
+        termsValidation: validationRules.terms(termsAccepted),
+        privacyValidation: validationRules.privacy(privacyAccepted),
         isCompleted: isStepCompleted(4),
       },
     });
@@ -830,7 +967,7 @@ export default function InitialAssessmentPage() {
     isStepCompleted,
   ]);
 
-  // Handle continue button click
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const handleContinue = useCallback(async () => {
     if (!canContinue) {
       setShowErrors(true);
@@ -890,10 +1027,10 @@ export default function InitialAssessmentPage() {
     termsAccepted,
     privacyAccepted,
     marketingAccepted,
+    router,
+    dispatch,
     fromLocation,
     toLocation,
-    dispatch,
-    router,
   ]);
 
   useEffect(() => {
@@ -909,21 +1046,52 @@ export default function InitialAssessmentPage() {
     }
   }, [dispatch]);
 
-  // Determine which steps should be open
-  const [openSteps, setOpenSteps] = useState<number[]>([]);
-
   // Initialize openSteps with steps that should be open by default
   useEffect(() => {
-    const initialOpenSteps = steps
-      .filter(
-        (step) =>
-          step.shouldStayOpen ||
-          step.isOpenByDefault ||
-          step.id === currentStep ||
-          (!isStepCompleted(step.id) &&
-            step.id === [1, 2, 3, 4].find((id) => !isStepCompleted(id)))
-      )
+    const completedStepIds = steps
+      .filter((step) => isStepCompleted(step.id))
       .map((step) => step.id);
+
+    // Find the first incomplete step
+    const nextIncompleteStep = steps.find(
+      (step) => !isStepCompleted(step.id)
+    )?.id;
+
+    // Keep completed steps open and open the next incomplete step
+    const initialOpenSteps = steps
+      .filter((step) => {
+        // Keep completed steps open
+        if (isStepCompleted(step.id)) return true;
+
+        // Always open step 1 if it's not completed
+        if (step.id === 1 && !isStepCompleted(step.id)) return true;
+
+        // Open step 3 if step 2 is completed
+        if (step.id === 3 && isStepCompleted(2)) return true;
+
+        // Open step 4 if step 3 is completed
+        if (step.id === 4 && isStepCompleted(3)) {
+          console.log('Opening step 4 because step 3 is completed');
+          return true;
+        }
+
+        // Open the current step if it's the next incomplete one and the previous step is completed
+        if (step.id === nextIncompleteStep) {
+          const previousStep = step.id - 1;
+          return previousStep === 0 || isStepCompleted(previousStep);
+        }
+
+        return false;
+      })
+      .map((step) => step.id);
+
+    console.log('Setting open steps:', {
+      completedStepIds,
+      nextIncompleteStep,
+      initialOpenSteps,
+      step3Completed: isStepCompleted(3),
+      step4ShouldOpen: isStepCompleted(3),
+    });
 
     setOpenSteps(initialOpenSteps);
   }, [currentStep, isStepCompleted, steps]);
@@ -982,19 +1150,16 @@ export default function InitialAssessmentPage() {
           }
           onToggle={() => {
             const isCurrentlyOpen = openSteps.includes(step.id);
+
             // Only update currentStep if we're opening
             if (!isCurrentlyOpen) {
               setCurrentStep(step.id);
+              // Open immediately
+              setOpenSteps((prev) => [...prev, step.id]);
+            } else if (!step.shouldStayOpen) {
+              // Close immediately
+              setOpenSteps((prev) => prev.filter((id) => id !== step.id));
             }
-            // Update openSteps immediately
-            setOpenSteps((prev) => {
-              if (isCurrentlyOpen && !step.shouldStayOpen) {
-                return prev.filter((id) => id !== step.id);
-              } else if (!isCurrentlyOpen) {
-                return [...prev, step.id];
-              }
-              return prev;
-            });
           }}
         >
           <div className={accordionConfig.padding.content}>
@@ -1034,142 +1199,6 @@ export default function InitialAssessmentPage() {
 
           <div className="space-y-6">
             {steps.map(renderStep)}
-
-            {/* Terms and Conditions */}
-            <AccordionCard
-              title="Terms and Conditions"
-              subtitle="Please review and accept the terms to proceed."
-              eyebrow="Step 4"
-              isCompleted={isStepCompleted(4)}
-              hasInteracted={showErrors}
-              className={accordionConfig.padding.wrapper}
-              stepId="terms-and-conditions"
-              isOpenByDefault={true}
-            >
-              <div className={accordionConfig.padding.content}>
-                <div className="space-y-4">
-                  <ConsentCheckbox
-                    id="terms"
-                    label="I have read and agree to the terms and conditions."
-                    checked={termsAccepted}
-                    onChange={(checked) => {
-                      dispatch(setTermsAccepted(checked));
-                      // Save to localStorage
-                      const newConsent = {
-                        terms: checked,
-                        privacy: privacyAccepted,
-                        marketing: marketingAccepted,
-                      };
-                      localStorage.setItem(
-                        'userConsent',
-                        JSON.stringify(newConsent)
-                      );
-
-                      // Update step 4 completion
-                      if (checked && privacyAccepted) {
-                        dispatch(completeStep(4));
-                        // Ensure step 4 is saved in localStorage
-                        const existingSteps = JSON.parse(
-                          localStorage.getItem('completedSteps') || '[]'
-                        );
-                        if (!existingSteps.includes(4)) {
-                          existingSteps.push(4);
-                          existingSteps.sort((a: number, b: number) => a - b);
-                          localStorage.setItem(
-                            'completedSteps',
-                            JSON.stringify(existingSteps)
-                          );
-                        }
-                      } else {
-                        dispatch(markStepIncomplete(4));
-                        // Remove step 4 from localStorage
-                        const existingSteps = JSON.parse(
-                          localStorage.getItem('completedSteps') || '[]'
-                        );
-                        const updatedSteps = existingSteps.filter(
-                          (step: number) => step !== 4
-                        );
-                        localStorage.setItem(
-                          'completedSteps',
-                          JSON.stringify(updatedSteps)
-                        );
-                      }
-                    }}
-                    required={true}
-                    error={showErrors && !termsAccepted}
-                  />
-                  <ConsentCheckbox
-                    id="privacy"
-                    label="I have read and agree to the privacy policy."
-                    checked={privacyAccepted}
-                    onChange={(checked) => {
-                      dispatch(setPrivacyAccepted(checked));
-                      // Save to localStorage
-                      const newConsent = {
-                        terms: termsAccepted,
-                        privacy: checked,
-                        marketing: marketingAccepted,
-                      };
-                      localStorage.setItem(
-                        'userConsent',
-                        JSON.stringify(newConsent)
-                      );
-
-                      // Update step 4 completion
-                      if (termsAccepted && checked) {
-                        dispatch(completeStep(4));
-                        // Ensure step 4 is saved in localStorage
-                        const existingSteps = JSON.parse(
-                          localStorage.getItem('completedSteps') || '[]'
-                        );
-                        if (!existingSteps.includes(4)) {
-                          existingSteps.push(4);
-                          existingSteps.sort((a: number, b: number) => a - b);
-                          localStorage.setItem(
-                            'completedSteps',
-                            JSON.stringify(existingSteps)
-                          );
-                        }
-                      } else {
-                        dispatch(markStepIncomplete(4));
-                        // Remove step 4 from localStorage
-                        const existingSteps = JSON.parse(
-                          localStorage.getItem('completedSteps') || '[]'
-                        );
-                        const updatedSteps = existingSteps.filter(
-                          (step: number) => step !== 4
-                        );
-                        localStorage.setItem(
-                          'completedSteps',
-                          JSON.stringify(updatedSteps)
-                        );
-                      }
-                    }}
-                    required={true}
-                    error={showErrors && !privacyAccepted}
-                  />
-                  <ConsentCheckbox
-                    id="marketing"
-                    label="I agree that Captain Frank may send me advertising about Captain Frank's services, promotions and satisfaction surveys by email. Captain Frank will process my personal data for this purpose (see privacy policy). I can revoke this consent at any time."
-                    checked={marketingAccepted}
-                    onChange={(checked) => {
-                      dispatch(setMarketingAccepted(checked));
-                      // Save to localStorage
-                      const newConsent = {
-                        terms: termsAccepted,
-                        privacy: privacyAccepted,
-                        marketing: checked,
-                      };
-                      localStorage.setItem(
-                        'userConsent',
-                        JSON.stringify(newConsent)
-                      );
-                    }}
-                    details="Stay updated with our latest services and travel tips. You can unsubscribe at any time."
-                  />
-                </div>
-              </div>
-            </AccordionCard>
 
             {/* Continue Button */}
             <div className="mt-8 flex justify-end">

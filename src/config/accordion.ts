@@ -150,14 +150,22 @@ interface AccordionConfig {
   flightSelector: FlightSelectorConfig;
   timing: TimingConfig;
   layout: LayoutConfig;
+  transition: {
+    enter: string;
+    enterFrom: string;
+    enterTo: string;
+    leave: string;
+    leaveFrom: string;
+    leaveTo: string;
+  };
 }
 
 export const accordionConfig: AccordionConfig = {
   // Accordion specific styling
-  isOpenByDefault: true,
+  isOpenByDefault: false,
   padding: {
-    content: 'overflow-visible px-0 pb-4',
-    wrapper: '-mt-2',
+    wrapper: 'p-4 sm:p-6',
+    content: 'px-4 py-4',
   },
   styling: {
     base: 'bg-white rounded-lg',
@@ -269,5 +277,13 @@ export const accordionConfig: AccordionConfig = {
         bottom: 'pb-24',
       },
     },
+  },
+  transition: {
+    enter: 'transition-all ease-in-out duration-[2000ms]',
+    enterFrom: 'opacity-0 max-h-0 transform -translate-y-2',
+    enterTo: 'opacity-100 max-h-[2000px] transform translate-y-0',
+    leave: 'transition-all ease-in-out duration-[2000ms]',
+    leaveFrom: 'opacity-100 max-h-[2000px] transform translate-y-0',
+    leaveTo: 'opacity-0 max-h-0 transform -translate-y-2',
   },
 };

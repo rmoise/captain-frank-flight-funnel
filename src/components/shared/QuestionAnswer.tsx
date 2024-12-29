@@ -218,13 +218,9 @@ export const QuestionAnswer: React.FC<QuestionAnswerProps> = ({
 
       case 'flight_selector':
         return (
-          <div className="mt-4">
-            <h3 className="text-lg font-medium text-gray-900 mb-8">
-              {question.text}
-            </h3>
+          <>
             <FlightSelector
-              onSelect={() => {
-                const flight = selectedFlight;
+              onSelect={(flight) => {
                 if (flight) {
                   onSelect(
                     question.id,
@@ -232,16 +228,36 @@ export const QuestionAnswer: React.FC<QuestionAnswerProps> = ({
                   );
                 }
               }}
-              showResults={true}
-              showFlightSearch={true}
-              showFlightDetails={true}
               selectedFlight={
                 Array.isArray(selectedFlight)
                   ? selectedFlight[0]
                   : selectedFlight
               }
+              showFlightSearch={true}
+              showFlightDetails={true}
+              showResults={true}
+              onInteract={() => {}}
             />
-          </div>
+            {question.relatedQuestions?.map((relatedQ) => (
+              <div key={relatedQ.id} className="mt-24 pt-12 pb-12 mb-12">
+                <hr className="border-t border-gray-200 mb-12" />
+                <h3 className="text-lg font-medium text-gray-900 mb-4">
+                  {relatedQ.text}
+                </h3>
+                <MoneyInput
+                  label=""
+                  value={selectedOption || ''}
+                  onChange={(value) => onSelect(relatedQ.id, value)}
+                  placeholder={relatedQ.placeholder || 'Enter amount'}
+                  required={relatedQ.required}
+                  isFocused={false}
+                  onFocus={() => {}}
+                  onBlur={() => {}}
+                  className="w-full"
+                />
+              </div>
+            ))}
+          </>
         );
 
       default:
@@ -272,7 +288,11 @@ export const QuestionAnswer: React.FC<QuestionAnswerProps> = ({
 
       {/* Question */}
       <div className="space-y-4">
-        <h3 className="text-lg font-medium text-gray-900">{question.text}</h3>
+        <h3
+          className={`text-lg font-medium text-gray-900 ${question.type === 'flight_selector' ? 'mb-12' : ''}`}
+        >
+          {question.text}
+        </h3>
         {renderQuestionInput()}
       </div>
     </div>

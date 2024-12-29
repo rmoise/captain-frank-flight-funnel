@@ -33,7 +33,7 @@ import { pushToDataLayer } from '@/utils/gtm';
 const questions: Question[] = [
   {
     id: 'travel_status',
-    text: 'What happened?',
+    text: 'Please select what happened:',
     type: 'radio',
     options: [
       { id: 'no_travel', value: 'no_travel', label: "I didn't travel at all" },
@@ -80,6 +80,7 @@ const questions: Question[] = [
   {
     id: 'alternative_flight_airline_expense',
     text: 'Please search for the alternative flight provided by the airline.',
+    label: 'Alternative Flight',
     type: 'flight_selector',
     showIf: (answers) =>
       answers.some(
@@ -146,8 +147,54 @@ export default function TripExperiencePage() {
   const [step1Answers, setStep1Answers] = useState<Answer[]>([]);
   const [step2Answers, setStep2Answers] = useState<Answer[]>([]);
   const [interactedSteps, setInteractedSteps] = useState<number[]>([]);
+  const [openSteps, setOpenSteps] = useState<number[]>([]);
   const lastProcessedTripDetailsRef = useRef<string>('');
   const { validateStep, isStepCompleted } = useStepValidation();
+
+  // Add effect to manage open steps
+  useEffect(() => {
+    const completedStepIds = [1, 2].filter((stepId) => isStepCompleted(stepId));
+    const nextIncompleteStep = [1, 2].find(
+      (stepId) => !isStepCompleted(stepId)
+    );
+
+    const initialOpenSteps = [1, 2].filter((stepId) => {
+      // Keep completed steps open
+      if (isStepCompleted(stepId)) return true;
+
+      // Always open step 1 if it's not completed
+      if (stepId === 1 && !isStepCompleted(stepId)) return true;
+
+      // Open step 2 if step 1 is completed
+      if (stepId === 2 && isStepCompleted(1)) return true;
+
+      // Open the current step if it's the next incomplete one and the previous step is completed
+      if (stepId === nextIncompleteStep) {
+        const previousStep = stepId - 1;
+        return previousStep === 0 || isStepCompleted(previousStep);
+      }
+
+      return false;
+    });
+
+    console.log('Setting open steps:', {
+      completedStepIds,
+      nextIncompleteStep,
+      initialOpenSteps,
+    });
+
+    setOpenSteps(initialOpenSteps);
+  }, [isStepCompleted]);
+
+  // Add effect to watch for step 1 completion
+  useEffect(() => {
+    if (isStepCompleted(1)) {
+      setOpenSteps((prev) => {
+        const newSteps = [...new Set([...prev, 1, 2])];
+        return newSteps;
+      });
+    }
+  }, [isStepCompleted]);
 
   // State for each step's answers and selected flights
   const [selectedAirlineExpenseFlight, setSelectedAirlineExpenseFlight] =
@@ -684,14 +731,23 @@ export default function TripExperiencePage() {
 
             {/* Step 1: Travel Status */}
             <AccordionCard
-              title="What happened with your trip?"
+              title="Travel Experience"
               eyebrow="Step 1"
-              summary="Tell us about your travel experience"
+              summary="Tell us about your experience"
               isCompleted={completedSteps.includes(1)}
               hasInteracted={interactedSteps.includes(1)}
-              isOpenByDefault={true}
-              shouldStayOpen={true}
-              stepId="travel-experience"
+              isOpenByDefault={!completedSteps.includes(1)}
+              shouldStayOpen={false}
+              stepId="experience-details"
+              isOpen={openSteps.includes(1)}
+              onToggle={() => {
+                const isCurrentlyOpen = openSteps.includes(1);
+                if (!isCurrentlyOpen) {
+                  setOpenSteps((prev) => [...prev, 1]);
+                } else {
+                  setOpenSteps((prev) => prev.filter((id) => id !== 1));
+                }
+              }}
             >
               {initialized && (
                 <QAWizard
@@ -717,9 +773,18 @@ export default function TripExperiencePage() {
               summary="Tell us when you were informed about the changes"
               isCompleted={completedSteps.includes(2)}
               hasInteracted={interactedSteps.includes(2)}
-              isOpenByDefault={true}
-              shouldStayOpen={true}
+              isOpenByDefault={false}
+              shouldStayOpen={false}
               stepId="informed-date"
+              isOpen={openSteps.includes(2)}
+              onToggle={() => {
+                const isCurrentlyOpen = openSteps.includes(2);
+                if (!isCurrentlyOpen) {
+                  setOpenSteps((prev) => [...prev, 2]);
+                } else {
+                  setOpenSteps((prev) => prev.filter((id) => id !== 2));
+                }
+              }}
             >
               {initialized && (
                 <QAWizard
