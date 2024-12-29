@@ -1,278 +1,53 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
-import {
-  motion,
-  AnimatePresence,
-  useMotionValue,
-  useTransform,
-  animate,
-  PanInfo,
-} from 'framer-motion';
-import { createPortal } from 'react-dom';
+import * as Sheet from 'vaul';
 
-interface SheetProps {
+interface BottomSheetProps {
   isOpen: boolean;
   onClose: () => void;
   children: React.ReactNode;
   title?: string;
 }
 
-export const Sheet: React.FC<SheetProps> = ({
+export const BottomSheet: React.FC<BottomSheetProps> = ({
   isOpen,
   onClose,
   children,
   title,
 }) => {
-  const contentRef = useRef<HTMLDivElement>(null);
-  const [isExpanded, setIsExpanded] = useState(false);
-  const sheetProgress = useMotionValue(0);
-  const height = useTransform(sheetProgress, [0, 1], ['50vh', '90vh']);
-  const [mounted, setMounted] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStartY = useRef(0);
-
-  useEffect(() => {
-    setMounted(true);
-    return () => setMounted(false);
-  }, []);
-
-  useEffect(() => {
-    if (isOpen) {
-      // Lock scroll and handle viewport
-      document.body.style.overflow = 'hidden';
-      document.body.style.position = 'fixed';
-      document.body.style.width = '100%';
-      document.body.style.top = `-${window.scrollY}px`;
-
-      // Reset state
-      setIsExpanded(false);
-      sheetProgress.set(0);
-
-      // Start expansion after a short delay
-      const timeoutId = setTimeout(() => {
-        setIsExpanded(true);
-        animate(sheetProgress, 1, {
-          type: 'spring',
-          stiffness: 300,
-          damping: 30,
-          mass: 0.2,
-          onComplete: () => {
-            if (contentRef.current) {
-              contentRef.current.style.overflowY = 'auto';
-            }
-          },
-        });
-      }, 100);
-
-      return () => {
-        clearTimeout(timeoutId);
-        const scrollY = document.body.style.top;
-        document.body.style.position = '';
-        document.body.style.width = '';
-        document.body.style.top = '';
-        document.body.style.overflow = '';
-        window.scrollTo(0, parseInt(scrollY || '0') * -1);
-      };
-    } else {
-      // Unlock scroll
-      document.body.style.overflow = '';
-      document.body.style.position = '';
-      document.body.style.width = '';
-      document.body.style.top = '';
-      setIsExpanded(false);
-      sheetProgress.set(0);
-    }
-  }, [isOpen, sheetProgress]);
-
-  const handleClose = () => {
-    document.body.style.overflow = '';
-    document.body.style.position = '';
-    document.body.style.width = '';
-    document.body.style.top = '';
-    setIsExpanded(false);
-    onClose();
-  };
-
-  const handleDragStart = (
-    event: MouseEvent | TouchEvent | PointerEvent,
-    info: PanInfo
-  ) => {
-    setIsDragging(true);
-    dragStartY.current = info.point.y;
-  };
-
-  const handleDrag = (
-    event: MouseEvent | TouchEvent | PointerEvent,
-    info: PanInfo
-  ) => {
-    if (!isDragging) return;
-
-    const deltaY = info.point.y - dragStartY.current;
-    if (deltaY < 0 && contentRef.current) {
-      // If dragging up and content is scrollable, let it scroll
-      if (
-        contentRef.current.scrollHeight > contentRef.current.clientHeight &&
-        contentRef.current.scrollTop <
-          contentRef.current.scrollHeight - contentRef.current.clientHeight
-      ) {
-        event.preventDefault();
-      }
-    }
-  };
-
-  const handleDragEnd = (
-    event: MouseEvent | TouchEvent | PointerEvent,
-    info: PanInfo
-  ) => {
-    setIsDragging(false);
-
-    // If we're scrolling content and dragging up, don't close
-    if (contentRef.current) {
-      const isScrollingUp = info.velocity.y < 0;
-      const isContentScrollable =
-        contentRef.current.scrollHeight > contentRef.current.clientHeight;
-
-      if (isScrollingUp && isContentScrollable) {
-        animate(sheetProgress, 1, {
-          type: 'spring',
-          stiffness: 300,
-          damping: 30,
-          mass: 0.2,
-        });
-        return;
-      }
-    }
-
-    const shouldClose =
-      info.velocity.y > 300 || (info.offset.y > 100 && info.velocity.y > 0);
-
-    if (shouldClose) {
-      handleClose();
-    } else {
-      animate(sheetProgress, isExpanded ? 1 : 0, {
-        type: 'spring',
-        stiffness: 300,
-        damping: 30,
-        mass: 0.2,
-      });
-    }
-  };
-
-  const sheetVariants = {
-    hidden: {
-      y: '100%',
-      transition: {
-        type: 'spring',
-        stiffness: 300,
-        damping: 30,
-        mass: 0.2,
-      },
-    },
-    visible: {
-      y: isExpanded ? '0%' : '50%',
-      transition: {
-        type: 'spring',
-        stiffness: 300,
-        damping: 30,
-        mass: 0.2,
-      },
-    },
-    exit: {
-      y: '100%',
-      transition: {
-        type: 'spring',
-        stiffness: 300,
-        damping: 30,
-        mass: 0.2,
-      },
-    },
-  };
-
-  if (!mounted) return null;
-
-  const sheet = (
-    <AnimatePresence mode="wait">
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-[9999] overscroll-none"
-          onTouchStart={(e) => {
-            // Prevent pull-to-refresh when sheet is open
-            if (contentRef.current?.scrollTop === 0) {
-              e.preventDefault();
-            }
+  return (
+    <Sheet.Root
+      open={isOpen}
+      onOpenChange={(isOpen: boolean) => !isOpen && onClose()}
+      snapPoints={[1]}
+      modal={true}
+    >
+      <Sheet.Portal>
+        <Sheet.Overlay className="fixed inset-0 bg-black/50 z-[9998]" />
+        <Sheet.Content
+          className="fixed bottom-0 left-0 right-0 z-[9999] flex flex-col rounded-t-[20px] bg-white"
+          style={{
+            height: '95vh',
+            minHeight: '50vh',
           }}
         >
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 0.5 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2, ease: 'easeInOut' }}
-            className="fixed inset-0 bg-black backdrop-blur-sm"
-            onClick={handleClose}
-          />
-          <motion.div
-            drag="y"
-            dragConstraints={{ top: 0, bottom: 0 }}
-            dragElastic={0.1}
-            dragMomentum={false}
-            onDragStart={handleDragStart}
-            onDrag={handleDrag}
-            onDragEnd={handleDragEnd}
-            style={{ height }}
-            variants={sheetVariants}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            className="fixed inset-x-0 bottom-0 rounded-t-[20px] bg-white shadow-2xl will-change-transform overscroll-none touch-pan-y"
-          >
-            <div className="absolute right-4 top-4 z-10">
-              <button
-                onClick={handleClose}
-                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
-              >
-                <XMarkIcon className="w-6 h-6" />
-              </button>
-            </div>
-            <div className="w-full flex justify-center pt-2 pb-4">
-              <div className="w-12 h-1.5 bg-gray-300 rounded-full" />
-            </div>
-            {title && (
-              <div className="px-4 mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
-              </div>
-            )}
-            <div
-              ref={contentRef}
-              style={{
-                height: 'calc(100% - 3rem)',
-                overflowY: isExpanded ? 'auto' : 'hidden',
-                WebkitOverflowScrolling: 'touch',
-                paddingBottom: 'env(safe-area-inset-bottom)',
-                transform: 'translate3d(0,0,0)',
-                willChange: 'transform',
-                overscrollBehavior: 'contain',
-                touchAction: isExpanded ? 'pan-y' : 'none',
-              }}
-              className="px-4 overflow-x-hidden overscroll-none"
-              onScroll={(e) => {
-                if (isDragging) {
-                  e.preventDefault();
-                }
-              }}
-              onTouchMove={(e) => {
-                // Prevent pull-to-refresh when at the top of content
-                if (contentRef.current?.scrollTop === 0) {
-                  e.preventDefault();
-                }
-              }}
+          <div className="mx-auto w-12 h-1.5 flex-shrink-0 rounded-full bg-gray-300 mt-2 mb-4" />
+          <div className="absolute right-4 top-4 z-10">
+            <button
+              onClick={onClose}
+              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
             >
-              {children}
+              <XMarkIcon className="w-6 h-6" />
+            </button>
+          </div>
+          {title && (
+            <div className="px-4 mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
             </div>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
+          )}
+          <div className="flex-1 overflow-y-auto px-4 pb-safe">{children}</div>
+        </Sheet.Content>
+      </Sheet.Portal>
+    </Sheet.Root>
   );
-
-  return createPortal(sheet, document.body);
 };
