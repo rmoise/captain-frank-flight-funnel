@@ -1,5 +1,5 @@
 [build]
-  command = "next build"
+  command = "npm install --legacy-peer-deps && next build"
   publish = ".next"
 
 [[plugins]]
