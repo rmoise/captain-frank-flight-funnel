@@ -193,7 +193,15 @@ export const Sheet: React.FC<SheetProps> = ({
   const sheet = (
     <AnimatePresence mode="wait">
       {isOpen && (
-        <div className="fixed inset-0 z-[9999] overscroll-none">
+        <div
+          className="fixed inset-0 z-[9999] overscroll-none"
+          onTouchStart={(e) => {
+            // Prevent pull-to-refresh when sheet is open
+            if (contentRef.current?.scrollTop === 0) {
+              e.preventDefault();
+            }
+          }}
+        >
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 0.5 }}
@@ -215,7 +223,7 @@ export const Sheet: React.FC<SheetProps> = ({
             initial="hidden"
             animate="visible"
             exit="exit"
-            className="fixed inset-x-0 bottom-0 rounded-t-[20px] bg-white shadow-2xl will-change-transform overscroll-none"
+            className="fixed inset-x-0 bottom-0 rounded-t-[20px] bg-white shadow-2xl will-change-transform overscroll-none touch-pan-y"
           >
             <div className="absolute right-4 top-4 z-10">
               <button
@@ -245,9 +253,15 @@ export const Sheet: React.FC<SheetProps> = ({
                 overscrollBehavior: 'contain',
                 touchAction: isExpanded ? 'pan-y' : 'none',
               }}
-              className="px-4 overflow-x-hidden"
+              className="px-4 overflow-x-hidden overscroll-none"
               onScroll={(e) => {
                 if (isDragging) {
+                  e.preventDefault();
+                }
+              }}
+              onTouchMove={(e) => {
+                // Prevent pull-to-refresh when at the top of content
+                if (contentRef.current?.scrollTop === 0) {
                   e.preventDefault();
                 }
               }}
