@@ -114,7 +114,7 @@ export const MoneyInput: React.FC<MoneyInputProps> = ({
           placeholder={placeholder}
           className={`
             w-full h-14 pl-8 pr-4
-            text-[#4b616d] text-base font-normal font-['Heebo']
+            text-[#4b616d] text-base font-normal font-heebo
             bg-white rounded-xl
             transition-[border-color,border-width] duration-[250ms] ease-in-out
             ${
@@ -131,7 +131,7 @@ export const MoneyInput: React.FC<MoneyInputProps> = ({
           className={`
             absolute left-8 top-0
             transition-all duration-[200ms] cubic-bezier(0.4, 0, 0.2, 1) pointer-events-none
-            text-[#909090] font-['Heebo'] ${
+            text-[#909090] font-heebo ${
               required
                 ? "after:content-['*'] after:text-[#F54538] after:ml-[1px] after:align-super after:text-[10px]"
                 : ''

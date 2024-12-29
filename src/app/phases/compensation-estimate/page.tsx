@@ -207,12 +207,8 @@ export default function CompensationEstimatePage() {
                     </p>
                   )}
                   <div className="space-y-2">
-                    <p>
-                      From: {routeInfo.departureCity} - {routeInfo.departure}
-                    </p>
-                    <p>
-                      To: {routeInfo.arrivalCity} - {routeInfo.arrival}
-                    </p>
+                    <p>From: {routeInfo.departureCity}</p>
+                    <p>To: {routeInfo.arrivalCity}</p>
                   </div>
                 </div>
               ) : (

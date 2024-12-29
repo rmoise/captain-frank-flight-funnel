@@ -2107,10 +2107,6 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
       />
 
       <div className="space-y-4">
-        {errorMessage && (
-          <div className="text-red-600 text-sm">{errorMessage}</div>
-        )}
-
         {selectedType === 'multi' ? (
           <div className="space-y-8">
             {flightSegments.map((segment, index) => (
@@ -2334,11 +2330,6 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                   >
                     Search Flights
                   </button>
-                  {errorMessage && (
-                    <div className="p-4 bg-red-50 rounded-lg">
-                      <p className="text-red-600 text-sm">{errorMessage}</p>
-                    </div>
-                  )}
                   <button
                     onClick={() => {}}
                     className="w-full h-12 bg-red-50 text-[#F54538] rounded-lg font-medium hover:bg-red-100 transition-colors text-sm"
@@ -2365,7 +2356,65 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                 {selectedType === 'direct'
                   ? directFlight.selectedFlight && (
                       <div className="w-full text-left p-4 bg-white border border-gray-200 rounded-lg hover:border-[#F54538] hover:shadow-lg transition-all">
-                        <div>
+                        {/* Mobile View */}
+                        <div className="flex flex-col sm:hidden">
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center">
+                                <PiAirplaneTakeoff className="w-4 h-4 text-[#F54538]" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium">
+                                  {directFlight.selectedFlight.airline}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {directFlight.selectedFlight.flightNumber}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleFlightEdit(0);
+                                }}
+                                className="p-1 text-gray-400 hover:text-gray-600"
+                              >
+                                <PencilIcon className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={handleDirectFlightDelete}
+                                className="p-1 text-gray-400 hover:text-gray-600"
+                              >
+                                <TrashIcon className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between border-t border-gray-100 pt-3">
+                            <div>
+                              <p className="text-sm font-medium">
+                                {directFlight.selectedFlight.departureCity}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {directFlight.selectedFlight.departureTime}
+                              </p>
+                            </div>
+                            <div className="flex-1 flex justify-center">
+                              <div className="w-12 h-[1px] bg-gray-200 mt-1"></div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-medium">
+                                {directFlight.selectedFlight.arrivalCity}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {directFlight.selectedFlight.arrivalTime}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Desktop View - Keep existing desktop view */}
+                        <div className="hidden sm:block">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center space-x-4">
                               <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center">
@@ -2431,7 +2480,71 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                             key={index}
                             className="w-full text-left p-4 bg-white border border-gray-200 rounded-lg hover:border-[#F54538] hover:shadow-lg transition-all"
                           >
-                            <div>
+                            {/* Mobile View */}
+                            <div className="flex flex-col sm:hidden">
+                              <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center space-x-3">
+                                  <div className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center relative">
+                                    <PiAirplaneTakeoff className="w-4 h-4 text-[#F54538]" />
+                                    <span className="absolute -top-2 -right-2 bg-[#F54538] text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                                      {index + 1}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium">
+                                      {segment.selectedFlight.airline}
+                                    </p>
+                                    <p className="text-xs text-gray-500">
+                                      {segment.selectedFlight.flightNumber}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <button
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      handleFlightEdit(index);
+                                    }}
+                                    className="p-1 text-gray-400 hover:text-gray-600"
+                                  >
+                                    <PencilIcon className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={(e) =>
+                                      handleMultiFlightDelete(index, e)
+                                    }
+                                    className="p-1 text-gray-400 hover:text-gray-600"
+                                  >
+                                    <TrashIcon className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-between border-t border-gray-100 pt-3">
+                                <div>
+                                  <p className="text-sm font-medium">
+                                    {segment.selectedFlight.departureCity}
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    {segment.selectedFlight.departureTime}
+                                  </p>
+                                </div>
+                                <div className="flex-1 flex justify-center">
+                                  <div className="w-12 h-[1px] bg-gray-200 mt-1"></div>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-sm font-medium">
+                                    {segment.selectedFlight.arrivalCity}
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    {segment.selectedFlight.arrivalTime}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Desktop View - Keep existing desktop view */}
+                            <div className="hidden sm:block">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center space-x-4">
                                   <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center relative">

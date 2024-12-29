@@ -35,7 +35,10 @@ import { pushToDataLayer } from '@/utils/gtm';
 import { XMarkIcon } from '@heroicons/react/20/solid';
 
 export default function FlightDetailsPage() {
-  // 1. All useState hooks first
+  // 1. Router
+  const router = useRouter();
+
+  // 2. All useState hooks first
   const [mounted, setMounted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [bookingNumber, setLocalBookingNumber] = useState('');
@@ -43,13 +46,13 @@ export default function FlightDetailsPage() {
   const [interactedSteps, setInteractedSteps] = useState<number[]>([]);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
   const [isBookingInputFocused, setIsBookingInputFocused] = useState(false);
+  const [openSteps, setOpenSteps] = useState<number[]>([]);
 
-  // 2. All useRef hooks
+  // 3. All useRef hooks
   const prevValidationRef = useRef({ flight: false, booking: false });
   const prevCompletedStepsRef = useRef<number[]>([]);
 
-  // 3. All Redux hooks
-  const router = useRouter();
+  // 4. All Redux hooks
   const dispatch = useAppDispatch();
   const selectedFlight = useAppSelector(
     (state) => state.booking.selectedFlight
@@ -62,10 +65,18 @@ export default function FlightDetailsPage() {
     (state) => state.progress.completedPhases
   );
 
-  // 4. Custom hooks
+  // 5. Custom hooks
   const { validationRules } = useStepValidation();
 
-  // 5. All useEffect hooks
+  // Add isStepCompleted function
+  const isStepCompleted = useCallback(
+    (step: number) => {
+      return completedSteps.includes(step);
+    },
+    [completedSteps]
+  );
+
+  // 6. All useEffect hooks
   useEffect(() => {
     if (storedCompletedSteps && storedCompletedSteps.length > 0) {
       setCompletedSteps(storedCompletedSteps);
@@ -196,7 +207,7 @@ export default function FlightDetailsPage() {
     initializeState();
   }, [dispatch, mounted]);
 
-  // 6. All memoized values/callbacks
+  // 7. All memoized values/callbacks
   const canContinue = useMemo(() => {
     const firstFlight = Array.isArray(selectedFlight)
       ? selectedFlight[0]
@@ -485,15 +496,54 @@ export default function FlightDetailsPage() {
     [dispatch, bookingState]
   );
 
-  const handleBack = useCallback(() => {
-    localStorage.setItem('isBackNavigation', 'true');
-    localStorage.setItem('previousPhase', '2');
-    router.push('/phases/compensation-estimate');
-  }, [router]);
-
   useEffect(() => {
     pushToDataLayer({ step_position: 2 });
   }, []);
+
+  // Add effect to manage open steps
+  useEffect(() => {
+    const completedStepIds = [1, 2].filter((stepId) => isStepCompleted(stepId));
+    const nextIncompleteStep = [1, 2].find(
+      (stepId) => !isStepCompleted(stepId)
+    );
+
+    const initialOpenSteps = [1, 2].filter((stepId) => {
+      // Keep completed steps open
+      if (isStepCompleted(stepId)) return true;
+
+      // Always open step 1 if it's not completed
+      if (stepId === 1 && !isStepCompleted(stepId)) return true;
+
+      // Open step 2 if step 1 is completed
+      if (stepId === 2 && isStepCompleted(1)) return true;
+
+      // Open the current step if it's the next incomplete one and the previous step is completed
+      if (stepId === nextIncompleteStep) {
+        const previousStep = stepId - 1;
+        return previousStep === 0 || isStepCompleted(previousStep);
+      }
+
+      return false;
+    });
+
+    console.log('Setting open steps:', {
+      completedStepIds,
+      nextIncompleteStep,
+      initialOpenSteps,
+    });
+
+    setOpenSteps(initialOpenSteps);
+  }, [isStepCompleted]);
+
+  // Add effect to watch for step 1 completion
+  useEffect(() => {
+    if (isStepCompleted(1)) {
+      setOpenSteps((prev) => {
+        const newSteps = [...new Set([...prev, 1, 2])];
+        return newSteps;
+      });
+    }
+  }, [isStepCompleted]);
 
   // Early return after all hooks
   if (!mounted) {
@@ -532,8 +582,17 @@ export default function FlightDetailsPage() {
               hasInteracted={interactedSteps.includes(1)}
               className={accordionConfig.padding.wrapper}
               shouldStayOpen={false}
-              isOpenByDefault={true}
+              isOpenByDefault={!completedSteps.includes(1)}
+              isOpen={openSteps.includes(1)}
               stepId="flight-selection"
+              onToggle={() => {
+                const isCurrentlyOpen = openSteps.includes(1);
+                if (!isCurrentlyOpen) {
+                  setOpenSteps((prev) => [...prev, 1]);
+                } else {
+                  setOpenSteps((prev) => prev.filter((id) => id !== 1));
+                }
+              }}
             >
               <div className={accordionConfig.padding.content}>
                 <FlightSelector
@@ -555,8 +614,17 @@ export default function FlightDetailsPage() {
               hasInteracted={interactedSteps.includes(2)}
               className={accordionConfig.padding.wrapper}
               shouldStayOpen={false}
-              isOpenByDefault={true}
+              isOpenByDefault={false}
+              isOpen={openSteps.includes(2)}
               stepId="booking-number"
+              onToggle={() => {
+                const isCurrentlyOpen = openSteps.includes(2);
+                if (!isCurrentlyOpen) {
+                  setOpenSteps((prev) => [...prev, 2]);
+                } else {
+                  setOpenSteps((prev) => prev.filter((id) => id !== 2));
+                }
+              }}
             >
               <div className={accordionConfig.padding.content}>
                 <div className="relative mt-3">
@@ -612,20 +680,28 @@ export default function FlightDetailsPage() {
                 </p>
               </div>
             </AccordionCard>
-          </div>
 
-          {/* Navigation */}
-          {mounted && (
+            {/* Navigation Buttons */}
             <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
-              <BackButton onClick={handleBack} />
+              <BackButton
+                onClick={() => {
+                  // Set phase information before navigation
+                  localStorage.setItem('currentPhase', '2');
+                  localStorage.setItem(
+                    'completedPhases',
+                    JSON.stringify([1, 2])
+                  );
+                  router.push('/phases/compensation-estimate');
+                }}
+              />
               <ContinueButton
                 onClick={handleContinue}
                 disabled={!canContinue}
                 isLoading={isLoading}
-                text="Continue to Trip Experience"
+                text="Continue to Compensation Estimate"
               />
             </div>
-          )}
+          </div>
         </main>
       </div>
     </PhaseGuard>

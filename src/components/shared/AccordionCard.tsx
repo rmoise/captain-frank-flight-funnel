@@ -81,7 +81,7 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
     >
       <button
         onClick={toggleAccordion}
-        className="w-full flex items-start justify-between cursor-pointer text-left px-8 py-6 transition-all duration-300"
+        className="w-full flex items-start justify-between cursor-pointer text-left px-4 sm:px-8 py-6 transition-all duration-300"
       >
         <div className="flex-1">
           {eyebrow && (
@@ -111,7 +111,7 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
           isAccordionOpen ? 'max-h-[2000px]' : 'max-h-0'
         }`}
       >
-        <div className="px-8 pb-8">{children}</div>
+        <div className="px-2 sm:px-8 pb-8">{children}</div>
       </div>
     </div>
   );

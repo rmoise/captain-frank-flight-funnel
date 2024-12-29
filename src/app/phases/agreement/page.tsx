@@ -52,6 +52,7 @@ export default function AgreementPage() {
   const signatureRef = useRef<SignaturePadRef>(null);
   const [mounted, setMounted] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
+  const [openSteps, setOpenSteps] = useState<string[]>([]);
 
   const validationRules = {
     hasAcceptedTerms: [
@@ -504,6 +505,16 @@ export default function AgreementPage() {
   useEffect(() => {
     const savedFormData = localStorage.getItem('agreementFormData');
     const savedSignature = localStorage.getItem('agreementSignature');
+    const savedOpenSteps = localStorage.getItem('agreementOpenSteps');
+
+    // Initialize open steps from saved state or default to first step
+    if (savedOpenSteps) {
+      const parsedOpenSteps = JSON.parse(savedOpenSteps);
+      setOpenSteps(parsedOpenSteps);
+    } else if (!savedSignature) {
+      // Open digital-signature by default if no signature
+      setOpenSteps(['digital-signature']);
+    }
 
     if (savedFormData) {
       try {
@@ -527,6 +538,11 @@ export default function AgreementPage() {
         } catch (error) {
           console.error('Error loading signature:', error);
         }
+      } else {
+        // If no signature, ensure digital-signature step is open
+        setOpenSteps((prev) =>
+          prev.includes('digital-signature') ? prev : ['digital-signature']
+        );
       }
     };
 
@@ -538,6 +554,18 @@ export default function AgreementPage() {
 
     return () => clearTimeout(retryTimeout);
   }, []);
+
+  // Effect to handle step 2 opening when step 1 is completed
+  useEffect(() => {
+    if (hasSignature && !openSteps.includes('terms-and-conditions')) {
+      setOpenSteps((prev) => [...prev, 'terms-and-conditions']);
+    }
+  }, [hasSignature, openSteps]);
+
+  // Save open steps state whenever it changes
+  useEffect(() => {
+    localStorage.setItem('agreementOpenSteps', JSON.stringify(openSteps));
+  }, [openSteps]);
 
   const handleSignatureStart = () => {
     setHasInteractedWithSignature(true);
@@ -1040,8 +1068,77 @@ export default function AgreementPage() {
       <div className="min-h-screen bg-[#f5f7fa]">
         <PhaseNavigation currentPhase={6} completedPhases={completedPhases} />
         <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
+          <div className="mt-4 sm:mt-8 mb-8">
+            <SpeechBubble
+              message={`I, ${personalDetails?.salutation || ''} ${
+                personalDetails?.firstName || ''
+              } ${personalDetails?.lastName || ''}, residing at ${
+                personalDetails?.address || ''
+              }, ${personalDetails?.zipCode || ''} ${
+                personalDetails?.city || ''
+              }, ${
+                personalDetails?.country || ''
+              }, hereby assign my claims for compensation from the flight connection with PNR/booking number ${
+                bookingNumber || ''
+              } from ${
+                Array.isArray(flightDetails) && flightDetails.length > 0
+                  ? flightDetails[0].departure ||
+                    flightDetails[0].departureAirport ||
+                    ''
+                  : flightDetails?.departure ||
+                    flightDetails?.departureAirport ||
+                    ''
+              } to ${
+                Array.isArray(flightDetails) && flightDetails.length > 0
+                  ? flightDetails[0].arrival ||
+                    flightDetails[0].arrivalAirport ||
+                    ''
+                  : flightDetails?.arrival ||
+                    flightDetails?.arrivalAirport ||
+                    ''
+              } on ${
+                Array.isArray(flightDetails) && flightDetails.length > 0
+                  ? flightDetails[0].date
+                    ? new Date(
+                        flightDetails[0].date.split('T')[0]
+                      ).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                      })
+                    : flightDetails[0].departureTime
+                      ? new Date(
+                          flightDetails[0].departureTime.split(' ')[0]
+                        ).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                        })
+                      : ''
+                  : flightDetails?.date
+                    ? new Date(
+                        flightDetails.date.split('T')[0]
+                      ).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                      })
+                    : flightDetails?.departureTime
+                      ? new Date(
+                          flightDetails.departureTime.split(' ')[0]
+                        ).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                        })
+                      : ''
+              } to Captain Frank GmbH.
+
+Captain Frank GmbH accepts the declaration of assignment.`}
+            />
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-6">
-            <SpeechBubble message="Great! Let's finalize your claim. Please review and sign the agreement below." />
             <AccordionCard
               title="Digital Signature"
               subtitle="Please sign to confirm your agreement"
@@ -1050,7 +1147,17 @@ export default function AgreementPage() {
               hasInteracted={hasInteractedWithSignature && !hasSignature}
               className={accordionConfig.padding.wrapper}
               stepId="digital-signature"
-              isOpenByDefault={true}
+              isOpenByDefault={!hasSignature}
+              shouldStayOpen={false}
+              summary="Sign the agreement to proceed"
+              isOpen={openSteps.includes('digital-signature')}
+              onToggle={() => {
+                setOpenSteps((prev) =>
+                  prev.includes('digital-signature')
+                    ? prev.filter((step) => step !== 'digital-signature')
+                    : [...prev, 'digital-signature']
+                );
+              }}
             >
               <div className={accordionConfig.padding.content}>
                 <div>
@@ -1095,7 +1202,17 @@ export default function AgreementPage() {
               hasInteracted={Object.keys(errors).length > 0}
               className={accordionConfig.padding.wrapper}
               stepId="terms-and-conditions"
-              isOpenByDefault={true}
+              isOpenByDefault={false}
+              shouldStayOpen={false}
+              summary="Accept the terms and conditions"
+              isOpen={openSteps.includes('terms-and-conditions')}
+              onToggle={() => {
+                setOpenSteps((prev) =>
+                  prev.includes('terms-and-conditions')
+                    ? prev.filter((step) => step !== 'terms-and-conditions')
+                    : [...prev, 'terms-and-conditions']
+                );
+              }}
             >
               <div className={accordionConfig.padding.content}>
                 <div className="space-y-4">

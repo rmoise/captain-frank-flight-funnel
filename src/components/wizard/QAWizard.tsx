@@ -117,10 +117,11 @@ export const QAWizard: React.FC<QAWizardProps> = ({
   });
   const [isEditingMoney, setIsEditingMoney] = useState(false);
   const [lastActiveStep, setLastActiveStep] = useState<number | null>(null);
+  const [showingSuccess, setShowingSuccess] = useState(false);
 
   // Redux hooks
   const dispatch = useAppDispatch();
-  const { validateStep, validationRules } = useStepValidation();
+  const { validateStep } = useStepValidation();
 
   // Memoized values
   const getActiveQuestions = useCallback(
@@ -266,65 +267,149 @@ export const QAWizard: React.FC<QAWizardProps> = ({
 
   // Effect to validate answers whenever they change
   useEffect(() => {
-    console.log('=== QAWizard Validation ===', {
-      answers,
-      stepNumber,
-      isValid: validationRules.wizardAnswers(answers),
-    });
-    const isValid = validationRules.wizardAnswers(answers);
-    validateStep(stepNumber, isValid);
-  }, [answers, stepNumber, validateStep, validationRules]);
+    console.log('\n=== QAWizard Answer Validation ===');
+    console.log('Current answers:', answers);
+    console.log('Active questions:', activeQuestions);
 
-  // Callback hooks
-  const handleAnswer = useCallback(
-    (questionId: string, value: string) => {
-      console.log('handleAnswer called with:', { questionId, value });
-
-      // Special handling for money type questions
-      const question = questions.find((q) => q.id === questionId);
-
-      const updatedAnswers = [...answers];
-      const existingIndex = updatedAnswers.findIndex(
-        (answer) => answer.questionId === questionId
-      );
-
-      if (existingIndex !== -1) {
-        updatedAnswers[existingIndex] = { questionId, value };
-      } else {
-        updatedAnswers.push({ questionId, value });
+    // Check if all active questions have valid answers
+    const isValid = activeQuestions.every((question) => {
+      const answer = answers.find((a) => a.questionId === question.id);
+      if (!answer) {
+        console.log(`Question ${question.id} has no answer`);
+        return false;
       }
 
-      // Update answers state first
-      setAnswers(updatedAnswers);
+      if (question.type === 'money') {
+        const numValue = parseFloat(answer.value.replace(/[^0-9.-]+/g, ''));
+        const isValidMoney = !isNaN(numValue) && numValue > 0;
+        console.log(`Question ${question.id} money validation:`, {
+          numValue,
+          isValidMoney,
+        });
+        return isValidMoney;
+      }
 
-      // Handle side effects after state update
-      queueMicrotask(() => {
-        try {
-          // Save to localStorage and update Redux
-          localStorage.setItem('wizardAnswers', JSON.stringify(updatedAnswers));
-          dispatch(setWizardAnswers(updatedAnswers));
-        } catch (error) {
-          console.error('Failed to save answers:', error);
-        }
+      if (question.type === 'date') {
+        const isValidDate = !!answer.value;
+        console.log(`Question ${question.id} date validation:`, isValidDate);
+        return isValidDate;
+      }
 
-        if (onInteract) {
-          onInteract();
-        }
+      const isValidAnswer = answer.value !== undefined && answer.value !== '';
+      console.log(`Question ${question.id} general validation:`, isValidAnswer);
+      return isValidAnswer;
+    });
 
-        // Handle money question specific logic
-        if (question?.type === 'money' && !isEditingMoney) {
-          setIsEditingMoney(true);
-          setLastActiveStep(currentStep);
-        }
-      });
-    },
-    [questions, answers, onInteract, currentStep, isEditingMoney, dispatch]
-  );
+    console.log('=== QAWizard Validation Result ===', {
+      answers,
+      stepNumber,
+      isValid,
+      activeQuestions: activeQuestions.map((q) => q.id),
+    });
+
+    validateStep(stepNumber, isValid);
+  }, [answers, stepNumber, validateStep, activeQuestions]);
+
+  // Don't automatically call handleComplete when all questions are answered
+  useEffect(() => {
+    if (isPathComplete && currentStep === activeQuestions.length - 1) {
+      // Instead of auto-completing, just save the answers
+      try {
+        localStorage.setItem('wizardAnswers', JSON.stringify(answers));
+        dispatch(setWizardAnswers(answers));
+      } catch (error) {
+        console.error('Failed to save answers:', error);
+      }
+    }
+  }, [isPathComplete, currentStep, activeQuestions.length, answers, dispatch]);
+
+  const isAnswerValid = useCallback(() => {
+    console.log('\n=== QAWizard Current Answer Validation ===');
+
+    if (!activeQuestions?.length) {
+      console.log('No active questions');
+      return false;
+    }
+
+    const currentQuestion = activeQuestions[currentStep];
+    if (!currentQuestion) {
+      console.log('No current question');
+      return false;
+    }
+
+    const currentAnswer = answers?.find(
+      (a) => a.questionId === currentQuestion?.id
+    )?.value;
+
+    console.log('Validating answer:', {
+      currentQuestion,
+      currentAnswer,
+      type: currentQuestion.type,
+    });
+
+    if (currentQuestion.type === 'money') {
+      if (!currentAnswer) {
+        console.log('No money answer');
+        return false;
+      }
+      const numValue = parseFloat(currentAnswer.replace(/[^0-9.-]+/g, ''));
+      const isValid = !isNaN(numValue) && numValue > 0;
+      console.log('Money validation:', { numValue, isValid });
+      return isValid;
+    }
+
+    if (currentQuestion.type === 'date') {
+      const isValid = !!currentAnswer;
+      console.log('Date validation:', isValid);
+      return isValid;
+    }
+
+    const isValid = currentAnswer !== undefined && currentAnswer !== '';
+    console.log('General validation:', isValid);
+    return isValid;
+  }, [answers, activeQuestions, currentStep]);
 
   const handleComplete = useCallback(() => {
-    if (!isPathComplete || !activeQuestions?.length) return;
-    if (currentStep !== activeQuestions.length - 1) return;
+    console.log('Handle complete called', {
+      currentStep,
+      activeQuestionsLength: activeQuestions.length,
+      isValid: isAnswerValid(),
+      answers,
+      stepNumber,
+    });
 
+    if (!isAnswerValid()) {
+      console.log('Current answer is not valid');
+      return;
+    }
+
+    // Only complete if we have answers and all questions are answered
+    const allQuestionsAnswered = activeQuestions.every((question) => {
+      const answer = answers.find((a) => a.questionId === question.id);
+      if (!answer) return false;
+
+      if (question.type === 'money') {
+        const numValue = parseFloat(answer.value.replace(/[^0-9.-]+/g, ''));
+        return !isNaN(numValue) && numValue > 0;
+      }
+
+      if (question.type === 'date') {
+        return !!answer.value;
+      }
+
+      return answer.value !== undefined && answer.value !== '';
+    });
+
+    console.log('All questions answered:', allQuestionsAnswered);
+
+    if (!allQuestionsAnswered) {
+      console.log('Not all questions are answered');
+      return;
+    }
+
+    console.log('All validation passed, completing wizard');
+
+    // Only complete if we have answers
     if (answers.length > 0) {
       const currentAnswer = answers[answers.length - 1];
       const currentQuestion = questions.find(
@@ -339,6 +424,8 @@ export const QAWizard: React.FC<QAWizardProps> = ({
         currentQuestion,
         selectedOption,
         showConfetti: selectedOption?.showConfetti,
+        answers,
+        stepNumber,
       });
 
       const message = selectedOption?.showConfetti
@@ -350,57 +437,47 @@ export const QAWizard: React.FC<QAWizardProps> = ({
       // Set completion state
       setIsCompleted(true);
       setSuccessMessage(message);
+      setShowingSuccess(true);
+
+      // Save answers to localStorage and Redux
+      try {
+        localStorage.setItem('wizardAnswers', JSON.stringify(answers));
+        dispatch(setWizardAnswers(answers));
+      } catch (error) {
+        console.error('Failed to save answers:', error);
+      }
+
+      // Call onComplete with answers
       onComplete(answers);
 
-      // Reset completion state after delay but don't close accordion
+      // After 2 seconds, hide success message and show questions
       setTimeout(() => {
-        setIsCompleted(false);
-        setSuccessMessage('');
+        setShowingSuccess(false);
+        // If this is step 3, trigger step 4 to open
+        if (stepNumber === 3) {
+          console.log('Step 3 completed, opening step 4');
+          validateStep(3, true); // Validate step 3
+          // Small delay to ensure step 3 validation is processed
+          setTimeout(() => {
+            validateStep(4, false); // Initialize step 4 as not complete
+          }, 100);
+        }
       }, 2000);
+
+      // Validate current step
+      validateStep(stepNumber, true);
     }
   }, [
     answers,
-    isPathComplete,
+    isAnswerValid,
     onComplete,
     currentStep,
     activeQuestions,
     questions,
+    stepNumber,
+    validateStep,
+    dispatch,
   ]);
-
-  const getCurrentAnswer = useCallback(() => {
-    if (!activeQuestions?.length) return '';
-    const answer = answers?.find(
-      (a) => a.questionId === activeQuestions[currentStep]?.id
-    )?.value;
-    return answer || '';
-  }, [answers, activeQuestions, currentStep]);
-
-  const isAnswerValid = useCallback(() => {
-    if (!activeQuestions?.length) return false;
-    const currentQuestion = activeQuestions[currentStep];
-    if (!currentQuestion) return false;
-
-    const currentAnswer = getCurrentAnswer();
-    console.log('Validating answer:', {
-      questionType: currentQuestion.type,
-      questionId: currentQuestion.id,
-      currentAnswer,
-    });
-
-    if (currentQuestion.type === 'money') {
-      if (!currentAnswer) return false;
-      const numValue = parseFloat(currentAnswer.replace(/[^0-9.-]+/g, ''));
-      return !isNaN(numValue) && numValue > 0;
-    }
-
-    if (currentQuestion.type === 'date') {
-      if (!currentAnswer) return false;
-      // For date type, just check if we have a value
-      return true;
-    }
-
-    return !!currentAnswer;
-  }, [getCurrentAnswer, activeQuestions, currentStep]);
 
   const goToNext = useCallback(() => {
     if (
@@ -437,6 +514,84 @@ export const QAWizard: React.FC<QAWizardProps> = ({
     }
   }, [currentStep, answers, activeQuestions]);
 
+  // Callback hooks
+  const handleAnswer = useCallback(
+    (questionId: string, value: string) => {
+      console.log('\n=== QAWizard handleAnswer ===', { questionId, value });
+
+      // Update answers
+      setAnswers((prevAnswers) => {
+        const newAnswers = [...prevAnswers];
+        const existingAnswerIndex = newAnswers.findIndex(
+          (a) => a.questionId === questionId
+        );
+
+        if (existingAnswerIndex !== -1) {
+          newAnswers[existingAnswerIndex] = {
+            ...newAnswers[existingAnswerIndex],
+            value,
+          };
+        } else {
+          newAnswers.push({ questionId, value });
+        }
+
+        // Save answers to localStorage and Redux
+        try {
+          console.log('Saving answers:', newAnswers);
+          localStorage.setItem('wizardAnswers', JSON.stringify(newAnswers));
+          dispatch(setWizardAnswers(newAnswers));
+        } catch (error) {
+          console.error('Failed to save answers:', error);
+        }
+
+        // Call onInteract if provided
+        if (onInteract) {
+          onInteract();
+        }
+
+        // Validate the current step
+        const currentQuestion = activeQuestions[currentStep];
+        if (currentQuestion) {
+          const answer = newAnswers.find(
+            (a) => a.questionId === currentQuestion.id
+          );
+          let isValid = false;
+
+          if (answer) {
+            if (currentQuestion.type === 'money') {
+              const numValue = parseFloat(
+                answer.value.replace(/[^0-9.-]+/g, '')
+              );
+              isValid = !isNaN(numValue) && numValue > 0;
+            } else if (currentQuestion.type === 'date') {
+              isValid = !!answer.value;
+            } else {
+              isValid = answer.value !== undefined && answer.value !== '';
+            }
+          }
+
+          console.log('Validating current step:', {
+            questionId: currentQuestion.id,
+            answer,
+            isValid,
+          });
+
+          validateStep(stepNumber, isValid);
+        }
+
+        return newAnswers;
+      });
+    },
+    [
+      dispatch,
+      onInteract,
+      activeQuestions,
+      currentStep,
+      stepNumber,
+      validateStep,
+    ]
+  );
+
   // Don't render if no questions
   if (!questions || !Array.isArray(questions)) {
     console.warn('QAWizard: questions prop is not an array');
@@ -468,48 +623,104 @@ export const QAWizard: React.FC<QAWizardProps> = ({
       (opt) => opt.value === currentAnswer.value
     );
 
-    console.log('=== QAWizard Render Completed State ===', {
-      currentAnswer,
-      currentQuestion,
-      selectedOption,
-      showConfetti: selectedOption?.showConfetti,
-      successMessage,
-    });
+    if (showingSuccess) {
+      return (
+        <section className={qaWizardConfig.spacing.questionGap}>
+          <div
+            className={`${qaWizardConfig.spacing.optionGap} min-h-[300px] flex flex-col justify-center`}
+          >
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.2 }}
+              className={qaWizardConfig.success.icon.wrapper}
+            >
+              {selectedOption?.showConfetti ? (
+                <div className={qaWizardConfig.success.icon.emoji}>
+                  <span style={{ fontSize: '64px', lineHeight: '1' }}>🎉</span>
+                </div>
+              ) : (
+                <CheckCircleIcon
+                  className={qaWizardConfig.success.icon.check}
+                />
+              )}
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.4 }}
+              className={qaWizardConfig.success.message.wrapper}
+            >
+              <h2 className={qaWizardConfig.success.message.title}>
+                {successMessage}
+              </h2>
+              <p className={qaWizardConfig.success.message.subtitle}>
+                We&apos;re processing your information...
+              </p>
+            </motion.div>
+          </div>
+        </section>
+      );
+    }
 
     return (
-      <section className={qaWizardConfig.spacing.questionGap}>
-        <div
-          className={`${qaWizardConfig.spacing.optionGap} min-h-[300px] flex flex-col justify-center`}
-        >
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: 0.2 }}
-            className={qaWizardConfig.success.icon.wrapper}
-          >
-            {selectedOption?.showConfetti ? (
-              <div className={qaWizardConfig.success.icon.emoji}>
-                <span style={{ fontSize: '64px', lineHeight: '1' }}>🎉</span>
-              </div>
-            ) : (
-              <CheckCircleIcon className={qaWizardConfig.success.icon.check} />
+      <div className={qaWizardConfig.spacing.questionGap}>
+        <div className={qaWizardConfig.spacing.optionGap}>
+          <QuestionAnswer
+            question={visibleQuestions[currentStep]}
+            selectedOption={
+              answers?.find(
+                (a) => a.questionId === visibleQuestions[currentStep].id
+              )?.value || ''
+            }
+            onSelect={handleAnswer}
+            currentStep={currentStep}
+            totalSteps={visibleQuestions.length}
+            selectedFlight={selectedFlight}
+          />
+
+          {/* Navigation buttons */}
+          <div className={qaWizardConfig.spacing.navigationWrapper}>
+            <button
+              onClick={goToPrevious}
+              disabled={currentStep === 0}
+              className={`${qaWizardConfig.spacing.buttonBase} ${
+                currentStep === 0
+                  ? qaWizardConfig.spacing.buttonPreviousDisabled
+                  : qaWizardConfig.spacing.buttonPreviousEnabled
+              }`}
+            >
+              Previous
+            </button>
+            {currentStep === visibleQuestions.length - 1 && !showingSuccess && (
+              <button
+                onClick={handleComplete}
+                disabled={!isAnswerValid()}
+                className={`${qaWizardConfig.spacing.buttonBase} ${
+                  !isAnswerValid()
+                    ? qaWizardConfig.spacing.buttonNextDisabled
+                    : qaWizardConfig.spacing.buttonNextEnabled
+                }`}
+              >
+                Complete
+              </button>
             )}
-          </motion.div>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
-            className={qaWizardConfig.success.message.wrapper}
-          >
-            <h2 className={qaWizardConfig.success.message.title}>
-              {successMessage}
-            </h2>
-            <p className={qaWizardConfig.success.message.subtitle}>
-              We&apos;re processing your information...
-            </p>
-          </motion.div>
+            {currentStep < visibleQuestions.length - 1 && (
+              <button
+                onClick={goToNext}
+                disabled={!isAnswerValid()}
+                className={`${qaWizardConfig.spacing.buttonBase} ${
+                  !isAnswerValid()
+                    ? qaWizardConfig.spacing.buttonNextDisabled
+                    : qaWizardConfig.spacing.buttonNextEnabled
+                }`}
+              >
+                Next
+              </button>
+            )}
+          </div>
         </div>
-      </section>
+      </div>
     );
   }
 
@@ -544,27 +755,32 @@ export const QAWizard: React.FC<QAWizardProps> = ({
             >
               Previous
             </button>
-            <button
-              onClick={
-                currentStep === visibleQuestions.length - 1
-                  ? handleComplete
-                  : goToNext
-              }
-              disabled={
-                !isAnswerValid() ||
-                (currentStep === visibleQuestions.length - 1 && !isPathComplete)
-              }
-              className={`${qaWizardConfig.spacing.buttonBase} ${
-                !isAnswerValid() ||
-                (currentStep === visibleQuestions.length - 1 && !isPathComplete)
-                  ? qaWizardConfig.spacing.buttonNextDisabled
-                  : qaWizardConfig.spacing.buttonNextEnabled
-              }`}
-            >
-              {currentStep === visibleQuestions.length - 1
-                ? 'Complete'
-                : 'Next'}
-            </button>
+            {currentStep === visibleQuestions.length - 1 && !showingSuccess && (
+              <button
+                onClick={handleComplete}
+                disabled={!isAnswerValid()}
+                className={`${qaWizardConfig.spacing.buttonBase} ${
+                  !isAnswerValid()
+                    ? qaWizardConfig.spacing.buttonNextDisabled
+                    : qaWizardConfig.spacing.buttonNextEnabled
+                }`}
+              >
+                Complete
+              </button>
+            )}
+            {currentStep < visibleQuestions.length - 1 && (
+              <button
+                onClick={goToNext}
+                disabled={!isAnswerValid()}
+                className={`${qaWizardConfig.spacing.buttonBase} ${
+                  !isAnswerValid()
+                    ? qaWizardConfig.spacing.buttonNextDisabled
+                    : qaWizardConfig.spacing.buttonNextEnabled
+                }`}
+              >
+                Next
+              </button>
+            )}
           </div>
         </div>
       )}

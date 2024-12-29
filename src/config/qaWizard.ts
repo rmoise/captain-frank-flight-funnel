@@ -7,8 +7,8 @@ export const qaWizardConfig = {
   },
   spacing: {
     questionGap: 'space-y-6',
-    optionGap: 'space-y-4',
-    navigationWrapper: 'flex justify-between mt-6',
+    optionGap: 'space-y-8 mb-32 sm:mb-6',
+    navigationWrapper: 'flex justify-between mt-32 sm:mt-6',
     button:
       'mt-8 text-[#F54538] hover:bg-[#FEF2F2] px-6 py-3 rounded-lg transition-colors font-medium',
     buttonBase: 'px-6 py-3 rounded-lg transition-colors',
@@ -19,7 +19,7 @@ export const qaWizardConfig = {
   },
   question: {
     wrapper: 'mb-6',
-    title: 'text-xl font-semibold text-gray-900 mb-2',
+    title: 'text-xl font-semibold text-gray-900 mb-8',
     description: 'text-sm text-gray-500',
   },
   option: {

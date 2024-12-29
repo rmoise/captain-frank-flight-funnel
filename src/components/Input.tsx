@@ -13,6 +13,7 @@ interface InputProps {
   required?: boolean;
   error?: string | null;
   autocomplete?: string;
+  placeholder?: string;
   maxLength?: number;
 }
 
@@ -28,15 +29,19 @@ export const Input: React.FC<InputProps> = ({
   required = false,
   error = null,
   autocomplete,
+  placeholder = '',
   maxLength,
 }) => {
+  const [isFieldFocused, setIsFieldFocused] = useState(isFocused);
   const [isTouched, setIsTouched] = useState(false);
 
   const handleFocus = () => {
+    setIsFieldFocused(true);
     onFocus?.();
   };
 
   const handleBlur = () => {
+    setIsFieldFocused(false);
     setIsTouched(true);
     onBlur?.();
   };
@@ -54,34 +59,19 @@ export const Input: React.FC<InputProps> = ({
 
   return (
     <div className={`relative ${className}`}>
-      <div className="relative pt-2">
+      <div className="relative">
         <input
           type={type}
           value={value}
           onChange={handleChange}
           onFocus={handleFocus}
           onBlur={handleBlur}
+          className={`w-full px-4 py-3 rounded-lg border ${
+            showError ? 'border-red-500' : 'border-gray-300'
+          } focus:outline-none focus:ring-2 focus:ring-[#F54538] focus:border-transparent ${className}`}
           autoComplete={autocomplete}
+          placeholder={placeholder}
           maxLength={maxLength}
-          className={`
-            w-full h-14 px-4 pt-6 pb-1
-            text-[#4B616D] text-base font-medium font-heebo
-            bg-white rounded-xl
-            transition-all duration-[250ms] ease-in-out
-            ${
-              isFocused
-                ? 'border-2 border-blue-500'
-                : error
-                  ? 'border border-[#F54538]'
-                  : 'border border-[#e0e1e4] hover:border-blue-500'
-            }
-            focus:outline-none
-            ${className}
-          `}
-          aria-invalid={showError || showRequiredError}
-          aria-describedby={
-            showError || showRequiredError ? `${label}-error` : undefined
-          }
         />
         {value && (
           <button
@@ -93,7 +83,7 @@ export const Input: React.FC<InputProps> = ({
         )}
         <label
           className={`
-            absolute left-4 top-1/2
+            absolute left-4
             transition-all duration-[200ms] cubic-bezier(0.4, 0, 0.2, 1) pointer-events-none
             text-[#9BA3AF] font-heebo ${
               required
@@ -101,11 +91,11 @@ export const Input: React.FC<InputProps> = ({
                 : ''
             }
             ${
-              isFocused || value
-                ? '-translate-y-[22px] text-[10px] px-1 bg-white'
-                : '-translate-y-1/2 text-base'
+              isFieldFocused || value
+                ? 'translate-y-[-8px] text-[10px] px-1 bg-white'
+                : 'translate-y-[14px] text-base'
             }
-            ${isFocused ? 'text-[#464646]' : ''}
+            ${isFieldFocused ? 'text-[#464646]' : ''}
           `}
         >
           {label}

@@ -278,10 +278,33 @@ export const useStepValidation = () => {
       return number.length === 6 || number.length === 13;
     },
     wizardAnswers: (answers: Answer[]): boolean => {
-      if (!Array.isArray(answers) || answers.length === 0) return false;
-      return answers.every(
-        (answer) => answer.value !== undefined && answer.value !== null
-      );
+      console.log('\n=== Wizard Answers Validation Start ===');
+      console.log('Answers:', answers);
+
+      if (!Array.isArray(answers) || answers.length === 0) {
+        console.log('No answers or invalid array');
+        return false;
+      }
+
+      // Check if all answers have valid values
+      const isValid = answers.every((answer) => {
+        // For money values, check if they are valid numbers after removing the € symbol
+        if (answer.value && answer.value.startsWith('€')) {
+          const numericValue = parseFloat(answer.value.slice(1));
+          return !isNaN(numericValue) && numericValue > 0;
+        }
+        // For other values, just check if they exist and aren't empty
+        return (
+          answer.value !== undefined &&
+          answer.value !== null &&
+          answer.value !== ''
+        );
+      });
+
+      console.log('Validation result:', isValid);
+      console.log('=== Wizard Answers Validation End ===\n');
+
+      return isValid;
     },
     personalDetails: (details: PassengerDetails | null): boolean => {
       if (!details) return false;

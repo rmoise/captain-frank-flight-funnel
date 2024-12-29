@@ -19,6 +19,8 @@ import { PersonalDetailsForm } from '@/components/forms/PersonalDetailsForm';
 import { accordionConfig } from '@/config/accordion';
 import { store } from '@/store';
 import { pushToDataLayer } from '@/utils/gtm';
+import { BackButton } from '@/components/shared/BackButton';
+import { ContinueButton } from '@/components/shared/ContinueButton';
 
 function ClaimSuccessContent() {
   const router = useRouter();
@@ -380,12 +382,7 @@ function ClaimSuccessContent() {
           {error ? (
             <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
               <p className="text-red-700">{error}</p>
-              <button
-                onClick={() => router.back()}
-                className="mt-4 px-6 py-2 text-[#F54538] hover:bg-[#FEF2F2] rounded-lg transition-colors"
-              >
-                Go Back
-              </button>
+              <BackButton onClick={() => router.back()} />
             </div>
           ) : (
             <>
@@ -454,23 +451,15 @@ function ClaimSuccessContent() {
                 </AccordionCard>
 
                 <div className="mt-8 flex justify-between">
-                  <button
+                  <BackButton
                     onClick={() => router.push('/phases/trip-experience')}
-                    className="px-6 py-3 text-[#F54538] hover:bg-[#FEF2F2] rounded-lg transition-colors"
-                  >
-                    Back
-                  </button>
-                  <button
+                  />
+                  <ContinueButton
                     onClick={handleContinue}
                     disabled={!completedSteps.includes(1) || !isFormValid}
-                    className={`px-6 py-3 rounded-lg transition-colors ${
-                      completedSteps.includes(1) && isFormValid
-                        ? 'bg-[#F54538] text-white hover:bg-[#E03F33]'
-                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                    }`}
                   >
                     Continue to Agreement
-                  </button>
+                  </ContinueButton>
                 </div>
               </div>
             </>
