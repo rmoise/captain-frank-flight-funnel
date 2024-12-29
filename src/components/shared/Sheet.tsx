@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import * as Sheet from 'vaul';
 
@@ -15,20 +15,35 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   children,
   title,
 }) => {
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
   return (
     <Sheet.Root
       open={isOpen}
       onOpenChange={(isOpen: boolean) => !isOpen && onClose()}
-      snapPoints={[1]}
+      snapPoints={[0.5, 0.95]}
+      activeSnapPoint={0.95}
       modal={true}
+      shouldScaleBackground={false}
     >
       <Sheet.Portal>
         <Sheet.Overlay className="fixed inset-0 bg-black/50 z-[9998]" />
         <Sheet.Content
           className="fixed bottom-0 left-0 right-0 z-[9999] flex flex-col rounded-t-[20px] bg-white"
           style={{
-            height: '95vh',
+            height: '98vh',
             minHeight: '50vh',
+            maxHeight: '98vh',
+            overscrollBehavior: 'contain',
           }}
         >
           <div className="mx-auto w-12 h-1.5 flex-shrink-0 rounded-full bg-gray-300 mt-2 mb-4" />
@@ -45,7 +60,9 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
               <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
             </div>
           )}
-          <div className="flex-1 overflow-y-auto px-4 pb-safe">{children}</div>
+          <div className="flex-1 overflow-y-auto">
+            <div className="px-4 pb-16">{children}</div>
+          </div>
         </Sheet.Content>
       </Sheet.Portal>
     </Sheet.Root>

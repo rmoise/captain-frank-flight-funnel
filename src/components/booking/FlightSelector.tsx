@@ -2750,7 +2750,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
               <div className="flex-shrink-0 border-b border-gray-200">
                 <div className="px-6 py-6">
                   <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between">
-                    <div>
+                    <div className="hidden">
                       <h2 className="text-2xl font-semibold text-gray-900">
                         Available Flights
                       </h2>
@@ -2758,8 +2758,8 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                         Select your preferred flight
                       </p>
                     </div>
-                    <div className="hidden sm:block">
-                      <div className="relative w-64">
+                    <div className="w-full sm:w-64">
+                      <div className="relative w-full">
                         <input
                           type="text"
                           placeholder="Search by flight number"
