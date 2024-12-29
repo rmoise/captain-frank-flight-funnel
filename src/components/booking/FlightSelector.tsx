@@ -24,7 +24,7 @@ import {
   type CustomDateInputProps,
 } from '@/components/shared/CustomDateInput';
 import { FlightTypeSelector } from '@/components/shared/FlightTypeSelector';
-import { Sheet } from '@/components/shared/Sheet';
+import { BottomSheet } from '@/components/shared/Sheet';
 import { format, addMonths, getMonth, getYear } from 'date-fns';
 import type { Flight } from '@/types/store';
 import { PiAirplaneTakeoff } from 'react-icons/pi';
@@ -2741,9 +2741,10 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
           )}
 
         {showResults && showFlightSearch && currentPhase !== 1 && (
-          <Sheet
+          <BottomSheet
             isOpen={isSearchModalOpen}
             onClose={() => setIsSearchModalOpen(false)}
+            title="Select Flight"
           >
             <div className="flex flex-col h-full">
               <div className="flex-shrink-0 border-b border-gray-200">
@@ -3034,7 +3035,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                 )}
               </div>
             </div>
-          </Sheet>
+          </BottomSheet>
         )}
       </div>
     </div>
