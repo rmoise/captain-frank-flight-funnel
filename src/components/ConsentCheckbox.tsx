@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ChevronUpIcon } from '@heroicons/react/24/outline';
 import { motion } from 'framer-motion';
 
@@ -25,10 +25,26 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
 }) => {
   const [mounted, setMounted] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isTextTruncated, setIsTextTruncated] = useState(false);
+  const textRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    const checkTruncation = () => {
+      if (textRef.current) {
+        const isOverflowing =
+          textRef.current.scrollHeight > textRef.current.clientHeight;
+        setIsTextTruncated(isOverflowing);
+      }
+    };
+
+    checkTruncation();
+    window.addEventListener('resize', checkTruncation);
+    return () => window.removeEventListener('resize', checkTruncation);
+  }, [label]);
 
   const handleChange = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -38,7 +54,9 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
   };
 
   const toggleAccordion = () => {
-    setIsExpanded(!isExpanded);
+    if (isTextTruncated || details) {
+      setIsExpanded(!isExpanded);
+    }
   };
 
   // Don't render anything until mounted to avoid hydration mismatch
@@ -48,15 +66,14 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
 
   return (
     <div
+      id={id}
       className={`flex flex-col bg-white rounded-xl border transition-colors hover:bg-gray-50 ${
         error ? 'border-[#F54538]' : 'border-[#e0e1e4]'
       }`}
     >
       <div
-        className={`flex items-start gap-4 p-4 ${
-          !isExpanded ? 'max-h-[56px] overflow-hidden' : ''
-        } ${id === 'marketing' ? 'cursor-pointer' : ''}`}
-        onClick={id === 'marketing' ? toggleAccordion : undefined}
+        className="flex items-start gap-4 p-4 cursor-pointer"
+        onClick={toggleAccordion}
       >
         <div
           className={`
@@ -65,8 +82,8 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
               checked
                 ? 'bg-[#F54538] border-[#F54538]'
                 : error
-                ? 'border-[#F54538] hover:border-[#F54538]'
-                : 'border-zinc-300 hover:border-[#F54538]'
+                  ? 'border-[#F54538] hover:border-[#F54538]'
+                  : 'border-zinc-300 hover:border-[#F54538]'
             }
           `}
           onClick={handleChange}
@@ -85,11 +102,14 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
         </div>
         <div className="flex-1 text-sm text-[#4b616d] font-heebo">
           <div className="flex items-start justify-between">
-            <div className={`flex-1 pr-4 ${!isExpanded ? 'line-clamp-1' : ''}`}>
+            <div
+              ref={textRef}
+              className={`flex-1 pr-4 ${!isExpanded ? 'line-clamp-2' : ''}`}
+            >
               {label}
               {required && <span className="text-[#F54538] ml-0.5">*</span>}
             </div>
-            {id === 'marketing' && details && (
+            {(isTextTruncated || details) && (
               <motion.div
                 animate={{ rotate: isExpanded ? 180 : 0 }}
                 transition={{ duration: 0.2 }}
@@ -99,21 +119,28 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
               </motion.div>
             )}
           </div>
-          {id === 'marketing' && (
+          {details && (
             <motion.div
               initial={false}
               animate={{
                 height: isExpanded ? 'auto' : 0,
                 opacity: isExpanded ? 1 : 0,
               }}
-              transition={{ duration: 0.2 }}
+              transition={{
+                duration: 0.3,
+                ease: 'easeInOut',
+                height: {
+                  type: 'spring',
+                  damping: 15,
+                  stiffness: 200,
+                },
+              }}
               className="overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
             >
-              {details && (
-                <div className="mt-2 text-sm text-[#4b616d] font-heebo">
-                  {details}
-                </div>
-              )}
+              <div className="mt-2 text-sm text-[#4b616d] font-heebo">
+                {details}
+              </div>
             </motion.div>
           )}
           {error && (

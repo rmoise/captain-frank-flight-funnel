@@ -29,6 +29,7 @@ import { useStepValidation } from '@/hooks/useStepValidation';
 import type { Flight } from '@/types/store';
 import { PhaseNavigation } from '@/components/PhaseNavigation';
 import { pushToDataLayer } from '@/utils/gtm';
+import { accordionConfig } from '@/config/accordion';
 
 const questions: Question[] = [
   {
@@ -740,6 +741,7 @@ export default function TripExperiencePage() {
               shouldStayOpen={false}
               stepId="experience-details"
               isOpen={openSteps.includes(1)}
+              className={accordionConfig.padding.wrapper}
               onToggle={() => {
                 const isCurrentlyOpen = openSteps.includes(1);
                 if (!isCurrentlyOpen) {
@@ -749,21 +751,23 @@ export default function TripExperiencePage() {
                 }
               }}
             >
-              {initialized && (
-                <QAWizard
-                  questions={questions}
-                  initialAnswers={step1Answers}
-                  onComplete={handleAnswerChange}
-                  selectedFlight={getSelectedFlight(step1Answers)}
-                  onInteract={() =>
-                    setInteractedSteps((prev) =>
-                      prev.includes(1) ? prev : [...prev, 1]
-                    )
-                  }
-                  phase={4}
-                  stepNumber={1}
-                />
-              )}
+              <div className={accordionConfig.padding.content}>
+                {initialized && (
+                  <QAWizard
+                    questions={questions}
+                    initialAnswers={step1Answers}
+                    onComplete={handleAnswerChange}
+                    selectedFlight={getSelectedFlight(step1Answers)}
+                    onInteract={() =>
+                      setInteractedSteps((prev) =>
+                        prev.includes(1) ? prev : [...prev, 1]
+                      )
+                    }
+                    phase={4}
+                    stepNumber={1}
+                  />
+                )}
+              </div>
             </AccordionCard>
 
             {/* Step 2: Informed Date */}
@@ -777,6 +781,7 @@ export default function TripExperiencePage() {
               shouldStayOpen={false}
               stepId="informed-date"
               isOpen={openSteps.includes(2)}
+              className={accordionConfig.padding.wrapper}
               onToggle={() => {
                 const isCurrentlyOpen = openSteps.includes(2);
                 if (!isCurrentlyOpen) {
@@ -786,20 +791,22 @@ export default function TripExperiencePage() {
                 }
               }}
             >
-              {initialized && (
-                <QAWizard
-                  questions={informedDateQuestions}
-                  initialAnswers={step2Answers}
-                  onComplete={handleStep2Change}
-                  onInteract={() =>
-                    setInteractedSteps((prev) =>
-                      prev.includes(2) ? prev : [...prev, 2]
-                    )
-                  }
-                  phase={4}
-                  stepNumber={2}
-                />
-              )}
+              <div className={accordionConfig.padding.content}>
+                {initialized && (
+                  <QAWizard
+                    questions={informedDateQuestions}
+                    initialAnswers={step2Answers}
+                    onComplete={handleStep2Change}
+                    onInteract={() =>
+                      setInteractedSteps((prev) =>
+                        prev.includes(2) ? prev : [...prev, 2]
+                      )
+                    }
+                    phase={4}
+                    stepNumber={2}
+                  />
+                )}
+              </div>
             </AccordionCard>
 
             {/* Navigation */}

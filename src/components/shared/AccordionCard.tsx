@@ -107,9 +107,10 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
         </div>
       </button>
       <div
-        className={`overflow-hidden transition-all duration-300 ${
-          isAccordionOpen ? 'max-h-[2000px]' : 'max-h-0'
+        className={`overflow-hidden transition-all duration-500 ease-in-out ${
+          isAccordionOpen ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
         }`}
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="px-2 sm:px-8 pb-8">{children}</div>
       </div>

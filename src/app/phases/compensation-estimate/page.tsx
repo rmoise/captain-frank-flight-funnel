@@ -199,16 +199,24 @@ export default function CompensationEstimatePage() {
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-xl font-semibold mb-4">Flight Summary</h2>
               {routeInfo ? (
-                <div className="space-y-2">
+                <div className="space-y-4">
                   {personalDetails && (
-                    <p>
-                      Passenger: {personalDetails.firstName}{' '}
-                      {personalDetails.lastName}
-                    </p>
+                    <div className="pb-4 border-b border-gray-100">
+                      <p className="text-gray-600">Passenger</p>
+                      <p className="font-medium">
+                        {personalDetails.firstName} {personalDetails.lastName}
+                      </p>
+                    </div>
                   )}
-                  <div className="space-y-2">
-                    <p>From: {routeInfo.departureCity}</p>
-                    <p>To: {routeInfo.arrivalCity}</p>
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-gray-600">From</p>
+                      <p className="font-medium">{routeInfo.departureCity}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600">To</p>
+                      <p className="font-medium">{routeInfo.arrivalCity}</p>
+                    </div>
                   </div>
                 </div>
               ) : (

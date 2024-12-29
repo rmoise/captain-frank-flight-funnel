@@ -25,7 +25,7 @@ import {
 } from '@/components/shared/CustomDateInput';
 import { FlightTypeSelector } from '@/components/shared/FlightTypeSelector';
 import { Sheet } from '@/components/shared/Sheet';
-import { format, addMonths } from 'date-fns';
+import { format, addMonths, getMonth, getYear } from 'date-fns';
 import type { Flight } from '@/types/store';
 import { PiAirplaneTakeoff } from 'react-icons/pi';
 import DatePicker from 'react-datepicker';
@@ -36,6 +36,8 @@ import {
   MagnifyingGlassIcon,
   PencilIcon,
   TrashIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
 } from '@heroicons/react/24/outline';
 
 // Custom styles for the calendar
@@ -210,6 +212,27 @@ const formatSafeDate = (date: Date | string | null | undefined): string => {
   }
 };
 
+// Add at the top of the file, after imports
+const months = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+const years = Array.from(
+  { length: 10 },
+  (_, i) => new Date().getFullYear() - i
+);
+
 export const FlightSelector: React.FC<FlightSelectorProps> = ({
   onSelect = () => {},
   showResults = true,
@@ -221,6 +244,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
   currentPhase = 3,
   disabled = false,
 }): React.ReactElement => {
+  const [isInitializing, setIsInitializing] = useState(false); // Changed to false by default
   console.log('\n=== FlightSelector Mount ===');
   console.log('Props:', {
     showResults,
@@ -558,6 +582,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
   // Update the useEffect that handles initialization
   useEffect(() => {
     if (reduxCurrentPhase === 3) {
+      setIsInitializing(true);
       console.log('\n=== Phase 3 Initialization ===');
 
       // Try to restore flight data from localStorage
@@ -594,82 +619,43 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
           dispatch(setFlightType(savedType as 'direct' | 'multi'));
         }
 
-        // Restore locations
-        if (savedFromLocation && savedToLocation) {
-          const fromLocationData = JSON.parse(savedFromLocation);
-          const toLocationData = JSON.parse(savedToLocation);
-
-          // Ensure locations use IATA codes as labels
-          fromLocationData.label = fromLocationData.value;
-          toLocationData.label = toLocationData.value;
-
-          console.log('Restoring locations to Redux:', {
-            fromLocationData,
-            toLocationData,
-          });
-
-          dispatch(setFromLocation(JSON.stringify(fromLocationData)));
-          dispatch(setToLocation(JSON.stringify(toLocationData)));
-
-          // Update direct flight state
-          setDirectFlight((prev) => ({
-            ...prev,
-            fromLocation: fromLocationData,
-            toLocation: toLocationData,
-          }));
-        } else {
-          console.log('No saved locations found in localStorage');
+        // Restore locations if available
+        if (savedFromLocation) {
+          try {
+            const parsedFromLocation = JSON.parse(savedFromLocation);
+            if (parsedFromLocation && parsedFromLocation.value) {
+              dispatch(setFromLocation(savedFromLocation));
+            }
+          } catch (error) {
+            console.error('Error parsing from location:', error);
+          }
         }
 
-        // Restore flight data
-        if (savedFlights) {
-          const parsedFlights = JSON.parse(savedFlights);
-          if (Array.isArray(parsedFlights) && parsedFlights.length > 0) {
-            // Validate and ensure duration is present for each flight
-            const validatedFlights = parsedFlights.map((flight) => ({
-              ...flight,
-              duration:
-                flight.duration ||
-                calculateDuration(flight.departureTime, flight.arrivalTime),
-            }));
-
-            // Update flight data in Redux
-            dispatch(setSelectedFlights(validatedFlights));
-
-            // Update direct flight state if in direct mode
-            if (validatedFlights.length === 1) {
-              setDirectFlight((prev) => ({
-                ...prev,
-                selectedFlight: validatedFlights[0],
-              }));
+        if (savedToLocation) {
+          try {
+            const parsedToLocation = JSON.parse(savedToLocation);
+            if (parsedToLocation && parsedToLocation.value) {
+              dispatch(setToLocation(savedToLocation));
             }
+          } catch (error) {
+            console.error('Error parsing to location:', error);
+          }
+        }
 
-            // Also restore flight segments for search state
-            if (savedFromLocation && savedToLocation) {
-              const fromLocationData = JSON.parse(savedFromLocation);
-              const toLocationData = JSON.parse(savedToLocation);
-              const flightSegments = [
-                {
-                  fromLocation: {
-                    ...fromLocationData,
-                    label: fromLocationData.value,
-                  },
-                  toLocation: {
-                    ...toLocationData,
-                    label: toLocationData.value,
-                  },
-                  selectedFlight: validatedFlights[0],
-                  date:
-                    validatedFlights[0].date ||
-                    format(new Date(), 'yyyy-MM-dd'),
-                },
-              ];
-              setFlightSegments(flightSegments);
-              localStorage.setItem(
-                'flightSegments',
-                JSON.stringify(flightSegments)
-              );
+        // Restore date if available
+        if (savedDate) {
+          try {
+            const parsedDate = new Date(savedDate);
+            if (!isNaN(parsedDate.getTime())) {
+              setDate(parsedDate);
+              dispatch(setSelectedDate(format(parsedDate, 'yyyy-MM-dd')));
             }
+          } catch (error) {
+            console.error('Error parsing date:', error);
+            // Use current date as fallback
+            const currentDate = new Date();
+            setDate(currentDate);
+            dispatch(setSelectedDate(format(currentDate, 'yyyy-MM-dd')));
           }
         }
 
@@ -678,37 +664,37 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
           try {
             const parsedSegments = JSON.parse(savedSegments);
             if (Array.isArray(parsedSegments)) {
-              const updatedSegments = parsedSegments.map((segment) => ({
-                ...segment,
-                fromLocation: segment.fromLocation
-                  ? {
-                      ...segment.fromLocation,
-                      label: segment.fromLocation.value,
-                    }
-                  : null,
-                toLocation: segment.toLocation
-                  ? {
-                      ...segment.toLocation,
-                      label: segment.toLocation.value,
-                    }
-                  : null,
-                date: segment.date ? new Date(segment.date) : new Date(),
-                selectedFlight: segment.selectedFlight
-                  ? {
-                      ...segment.selectedFlight,
-                      duration:
-                        segment.selectedFlight.duration ||
-                        calculateDuration(
-                          segment.selectedFlight.departureTime,
-                          segment.selectedFlight.arrivalTime
-                        ),
-                    }
-                  : null,
-              }));
-              setFlightSegments(updatedSegments);
+              setFlightSegments(parsedSegments);
             }
           } catch (error) {
-            console.error('Error parsing saved segments:', error);
+            console.error('Error parsing flight segments:', error);
+            // Initialize with empty segments as fallback
+            setFlightSegments([
+              {
+                fromLocation: null,
+                toLocation: null,
+                date: new Date(),
+                selectedFlight: null,
+              },
+            ]);
+          }
+        }
+
+        // Restore selected flights if available
+        if (savedFlights) {
+          try {
+            const parsedFlights = JSON.parse(savedFlights);
+            if (parsedFlights) {
+              if (Array.isArray(parsedFlights)) {
+                dispatch(setSelectedFlights(parsedFlights));
+              } else {
+                dispatch(setSelectedFlights([parsedFlights]));
+              }
+            }
+          } catch (error) {
+            console.error('Error parsing saved flights:', error);
+            // Initialize with empty array as fallback
+            dispatch(setSelectedFlights([]));
           }
         }
 
@@ -716,15 +702,25 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
         console.log('=== End Phase 3 Initialization ===');
       } catch (error) {
         console.error('Error restoring saved data:', error);
-        // Clear invalid data
-        dispatch(setSelectedFlights([])); // Empty array instead of null
+        // Initialize with default values
+        dispatch(setSelectedFlights([]));
         dispatch(markStepIncomplete(1));
-        localStorage.removeItem('selectedFlights');
-        localStorage.removeItem('flightSummary');
-        localStorage.removeItem('flightSegments');
+        setFlightSegments([
+          {
+            fromLocation: null,
+            toLocation: null,
+            date: new Date(),
+            selectedFlight: null,
+          },
+        ]);
+        setDate(new Date());
+        dispatch(setSelectedDate(format(new Date(), 'yyyy-MM-dd')));
       }
+
+      // Set initializing to false after everything is done
+      setIsInitializing(false);
     }
-  }, [reduxCurrentPhase, dispatch]); // Remove calculateDuration from dependencies
+  }, [reduxCurrentPhase, dispatch]);
 
   // Add validation effect
   useEffect(() => {
@@ -2094,6 +2090,16 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
     }
   }, [selectedType, flightSegments, dispatch]);
 
+  if (isInitializing && reduxCurrentPhase === 3) {
+    // Only show loading in phase 3
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <div className="w-12 h-12 border-4 border-[#F54538] border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-gray-600 font-medium">Loading flight details...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <FlightTypeSelector
@@ -2112,7 +2118,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
             {flightSegments.map((segment, index) => (
               <div key={index} className="relative">
                 {index > 1 && (
-                  <div className="absolute -right-10 top-1/2 -translate-y-1/2">
+                  <div className="absolute -right-6 sm:-right-10 top-1/2 -translate-y-1/2">
                     <button
                       onClick={(e) => handleMultiFlightDelete(index, e)}
                       className="p-1 text-gray-500 hover:text-red-500"
@@ -2181,8 +2187,8 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                   </div>
 
                   {showFlightSearch && currentPhase !== 1 && (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="relative date-picker-input">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="relative date-picker-input w-full">
                         <DatePicker
                           selected={segment.date}
                           onChange={(date) =>
@@ -2209,6 +2215,64 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                             strategy: 'fixed',
                             placement: 'top-start',
                           }}
+                          className="react-datepicker-popper"
+                          calendarClassName="custom-calendar"
+                          renderCustomHeader={({
+                            date,
+                            changeYear,
+                            changeMonth,
+                            decreaseMonth,
+                            increaseMonth,
+                            prevMonthButtonDisabled,
+                            nextMonthButtonDisabled,
+                          }) => (
+                            <div className="flex items-center justify-between px-2 py-2">
+                              <button
+                                onClick={decreaseMonth}
+                                disabled={prevMonthButtonDisabled}
+                                type="button"
+                                className="p-1 hover:bg-gray-100 rounded-full disabled:opacity-50"
+                              >
+                                <ChevronLeftIcon className="w-5 h-5 text-gray-600" />
+                              </button>
+                              <div className="flex items-center gap-2">
+                                <select
+                                  value={getMonth(date)}
+                                  onChange={({ target: { value } }) =>
+                                    changeMonth(parseInt(value))
+                                  }
+                                  className="text-sm bg-transparent hover:bg-gray-100 rounded px-4 py-1 appearance-none cursor-pointer min-w-[120px] text-center"
+                                >
+                                  {months.map((option, i) => (
+                                    <option key={option} value={i}>
+                                      {option}
+                                    </option>
+                                  ))}
+                                </select>
+                                <select
+                                  value={getYear(date)}
+                                  onChange={({ target: { value } }) =>
+                                    changeYear(parseInt(value))
+                                  }
+                                  className="text-sm bg-transparent hover:bg-gray-100 rounded px-4 py-1 appearance-none cursor-pointer min-w-[100px] text-center"
+                                >
+                                  {years.map((option) => (
+                                    <option key={option} value={option}>
+                                      {option}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <button
+                                onClick={increaseMonth}
+                                disabled={nextMonthButtonDisabled}
+                                type="button"
+                                className="p-1 hover:bg-gray-100 rounded-full disabled:opacity-50"
+                              >
+                                <ChevronRightIcon className="w-5 h-5 text-gray-600" />
+                              </button>
+                            </div>
+                          )}
                         />
                       </div>
 
@@ -2218,7 +2282,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                           setIsSearchModalOpen(true);
                           handleSearchFlights(index);
                         }}
-                        className="h-14 px-6 text-white bg-[#F54538] rounded-xl hover:bg-[#F54538]/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#F54538] disabled:opacity-50 font-sans font-medium text-base"
+                        className="h-14 w-full text-white bg-[#F54538] rounded-xl hover:bg-[#F54538]/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#F54538] disabled:opacity-50 font-sans font-medium text-base"
                       >
                         Search Flights
                       </button>
@@ -2315,6 +2379,64 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                       strategy: 'fixed',
                       placement: 'top-start',
                     }}
+                    className="react-datepicker-popper"
+                    calendarClassName="custom-calendar"
+                    renderCustomHeader={({
+                      date,
+                      changeYear,
+                      changeMonth,
+                      decreaseMonth,
+                      increaseMonth,
+                      prevMonthButtonDisabled,
+                      nextMonthButtonDisabled,
+                    }) => (
+                      <div className="flex items-center justify-between px-2 py-2">
+                        <button
+                          onClick={decreaseMonth}
+                          disabled={prevMonthButtonDisabled}
+                          type="button"
+                          className="p-1 hover:bg-gray-100 rounded-full disabled:opacity-50"
+                        >
+                          <ChevronLeftIcon className="w-5 h-5 text-gray-600" />
+                        </button>
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={getMonth(date)}
+                            onChange={({ target: { value } }) =>
+                              changeMonth(parseInt(value))
+                            }
+                            className="text-sm bg-transparent hover:bg-gray-100 rounded px-4 py-1 appearance-none cursor-pointer min-w-[120px] text-center"
+                          >
+                            {months.map((option, i) => (
+                              <option key={option} value={i}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={getYear(date)}
+                            onChange={({ target: { value } }) =>
+                              changeYear(parseInt(value))
+                            }
+                            className="text-sm bg-transparent hover:bg-gray-100 rounded px-4 py-1 appearance-none cursor-pointer min-w-[100px] text-center"
+                          >
+                            {years.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <button
+                          onClick={increaseMonth}
+                          disabled={nextMonthButtonDisabled}
+                          type="button"
+                          className="p-1 hover:bg-gray-100 rounded-full disabled:opacity-50"
+                        >
+                          <ChevronRightIcon className="w-5 h-5 text-gray-600" />
+                        </button>
+                      </div>
+                    )}
                   />
                 </div>
 
@@ -2626,7 +2748,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
             <div className="flex flex-col h-full">
               <div className="flex-shrink-0 border-b border-gray-200">
                 <div className="px-6 py-6">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between">
                     <div>
                       <h2 className="text-2xl font-semibold text-gray-900">
                         Available Flights
@@ -2635,14 +2757,14 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                         Select your preferred flight
                       </p>
                     </div>
-                    <div className="hidden sm:flex items-center gap-3">
+                    <div className="hidden sm:block">
                       <div className="relative w-64">
                         <input
                           type="text"
                           placeholder="Search by flight number"
                           value={searchTerm}
                           onChange={(e) => handleSheetSearch(e.target.value)}
-                          className="w-full h-14 px-3 pl-10 pr-10 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#F54538] focus:border-transparent bg-white"
+                          className="w-full h-10 px-3 pl-10 pr-10 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F54538] focus:border-transparent transition-colors"
                         />
                         <MagnifyingGlassIcon className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                       </div>
@@ -2651,7 +2773,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                 </div>
               </div>
 
-              <div className="flex-1 overflow-auto p-6">
+              <div className="flex-1 overflow-auto">
                 {loading ? (
                   <div className="flex flex-col justify-center items-center py-8">
                     <div className="w-12 h-12 border-4 border-[#F54538] border-t-transparent rounded-full animate-spin mb-4" />
@@ -2705,140 +2827,155 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                   </div>
                 ) : (
                   <>
-                    <div className="flex items-center justify-between mb-6">
-                      <h3 className="text-lg font-medium text-gray-900">
-                        {filteredFlights.length}{' '}
-                        {filteredFlights.length === 1 ? 'flight' : 'flights'}{' '}
-                        found
-                      </h3>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setView('card')}
-                          className={`p-2 rounded-lg ${
-                            view === 'card'
-                              ? 'bg-gray-100 text-gray-900'
-                              : 'text-gray-500 hover:text-gray-900'
-                          }`}
-                        >
-                          <Squares2X2Icon className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={() => setView('list')}
-                          className={`p-2 rounded-lg ${
-                            view === 'list'
-                              ? 'bg-gray-100 text-gray-900'
-                              : 'text-gray-500 hover:text-gray-900'
-                          }`}
-                        >
-                          <ListBulletIcon className="w-5 h-5" />
-                        </button>
+                    {/* Mobile Search */}
+                    <div className="sm:hidden px-6 py-3">
+                      <div className="relative w-full">
+                        <input
+                          type="text"
+                          placeholder="Search by flight number"
+                          value={searchTerm}
+                          onChange={(e) => handleSheetSearch(e.target.value)}
+                          className="w-full h-10 px-3 pl-10 pr-10 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F54538] focus:border-transparent transition-colors"
+                        />
+                        <MagnifyingGlassIcon className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
+                    </div>
+
+                    <div className="px-6 py-2 border-b border-gray-200 bg-white">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-base font-medium text-gray-900">
+                          {filteredFlights.length}{' '}
+                          {filteredFlights.length === 1 ? 'flight' : 'flights'}{' '}
+                          found
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setView('card')}
+                            className={`p-2 rounded-lg ${
+                              view === 'card'
+                                ? 'bg-gray-100 text-gray-900'
+                                : 'text-gray-500 hover:text-gray-900'
+                            }`}
+                          >
+                            <Squares2X2Icon className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={() => setView('list')}
+                            className={`p-2 rounded-lg ${
+                              view === 'list'
+                                ? 'bg-gray-100 text-gray-900'
+                                : 'text-gray-500 hover:text-gray-900'
+                            }`}
+                          >
+                            <ListBulletIcon className="w-5 h-5" />
+                          </button>
+                        </div>
                       </div>
                     </div>
 
                     <div
                       className={
                         view === 'list'
-                          ? 'overflow-hidden'
-                          : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4'
+                          ? 'flex-1'
+                          : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 px-6 pt-6'
                       }
                     >
                       {view === 'list' ? (
-                        <div className="relative">
-                          <div className="overflow-x-auto -mx-6 sm:mx-0">
-                            <div className="inline-block min-w-full align-middle px-6 sm:px-0">
-                              <table className="min-w-full">
-                                <thead>
-                                  <tr className="bg-[#F54538]/5">
-                                    <th
-                                      scope="col"
-                                      className="px-4 py-4 text-left text-xs font-semibold text-[#F54538] uppercase tracking-wider w-[200px]"
-                                    >
-                                      Flight
-                                    </th>
-                                    <th
-                                      scope="col"
-                                      className="px-4 py-4 text-left text-xs font-semibold text-[#F54538] uppercase tracking-wider w-[120px]"
-                                    >
-                                      Date
-                                    </th>
-                                    <th
-                                      scope="col"
-                                      className="px-4 py-4 text-left text-xs font-semibold text-[#F54538] uppercase tracking-wider w-[160px]"
-                                    >
-                                      Departure
-                                    </th>
-                                    <th
-                                      scope="col"
-                                      className="px-4 py-4 text-left text-xs font-semibold text-[#F54538] uppercase tracking-wider w-[160px]"
-                                    >
-                                      Arrival
-                                    </th>
-                                    <th
-                                      scope="col"
-                                      className="px-4 py-4 text-left text-xs font-semibold text-[#F54538] uppercase tracking-wider w-[120px]"
-                                    >
-                                      Duration
-                                    </th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {filteredFlights.map((flight, index) => (
-                                    <tr
-                                      key={flight.id}
-                                      onClick={() => handleFlightSelect(flight)}
-                                      className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-gray-100 cursor-pointer transition-colors border-b border-gray-100 last:border-b-0`}
-                                    >
-                                      <td className="px-4 py-4">
-                                        <div className="flex items-center space-x-3">
-                                          <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
-                                            <PiAirplaneTakeoff className="w-5 h-5 text-[#F54538]" />
-                                          </div>
-                                          <div>
-                                            <p className="font-medium text-sm sm:text-base">
-                                              {flight.flightNumber}
-                                            </p>
-                                            <p className="text-xs sm:text-sm text-gray-500">
-                                              {flight.airline}
-                                            </p>
-                                          </div>
-                                        </div>
-                                      </td>
-                                      <td className="px-4 py-4">
-                                        <p className="font-medium text-sm sm:text-base">
-                                          {formatSafeDate(flight.date)}
+                        <div className="relative overflow-x-auto">
+                          <table className="w-full table-fixed">
+                            <thead className="bg-[#F54538]/5">
+                              <tr>
+                                <th
+                                  scope="col"
+                                  className="w-[200px] py-3 pl-6 pr-3 text-left text-xs font-semibold text-[#F54538] uppercase tracking-wider"
+                                >
+                                  <div className="flex items-center space-x-3">
+                                    <span>Flight</span>
+                                  </div>
+                                </th>
+                                <th
+                                  scope="col"
+                                  className="w-[120px] px-3 py-3 text-left text-xs font-semibold text-[#F54538] uppercase tracking-wider"
+                                >
+                                  Date
+                                </th>
+                                <th
+                                  scope="col"
+                                  className="w-[160px] px-3 py-3 text-left text-xs font-semibold text-[#F54538] uppercase tracking-wider"
+                                >
+                                  Departure
+                                </th>
+                                <th
+                                  scope="col"
+                                  className="w-[160px] px-3 py-3 text-left text-xs font-semibold text-[#F54538] uppercase tracking-wider"
+                                >
+                                  Arrival
+                                </th>
+                                <th
+                                  scope="col"
+                                  className="w-[120px] px-3 py-3 text-left text-xs font-semibold text-[#F54538] uppercase tracking-wider"
+                                >
+                                  Duration
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {filteredFlights.map((flight, index) => (
+                                <tr
+                                  key={flight.id}
+                                  onClick={() => handleFlightSelect(flight)}
+                                  className={`cursor-pointer hover:bg-gray-100 ${
+                                    index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                                  }`}
+                                >
+                                  <td className="py-3 pl-6 pr-3">
+                                    <div className="flex items-center space-x-3">
+                                      <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
+                                        <PiAirplaneTakeoff className="w-5 h-5 text-[#F54538]" />
+                                      </div>
+                                      <div>
+                                        <p className="font-medium text-sm">
+                                          {flight.flightNumber}
                                         </p>
-                                      </td>
-                                      <td className="px-4 py-4">
-                                        <p className="text-xs sm:text-sm text-gray-500">
-                                          {flight.departure}
+                                        <p className="text-xs text-gray-500">
+                                          {flight.airline}
                                         </p>
-                                        <p className="font-medium text-sm sm:text-base">
-                                          {flight.departureTime}
-                                        </p>
-                                      </td>
-                                      <td className="px-4 py-4">
-                                        <p className="text-xs sm:text-sm text-gray-500">
-                                          {flight.arrival}
-                                        </p>
-                                        <p className="font-medium text-sm sm:text-base">
-                                          {flight.arrivalTime}
-                                        </p>
-                                      </td>
-                                      <td className="px-4 py-4">
-                                        <p className="font-medium text-sm sm:text-base">
-                                          {flight.duration}
-                                        </p>
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                          <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white to-transparent pointer-events-none sm:hidden" />
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <p className="font-medium text-sm">
+                                      {formatSafeDate(flight.date)}
+                                    </p>
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <p className="text-xs text-gray-500">
+                                      {flight.departure}
+                                    </p>
+                                    <p className="font-medium text-sm">
+                                      {flight.departureTime}
+                                    </p>
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <p className="text-xs text-gray-500">
+                                      {flight.arrival}
+                                    </p>
+                                    <p className="font-medium text-sm">
+                                      {flight.arrivalTime}
+                                    </p>
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <p className="font-medium text-sm">
+                                      {flight.duration}
+                                    </p>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </div>
                       ) : (
-                        // Card View
+                        // Card View with added top padding
                         filteredFlights.map((flight) => (
                           <button
                             key={flight.id}
