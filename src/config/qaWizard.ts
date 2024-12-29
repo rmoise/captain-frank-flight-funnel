@@ -14,7 +14,7 @@ export const qaWizardConfig = {
     buttonBase: 'px-6 py-3 rounded-lg transition-colors',
     buttonPreviousEnabled: 'text-[#F54538] hover:bg-[#FEF2F2]',
     buttonPreviousDisabled: 'text-gray-400 cursor-not-allowed',
-    buttonNextEnabled: 'bg-[#FEF2F2] text-[#F54538] hover:bg-[#FDE8E8]',
+    buttonNextEnabled: 'bg-[#F54538] text-white hover:bg-[#E03F33]',
     buttonNextDisabled: 'bg-gray-200 text-gray-400 cursor-not-allowed',
   },
   question: {

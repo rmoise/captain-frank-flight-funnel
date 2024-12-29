@@ -202,10 +202,13 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
       });
 
       // Mark all fields as touched and dirty
-      const touchedState = Object.keys(reduxState).reduce((acc, key) => {
-        acc[key as keyof FormPersonalDetails] = true;
-        return acc;
-      }, {} as Record<keyof FormPersonalDetails, boolean>);
+      const touchedState = Object.keys(reduxState).reduce(
+        (acc, key) => {
+          acc[key as keyof FormPersonalDetails] = true;
+          return acc;
+        },
+        {} as Record<keyof FormPersonalDetails, boolean>
+      );
 
       setTouchedFields(touchedState);
       setDirtyFields(touchedState);
@@ -376,11 +379,14 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
 
   return (
     <div
-      className="w-full max-w-4xl mx-auto p-6"
+      className="w-full max-w-4xl mx-0 sm:mx-auto px-0 sm:px-6 py-2 sm:py-6"
       onClick={(e) => e.stopPropagation()}
       data-step="3"
     >
-      <form className="flex flex-col gap-8" onSubmit={handleSubmit}>
+      <form
+        className="flex flex-col gap-4 sm:gap-8 px-4 sm:px-0"
+        onSubmit={handleSubmit}
+      >
         {/* Salutation */}
         <div onClick={(e) => e.stopPropagation()}>
           <AutocompleteInput
@@ -402,7 +408,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
         </div>
 
         {/* Names Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8">
           {/* First Name */}
           <div onClick={(e) => e.stopPropagation()}>
             <Input
@@ -490,7 +496,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
             </div>
 
             {/* ZIP Code and Location Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8">
               <div onClick={(e) => e.stopPropagation()}>
                 <Input
                   label="ZIP Code"

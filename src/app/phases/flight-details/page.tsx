@@ -24,13 +24,15 @@ import { SpeechBubble } from '@/components/SpeechBubble';
 import { PhaseGuard } from '@/components/shared/PhaseGuard';
 import { FlightSelector } from '@/components/booking/FlightSelector';
 import { AccordionCard } from '@/components/shared/AccordionCard';
-import { Input } from '@/components/Input';
+// import { Input } from '@/components/shared/Input';
 import type { Flight } from '@/types';
 import { accordionConfig } from '@/config/accordion';
 import { useStepValidation } from '@/hooks/useStepValidation';
 import { ContinueButton } from '@/components/shared/ContinueButton';
 import { BackButton } from '@/components/shared/BackButton';
 import { PhaseNavigation } from '@/components/PhaseNavigation';
+import { pushToDataLayer } from '@/utils/gtm';
+import { XMarkIcon } from '@heroicons/react/20/solid';
 
 export default function FlightDetailsPage() {
   // 1. All useState hooks first
@@ -40,6 +42,7 @@ export default function FlightDetailsPage() {
   const [flightType] = useState<'direct' | 'multi'>('direct');
   const [interactedSteps, setInteractedSteps] = useState<number[]>([]);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
+  const [isBookingInputFocused, setIsBookingInputFocused] = useState(false);
 
   // 2. All useRef hooks
   const prevValidationRef = useRef({ flight: false, booking: false });
@@ -485,6 +488,10 @@ export default function FlightDetailsPage() {
     router.push('/phases/compensation-estimate');
   }, [router]);
 
+  useEffect(() => {
+    pushToDataLayer({ step_position: 2 });
+  }, []);
+
   // Early return after all hooks
   if (!mounted) {
     return null;
@@ -554,13 +561,53 @@ export default function FlightDetailsPage() {
               stepId="booking-number"
             >
               <div className={accordionConfig.padding.content}>
-                <Input
-                  type="text"
-                  label="Booking Number"
-                  value={bookingNumber}
-                  onChange={handleBookingNumberChange}
-                  className="w-full"
-                />
+                <div className="relative mt-3">
+                  <input
+                    type="text"
+                    value={bookingNumber}
+                    onChange={(e) => handleBookingNumberChange(e.target.value)}
+                    onFocus={() => setIsBookingInputFocused(true)}
+                    onBlur={() => setIsBookingInputFocused(false)}
+                    className={`
+                      w-full h-14 px-4 py-2
+                      text-[#4B616D] text-base font-medium font-heebo
+                      bg-white rounded-xl
+                      transition-all duration-[250ms] ease-in-out
+                      ${
+                        isBookingInputFocused
+                          ? 'border-2 border-blue-500'
+                          : 'border border-[#e0e1e4] hover:border-blue-500'
+                      }
+                      focus:outline-none
+                      ${bookingNumber ? 'pr-10' : ''}
+                    `}
+                  />
+                  {bookingNumber && (
+                    <button
+                      onClick={() => handleBookingNumberChange('')}
+                      className="absolute right-4 top-1/2 -translate-y-1/2"
+                      type="button"
+                      aria-label="Clear input"
+                    >
+                      <XMarkIcon className="w-5 h-5 text-gray-400 hover:text-[#F54538] transition-colors" />
+                    </button>
+                  )}
+                  <label
+                    className={`
+                      absolute left-4 top-0
+                      transition-all duration-[200ms] cubic-bezier(0.4, 0, 0.2, 1) pointer-events-none
+                      text-[#9BA3AF] font-heebo
+                      ${
+                        isBookingInputFocused || bookingNumber
+                          ? '-translate-y-1/2 text-[10px] px-1 bg-white'
+                          : 'translate-y-[calc(50%+7px)] text-base'
+                      }
+                      ${isBookingInputFocused ? 'text-[#464646]' : ''}
+                    `}
+                  >
+                    Booking Number
+                  </label>
+                </div>
                 <p className="mt-2 text-sm text-gray-500">
                   Your PNR (Passenger Name Record) is a 6 or 13-character code
                   that can be found on your booking confirmation or e-ticket.
@@ -571,7 +618,7 @@ export default function FlightDetailsPage() {
 
           {/* Navigation */}
           {mounted && (
-            <div className="mt-8 flex justify-between">
+            <div className="mt-8 flex flex-col-reverse sm:flex-row justify-between gap-4">
               <BackButton onClick={handleBack} />
               <ContinueButton
                 onClick={handleContinue}

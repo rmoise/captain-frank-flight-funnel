@@ -44,6 +44,7 @@ import {
   selectToLocation,
 } from '@/store/selectors/locationSelectors';
 import { useRouter } from 'next/navigation';
+import { pushToDataLayer } from '@/utils/gtm';
 
 // Extend the existing RootState type instead of redeclaring it
 declare module '@/store' {
@@ -341,16 +342,36 @@ export default function InitialAssessmentPage() {
           currentPhase: 1,
         },
         getSummary: (state: RootState['booking']) => {
-          const from = state.fromLocation as string | LocationData | null;
-          const to = state.toLocation as string | LocationData | null;
+          const from = state.fromLocation;
+          const to = state.toLocation;
+
           if (!from || !to) return '';
 
-          const fromLabel =
-            typeof from === 'string' ? JSON.parse(from).label : from.label;
-          const toLabel =
-            typeof to === 'string' ? JSON.parse(to).label : to.label;
+          try {
+            let fromLabel, toLabel;
 
-          return `${fromLabel} → ${toLabel}`;
+            if (typeof from === 'string') {
+              const parsedFrom = JSON.parse(from);
+              fromLabel = parsedFrom.label || parsedFrom.name || '';
+            } else if (from && typeof from === 'object') {
+              const locationFrom = from as { label?: string; name?: string };
+              fromLabel = locationFrom.label || locationFrom.name || '';
+            }
+
+            if (typeof to === 'string') {
+              const parsedTo = JSON.parse(to);
+              toLabel = parsedTo.label || parsedTo.name || '';
+            } else if (to && typeof to === 'object') {
+              const locationTo = to as { label?: string; name?: string };
+              toLabel = locationTo.label || locationTo.name || '';
+            }
+
+            if (!fromLabel || !toLabel) return '';
+            return `${fromLabel} → ${toLabel}`;
+          } catch (error) {
+            console.error('Error parsing location data:', error);
+            return '';
+          }
         },
         shouldStayOpen: false,
         isOpenByDefault: true,
@@ -386,7 +407,7 @@ export default function InitialAssessmentPage() {
 
           return answeredCount ? `${answeredCount} questions answered` : '';
         },
-        shouldStayOpen: true,
+        shouldStayOpen: false,
         isOpenByDefault: true,
       },
       {
@@ -889,38 +910,30 @@ export default function InitialAssessmentPage() {
   }, [dispatch]);
 
   // Determine which steps should be open
-  const getStepOpenState = useCallback(
-    (stepId: number, shouldStayOpen: boolean, isOpenByDefault: boolean) => {
-      // Always keep the current step open
-      if (currentStep === stepId) return true;
+  const [openSteps, setOpenSteps] = useState<number[]>([]);
 
-      // Keep steps open based on their configuration
-      if (shouldStayOpen) return true;
-      if (isOpenByDefault) return true;
+  // Initialize openSteps with steps that should be open by default
+  useEffect(() => {
+    const initialOpenSteps = steps
+      .filter(
+        (step) =>
+          step.shouldStayOpen ||
+          step.isOpenByDefault ||
+          step.id === currentStep ||
+          (!isStepCompleted(step.id) &&
+            step.id === [1, 2, 3, 4].find((id) => !isStepCompleted(id)))
+      )
+      .map((step) => step.id);
 
-      // Keep incomplete steps open if they're the first incomplete step
-      if (!isStepCompleted(stepId)) {
-        const firstIncompleteStep = [1, 2, 3, 4].find(
-          (id) => !isStepCompleted(id)
-        );
-        return stepId === firstIncompleteStep;
-      }
-
-      return false;
-    },
-    [currentStep, isStepCompleted]
-  );
+    setOpenSteps(initialOpenSteps);
+  }, [currentStep, isStepCompleted, steps]);
 
   // Add logging to step rendering
   const renderStep = (step: Step) => {
     const isCompleted = isStepCompleted(step.id);
     const hasInteracted = interactedSteps.includes(step.id);
     const summary = step.getSummary(bookingState);
-    const isOpen = getStepOpenState(
-      step.id,
-      step.shouldStayOpen || false,
-      step.isOpenByDefault || false
-    );
+    const isOpen = openSteps.includes(step.id);
 
     // Add logging to track step state
     console.log('\n=== Step Render State ===', {
@@ -933,6 +946,7 @@ export default function InitialAssessmentPage() {
       currentStep,
       shouldStayOpen: step.shouldStayOpen,
       isOpenByDefault: step.isOpenByDefault,
+      openSteps,
     });
 
     return (
@@ -961,16 +975,26 @@ export default function InitialAssessmentPage() {
             step.id === 1
               ? 'flight-selection'
               : step.id === 2
-              ? 'qa-wizard'
-              : step.id === 3
-              ? 'passenger-info'
-              : `step-${step.id}`
+                ? 'qa-wizard'
+                : step.id === 3
+                  ? 'passenger-info'
+                  : `step-${step.id}`
           }
           onToggle={() => {
-            // Only allow toggling if not forced open
-            if (!step.shouldStayOpen) {
+            const isCurrentlyOpen = openSteps.includes(step.id);
+            // Only update currentStep if we're opening
+            if (!isCurrentlyOpen) {
               setCurrentStep(step.id);
             }
+            // Update openSteps immediately
+            setOpenSteps((prev) => {
+              if (isCurrentlyOpen && !step.shouldStayOpen) {
+                return prev.filter((id) => id !== step.id);
+              } else if (!isCurrentlyOpen) {
+                return [...prev, step.id];
+              }
+              return prev;
+            });
           }}
         >
           <div className={accordionConfig.padding.content}>
@@ -990,6 +1014,10 @@ export default function InitialAssessmentPage() {
       JSON.stringify(bookingStateForStorage)
     );
   }, [bookingStateForStorage]);
+
+  useEffect(() => {
+    pushToDataLayer({ step_position: 1 });
+  }, []);
 
   if (!mounted) {
     return null;

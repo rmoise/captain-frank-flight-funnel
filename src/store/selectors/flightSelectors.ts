@@ -1,8 +1,14 @@
 import type { RootState } from '@/store';
+import { createSelector } from '@reduxjs/toolkit';
 
-export const selectSelectedFlights = (state: RootState) =>
-  Array.isArray(state.booking.selectedFlight)
-    ? state.booking.selectedFlight
-    : state.booking.selectedFlight
-    ? [state.booking.selectedFlight]
-    : [];
+const selectBookingState = (state: RootState) => state.booking;
+
+export const selectSelectedFlights = createSelector(
+  [selectBookingState],
+  (booking) =>
+    Array.isArray(booking.selectedFlight)
+      ? booking.selectedFlight
+      : booking.selectedFlight
+        ? [booking.selectedFlight]
+        : []
+);

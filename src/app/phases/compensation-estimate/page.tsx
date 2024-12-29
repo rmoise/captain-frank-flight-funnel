@@ -172,13 +172,16 @@ export default function CompensationEstimatePage() {
 
     // Set back navigation flag
     localStorage.setItem('isBackNavigation', 'true');
-    localStorage.setItem('previousPhase', '2');
+    localStorage.setItem('previousPhase', '1');
 
     // Save current state to be restored
     localStorage.setItem('savedFlightState', JSON.stringify(currentState));
 
-    // Navigate back to flight details
-    router.push('/phases/flight-details');
+    // Update phase in localStorage
+    localStorage.setItem('currentPhase', '1');
+
+    // Navigate back to initial assessment
+    router.push('/phases/initial-assessment');
   };
 
   // Don't render anything until after hydration
@@ -212,9 +215,11 @@ export default function CompensationEstimatePage() {
                   )}
                   <div className="space-y-2">
                     <p>
-                      From: {routeInfo.departureCity || routeInfo.departure}
+                      From: {routeInfo.departureCity} ({routeInfo.departure})
                     </p>
-                    <p>To: {routeInfo.arrivalCity || routeInfo.arrival}</p>
+                    <p>
+                      To: {routeInfo.arrivalCity} ({routeInfo.arrival})
+                    </p>
                   </div>
                 </div>
               ) : (
@@ -230,10 +235,10 @@ export default function CompensationEstimatePage() {
                 {compensationLoading
                   ? 'Calculating compensation...'
                   : compensationError
-                  ? compensationError
-                  : typeof compensationAmount === 'number'
-                  ? `€${compensationAmount}`
-                  : 'Unable to calculate compensation'}
+                    ? compensationError
+                    : typeof compensationAmount === 'number'
+                      ? `€${compensationAmount}`
+                      : 'Unable to calculate compensation'}
               </div>
               <p className="text-gray-600 mt-2">
                 Final amount will be determined after reviewing your complete

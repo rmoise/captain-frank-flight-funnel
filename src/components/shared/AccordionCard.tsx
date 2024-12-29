@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
 import { CheckCircleIcon } from '@heroicons/react/24/outline';
 
@@ -6,7 +6,6 @@ export interface AccordionCardProps {
   title: string;
   children: React.ReactNode;
   isCompleted: boolean;
-  shouldStayOpen?: boolean;
   isOpenByDefault?: boolean;
   className?: string;
   eyebrow?: string;
@@ -17,13 +16,13 @@ export interface AccordionCardProps {
   stepId?: string;
   isOpen?: boolean;
   onToggle?: () => void;
+  shouldStayOpen?: boolean;
 }
 
 export const AccordionCard: React.FC<AccordionCardProps> = ({
   title,
   children,
   isCompleted,
-  shouldStayOpen = false,
   isOpenByDefault = false,
   className = '',
   eyebrow,
@@ -34,83 +33,30 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
   stepId,
   isOpen: controlledIsOpen,
   onToggle,
+  shouldStayOpen = false,
 }) => {
-  const [isAccordionOpen, setIsAccordionOpen] = useState(isOpenByDefault);
+  const [internalIsOpen, setInternalIsOpen] = useState(isOpenByDefault);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Persist accordion state in localStorage
-  useEffect(() => {
-    if (stepId) {
-      const storedState = localStorage.getItem(`accordion_${stepId}`);
-      if (storedState !== null) {
-        setIsAccordionOpen(JSON.parse(storedState));
-      }
-    }
-  }, [stepId]);
-
-  // Memoize state updates to prevent unnecessary re-renders
-  const updateAccordionState = useCallback(
-    (newState: boolean) => {
-      console.log('\n=== AccordionCard State Update ===');
-      console.log('Step ID:', stepId);
-      console.log('Is Completed:', isCompleted);
-      console.log('Should Stay Open:', shouldStayOpen);
-      console.log('Is Open By Default:', isOpenByDefault);
-      console.log('Current State:', isAccordionOpen);
-      console.log('New State:', newState);
-
-      if (isAccordionOpen !== newState) {
-        setIsAccordionOpen(newState);
-        if (stepId) {
-          localStorage.setItem(`accordion_${stepId}`, JSON.stringify(newState));
-        }
-        console.log('State updated to:', newState);
-      } else {
-        console.log('State unchanged, skipping update');
-      }
-      console.log('=== End AccordionCard State Update ===\n');
-    },
-    [isAccordionOpen, stepId, isCompleted, shouldStayOpen, isOpenByDefault]
-  );
-
-  // Handle controlled state
   useEffect(() => {
     if (controlledIsOpen !== undefined) {
-      updateAccordionState(controlledIsOpen);
+      setInternalIsOpen(controlledIsOpen);
     }
-  }, [controlledIsOpen, updateAccordionState]);
+  }, [controlledIsOpen]);
 
-  // Handle default open state and shouldStayOpen
-  useEffect(() => {
-    if (shouldStayOpen || isOpenByDefault) {
-      updateAccordionState(true);
+  const toggleAccordion = () => {
+    if (!shouldStayOpen || !internalIsOpen) {
+      setInternalIsOpen((prev) => !prev);
+      onToggle?.();
     }
-  }, [shouldStayOpen, isOpenByDefault, updateAccordionState]);
+  };
 
-  const toggleAccordion = useCallback(() => {
-    console.log('\n=== AccordionCard Toggle ===');
-    console.log('Step ID:', stepId);
-    console.log('Should Stay Open:', shouldStayOpen);
-    console.log('Current Is Open:', isAccordionOpen);
-
-    if (shouldStayOpen) {
-      console.log('Toggle prevented due to shouldStayOpen');
-      return;
-    }
-
-    if (onToggle) {
-      console.log('Using controlled toggle');
-      onToggle();
-    } else {
-      console.log('Using uncontrolled toggle');
-      updateAccordionState(!isAccordionOpen);
-    }
-    console.log('=== End AccordionCard Toggle ===\n');
-  }, [shouldStayOpen, isAccordionOpen, onToggle, stepId, updateAccordionState]);
+  const isAccordionOpen =
+    controlledIsOpen !== undefined ? controlledIsOpen : internalIsOpen;
 
   const getStatusIcon = useMemo(() => {
     if (!mounted) {
@@ -145,29 +91,27 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
             <h3 className="text-2xl font-semibold text-gray-900">{title}</h3>
           </div>
           {isAccordionOpen && subtitle && (
-            <p className="text-sm text-gray-500 mt-1">{subtitle}</p>
+            <p className="mt-2 text-gray-500">{subtitle}</p>
           )}
           {!isAccordionOpen && summary && (
-            <p className="text-sm text-gray-500 mt-2">{summary}</p>
+            <p className="mt-2 text-gray-500">{summary}</p>
           )}
         </div>
-        <div className="flex items-center gap-4 pt-1">
-          <div className="flex items-center gap-2">
-            {getStatusIcon}
-            <ChevronDownIcon
-              className={`w-5 h-5 text-gray-500 transition-transform duration-300 ${
-                isAccordionOpen ? 'transform rotate-180' : ''
-              }`}
-            />
-          </div>
+        <div className="flex items-center space-x-4">
+          {getStatusIcon}
+          <ChevronDownIcon
+            className={`w-6 h-6 text-gray-400 transition-transform duration-300 ${
+              isAccordionOpen ? 'transform rotate-180' : ''
+            }`}
+          />
         </div>
       </button>
       <div
-        className={`transition-all duration-300 overflow-hidden ${
-          isAccordionOpen ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
+        className={`overflow-hidden transition-all duration-300 ${
+          isAccordionOpen ? 'max-h-[2000px]' : 'max-h-0'
         }`}
       >
-        <div className="px-8 pb-8 pt-4">{children}</div>
+        <div className="px-8 pb-8">{children}</div>
       </div>
     </div>
   );

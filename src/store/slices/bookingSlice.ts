@@ -13,6 +13,7 @@ interface BookingState {
   completedSteps: number[];
   completedPhases: number[];
   bookingNumber: string | null;
+  compensationAmount: number | null;
 }
 
 const initialState: BookingState = {
@@ -27,6 +28,7 @@ const initialState: BookingState = {
   completedSteps: [],
   completedPhases: [],
   bookingNumber: null,
+  compensationAmount: null,
 };
 
 const bookingSlice = createSlice({
@@ -60,6 +62,9 @@ const bookingSlice = createSlice({
     setBookingNumber: (state, action: PayloadAction<string | null>) => {
       state.bookingNumber = action.payload;
     },
+    setCompensationAmount: (state, action: PayloadAction<number | null>) => {
+      state.compensationAmount = action.payload;
+    },
   },
 });
 
@@ -73,5 +78,6 @@ export const {
   setPrivacyAccepted,
   setMarketingAccepted,
   setBookingNumber,
+  setCompensationAmount,
 } = bookingSlice.actions;
 export default bookingSlice.reducer;

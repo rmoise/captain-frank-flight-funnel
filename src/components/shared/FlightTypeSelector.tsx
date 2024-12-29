@@ -17,7 +17,7 @@ export const FlightTypeSelector: React.FC<FlightTypeSelectorProps> = ({
   className = '',
 }) => {
   return (
-    <div className={className}>
+    <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${className}`}>
       {types.map((type) => (
         <button
           key={type.id}

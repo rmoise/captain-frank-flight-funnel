@@ -5,6 +5,7 @@ interface Airport {
   code?: string;
   name?: string;
   airport?: string;
+  city?: string;
   lat?: number;
   latitude?: number;
   lng?: number;
@@ -14,6 +15,7 @@ interface Airport {
 interface FormattedAirport {
   iata_code: string;
   name: string;
+  city: string;
   lat: number;
   lng: number;
 }
@@ -123,6 +125,7 @@ export async function GET(request: Request) {
     const formattedAirports: FormattedAirport[] = airports.map((airport) => ({
       iata_code: airport.iata_code || airport.code || '',
       name: airport.name || airport.airport || '',
+      city: airport.city || '',
       lat: airport.lat || airport.latitude || 0,
       lng: airport.lng || airport.longitude || 0,
     }));

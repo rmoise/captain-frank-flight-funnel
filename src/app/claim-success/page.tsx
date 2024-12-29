@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { RootState } from '@/store';
@@ -18,6 +18,7 @@ import { AccordionCard } from '@/components/shared/AccordionCard';
 import { PersonalDetailsForm } from '@/components/forms/PersonalDetailsForm';
 import { accordionConfig } from '@/config/accordion';
 import { store } from '@/store';
+import { pushToDataLayer } from '@/utils/gtm';
 
 function ClaimSuccessContent() {
   const router = useRouter();
@@ -37,6 +38,9 @@ function ClaimSuccessContent() {
     arrivalAirport: '',
     scheduledDepartureTime: '',
   });
+  const compensationAmount = useAppSelector(
+    (state) => state.booking.compensationAmount
+  );
 
   React.useEffect(() => {
     const initializeFromUrl = () => {
@@ -360,6 +364,13 @@ function ClaimSuccessContent() {
       console.error('Error during continue:', error);
     }
   }, [dispatch, router]);
+
+  useEffect(() => {
+    pushToDataLayer({
+      step_position: 4,
+      dlv_provision: compensationAmount,
+    });
+  }, [compensationAmount]);
 
   return (
     <PhaseGuard phase={5}>

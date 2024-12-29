@@ -28,6 +28,7 @@ import { BackButton } from '@/components/shared/BackButton';
 import { useStepValidation } from '@/hooks/useStepValidation';
 import type { Flight } from '@/types/store';
 import { PhaseNavigation } from '@/components/PhaseNavigation';
+import { pushToDataLayer } from '@/utils/gtm';
 
 const questions: Question[] = [
   {
@@ -638,6 +639,10 @@ export default function TripExperiencePage() {
       router.push(`/claim-rejected?${searchParams.toString()}`);
     }
   };
+
+  useEffect(() => {
+    pushToDataLayer({ step_position: 3 });
+  }, []);
 
   return (
     <PhaseGuard phase={4}>

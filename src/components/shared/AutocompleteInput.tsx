@@ -282,7 +282,9 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
             >
               <div className="flex items-center justify-between">
                 <span className="text-base font-medium font-heebo">
-                  {option.description || option.label}
+                  {option.city
+                    ? `${option.city} (${option.value})`
+                    : option.description || option.label}
                 </span>
                 <span className="text-sm text-gray-500 font-heebo">
                   {option.value}
@@ -310,8 +312,8 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
       isFocused
         ? 'border-2 border-blue-500'
         : error
-        ? 'border border-[#F54538]'
-        : 'border border-[#e0e1e4] group-hover:border-blue-500'
+          ? 'border border-[#F54538]'
+          : 'border border-[#e0e1e4] group-hover:border-blue-500'
     }
     focus:outline-none
   `;

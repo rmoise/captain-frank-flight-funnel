@@ -83,6 +83,8 @@ export interface BookingState {
   toLocation: string | null;
   completedPhases: number[];
   completedSteps: number[];
+  bookingNumber: string;
+  compensationAmount: number | null;
 }
 
 export interface ProgressState {

@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { SpeechBubble } from '@/components/SpeechBubble';
 import { BackButton } from '@/components/shared/BackButton';
 import { ContinueButton } from '@/components/shared/ContinueButton';
+import { pushToDataLayer } from '@/utils/gtm';
 
 export default function ClaimRejectedPage() {
   const router = useRouter();
@@ -13,6 +14,10 @@ export default function ClaimRejectedPage() {
     Record<string, string>
   >({});
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    pushToDataLayer({ step_position: 4.1 });
+  }, []);
 
   React.useEffect(() => {
     setMounted(true);
