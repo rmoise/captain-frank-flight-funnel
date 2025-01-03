@@ -1,8 +1,11 @@
-import React from 'react';
-import { QAWizard } from '@/components/wizard/QAWizard';
+import React, { useEffect, useState } from 'react';
+import { QAWizard } from './QAWizard';
 import type { Question } from '@/types/experience';
 import type { Answer } from '@/types/wizard';
 import type { Flight } from '@/types/store';
+import { useStore } from '@/lib/state/store';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import type { ValidationStateSteps } from '@/lib/state/store';
 
 interface QAWizardWrapperProps {
   questions: Question[];
@@ -10,34 +13,108 @@ interface QAWizardWrapperProps {
   onInteract?: () => void;
   initialAnswers?: Answer[];
   phase?: number;
-  stepNumber?: number;
-  selectedFlight?: Flight | Flight[] | null;
+  stepNumber?: ValidationStateSteps;
+  selectedFlight?: Flight | null;
 }
 
 export const QAWizardWrapper: React.FC<QAWizardWrapperProps> = (props) => {
-  console.log('=== QAWizardWrapper Render ===', {
-    hasQuestions: !!props.questions,
-    questionsLength: props.questions?.length,
-    initialAnswers: props.initialAnswers,
-    phase: props.phase,
-    stepNumber: props.stepNumber,
-    selectedFlight: props.selectedFlight,
-  });
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Don't render if no questions
-  if (!props.questions || !Array.isArray(props.questions)) {
-    console.warn('QAWizardWrapper: questions prop is not an array');
-    return null;
+  const { wizardAnswers: answers, initializeStore } = useStore();
+
+  // Initialize store when component mounts
+  useEffect(() => {
+    const initialize = async () => {
+      try {
+        setIsInitializing(true);
+        setError(null);
+        await initializeStore();
+        // Wait for next tick to ensure store is ready
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        setIsInitializing(false);
+      } catch (err) {
+        console.error('Error initializing QA wizard:', err);
+        setError('Failed to initialize questionnaire');
+        setIsInitializing(false);
+      }
+    };
+
+    initialize();
+  }, [initializeStore]);
+
+  // Show loading state
+  if (isInitializing) {
+    return (
+      <div className="flex items-center justify-center min-h-[300px]">
+        <LoadingSpinner />
+      </div>
+    );
   }
 
-  if (props.questions.length === 0) {
-    console.warn('QAWizardWrapper: questions array is empty');
-    return null;
+  // Show error state
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[300px] text-center">
+        <div className="text-red-500 mb-4">
+          <svg
+            className="w-12 h-12 mx-auto"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+            />
+          </svg>
+        </div>
+        <h3 className="text-lg font-medium text-gray-900 mb-2">{error}</h3>
+        <p className="text-sm text-gray-500">Please try refreshing the page</p>
+      </div>
+    );
   }
 
+  // Always use the provided initialAnswers if they exist
+  if (props.initialAnswers && props.initialAnswers.length > 0) {
+    return (
+      <QAWizard
+        questions={props.questions}
+        onComplete={props.onComplete}
+        selectedFlight={props.selectedFlight}
+        initialAnswers={props.initialAnswers}
+      />
+    );
+  }
+
+  // If no initialAnswers provided, check store answers
+  if (answers?.length > 0) {
+    // Filter answers to only include those for the current QA
+    const currentQAType = props.questions[0]?.id || '';
+    const relevantAnswers = answers.filter((a) =>
+      a.questionId?.includes(currentQAType.split('_')[0])
+    );
+
+    if (relevantAnswers.length > 0) {
+      return (
+        <QAWizard
+          questions={props.questions}
+          onComplete={props.onComplete}
+          selectedFlight={props.selectedFlight}
+          initialAnswers={relevantAnswers}
+        />
+      );
+    }
+  }
+
+  // If no valid answers found, start fresh
   return (
-    <div className="w-full">
-      <QAWizard {...props} />
-    </div>
+    <QAWizard
+      questions={props.questions}
+      onComplete={props.onComplete}
+      selectedFlight={props.selectedFlight}
+    />
   );
 };

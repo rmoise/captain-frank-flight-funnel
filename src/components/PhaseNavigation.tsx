@@ -4,14 +4,14 @@ import React, { useState, useEffect } from 'react';
 import { PHASES } from '@/constants/phases';
 import styles from './PhaseNavigation.module.css';
 
-interface PhaseNavigationProps {
+export interface PhaseNavigationProps {
   currentPhase: number;
-  completedPhases?: number[];
+  completedPhases: number[];
 }
 
 export const PhaseNavigation: React.FC<PhaseNavigationProps> = ({
   currentPhase,
-  completedPhases = [],
+  completedPhases,
 }) => {
   const [isClient, setIsClient] = useState(false);
 

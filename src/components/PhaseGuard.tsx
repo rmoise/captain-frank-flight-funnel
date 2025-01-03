@@ -1,6 +1,5 @@
 import React from 'react';
-import { useSelector } from 'react-redux';
-import type { RootState } from '@/store';
+import { useStore } from '@/lib/state/store';
 
 interface PhaseGuardProps {
   phase: number;
@@ -8,11 +7,12 @@ interface PhaseGuardProps {
 }
 
 export const PhaseGuard: React.FC<PhaseGuardProps> = ({ phase, children }) => {
-  const currentPhase = useSelector(
-    (state: RootState) => state.progress.currentPhase
-  );
+  const { currentPhase, completedPhases } = useStore();
 
-  if (currentPhase !== phase) {
+  const isPhaseAccessible =
+    phase <= currentPhase || completedPhases.includes(phase);
+
+  if (!isPhaseAccessible) {
     return null;
   }
 

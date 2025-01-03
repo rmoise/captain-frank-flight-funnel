@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import LoadingSpinner from '@/components/shared/LoadingSpinner';
+import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 
 interface LoadingContextType {
   showLoading: (message?: string) => void;

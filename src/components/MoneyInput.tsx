@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { MoneyInputControls } from './MoneyInputControls';
 
 interface MoneyInputProps {
@@ -27,62 +27,61 @@ export const MoneyInput: React.FC<MoneyInputProps> = ({
   const [showWarning, setShowWarning] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [localValue, setLocalValue] = useState(value);
+
+  // Sync local value with prop value
+  useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-
     console.log('=== MoneyInput handleChange ===', {
       newValue: e.target.value,
       currentValue: value,
     });
 
     const newValue = e.target.value;
-    // Only allow numbers and at most one decimal point
-    if (/[^0-9.]/.test(newValue) || (newValue.match(/\./g) || []).length > 1) {
-      setShowWarning(true);
-      return;
-    }
-    setShowWarning(false);
 
-    // If the value is empty, pass it through
+    // Allow empty input
     if (!newValue) {
+      setShowWarning(false);
+      setLocalValue('');
       onChange('');
       return;
     }
 
-    // Handle increment/decrement
-    if (newValue === '+' || newValue === '-') {
-      const currentValue = parseFloat(value.replace(/[^0-9.-]+/g, '') || '0');
-      const newNumericValue =
-        newValue === '+' ? currentValue + 1 : Math.max(0, currentValue - 1);
-      onChange(`€${newNumericValue.toFixed(2)}`);
+    // Only allow valid numeric input with at most one decimal point
+    const numericValue = newValue.replace(/[^0-9.]/g, '');
+    const parts = numericValue.split('.');
+
+    // Validate format
+    if (parts.length > 2 || !/^\d*\.?\d*$/.test(numericValue)) {
+      setShowWarning(true);
       return;
     }
 
-    // Pass through the numeric value without immediate formatting
-    const numericValue = newValue.replace(/[^0-9.]/g, '');
+    setShowWarning(false);
+    setLocalValue(numericValue);
     onChange(`€${numericValue}`);
   };
 
-  const handleInputFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleInputFocus = () => {
     onFocus?.();
   };
 
   const handleInputBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     // Only blur if clicking outside the wrapper
     if (!wrapperRef.current?.contains(e.relatedTarget as Node)) {
-      e.preventDefault();
-      e.stopPropagation();
       setShowWarning(false);
 
       // Format the value with decimals on blur
-      if (value) {
-        const numericValue = parseFloat(value.replace(/[^0-9.-]+/g, '') || '0');
+      if (localValue) {
+        const numericValue = parseFloat(
+          localValue.replace(/[^0-9.-]+/g, '') || '0'
+        );
         if (!isNaN(numericValue)) {
           const formattedValue = `€${numericValue.toFixed(2)}`;
+          setLocalValue(numericValue.toFixed(2));
           onChange(formattedValue);
         }
       }
@@ -91,8 +90,8 @@ export const MoneyInput: React.FC<MoneyInputProps> = ({
     }
   };
 
-  // Format the display value - strip € from input value since we show it separately
-  const displayValue = value.startsWith('€') ? value.slice(1) : value;
+  // Format the display value - strip € from input value and use local value for display
+  const displayValue = localValue || '';
 
   return (
     <div
@@ -106,6 +105,7 @@ export const MoneyInput: React.FC<MoneyInputProps> = ({
         <input
           ref={inputRef}
           type="text"
+          inputMode="decimal"
           value={displayValue}
           onChange={handleChange}
           onFocus={handleInputFocus}
@@ -120,7 +120,7 @@ export const MoneyInput: React.FC<MoneyInputProps> = ({
             ${
               isFocused ? 'border-2 border-blue-500' : 'border border-[#e0e1e4]'
             }
-            ${value ? 'pr-10' : ''}
+            ${localValue ? 'pr-10' : ''}
             focus:outline-none
             flex items-center
             leading-none
@@ -153,8 +153,22 @@ export const MoneyInput: React.FC<MoneyInputProps> = ({
         </div>
       )}
       <MoneyInputControls
-        value={value}
-        onChange={onChange}
+        value={localValue}
+        onChange={(newValue) => {
+          if (newValue === '+' || newValue === '-') {
+            const currentValue = parseFloat(localValue || '0');
+            const updatedValue =
+              newValue === '+'
+                ? currentValue + 1
+                : Math.max(0, currentValue - 1);
+            const formattedValue = updatedValue.toFixed(2);
+            setLocalValue(formattedValue);
+            onChange(`€${formattedValue}`);
+          } else {
+            setLocalValue(newValue);
+            onChange(newValue.startsWith('€') ? newValue : `€${newValue}`);
+          }
+        }}
         containerRef={wrapperRef}
       />
     </div>

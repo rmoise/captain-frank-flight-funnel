@@ -1,11 +1,9 @@
 import React from 'react';
-import { useAppSelector } from '@/store/hooks';
+import { useStore } from '@/lib/state/store';
 import { formatCurrency } from '@/utils/helpers';
 
 export const CompensationSummary: React.FC = () => {
-  const compensationAmount = useAppSelector(
-    (state) => state.compensation.compensationAmount
-  );
+  const { compensationAmount } = useStore();
 
   return (
     <div className="bg-white rounded-lg shadow-sm p-4">

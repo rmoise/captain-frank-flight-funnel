@@ -1,20 +1,28 @@
-import { useAppSelector } from '@/store/hooks';
+'use client';
+
+import { useCallback } from 'react';
+import { useStore } from '@/lib/state/store';
 
 export const usePhaseNavigation = () => {
-  const completedPhases = useAppSelector(
-    (state) => state.progress.completedPhases
+  const { currentPhase, completedPhases, setCurrentPhase, completePhase } =
+    useStore();
+
+  const moveToNextPhase = useCallback(() => {
+    if (currentPhase) {
+      completePhase(currentPhase);
+      setCurrentPhase(currentPhase + 1);
+    }
+  }, [currentPhase, completePhase, setCurrentPhase]);
+
+  const isPhaseCompleted = useCallback(
+    (phase: number) => completedPhases.includes(phase),
+    [completedPhases]
   );
 
-  const isPhaseCompleted = (phase: number) => {
-    return completedPhases.includes(phase);
-  };
-
-  const canAccessPhase = (phase: number, requiredPreviousPhases: number[]) => {
-    return requiredPreviousPhases.every((p) => isPhaseCompleted(p));
-  };
-
   return {
+    currentPhase,
+    completedPhases,
+    moveToNextPhase,
     isPhaseCompleted,
-    canAccessPhase,
   };
 };

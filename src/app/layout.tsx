@@ -1,9 +1,8 @@
 'use client';
 
 import { Heebo } from 'next/font/google';
-import { Provider } from 'react-redux';
-import { store } from '@/store';
 import { LoadingProvider } from '@/providers/LoadingProvider';
+import { NavigationProvider } from '@/components/providers/NavigationProvider';
 import './globals.css';
 import '@/styles/autofill.css';
 import Script from 'next/script';
@@ -33,7 +32,7 @@ export default function RootLayout({
           `}
         </Script>
       </head>
-      <body>
+      <body suppressHydrationWarning>
         <noscript>
           <iframe
             src="https://www.googletagmanager.com/ns.html?id=GTM-MBBVJT3C"
@@ -42,9 +41,9 @@ export default function RootLayout({
             style={{ display: 'none', visibility: 'hidden' }}
           />
         </noscript>
-        <Provider store={store}>
+        <NavigationProvider>
           <LoadingProvider>{children}</LoadingProvider>
-        </Provider>
+        </NavigationProvider>
       </body>
     </html>
   );

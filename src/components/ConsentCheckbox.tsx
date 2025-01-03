@@ -1,55 +1,97 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef, useLayoutEffect } from 'react';
 import { ChevronUpIcon } from '@heroicons/react/24/outline';
 import { motion } from 'framer-motion';
+import { useStore } from '@/lib/state/store';
 
 interface ConsentCheckboxProps {
   id?: string;
   label: string;
+  type: 'terms' | 'privacy' | 'marketing';
+  required?: boolean;
+  details?: string;
   checked?: boolean;
   onChange?: (checked: boolean) => void;
-  required?: boolean;
-  error?: boolean;
-  details?: string;
 }
 
 export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
   id,
   label,
+  type,
+  required = false,
+  details,
   checked = false,
   onChange,
-  required = false,
-  error = false,
-  details,
 }) => {
-  const [mounted, setMounted] = useState(false);
+  const {
+    termsAccepted,
+    privacyAccepted,
+    marketingAccepted,
+    setTermsAccepted,
+    setPrivacyAccepted,
+    setMarketingAccepted,
+    validationState,
+    currentPhase,
+  } = useStore();
+
   const [isExpanded, setIsExpanded] = useState(false);
   const [isTextTruncated, setIsTextTruncated] = useState(false);
+  const [isTouched, setIsTouched] = useState(false);
   const textRef = useRef<HTMLDivElement>(null);
+  const prevOverflowingRef = useRef<boolean | null>(null);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  // Get the current checked state based on type
+  const isChecked =
+    checked ||
+    (type === 'terms'
+      ? termsAccepted
+      : type === 'privacy'
+        ? privacyAccepted
+        : marketingAccepted);
 
-  useEffect(() => {
+  // Get the appropriate setter based on type
+  const setChecked =
+    type === 'terms'
+      ? setTermsAccepted
+      : type === 'privacy'
+        ? setPrivacyAccepted
+        : setMarketingAccepted;
+
+  // Use useLayoutEffect to check truncation before paint
+  useLayoutEffect(() => {
     const checkTruncation = () => {
       if (textRef.current) {
         const isOverflowing =
           textRef.current.scrollHeight > textRef.current.clientHeight;
-        setIsTextTruncated(isOverflowing);
+
+        // Only update if the value has changed
+        if (prevOverflowingRef.current !== isOverflowing) {
+          prevOverflowingRef.current = isOverflowing;
+          setIsTextTruncated(isOverflowing);
+        }
       }
     };
 
-    checkTruncation();
+    // Run the check after a short delay to ensure content is rendered
+    const timeoutId = setTimeout(checkTruncation, 0);
+
+    // Add resize listener
     window.addEventListener('resize', checkTruncation);
-    return () => window.removeEventListener('resize', checkTruncation);
+
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener('resize', checkTruncation);
+    };
   }, [label]);
 
   const handleChange = (e: React.MouseEvent) => {
     e.stopPropagation();
+    const newValue = !isChecked;
+    setChecked(newValue);
+    setIsTouched(true);
     if (onChange) {
-      onChange(!checked);
+      onChange(newValue);
     }
   };
 
@@ -59,16 +101,22 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
     }
   };
 
-  // Don't render anything until mounted to avoid hydration mismatch
-  if (!mounted) {
-    return null;
-  }
+  // Get validation state based on current phase
+  const stepToValidate = currentPhase === 1 ? 4 : currentPhase === 6 ? 2 : null;
+  const isValid = stepToValidate
+    ? validationState[stepToValidate] || false
+    : true;
+  const showError =
+    required &&
+    !isValid &&
+    (type === 'terms' || type === 'privacy') &&
+    isTouched;
 
   return (
     <div
       id={id}
       className={`flex flex-col bg-white rounded-xl border transition-colors hover:bg-gray-50 ${
-        error ? 'border-[#F54538]' : 'border-[#e0e1e4]'
+        showError ? 'border-[#F54538]' : 'border-[#e0e1e4]'
       }`}
     >
       <div
@@ -79,16 +127,16 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
           className={`
             mt-1 w-4 h-4 rounded border transition-colors cursor-pointer
             ${
-              checked
+              isChecked
                 ? 'bg-[#F54538] border-[#F54538]'
-                : error
+                : showError
                   ? 'border-[#F54538] hover:border-[#F54538]'
                   : 'border-zinc-300 hover:border-[#F54538]'
             }
           `}
           onClick={handleChange}
         >
-          {checked && (
+          {isChecked && (
             <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-white">
               <path
                 d="M20 6L9 17L4 12"
@@ -143,7 +191,7 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
               </div>
             </motion.div>
           )}
-          {error && (
+          {showError && (
             <div className="text-[#F54538] text-xs mt-1">
               This checkbox is required
             </div>

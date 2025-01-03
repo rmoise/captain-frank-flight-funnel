@@ -1,789 +1,711 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { motion } from 'framer-motion';
-import type { Answer } from '@/types/wizard';
-import { CheckCircleIcon } from '@heroicons/react/24/solid';
-import { QuestionAnswer } from '@/components/shared/QuestionAnswer';
-import type { Question } from '@/types/experience';
-import { useAppDispatch } from '@/store/hooks';
-import { setWizardAnswers } from '@/store/slices/bookingSlice';
-import { qaWizardConfig } from '@/config/qaWizard';
-import type { Flight } from '@/types/store';
-import { useStepValidation } from '@/hooks/useStepValidation';
-
-export type { Question, Answer };
-
-export interface QAWizardProps {
-  questions: Question[];
-  onComplete: (answers: Answer[]) => void;
-  onInteract?: () => void;
-  initialAnswers?: Answer[];
-  phase?: number;
-  stepNumber?: number;
-  selectedFlight?: Flight | Flight[] | null | undefined;
+declare global {
+  interface Window {
+    __wizardSuccessTimeout?: NodeJS.Timeout;
+  }
 }
 
+import React, { useCallback, useMemo, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Answer } from '../../types/wizard';
+import { Question } from '../../types/experience';
+import { QuestionAnswer } from '../shared/QuestionAnswer';
+import type { Flight } from '../../types/store';
+import { useStore } from '../../lib/state/store';
+import type { StoreState } from '../../lib/state/store';
+import { CheckCircleIcon } from '@heroicons/react/24/solid';
+import { qaWizardConfig } from '@/config/qaWizard';
+
+// Add type for wizard step keys
+type WizardStepKey =
+  | 'travel_status'
+  | 'informed_date'
+  | 'issue'
+  | 'phase1'
+  | 'default';
+
+interface QAWizardProps {
+  questions: Question[];
+  onComplete?: (answers: Answer[]) => void;
+  onInteract?: () => void;
+  selectedFlight?: Flight | null;
+  initialAnswers?: Answer[];
+}
+
+// Define handleOptionClick outside the component
+export const handleOptionClick = (
+  questionId: string,
+  value: string | number | boolean,
+  wizardAnswers: Answer[],
+  batchUpdateWizardState: (updates: Partial<StoreState>) => void
+) => {
+  // Get current answers
+  const currentAnswers = [...wizardAnswers];
+  const answerIndex = currentAnswers.findIndex(
+    (a) => a.questionId === questionId
+  );
+
+  // Create new answer or update existing
+  const newAnswer = {
+    questionId,
+    value,
+    shouldShow: true,
+  };
+
+  if (answerIndex >= 0) {
+    currentAnswers[answerIndex] = newAnswer;
+  } else {
+    currentAnswers.push(newAnswer);
+  }
+
+  // Only update answers, no validation
+  batchUpdateWizardState({
+    wizardAnswers: currentAnswers,
+    lastAnsweredQuestion: questionId,
+  });
+};
+
 export const QAWizard: React.FC<QAWizardProps> = ({
-  questions,
+  questions = [],
   onComplete,
   onInteract,
+  selectedFlight,
   initialAnswers = [],
-  phase = 1,
-  stepNumber = 2,
-  selectedFlight = undefined,
 }) => {
-  console.log('=== QAWizard Render ===', {
-    hasQuestions: !!questions,
-    questionsLength: questions?.length,
-    initialAnswers,
-    phase,
-    stepNumber,
-    selectedFlight,
-  });
+  const {
+    wizardAnswers,
+    wizardCurrentSteps,
+    wizardSuccessStates,
+    batchUpdateWizardState,
+    handleWizardComplete,
+    lastAnsweredQuestion,
+  } = useStore();
 
-  // All state hooks
-  const [currentStep, setCurrentStep] = useState(() => {
-    try {
-      // Try to load saved answers first
-      const savedAnswers = localStorage.getItem('wizardAnswers');
-      if (savedAnswers) {
-        const parsed = JSON.parse(savedAnswers);
-        const filteredAnswers = parsed.filter((answer: Answer) =>
-          questions.some((q) => q.id === answer.questionId)
-        );
+  // Get wizard ID and type
+  const wizardId = questions?.[0]?.id;
+  const wizardType = useMemo((): WizardStepKey => {
+    const firstQuestionId = questions[0]?.id;
+    if (!firstQuestionId) return 'default';
+    const type = firstQuestionId.split('_')[0];
+    // Map 'informed' to 'informed_date'
+    if (type === 'informed') return 'informed_date';
+    return (type === 'travel' ? 'travel_status' : type) as WizardStepKey;
+  }, [questions]);
 
-        if (filteredAnswers.length > 0) {
-          // Get active questions based on saved answers
-          const activeQs = questions.filter(
-            (q) => !q.showIf || q.showIf(filteredAnswers)
-          );
-          // Find the index of the last answered question
-          const lastAnsweredId =
-            filteredAnswers[filteredAnswers.length - 1].questionId;
-          const lastAnsweredIndex = activeQs.findIndex(
-            (q) => q.id === lastAnsweredId
-          );
-          return lastAnsweredIndex >= 0
-            ? lastAnsweredIndex
-            : activeQs.length - 1;
-        }
-      }
+  // Get success state for this wizard type
+  const successState = useMemo(() => {
+    return wizardSuccessStates[wizardType] || { showing: false, message: '' };
+  }, [wizardSuccessStates, wizardType]);
 
-      // If no saved answers, check initialAnswers
-      if (initialAnswers.length > 0) {
-        const filteredInitial = initialAnswers.filter((answer) =>
-          questions.some((q) => q.id === answer.questionId)
-        );
-        if (filteredInitial.length > 0) {
-          const activeQs = questions.filter(
-            (q) => !q.showIf || q.showIf(filteredInitial)
-          );
-          const lastAnsweredId =
-            filteredInitial[filteredInitial.length - 1].questionId;
-          const lastAnsweredIndex = activeQs.findIndex(
-            (q) => q.id === lastAnsweredId
-          );
-          return lastAnsweredIndex >= 0
-            ? lastAnsweredIndex
-            : activeQs.length - 1;
-        }
-      }
-      return 0;
-    } catch (error) {
-      console.error('Failed to load last question position:', error);
-      return 0;
-    }
-  });
-
-  const [isCompleted, setIsCompleted] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
-  const [answers, setAnswers] = useState<Answer[]>(() => {
-    // Try to load saved answers first, fallback to initialAnswers
-    try {
-      const savedAnswers = localStorage.getItem('wizardAnswers');
-      if (savedAnswers) {
-        const parsed = JSON.parse(savedAnswers);
-        return parsed.filter((answer: Answer) =>
-          questions.some((q) => q.id === answer.questionId)
-        );
-      }
-    } catch (error) {
-      console.error('Failed to load saved answers:', error);
-    }
-    return initialAnswers.filter((answer) =>
-      questions.some((q) => q.id === answer.questionId)
-    );
-  });
-  const [isEditingMoney, setIsEditingMoney] = useState(false);
-  const [lastActiveStep, setLastActiveStep] = useState<number | null>(null);
-  const [showingSuccess, setShowingSuccess] = useState(false);
-
-  // Redux hooks
-  const dispatch = useAppDispatch();
-  const { validateStep } = useStepValidation();
-
-  // Memoized values
-  const getActiveQuestions = useCallback(
-    (currentAnswers: Answer[]) => {
-      console.log('getActiveQuestions called with:', {
-        hasQuestions: !!questions,
-        questionsLength: questions?.length,
-        currentAnswers,
-      });
-
-      if (!questions || !Array.isArray(questions)) {
-        console.warn('No questions array available');
-        return [];
-      }
-
-      if (questions.length === 0) {
-        console.warn('Questions array is empty');
-        return [];
-      }
-
-      // Always start with the first question
-      const activeQuestions = [questions[0]];
-      console.log('First question:', questions[0]);
-
-      // Add all questions that meet their showIf conditions
-      questions.slice(1).forEach((question) => {
-        // Skip questions that are related questions of other questions
-        const isRelatedQuestion = questions.some((q) =>
-          q.relatedQuestions?.some((rq) => rq.id === question.id)
-        );
-
-        if (
-          !isRelatedQuestion &&
-          (!question.showIf || question.showIf(currentAnswers))
-        ) {
-          activeQuestions.push(question);
-        }
-      });
-
-      console.log('Final active questions:', activeQuestions);
-      return activeQuestions;
-    },
-    [questions]
+  // Get current step for this instance
+  const wizardCurrentStep = useMemo(
+    () => wizardCurrentSteps[wizardType] || 0,
+    [wizardCurrentSteps, wizardType]
   );
 
-  const activeQuestions = useMemo(
-    () => getActiveQuestions(answers),
-    [getActiveQuestions, answers]
-  );
-
-  // Effect to handle step management
-  useEffect(() => {
-    if (isEditingMoney && lastActiveStep !== null) {
-      setCurrentStep(lastActiveStep);
-    }
-  }, [isEditingMoney, lastActiveStep]);
-
-  const isPathComplete = React.useMemo(() => {
-    const requiredQuestions =
-      questions?.filter((q) => !q.showIf || q.showIf(answers || [])) || [];
-    return requiredQuestions.every(
-      (question) =>
-        answers?.some((answer: Answer) => {
-          if (answer.questionId !== question.id) return false;
-          if (question.type === 'date') {
-            return !!answer.value;
-          }
-          if (question.type === 'money') {
-            const value = answer.value;
-            if (!value) return false;
-            const numValue = parseFloat(value.replace(/[^0-9.-]+/g, ''));
-            return !isNaN(numValue) && numValue > 0;
-          }
-          return !!answer.value;
-        }) ?? false
-    );
-  }, [questions, answers]);
-
-  // Effect to sync with initialAnswers changes
-  useEffect(() => {
-    // Only run this effect on mount or when initialAnswers actually change
-    const filteredAnswers = initialAnswers.filter((answer) =>
-      questions.some((q) => q.id === answer.questionId)
-    );
-
-    // Only update if we have initial answers and current answers are empty
-    if (filteredAnswers.length > 0 && answers.length === 0) {
-      const currentActiveQuestions = getActiveQuestions(filteredAnswers);
-      const moneyQuestion = currentActiveQuestions.find(
-        (q) => q.type === 'money'
-      );
-      const moneyAnswer = filteredAnswers.find(
-        (a) => moneyQuestion && a.questionId === moneyQuestion.id
-      );
-      const flightSelectorIndex = currentActiveQuestions.findIndex(
-        (q) => q.id === 'alternative_flight'
-      );
-
-      if (moneyAnswer && flightSelectorIndex !== -1) {
-        setCurrentStep(flightSelectorIndex);
-        setIsEditingMoney(true);
-        setLastActiveStep(flightSelectorIndex);
-      } else {
-        const lastAnsweredQuestionId =
-          filteredAnswers[filteredAnswers.length - 1]?.questionId;
-        const lastAnsweredStep = currentActiveQuestions.findIndex(
-          (q) => q.id === lastAnsweredQuestionId
-        );
-
-        if (lastAnsweredStep !== -1) {
-          setCurrentStep(lastAnsweredStep);
-          setLastActiveStep(null);
-        } else {
-          // If we can't find the last answered question, go to the last active question
-          setCurrentStep(currentActiveQuestions.length - 1);
-          setLastActiveStep(null);
-        }
-      }
-
-      setAnswers(filteredAnswers);
-    }
-  }, [initialAnswers, questions, getActiveQuestions, answers.length]);
-
-  // Effect to log state changes
-  useEffect(() => {
-    console.log('=== QAWizard State Change ===', {
-      hasQuestions: !!questions,
-      questionsLength: questions?.length,
-      activeQuestionsLength: activeQuestions?.length,
-      currentStep,
-      answers,
-      isEditingMoney,
-      lastActiveStep,
+  // Filter answers specific to this wizard instance
+  const instanceAnswers = useMemo(() => {
+    console.log('\n=== QAWizard instanceAnswers initialization ===');
+    console.log('Initial state:', {
+      wizardType,
+      initialAnswers,
+      wizardAnswers,
     });
-  }, [
-    questions,
-    activeQuestions,
-    currentStep,
-    answers,
-    isEditingMoney,
-    lastActiveStep,
-  ]);
 
-  // Effect to validate answers whenever they change
-  useEffect(() => {
-    console.log('\n=== QAWizard Answer Validation ===');
-    console.log('Current answers:', answers);
-    console.log('Active questions:', activeQuestions);
+    let answers: Answer[] = [];
+    if (initialAnswers && initialAnswers.length > 0) {
+      console.log('Using initial answers:', initialAnswers);
+      answers = initialAnswers;
+    } else if (wizardType === 'travel_status') {
+      console.log('Using travel_status answers');
+      // Get all relevant answers from wizardAnswers
+      answers = wizardAnswers.filter(
+        (a) =>
+          a.questionId === 'travel_status' ||
+          a.questionId === 'refund_status' ||
+          a.questionId === 'ticket_cost'
+      );
+      console.log('Using filtered travel status answers:', answers);
+    } else if (wizardType === 'informed_date') {
+      console.log('Using informed_date answers');
+      answers =
+        wizardAnswers.filter(
+          (a) =>
+            a.questionId === 'informed_date' ||
+            a.questionId === 'specific_informed_date'
+        ) || [];
+      console.log('Filtered informed date answers:', answers);
+    } else {
+      console.log('Using wizard answers:', wizardAnswers);
+      answers = wizardAnswers || [];
+    }
 
-    // Check if all active questions have valid answers
-    const isValid = activeQuestions.every((question) => {
-      const answer = answers.find((a) => a.questionId === question.id);
-      if (!answer) {
-        console.log(`Question ${question.id} has no answer`);
-        return false;
-      }
+    console.log('Final instance answers:', {
+      wizardType,
+      answers,
+    });
+    console.log('=== End QAWizard instanceAnswers initialization ===\n');
 
-      if (question.type === 'money') {
-        const numValue = parseFloat(answer.value.replace(/[^0-9.-]+/g, ''));
-        const isValidMoney = !isNaN(numValue) && numValue > 0;
-        console.log(`Question ${question.id} money validation:`, {
-          numValue,
-          isValidMoney,
+    return answers;
+  }, [wizardType, initialAnswers, wizardAnswers]);
+
+  // All memoized values must be at the top level
+  const visibleQuestions = useMemo(() => {
+    try {
+      console.log('\n=== QAWizard visibleQuestions calculation ===');
+      console.log('Initial state:', {
+        questions,
+        instanceAnswers,
+        wizardType,
+      });
+
+      if (!questions || !Array.isArray(questions) || questions.length === 0) {
+        console.log('Early return due to no questions:', {
+          hasQuestions: !!questions,
+          isArray: Array.isArray(questions),
+          length: questions?.length,
+          wizardType,
         });
-        return isValidMoney;
+        return [];
       }
 
-      if (question.type === 'date') {
-        const isValidDate = !!answer.value;
-        console.log(`Question ${question.id} date validation:`, isValidDate);
-        return isValidDate;
-      }
+      // Always include the first question
+      const firstQuestion = questions[0];
+      const remainingQuestions = questions.slice(1);
 
-      const isValidAnswer = answer.value !== undefined && answer.value !== '';
-      console.log(`Question ${question.id} general validation:`, isValidAnswer);
-      return isValidAnswer;
-    });
-
-    console.log('=== QAWizard Validation Result ===', {
-      answers,
-      stepNumber,
-      isValid,
-      activeQuestions: activeQuestions.map((q) => q.id),
-    });
-
-    validateStep(stepNumber, isValid);
-  }, [answers, stepNumber, validateStep, activeQuestions]);
-
-  // Don't automatically call handleComplete when all questions are answered
-  useEffect(() => {
-    if (isPathComplete && currentStep === activeQuestions.length - 1) {
-      // Instead of auto-completing, just save the answers
-      try {
-        localStorage.setItem('wizardAnswers', JSON.stringify(answers));
-        dispatch(setWizardAnswers(answers));
-      } catch (error) {
-        console.error('Failed to save answers:', error);
-      }
-    }
-  }, [isPathComplete, currentStep, activeQuestions.length, answers, dispatch]);
-
-  const isAnswerValid = useCallback(() => {
-    console.log('\n=== QAWizard Current Answer Validation ===');
-
-    if (!activeQuestions?.length) {
-      console.log('No active questions');
-      return false;
-    }
-
-    const currentQuestion = activeQuestions[currentStep];
-    if (!currentQuestion) {
-      console.log('No current question');
-      return false;
-    }
-
-    const currentAnswer = answers?.find(
-      (a) => a.questionId === currentQuestion?.id
-    )?.value;
-
-    console.log('Validating answer:', {
-      currentQuestion,
-      currentAnswer,
-      type: currentQuestion.type,
-    });
-
-    if (currentQuestion.type === 'money') {
-      if (!currentAnswer) {
-        console.log('No money answer');
-        return false;
-      }
-      const numValue = parseFloat(currentAnswer.replace(/[^0-9.-]+/g, ''));
-      const isValid = !isNaN(numValue) && numValue > 0;
-      console.log('Money validation:', { numValue, isValid });
-      return isValid;
-    }
-
-    if (currentQuestion.type === 'date') {
-      const isValid = !!currentAnswer;
-      console.log('Date validation:', isValid);
-      return isValid;
-    }
-
-    const isValid = currentAnswer !== undefined && currentAnswer !== '';
-    console.log('General validation:', isValid);
-    return isValid;
-  }, [answers, activeQuestions, currentStep]);
-
-  const handleComplete = useCallback(() => {
-    console.log('Handle complete called', {
-      currentStep,
-      activeQuestionsLength: activeQuestions.length,
-      isValid: isAnswerValid(),
-      answers,
-      stepNumber,
-    });
-
-    if (!isAnswerValid()) {
-      console.log('Current answer is not valid');
-      return;
-    }
-
-    // Only complete if we have answers and all questions are answered
-    const allQuestionsAnswered = activeQuestions.every((question) => {
-      const answer = answers.find((a) => a.questionId === question.id);
-      if (!answer) return false;
-
-      if (question.type === 'money') {
-        const numValue = parseFloat(answer.value.replace(/[^0-9.-]+/g, ''));
-        return !isNaN(numValue) && numValue > 0;
-      }
-
-      if (question.type === 'date') {
-        return !!answer.value;
-      }
-
-      return answer.value !== undefined && answer.value !== '';
-    });
-
-    console.log('All questions answered:', allQuestionsAnswered);
-
-    if (!allQuestionsAnswered) {
-      console.log('Not all questions are answered');
-      return;
-    }
-
-    console.log('All validation passed, completing wizard');
-
-    // Only complete if we have answers
-    if (answers.length > 0) {
-      const currentAnswer = answers[answers.length - 1];
-      const currentQuestion = questions.find(
-        (q) => q.id === currentAnswer.questionId
-      );
-      const selectedOption = currentQuestion?.options?.find(
-        (opt) => opt.value === currentAnswer.value
-      );
-
-      console.log('=== QAWizard Complete ===', {
-        currentAnswer,
-        currentQuestion,
-        selectedOption,
-        showConfetti: selectedOption?.showConfetti,
-        answers,
-        stepNumber,
-      });
-
-      const message = selectedOption?.showConfetti
-        ? 'Yay, you have a good chance of claiming it.'
-        : 'Your responses have been recorded.';
-
-      console.log('Setting message:', message);
-
-      // Set completion state
-      setIsCompleted(true);
-      setSuccessMessage(message);
-      setShowingSuccess(true);
-
-      // Save answers to localStorage and Redux
-      try {
-        localStorage.setItem('wizardAnswers', JSON.stringify(answers));
-        dispatch(setWizardAnswers(answers));
-      } catch (error) {
-        console.error('Failed to save answers:', error);
-      }
-
-      // Call onComplete with answers
-      onComplete(answers);
-
-      // After 2 seconds, hide success message and show questions
-      setTimeout(() => {
-        setShowingSuccess(false);
-        // If this is step 3, trigger step 4 to open
-        if (stepNumber === 3) {
-          console.log('Step 3 completed, opening step 4');
-          validateStep(3, true); // Validate step 3
-          // Small delay to ensure step 3 validation is processed
-          setTimeout(() => {
-            validateStep(4, false); // Initialize step 4 as not complete
-          }, 100);
-        }
-      }, 2000);
-
-      // Validate current step
-      validateStep(stepNumber, true);
-    }
-  }, [
-    answers,
-    isAnswerValid,
-    onComplete,
-    currentStep,
-    activeQuestions,
-    questions,
-    stepNumber,
-    validateStep,
-    dispatch,
-  ]);
-
-  const goToNext = useCallback(() => {
-    if (
-      activeQuestions?.length > 0 &&
-      currentStep < activeQuestions.length - 1
-    ) {
-      setCurrentStep((prev) => Math.min(prev + 1, activeQuestions.length - 1));
-    }
-  }, [currentStep, activeQuestions]);
-
-  const goToPrevious = useCallback(() => {
-    if (currentStep > 0) {
-      // Check if the current question is a money question
-      const currentQuestion = activeQuestions[currentStep];
-      if (currentQuestion?.type === 'money') {
-        setIsEditingMoney(false);
-      }
-      setCurrentStep((prev) => Math.max(0, prev - 1));
-    }
-  }, [currentStep, activeQuestions]);
-
-  // Effect to save current step
-  useEffect(() => {
-    try {
-      // Save current step in the answers array
-      const currentAnswers = answers.map((answer) => ({
-        ...answer,
-        isActiveSelection:
-          answer.questionId === activeQuestions[currentStep]?.id,
-      }));
-      localStorage.setItem('wizardAnswers', JSON.stringify(currentAnswers));
-    } catch (error) {
-      console.error('Failed to save current step:', error);
-    }
-  }, [currentStep, answers, activeQuestions]);
-
-  // Callback hooks
-  const handleAnswer = useCallback(
-    (questionId: string, value: string) => {
-      console.log('\n=== QAWizard handleAnswer ===', { questionId, value });
-
-      // Update answers
-      setAnswers((prevAnswers) => {
-        const newAnswers = [...prevAnswers];
-        const existingAnswerIndex = newAnswers.findIndex(
-          (a) => a.questionId === questionId
-        );
-
-        if (existingAnswerIndex !== -1) {
-          newAnswers[existingAnswerIndex] = {
-            ...newAnswers[existingAnswerIndex],
-            value,
-          };
-        } else {
-          newAnswers.push({ questionId, value });
-        }
-
-        // Save answers to localStorage and Redux
-        try {
-          console.log('Saving answers:', newAnswers);
-          localStorage.setItem('wizardAnswers', JSON.stringify(newAnswers));
-          dispatch(setWizardAnswers(newAnswers));
-        } catch (error) {
-          console.error('Failed to save answers:', error);
-        }
-
-        // Call onInteract if provided
-        if (onInteract) {
-          onInteract();
-        }
-
-        // Validate the current step
-        const currentQuestion = activeQuestions[currentStep];
-        if (currentQuestion) {
-          const answer = newAnswers.find(
-            (a) => a.questionId === currentQuestion.id
-          );
-          let isValid = false;
-
-          if (answer) {
-            if (currentQuestion.type === 'money') {
-              const numValue = parseFloat(
-                answer.value.replace(/[^0-9.-]+/g, '')
-              );
-              isValid = !isNaN(numValue) && numValue > 0;
-            } else if (currentQuestion.type === 'date') {
-              isValid = !!answer.value;
-            } else {
-              isValid = answer.value !== undefined && answer.value !== '';
+      // Filter remaining questions based on showIf conditions
+      const filteredRemaining = remainingQuestions.filter(
+        (question: Question) => {
+          // If this question has a showIf condition, evaluate it
+          if (question.showIf) {
+            try {
+              // Get all answers for evaluation
+              const shouldShow = question.showIf(wizardAnswers);
+              console.log(`Evaluating showIf for question ${question.id}:`, {
+                shouldShow,
+                answers: wizardAnswers,
+                condition: question.showIf.toString(),
+              });
+              return shouldShow;
+            } catch (err) {
+              console.error('Error evaluating showIf condition:', err);
+              return false;
             }
           }
 
-          console.log('Validating current step:', {
-            questionId: currentQuestion.id,
-            answer,
-            isValid,
-          });
+          // If no showIf condition, show the question
+          console.log(
+            'Question has no showIf condition, showing:',
+            question.id
+          );
+          return true;
+        }
+      );
 
-          validateStep(stepNumber, isValid);
+      // Combine first question with filtered remaining questions
+      const filtered = [firstQuestion, ...filteredRemaining];
+
+      console.log('Filtered questions:', filtered);
+      console.log('=== End QAWizard visibleQuestions calculation ===\n');
+
+      return filtered;
+    } catch (err) {
+      console.error('Error getting visible questions:', err);
+      return [];
+    }
+  }, [questions, instanceAnswers, wizardType, wizardAnswers]);
+
+  // Get current question with defensive checks
+  const currentQuestion = useMemo(() => {
+    console.log('\n=== QAWizard currentQuestion calculation ===');
+    console.log('Current state:', {
+      visibleQuestions,
+      wizardCurrentStep,
+      questionsLength: visibleQuestions?.length,
+    });
+
+    // Ensure we have valid questions and step
+    if (
+      !visibleQuestions ||
+      !Array.isArray(visibleQuestions) ||
+      visibleQuestions.length === 0
+    ) {
+      console.log('No visible questions available');
+      return null;
+    }
+
+    // Ensure step is within bounds
+    if (wizardCurrentStep < 0 || wizardCurrentStep >= visibleQuestions.length) {
+      console.log('Step out of bounds, resetting to 0');
+      batchUpdateWizardState({
+        wizardCurrentSteps: {
+          ...wizardCurrentSteps,
+          [wizardType]: 0,
+        },
+      });
+      return visibleQuestions[0];
+    }
+
+    const question = visibleQuestions[wizardCurrentStep];
+    console.log('Selected question:', question);
+    console.log('=== End QAWizard currentQuestion calculation ===\n');
+    return question;
+  }, [
+    visibleQuestions,
+    wizardCurrentStep,
+    batchUpdateWizardState,
+    wizardCurrentSteps,
+    wizardType,
+  ]);
+
+  // Check if current question is answered
+  const isCurrentQuestionAnswered = useMemo(() => {
+    if (!currentQuestion) return false;
+    console.log('Checking if question is answered:', {
+      questionId: currentQuestion.id,
+      instanceAnswers,
+      wizardAnswers,
+    });
+    return (
+      instanceAnswers.some((a) => a.questionId === currentQuestion.id) ||
+      wizardAnswers.some((a) => a.questionId === currentQuestion.id)
+    );
+  }, [currentQuestion, instanceAnswers, wizardAnswers]);
+
+  // Get current answer for a question
+  const getCurrentAnswer = useCallback(
+    (questionId: string): string => {
+      const answer =
+        instanceAnswers.find((a) => a.questionId === questionId) ||
+        wizardAnswers.find((a) => a.questionId === questionId);
+      return answer?.value?.toString() || '';
+    },
+    [instanceAnswers, wizardAnswers]
+  );
+
+  // Handle answer selection
+  const handleSelect = useCallback(
+    (questionId: string, value: string) => {
+      // Call onInteract when user selects an answer
+      if (onInteract) {
+        onInteract();
+      }
+
+      console.log('\n=== QAWizard handleSelect ===');
+      console.log('Initial state:', {
+        questionId,
+        value,
+        currentAnswers: wizardAnswers,
+        instanceAnswers,
+        wizardType,
+      });
+
+      const newAnswer: Answer = {
+        questionId,
+        value,
+        shouldShow: true,
+      };
+
+      // Get all existing answers except for the one we're updating
+      const otherAnswers = wizardAnswers.filter(
+        (a) => a.questionId !== questionId
+      );
+
+      // For informed_date wizard, ensure we keep both the informed_date and specific_informed_date answers
+      // Also preserve answers from other wizards
+      let updatedAnswers = [...otherAnswers, newAnswer];
+
+      if (wizardType === 'informed_date') {
+        console.log('Handling informed date answer:', {
+          questionId,
+          value,
+          existingAnswers: wizardAnswers,
+        });
+
+        // Keep answers from travel_status wizard
+        const travelStatusAnswers = wizardAnswers.filter(
+          (a) =>
+            a.questionId === 'travel_status' ||
+            a.questionId === 'refund_status' ||
+            a.questionId === 'ticket_cost'
+        );
+
+        // For specific_informed_date, ensure we keep both answers
+        if (questionId === 'specific_informed_date') {
+          const informedDateAnswer = wizardAnswers.find(
+            (a) => a.questionId === 'informed_date'
+          );
+          if (informedDateAnswer) {
+            updatedAnswers = [...updatedAnswers, informedDateAnswer];
+          }
         }
 
-        return newAnswers;
+        updatedAnswers = [...travelStatusAnswers, ...updatedAnswers];
+      } else if (wizardType === 'travel_status') {
+        // Keep answers from informed_date wizard
+        const informedDateAnswers = wizardAnswers.filter(
+          (a) =>
+            a.questionId === 'informed_date' ||
+            a.questionId === 'specific_informed_date'
+        );
+        updatedAnswers = [...informedDateAnswers, ...updatedAnswers];
+      }
+
+      console.log('Updating answers:', {
+        newAnswer,
+        updatedAnswers,
+        wizardType,
+        preservedAnswers: updatedAnswers.filter(
+          (a) => a.questionId !== questionId
+        ),
+      });
+
+      // Update the store with new answers
+      batchUpdateWizardState({
+        wizardAnswers: updatedAnswers,
+        lastAnsweredQuestion: questionId,
       });
     },
     [
-      dispatch,
+      wizardAnswers,
+      batchUpdateWizardState,
       onInteract,
-      activeQuestions,
-      currentStep,
-      stepNumber,
-      validateStep,
+      instanceAnswers,
+      wizardType,
     ]
   );
 
-  // Don't render if no questions
-  if (!questions || !Array.isArray(questions)) {
-    console.warn('QAWizard: questions prop is not an array');
-    return null;
-  }
-
-  if (questions.length === 0) {
-    console.warn('QAWizard: questions array is empty');
-    return null;
-  }
-
-  // Ensure we have at least one question to show
-  const visibleQuestions =
-    activeQuestions.length > 0 ? activeQuestions : [questions[0]];
-  console.log('=== QAWizard Visible Questions ===', {
-    visibleQuestions: visibleQuestions.map((q) => ({ id: q.id, text: q.text })),
-    currentStep,
-    answers,
-  });
-
-  // Main render
-  // Render completed state if needed
-  if (isCompleted) {
-    const currentAnswer = answers[answers.length - 1];
-    const currentQuestion = questions.find(
-      (q) => q.id === currentAnswer.questionId
-    );
-    const selectedOption = currentQuestion?.options?.find(
-      (opt) => opt.value === currentAnswer.value
-    );
-
-    if (showingSuccess) {
-      return (
-        <section className={qaWizardConfig.spacing.questionGap}>
-          <div
-            className={`${qaWizardConfig.spacing.optionGap} min-h-[300px] flex flex-col justify-center`}
-          >
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ delay: 0.2 }}
-              className={qaWizardConfig.success.icon.wrapper}
-            >
-              {selectedOption?.showConfetti ? (
-                <div className={qaWizardConfig.success.icon.emoji}>
-                  <span style={{ fontSize: '64px', lineHeight: '1' }}>🎉</span>
-                </div>
-              ) : (
-                <CheckCircleIcon
-                  className={qaWizardConfig.success.icon.check}
-                />
-              )}
-            </motion.div>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.4 }}
-              className={qaWizardConfig.success.message.wrapper}
-            >
-              <h2 className={qaWizardConfig.success.message.title}>
-                {successMessage}
-              </h2>
-              <p className={qaWizardConfig.success.message.subtitle}>
-                We&apos;re processing your information...
-              </p>
-            </motion.div>
-          </div>
-        </section>
-      );
+  const goToNext = useCallback(() => {
+    // Don't proceed if current question isn't answered or null
+    if (!isCurrentQuestionAnswered || !currentQuestion) {
+      return;
     }
 
-    return (
-      <div className={qaWizardConfig.spacing.questionGap}>
-        <div className={qaWizardConfig.spacing.optionGap}>
-          <QuestionAnswer
-            question={visibleQuestions[currentStep]}
-            selectedOption={
-              answers?.find(
-                (a) => a.questionId === visibleQuestions[currentStep].id
-              )?.value || ''
-            }
-            onSelect={handleAnswer}
-            currentStep={currentStep}
-            totalSteps={visibleQuestions.length}
-            selectedFlight={selectedFlight}
-          />
+    // Get the current answer
+    const currentAnswer =
+      instanceAnswers.find((a) => a.questionId === currentQuestion.id) ||
+      wizardAnswers.find((a) => a.questionId === currentQuestion.id);
 
-          {/* Navigation buttons */}
-          <div className={qaWizardConfig.spacing.navigationWrapper}>
-            <button
-              onClick={goToPrevious}
-              disabled={currentStep === 0}
-              className={`${qaWizardConfig.spacing.buttonBase} ${
-                currentStep === 0
-                  ? qaWizardConfig.spacing.buttonPreviousDisabled
-                  : qaWizardConfig.spacing.buttonPreviousEnabled
-              }`}
-            >
-              Previous
-            </button>
-            {currentStep === visibleQuestions.length - 1 && !showingSuccess && (
-              <button
-                onClick={handleComplete}
-                disabled={!isAnswerValid()}
-                className={`${qaWizardConfig.spacing.buttonBase} ${
-                  !isAnswerValid()
-                    ? qaWizardConfig.spacing.buttonNextDisabled
-                    : qaWizardConfig.spacing.buttonNextEnabled
-                }`}
-              >
-                Complete
-              </button>
-            )}
-            {currentStep < visibleQuestions.length - 1 && (
-              <button
-                onClick={goToNext}
-                disabled={!isAnswerValid()}
-                className={`${qaWizardConfig.spacing.buttonBase} ${
-                  !isAnswerValid()
-                    ? qaWizardConfig.spacing.buttonNextDisabled
-                    : qaWizardConfig.spacing.buttonNextEnabled
-                }`}
-              >
-                Next
-              </button>
-            )}
-          </div>
-        </div>
+    if (!currentAnswer) {
+      return;
+    }
+
+    // Get the selected option
+    const selectedOption = currentQuestion.options?.find(
+      (opt) => opt.value.toString() === currentAnswer.value?.toString()
+    );
+
+    // If we're on the last question, show success
+    if (wizardCurrentStep === visibleQuestions.length - 1) {
+      const successMessage = selectedOption?.showConfetti
+        ? 'Yay, you have a good chance of claiming it.'
+        : 'Your responses have been recorded.';
+
+      // For informed date wizard, use the proper ID
+      const completeWizardId =
+        wizardType === 'informed_date' ? 'informed_date' : wizardId;
+
+      // Let the store handle completion with current answers
+      if (completeWizardId) {
+        console.log('Completing wizard:', {
+          wizardId: completeWizardId,
+          wizardType,
+          successMessage,
+          selectedOption,
+        });
+
+        // Get only the relevant answers for this wizard type
+        const relevantAnswers =
+          wizardType === 'informed_date'
+            ? wizardAnswers.filter(
+                (a) =>
+                  a.questionId === 'informed_date' ||
+                  a.questionId === 'specific_informed_date'
+              )
+            : wizardType === 'travel_status'
+              ? wizardAnswers.filter(
+                  (a) =>
+                    a.questionId === 'travel_status' ||
+                    a.questionId === 'refund_status' ||
+                    a.questionId === 'ticket_cost'
+                )
+              : wizardAnswers;
+
+        // Keep answers from other wizards
+        const otherWizardAnswers =
+          wizardType === 'informed_date'
+            ? wizardAnswers.filter(
+                (a) =>
+                  a.questionId === 'travel_status' ||
+                  a.questionId === 'refund_status' ||
+                  a.questionId === 'ticket_cost'
+              )
+            : wizardType === 'travel_status'
+              ? wizardAnswers.filter(
+                  (a) =>
+                    a.questionId === 'informed_date' ||
+                    a.questionId === 'specific_informed_date'
+                )
+              : [];
+
+        const combinedAnswers = [...otherWizardAnswers, ...relevantAnswers];
+
+        console.log('Completing with filtered answers:', {
+          wizardType,
+          relevantAnswers,
+          otherWizardAnswers,
+          combinedAnswers,
+          allAnswers: wizardAnswers,
+        });
+
+        handleWizardComplete(completeWizardId, combinedAnswers, successMessage);
+
+        // Call onComplete callback if provided
+        if (onComplete) {
+          onComplete(combinedAnswers);
+        }
+      }
+      return;
+    }
+
+    // Move to the next step while preserving the current answer
+    const nextStep = wizardCurrentStep + 1;
+    if (nextStep < visibleQuestions.length) {
+      batchUpdateWizardState({
+        wizardCurrentSteps: {
+          ...wizardCurrentSteps,
+          [wizardType]: nextStep,
+        },
+        lastAnsweredQuestion: currentQuestion.id,
+        wizardAnswers: wizardAnswers,
+      });
+    }
+  }, [
+    isCurrentQuestionAnswered,
+    currentQuestion,
+    instanceAnswers,
+    wizardAnswers,
+    wizardCurrentStep,
+    visibleQuestions.length,
+    wizardType,
+    wizardId,
+    handleWizardComplete,
+    onComplete,
+    wizardCurrentSteps,
+    batchUpdateWizardState,
+  ]);
+
+  const goToPrevious = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      e.preventDefault();
+      if (wizardCurrentStep > 0) {
+        batchUpdateWizardState({
+          wizardCurrentSteps: {
+            ...wizardCurrentSteps,
+            [wizardType]: wizardCurrentStep - 1,
+          },
+        });
+      }
+    },
+    [wizardCurrentStep, wizardType, wizardCurrentSteps, batchUpdateWizardState]
+  );
+
+  // Simplify initialization effect to only run once
+  useEffect(() => {
+    if (wizardAnswers.length > 0 && !lastAnsweredQuestion) {
+      console.log('Initializing wizard answers:', {
+        wizardType,
+        currentAnswers: wizardAnswers,
+      });
+
+      // Filter answers for this wizard type
+      const relevantAnswers =
+        wizardType === 'travel_status'
+          ? wizardAnswers.filter(
+              (a) =>
+                a.questionId === 'travel_status' ||
+                a.questionId === 'refund_status' ||
+                a.questionId === 'ticket_cost'
+            )
+          : wizardType === 'informed_date'
+            ? wizardAnswers.filter(
+                (a) =>
+                  a.questionId === 'informed_date' ||
+                  a.questionId === 'specific_informed_date'
+              )
+            : wizardAnswers;
+
+      // Keep answers from other wizards
+      const otherWizardAnswers =
+        wizardType === 'informed_date'
+          ? wizardAnswers.filter(
+              (a) =>
+                a.questionId === 'travel_status' ||
+                a.questionId === 'refund_status' ||
+                a.questionId === 'ticket_cost'
+            )
+          : wizardType === 'travel_status'
+            ? wizardAnswers.filter(
+                (a) =>
+                  a.questionId === 'informed_date' ||
+                  a.questionId === 'specific_informed_date'
+              )
+            : [];
+
+      if (relevantAnswers.length > 0) {
+        // Find the last answered question for this wizard type
+        const lastAnswer = relevantAnswers[relevantAnswers.length - 1];
+        if (lastAnswer) {
+          console.log('Updating wizard state:', {
+            lastAnsweredQuestion: lastAnswer.questionId,
+            relevantAnswers,
+            otherWizardAnswers,
+            combinedAnswers: [...otherWizardAnswers, ...relevantAnswers],
+          });
+
+          batchUpdateWizardState({
+            lastAnsweredQuestion: lastAnswer.questionId,
+            wizardAnswers: [...otherWizardAnswers, ...relevantAnswers],
+          });
+        }
+      }
+    }
+  }, [wizardAnswers, wizardType, lastAnsweredQuestion, batchUpdateWizardState]);
+
+  // Early returns for error states
+  if (!questions || !Array.isArray(questions) || questions.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-[300px] text-center">
+        <p className="text-gray-500">No questions available</p>
       </div>
     );
   }
 
-  // Main render
   return (
-    <div className={qaWizardConfig.spacing.questionGap}>
-      {visibleQuestions[currentStep] && (
-        <div className={qaWizardConfig.spacing.optionGap}>
-          <QuestionAnswer
-            question={visibleQuestions[currentStep]}
-            selectedOption={
-              answers?.find(
-                (a) => a.questionId === visibleQuestions[currentStep].id
-              )?.value || ''
-            }
-            onSelect={handleAnswer}
-            currentStep={currentStep}
-            totalSteps={visibleQuestions.length}
-            selectedFlight={selectedFlight}
-          />
-
-          {/* Navigation buttons */}
-          <div className={qaWizardConfig.spacing.navigationWrapper}>
-            <button
-              onClick={goToPrevious}
-              disabled={currentStep === 0}
-              className={`${qaWizardConfig.spacing.buttonBase} ${
-                currentStep === 0
-                  ? qaWizardConfig.spacing.buttonPreviousDisabled
-                  : qaWizardConfig.spacing.buttonPreviousEnabled
-              }`}
+    <div className="space-y-8">
+      <AnimatePresence mode="wait">
+        {successState.showing ? (
+          <motion.div
+            key="success"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.2 }}
+            className="min-h-[300px] flex flex-col justify-center"
+          >
+            <div className="flex flex-col items-center justify-center space-y-6">
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0 }}
+                transition={{ delay: 0.1, duration: 0.2 }}
+                className="w-16 h-16 flex items-center justify-center text-[64px]"
+              >
+                {successState.message ===
+                'Yay, you have a good chance of claiming it.' ? (
+                  <span>🎉</span>
+                ) : (
+                  <CheckCircleIcon
+                    className={qaWizardConfig.success.icon.check}
+                  />
+                )}
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ delay: 0.2, duration: 0.2 }}
+                className="text-center space-y-2"
+              >
+                <h2 className="text-2xl font-bold text-gray-900">
+                  {successState.message}
+                </h2>
+                <p className="text-sm text-gray-500">
+                  We&apos;re processing your information...
+                </p>
+              </motion.div>
+            </div>
+          </motion.div>
+        ) : (
+          visibleQuestions &&
+          Array.isArray(visibleQuestions) &&
+          visibleQuestions.length > 0 &&
+          currentQuestion && (
+            <motion.div
+              key={`question-${currentQuestion.id}-${wizardCurrentStep}`}
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -50 }}
+              transition={{ duration: 0.3, ease: 'easeInOut' }}
             >
-              Previous
-            </button>
-            {currentStep === visibleQuestions.length - 1 && !showingSuccess && (
-              <button
-                onClick={handleComplete}
-                disabled={!isAnswerValid()}
-                className={`${qaWizardConfig.spacing.buttonBase} ${
-                  !isAnswerValid()
-                    ? qaWizardConfig.spacing.buttonNextDisabled
-                    : qaWizardConfig.spacing.buttonNextEnabled
-                }`}
-              >
-                Complete
-              </button>
-            )}
-            {currentStep < visibleQuestions.length - 1 && (
-              <button
-                onClick={goToNext}
-                disabled={!isAnswerValid()}
-                className={`${qaWizardConfig.spacing.buttonBase} ${
-                  !isAnswerValid()
-                    ? qaWizardConfig.spacing.buttonNextDisabled
-                    : qaWizardConfig.spacing.buttonNextEnabled
-                }`}
-              >
-                Next
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+              <QuestionAnswer
+                question={currentQuestion}
+                selectedOption={getCurrentAnswer(currentQuestion.id)}
+                onSelect={handleSelect}
+                currentStep={wizardCurrentStep + 1}
+                totalSteps={visibleQuestions.length}
+                initialSelectedFlight={selectedFlight}
+              />
+              <div className="flex justify-between mt-6">
+                <div>
+                  {wizardCurrentStep > 0 && (
+                    <motion.button
+                      onClick={goToPrevious}
+                      className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      Previous
+                    </motion.button>
+                  )}
+                </div>
+                <div>
+                  {wizardCurrentStep < visibleQuestions.length - 1 ? (
+                    <motion.button
+                      onClick={goToNext}
+                      disabled={!isCurrentQuestionAnswered}
+                      className={`px-4 py-2 bg-[#F54538] text-white rounded-md ${
+                        !isCurrentQuestionAnswered
+                          ? 'opacity-50 cursor-not-allowed'
+                          : 'hover:bg-[#E03E32]'
+                      }`}
+                      whileHover={
+                        isCurrentQuestionAnswered ? { scale: 1.05 } : {}
+                      }
+                      whileTap={
+                        isCurrentQuestionAnswered ? { scale: 0.95 } : {}
+                      }
+                    >
+                      Next
+                    </motion.button>
+                  ) : (
+                    <motion.button
+                      onClick={goToNext}
+                      disabled={!isCurrentQuestionAnswered}
+                      className={`px-4 py-2 bg-[#F54538] text-white rounded-md ${
+                        !isCurrentQuestionAnswered
+                          ? 'opacity-50 cursor-not-allowed'
+                          : 'hover:bg-[#E03E32]'
+                      }`}
+                      whileHover={
+                        isCurrentQuestionAnswered ? { scale: 1.05 } : {}
+                      }
+                      whileTap={
+                        isCurrentQuestionAnswered ? { scale: 0.95 } : {}
+                      }
+                    >
+                      Complete
+                    </motion.button>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )
+        )}
+      </AnimatePresence>
     </div>
   );
 };
+
+export default QAWizard;

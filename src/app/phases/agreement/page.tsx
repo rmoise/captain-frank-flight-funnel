@@ -2,57 +2,88 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { useStore } from '@/lib/state/store';
 import { validateForm } from '@/utils/validation';
 import FormError from '@/components/shared/FormError';
 import { useLoading } from '@/providers/LoadingProvider';
-import { PhaseGuard } from '@/components/shared/PhaseGuard';
+import { PhaseGuard } from '@/components/guards/PhaseGuard';
 import SignaturePad, {
   SignaturePadRef,
 } from '@/components/shared/SignaturePad';
 import { ConsentCheckbox } from '@/components/ConsentCheckbox';
 import { SpeechBubble } from '@/components/SpeechBubble';
 import api from '@/services/api';
-import type { Flight } from '@/types/store';
 import type { OrderClaimRequest } from '@/services/api';
 import { PhaseNavigation } from '@/components/PhaseNavigation';
 import { AccordionCard } from '@/components/shared/AccordionCard';
 import { accordionConfig } from '@/config/accordion';
-import {
-  setPersonalDetails,
-  setSelectedFlight,
-  setBookingNumber,
-  setWizardAnswers,
-} from '@/store/slices/bookingSlice';
-import { setCurrentPhase } from '@/store/slices/progressSlice';
 
 interface FormData {
   hasAcceptedTerms: boolean;
   hasAcceptedPrivacy: boolean;
   hasAcceptedMarketing: boolean;
-  signature: string;
+  [key: string]: unknown;
 }
 
 interface FormErrors {
   [key: string]: string[];
 }
 
+// Add type for validation rules
+interface ValidationRule {
+  test: (value: unknown) => boolean;
+  message: string;
+}
+
+interface ValidationRules {
+  [key: string]: ValidationRule[];
+}
+
+// Add type for state setters at the top of the file
+type SetStateAction<T> = T | ((prevState: T) => T);
+/* eslint-disable @typescript-eslint/no-unused-vars */
+type SetStateFunction<T> = (action: SetStateAction<T>) => void;
+/* eslint-enable @typescript-eslint/no-unused-vars */
+
 export default function AgreementPage() {
   const router = useRouter();
   const { showLoading, hideLoading } = useLoading();
-  const dispatch = useAppDispatch();
-  const flightDetails = useAppSelector((state) => state.booking.selectedFlight);
-  const personalDetails = useAppSelector(
-    (state) => state.booking.personalDetails
-  );
-  const bookingNumber = useAppSelector((state) => state.booking.bookingNumber);
-  const completedPhases = useAppSelector(
-    (state) => state.progress.completedPhases
-  );
+  const {
+    selectedFlight: flightDetails,
+    selectedFlights,
+    personalDetails,
+    bookingNumber,
+    completedPhases,
+    setCurrentPhase,
+    completePhase,
+    setTermsAccepted,
+    setPrivacyAccepted,
+    setMarketingAccepted,
+    validateTerms,
+    termsAccepted,
+    privacyAccepted,
+    marketingAccepted,
+    validationState,
+    setSignature,
+    setHasSignature,
+    validateSignature,
+  } = useStore();
+
   const signatureRef = useRef<SignaturePadRef>(null);
   const [mounted, setMounted] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
-  const [openSteps, setOpenSteps] = useState<string[]>([]);
+  const [openSteps, setOpenSteps] = React.useState<Array<number | string>>([1]);
+  // Kept for consistency with other pages
+  /* eslint-disable @typescript-eslint/no-unused-vars */
+  const [interactedSteps, setInteractedSteps] = React.useState<number[]>([]);
+  const [formData, setFormData] = React.useState<FormData>({
+    hasAcceptedTerms: false,
+    hasAcceptedPrivacy: false,
+    hasAcceptedMarketing: false,
+  });
+  const [hasInteractedWithSignature, setHasInteractedWithSignature] =
+    useState(false);
+  const [isNavigatingBack, setIsNavigatingBack] = useState(false);
 
   const validationRules = {
     hasAcceptedTerms: [
@@ -67,101 +98,43 @@ export default function AgreementPage() {
         message: 'You must accept the privacy policy',
       },
     ],
-    signature: [
-      {
-        test: (value: unknown) =>
-          typeof value === 'string' && value.trim().length > 0,
-        message: 'Please provide your signature',
-      },
-    ],
   };
 
+  // Initialize state
   useEffect(() => {
     if (!mounted) {
-      const initializeState = () => {
+      const initializeState = async () => {
         try {
-          // Check if we have all required data before proceeding
-          const savedBookingState = localStorage.getItem('bookingState');
-          const savedWizardAnswers = localStorage.getItem('wizardAnswers');
-          const savedPersonalDetails = localStorage.getItem('personalDetails');
-          const savedSelectedFlights = localStorage.getItem('selectedFlights');
-          const savedBookingNumber = localStorage.getItem('bookingNumber');
-          const savedCompletedPhases = localStorage.getItem('completedPhases');
-
-          // Validate booking number length
-          const isValidBookingNumber = (num: string) => {
-            const trimmed = num.trim();
-            return trimmed.length === 6 || trimmed.length === 13;
-          };
-
-          // Only set valid booking numbers
-          if (savedBookingNumber && isValidBookingNumber(savedBookingNumber)) {
-            console.log('Setting initial booking number:', savedBookingNumber);
-            const trimmedNumber = savedBookingNumber.trim();
-            dispatch(setBookingNumber(trimmedNumber));
-            localStorage.setItem('bookingNumber', trimmedNumber);
-          } else if (savedBookingNumber) {
-            // Remove invalid booking number
-            console.log('Removing invalid booking number:', savedBookingNumber);
-            localStorage.removeItem('bookingNumber');
-            dispatch(setBookingNumber(null));
-          }
-
-          // Parse completed phases
-          const completedPhases = savedCompletedPhases
-            ? JSON.parse(savedCompletedPhases)
-            : [];
-
-          // Verify all previous phases are completed
-          const requiredPhases = [1, 2, 3, 4, 5];
-          const hasAllRequiredPhases = requiredPhases.every((phase) =>
-            completedPhases.includes(phase)
-          );
-
-          if (!hasAllRequiredPhases) {
-            console.error(
-              'Missing required phases:',
-              requiredPhases.filter((phase) => !completedPhases.includes(phase))
-            );
-            router.push('/phases/initial-assessment');
-            return;
-          }
-
           // Set current phase to 6
-          dispatch(setCurrentPhase(6));
-          localStorage.setItem('currentPhase', '6');
+          setCurrentPhase(6);
 
-          // Restore booking state
-          if (savedBookingState) {
-            const bookingState = JSON.parse(savedBookingState);
-            if (bookingState.wizardAnswers) {
-              dispatch(setWizardAnswers(bookingState.wizardAnswers));
-            }
-            if (bookingState.personalDetails) {
-              dispatch(setPersonalDetails(bookingState.personalDetails));
-            }
-            if (bookingState.selectedFlight) {
-              dispatch(setSelectedFlight(bookingState.selectedFlight));
-            }
-            if (bookingState.bookingNumber) {
-              dispatch(setBookingNumber(bookingState.bookingNumber));
-            }
-          }
+          // Initialize form data from store state
+          const initialFormData = {
+            hasAcceptedTerms: termsAccepted,
+            hasAcceptedPrivacy: privacyAccepted,
+            hasAcceptedMarketing: marketingAccepted,
+          };
+          setFormData(initialFormData);
 
-          // Restore individual states if not in booking state
-          if (savedWizardAnswers) {
-            dispatch(setWizardAnswers(JSON.parse(savedWizardAnswers)));
-          }
-          if (savedPersonalDetails) {
-            dispatch(setPersonalDetails(JSON.parse(savedPersonalDetails)));
-          }
-          if (savedSelectedFlights) {
-            dispatch(setSelectedFlight(JSON.parse(savedSelectedFlights)));
-          }
-          if (savedBookingNumber) {
-            dispatch(setBookingNumber(savedBookingNumber));
+          // If terms were already accepted in a previous phase, validate them
+          if (termsAccepted && privacyAccepted) {
+            const store = useStore.getState();
+            store.updateValidationState({
+              isTermsValid: true,
+              stepValidation: {
+                ...store.validationState.stepValidation,
+                2: true,
+              },
+              stepInteraction: {
+                ...store.validationState.stepInteraction,
+                2: true,
+              },
+              2: true,
+            });
           }
 
+          // Validate initial state
+          validateSignature();
           setMounted(true);
         } catch (error) {
           console.error('Error initializing agreement page:', error);
@@ -171,401 +144,126 @@ export default function AgreementPage() {
 
       initializeState();
     }
-  }, [dispatch, mounted, router]);
+  }, [
+    mounted,
+    router,
+    setCurrentPhase,
+    termsAccepted,
+    privacyAccepted,
+    marketingAccepted,
+    validateTerms,
+    personalDetails,
+    validateSignature,
+    setHasInteractedWithSignature,
+    validationState,
+    setMounted,
+  ]);
 
+  // Add effect to sync form data with store state
   useEffect(() => {
-    const loadPersonalDetails = () => {
-      const savedPersonalDetails = localStorage.getItem('personalDetails');
-      console.log('Raw saved personal details:', savedPersonalDetails);
+    if (mounted) {
+      setFormData(
+        (prev: FormData): FormData => ({
+          ...prev,
+          hasAcceptedTerms: termsAccepted,
+          hasAcceptedPrivacy: privacyAccepted,
+          hasAcceptedMarketing: marketingAccepted,
+        })
+      );
+    }
+  }, [mounted, termsAccepted, privacyAccepted, marketingAccepted]);
 
-      if (!savedPersonalDetails || savedPersonalDetails === 'null') {
-        console.error('No valid personal details found in localStorage');
-        setErrors({
-          submit: [
-            'Error loading personal details. Please go back and check your information.',
-          ],
-        });
-        return;
-      }
-
-      try {
-        const details = JSON.parse(savedPersonalDetails);
-        console.log('Parsed personal details:', details);
-
-        if (!details) {
-          setErrors({
-            submit: [
-              'Invalid personal details format. Please go back and fill in your information.',
-            ],
-          });
-          return;
-        }
-
-        // Format the fields before setting
-        const formattedDetails = {
-          salutation: details.salutation?.toString().trim() || '',
-          firstName: details.firstName?.toString().trim() || '',
-          lastName: details.lastName?.toString().trim() || '',
-          email: details.email?.toString().trim() || '',
-          phone: details.phone?.toString().trim() || '',
-          address: details.address?.toString().trim() || '',
-          zipCode: details.zipCode?.toString().trim() || '',
-          city: details.city?.toString().trim() || '',
-          country: details.country?.toString().trim() || '',
-        };
-
-        // Check for required fields
-        const missingFields = Object.entries(formattedDetails)
-          .filter(([key, value]) => !value && key !== 'phone') // phone is optional
-          .map(([key]) => key);
-
-        if (missingFields.length > 0) {
-          console.error('Missing required fields:', missingFields);
-          setErrors({
-            submit: [
-              `Missing required fields: ${missingFields.join(
-                ', '
-              )}. Please go back and fill in all required information.`,
-            ],
-          });
-          return;
-        }
-
-        // Set in Redux and localStorage
-        dispatch(setPersonalDetails(formattedDetails));
-        localStorage.setItem(
-          'personalDetails',
-          JSON.stringify(formattedDetails)
-        );
-        console.log('Personal details saved successfully');
-      } catch (error) {
-        console.error('Error parsing personal details:', error);
-        console.error(
-          'Raw personal details that failed:',
-          savedPersonalDetails
-        );
-        setErrors({
-          submit: [
-            'Error loading personal details. Please go back and check your information.',
-          ],
-        });
-      }
-    };
-
-    loadPersonalDetails();
-  }, [dispatch]);
-
+  // Initialize phase state from URL
   useEffect(() => {
-    const savedPersonalDetails = localStorage.getItem('personalDetails');
-    console.log('Raw saved personal details:', savedPersonalDetails);
+    const searchParams = new URLSearchParams(window.location.search);
+    const isRedirected = searchParams.get('redirected') === 'true';
+    const completedPhasesStr = searchParams.get('completed_phases');
+    const currentPhaseStr = searchParams.get('current_phase');
 
-    if (savedPersonalDetails) {
-      try {
-        const details = JSON.parse(savedPersonalDetails);
-        console.log('Parsed personal details:', details);
+    if (isRedirected && completedPhasesStr && currentPhaseStr) {
+      // Parse completed phases
+      const phases = completedPhasesStr.split(',').map(Number);
+      console.log('Initializing completed phases:', phases);
+      phases.forEach((phase) => completePhase(phase));
 
-        // Ensure all required fields are present and not empty
-        const requiredFields = [
-          'salutation',
-          'firstName',
-          'lastName',
-          'email',
-          'phone',
-          'address',
-          'zipCode',
-          'city',
-          'country',
-        ];
+      // Set current phase
+      const phase = parseInt(currentPhaseStr, 10);
+      console.log('Setting current phase to:', phase);
+      setCurrentPhase(phase);
 
-        // Check each field individually and log any missing ones
-        const missingFields = requiredFields.filter(
-          (field) => !details[field] || !details[field].toString().trim()
-        );
-
-        if (missingFields.length > 0) {
-          console.error('Missing required fields:', missingFields);
-          setErrors({
-            submit: [
-              `Missing required fields: ${missingFields.join(
-                ', '
-              )}. Please go back and fill in all required information.`,
-            ],
-          });
-          return;
-        }
-
-        // Format the fields before setting
-        const formattedDetails = {
-          ...details,
-          city: details.city.toString().trim(),
-          address: details.address.toString().trim(),
-          zipCode: details.zipCode.toString().trim(),
-          country: details.country.toString().trim(),
-          phone: details.phone?.toString().trim() || '',
-        };
-
-        // Log the formatted details before setting
-        console.log('Formatted personal details:', formattedDetails);
-
-        // Set in Redux and localStorage
-        dispatch(setPersonalDetails(formattedDetails));
-        localStorage.setItem(
-          'personalDetails',
-          JSON.stringify(formattedDetails)
-        );
-
-        // Log success message
-        console.log('Personal details saved successfully');
-      } catch (error) {
-        console.error('Error parsing personal details:', error);
-        console.error(
-          'Raw personal details that failed:',
-          savedPersonalDetails
-        );
-        setErrors({
-          submit: [
-            'Error loading personal details. Please go back and check your information.',
-          ],
-        });
-      }
-    } else {
-      console.error('No personal details found in localStorage');
-      setErrors({
-        submit: [
-          'No personal details found. Please go back and fill in your information.',
-        ],
+      // Validate personal details
+      const isValid = useStore.getState().validatePersonalDetails();
+      console.log('Personal details validation on init:', {
+        isValid,
+        personalDetails,
       });
-    }
 
-    // Load flight details from flightDetails
-    const flightDetailsStr = localStorage.getItem('flightDetails');
-    console.log('Flight Details from localStorage:', flightDetailsStr);
-    if (flightDetailsStr) {
-      try {
-        const details = JSON.parse(flightDetailsStr);
-        console.log('Parsed Flight Details:', details);
-
-        // Only set booking number if we don't already have one
-        const currentBookingNumber = localStorage.getItem('bookingNumber');
-
-        // Only extract and use booking number if it's valid (6 or 13 characters)
-        const isValidBookingNumber = (num: string) => {
-          const trimmed = num.trim();
-          return trimmed.length === 6 || trimmed.length === 13;
-        };
-
-        // Don't extract or use invalid booking numbers
-        const extractedBookingNumber = !currentBookingNumber
-          ? (() => {
-              const possibleNumber =
-                details.bookingNumber ||
-                details.flight?.bookingReference ||
-                details.flight?.bookingNumber ||
-                details.bookingReference;
-              return possibleNumber && isValidBookingNumber(possibleNumber)
-                ? possibleNumber.trim()
-                : null;
-            })()
-          : null;
-
-        console.log('Extracted Booking Number:', extractedBookingNumber);
-
-        // Only set if we don't have a booking number and found a valid one
-        if (!currentBookingNumber && extractedBookingNumber) {
-          dispatch(setBookingNumber(extractedBookingNumber));
-          localStorage.setItem('bookingNumber', extractedBookingNumber);
-        }
-
-        // Set flight details in Redux
-        if (details.flight) {
-          // Handle flight details with nested flight object
-          const flight = {
-            ...details.flight,
-            // Only use booking references that are valid
-            bookingReference:
-              (currentBookingNumber &&
-              isValidBookingNumber(currentBookingNumber)
-                ? currentBookingNumber
-                : null) ||
-              (extractedBookingNumber &&
-              isValidBookingNumber(extractedBookingNumber)
-                ? extractedBookingNumber
-                : null),
-          } as Flight;
-          dispatch(setSelectedFlight(flight));
-        } else if (Array.isArray(details)) {
-          // Handle array of flights
-          const flight = {
-            ...details[0],
-            bookingReference:
-              (currentBookingNumber &&
-              isValidBookingNumber(currentBookingNumber)
-                ? currentBookingNumber
-                : null) ||
-              (extractedBookingNumber &&
-              isValidBookingNumber(extractedBookingNumber)
-                ? extractedBookingNumber
-                : null) ||
-              (details[0].bookingReference &&
-              isValidBookingNumber(details[0].bookingReference)
-                ? details[0].bookingReference
-                : null) ||
-              (details[0].bookingNumber &&
-              isValidBookingNumber(details[0].bookingNumber)
-                ? details[0].bookingNumber
-                : null),
-          } as Flight;
-          dispatch(setSelectedFlight(flight));
-        } else {
-          // Handle single flight object
-          const flight = {
-            ...details,
-            bookingReference:
-              (currentBookingNumber &&
-              isValidBookingNumber(currentBookingNumber)
-                ? currentBookingNumber
-                : null) ||
-              (extractedBookingNumber &&
-              isValidBookingNumber(extractedBookingNumber)
-                ? extractedBookingNumber
-                : null) ||
-              (details.bookingReference &&
-              isValidBookingNumber(details.bookingReference)
-                ? details.bookingReference
-                : null) ||
-              (details.bookingNumber &&
-              isValidBookingNumber(details.bookingNumber)
-                ? details.bookingNumber
-                : null),
-          } as Flight;
-          dispatch(setSelectedFlight(flight));
-        }
-      } catch (error) {
-        console.error('Error loading flight details:', error);
+      if (isValid) {
+        const store = useStore.getState();
+        store.updateValidationState({
+          isPersonalValid: true,
+          stepValidation: {
+            1: true,
+            2: true,
+            3: true,
+            4: true,
+          },
+        });
       }
     }
+  }, [completePhase, setCurrentPhase, personalDetails]);
 
-    // If no booking number from flight details, try loading from localStorage directly
-    const savedBookingNumber = localStorage.getItem('bookingNumber');
-    console.log('Saved Booking Number:', savedBookingNumber);
-    if (savedBookingNumber) {
-      dispatch(setBookingNumber(savedBookingNumber));
-    }
+  // Add effect to check flight details and validate personal details on mount
+  useEffect(() => {
+    if (mounted) {
+      console.log('Flight details on mount:', {
+        flightDetails,
+        selectedFlights,
+        completedPhases,
+        personalDetails,
+      });
 
-    // If still no booking number, try to get it from the selected flights
-    const selectedFlightsStr = localStorage.getItem('selectedFlights');
-    if (selectedFlightsStr) {
-      try {
-        const flights = JSON.parse(selectedFlightsStr);
-        console.log('Selected Flights:', flights);
-        if (Array.isArray(flights) && flights.length > 0) {
-          const flightBookingNumber =
-            flights[0].bookingReference || flights[0].bookingNumber;
-          if (flightBookingNumber) {
-            dispatch(setBookingNumber(flightBookingNumber));
-            localStorage.setItem('bookingNumber', flightBookingNumber);
-          }
-        }
-      } catch (error) {
-        console.error('Error loading selected flights:', error);
+      // Validate personal details
+      const isValid = useStore.getState().validatePersonalDetails();
+      console.log('Personal details validation on mount:', {
+        isValid,
+        personalDetails,
+      });
+
+      if (isValid) {
+        const store = useStore.getState();
+        store.updateValidationState({
+          isPersonalValid: true,
+          stepValidation: {
+            1: true,
+            2: true,
+            3: true,
+            4: true,
+          },
+        });
       }
     }
-  }, [dispatch]);
+  }, [
+    mounted,
+    flightDetails,
+    selectedFlights,
+    completedPhases,
+    personalDetails,
+  ]);
 
-  // Add a separate effect to handle booking number updates
+  // Initialize signature pad
   useEffect(() => {
-    if (bookingNumber) {
-      localStorage.setItem('bookingNumber', bookingNumber);
-    }
-  }, [bookingNumber]);
-
-  // Debug current state
-  useEffect(() => {
-    console.log('Current Flight Details:', flightDetails);
-    console.log('Current Booking Number:', bookingNumber);
-  }, [flightDetails, bookingNumber]);
-
-  const [formData, setFormData] = useState<FormData>({
-    hasAcceptedTerms: false,
-    hasAcceptedPrivacy: false,
-    hasAcceptedMarketing: false,
-    signature: '',
-  });
-
-  const [hasSignature, setHasSignature] = useState(false);
-  const [hasInteractedWithSignature, setHasInteractedWithSignature] =
-    useState(false);
-
-  const isSignatureEmpty = () => {
-    if (!signatureRef.current) return true;
-    return signatureRef.current.isEmpty();
-  };
-
-  // Load saved state on mount
-  useEffect(() => {
-    const savedFormData = localStorage.getItem('agreementFormData');
-    const savedSignature = localStorage.getItem('agreementSignature');
-    const savedOpenSteps = localStorage.getItem('agreementOpenSteps');
-
-    // Initialize open steps from saved state or default to first step
-    if (savedOpenSteps) {
-      const parsedOpenSteps = JSON.parse(savedOpenSteps);
-      setOpenSteps(parsedOpenSteps);
-    } else if (!savedSignature) {
-      // Open digital-signature by default if no signature
-      setOpenSteps(['digital-signature']);
-    }
-
-    if (savedFormData) {
-      try {
-        const parsedFormData = JSON.parse(savedFormData);
-        setFormData(parsedFormData);
-      } catch (error) {
-        console.error('Error loading form data:', error);
+    if (mounted && signatureRef.current) {
+      const store = useStore.getState();
+      const signature = store.signature;
+      if (signature) {
+        signatureRef.current.fromDataURL(signature);
+        setHasSignature(true);
+        validateSignature();
+        setHasInteractedWithSignature(true);
       }
     }
-
-    // Create a function to load the signature
-    const loadSignature = () => {
-      if (savedSignature && signatureRef.current) {
-        try {
-          signatureRef.current.fromDataURL(savedSignature);
-          setFormData((prev) => ({
-            ...prev,
-            signature: savedSignature,
-          }));
-          setHasSignature(true);
-        } catch (error) {
-          console.error('Error loading signature:', error);
-        }
-      } else {
-        // If no signature, ensure digital-signature step is open
-        setOpenSteps((prev) =>
-          prev.includes('digital-signature') ? prev : ['digital-signature']
-        );
-      }
-    };
-
-    // Try to load immediately
-    loadSignature();
-
-    // Also try again after a short delay to ensure canvas is ready
-    const retryTimeout = setTimeout(loadSignature, 500);
-
-    return () => clearTimeout(retryTimeout);
-  }, []);
-
-  // Effect to handle step 2 opening when step 1 is completed
-  useEffect(() => {
-    if (hasSignature && !openSteps.includes('terms-and-conditions')) {
-      setOpenSteps((prev) => [...prev, 'terms-and-conditions']);
-    }
-  }, [hasSignature, openSteps]);
-
-  // Save open steps state whenever it changes
-  useEffect(() => {
-    localStorage.setItem('agreementOpenSteps', JSON.stringify(openSteps));
-  }, [openSteps]);
+  }, [mounted, validateSignature, setHasSignature]);
 
   const handleSignatureStart = () => {
     setHasInteractedWithSignature(true);
@@ -577,20 +275,22 @@ export default function AgreementPage() {
       const isEmpty = isSignatureEmpty();
 
       if (!isEmpty) {
-        localStorage.setItem('agreementSignature', signatureData);
-        setFormData((prev) => ({
-          ...prev,
-          signature: signatureData,
-        }));
+        setSignature(signatureData);
         setHasSignature(true);
-        setErrors((prev) => ({ ...prev, signature: [] }));
+        validateSignature();
+        setErrors(
+          (prev: FormErrors): FormErrors => ({ ...prev, signature: [] })
+        );
       } else {
+        setSignature('');
         setHasSignature(false);
         if (hasInteractedWithSignature) {
-          setErrors((prev) => ({
-            ...prev,
-            signature: ['Please provide your signature'],
-          }));
+          setErrors(
+            (prev: FormErrors): FormErrors => ({
+              ...prev,
+              signature: ['Please provide your signature'],
+            })
+          );
         }
       }
     }
@@ -599,487 +299,313 @@ export default function AgreementPage() {
   const clearSignature = () => {
     if (signatureRef.current) {
       signatureRef.current.clear();
-      localStorage.removeItem('agreementSignature');
-      setFormData((prev) => ({
-        ...prev,
-        signature: '',
-      }));
+      setSignature('');
       setHasSignature(false);
       setHasInteractedWithSignature(false);
-      setErrors((prev) => ({
-        ...prev,
-        signature: [],
-      }));
+      setErrors(
+        (prev: FormErrors): FormErrors => ({
+          ...prev,
+          signature: [],
+        })
+      );
     }
   };
 
-  const handleTermsChange = (field: keyof FormData) => (checked: boolean) => {
-    const updatedFormData = {
-      ...formData,
-      [field]: checked,
+  const handleTermsChange =
+    (field: keyof FormData) =>
+    (checked: boolean): void => {
+      const updatedFormData = {
+        ...formData,
+        [field]: checked,
+      };
+      setFormData(updatedFormData);
+      setErrors((prev: FormErrors): FormErrors => ({ ...prev, [field]: [] }));
+
+      // Update store state based on field
+      if (field === 'hasAcceptedTerms') {
+        setTermsAccepted(checked);
+      } else if (field === 'hasAcceptedPrivacy') {
+        setPrivacyAccepted(checked);
+      } else if (field === 'hasAcceptedMarketing') {
+        setMarketingAccepted(checked);
+      }
     };
-    setFormData(updatedFormData);
-    localStorage.setItem('agreementFormData', JSON.stringify(updatedFormData));
-    setErrors((prev) => ({ ...prev, [field]: [] }));
+
+  const isSignatureEmpty = () => {
+    if (!signatureRef.current) return true;
+    return signatureRef.current.isEmpty();
+  };
+
+  const canSubmit = () => {
+    // Check signature validity from store
+    const signatureValid = validationState.isSignatureValid;
+    // Check terms validity from store and actual acceptance state
+    const termsValid =
+      validationState.isTermsValid && termsAccepted && privacyAccepted;
+
+    console.log('Submit validation:', {
+      signatureValid,
+      termsValid,
+      validationState,
+      termsAccepted,
+      privacyAccepted,
+    });
+
+    return signatureValid && termsValid;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    const signatureData = signatureRef.current?.toDataURL() || '';
-    const updatedFormData = {
-      ...formData,
-      signature: signatureData,
-    };
-
-    const validationErrors = validateForm(updatedFormData, validationRules);
-    if (Object.keys(validationErrors).length > 0) {
-      setErrors(validationErrors);
-      return;
-    }
-
-    showLoading('Evaluating and submitting your claim...');
+    showLoading();
 
     try {
-      // Get flight ID from either array or single flight object
-      const flightId = Array.isArray(flightDetails)
-        ? flightDetails[0]?.id
-        : flightDetails?.id;
-
-      if (!flightId) {
-        setErrors({
-          submit: [
-            'Missing flight details. Please go back and select a flight.',
-          ],
-        });
+      // Validate form data with rules
+      const validationErrors = validateForm(
+        formData,
+        validationRules as ValidationRules
+      );
+      if (Object.keys(validationErrors).length > 0) {
+        setErrors(
+          (prev: FormErrors): FormErrors => ({
+            ...prev,
+            ...validationErrors,
+          })
+        );
         hideLoading();
         return;
       }
 
-      if (!personalDetails) {
-        setErrors({
-          submit: [
-            'Missing personal details. Please go back and fill in your information.',
-          ],
-        });
-        hideLoading();
-        return;
-      }
+      // Clear any previous errors
+      setErrors(
+        (prev: FormErrors): FormErrors => ({
+          ...prev,
+          submit: [],
+        })
+      );
 
-      const {
-        salutation,
-        firstName,
-        lastName,
-        email,
-        phone,
-        address,
-        zipCode,
-        city,
-        country,
-      } = personalDetails;
+      // Get flight IDs from selectedFlights
+      const flightIdsAsStrings = selectedFlights.map((flight) =>
+        String(flight.id)
+      );
 
-      // Log personal details for debugging
-      console.log('Personal details before validation:', {
-        salutation,
-        firstName,
-        lastName,
-        email,
-        phone,
-        address,
-        zipCode,
-        city,
-        country,
+      // Get travel status from store
+      const travelStatus = useStore
+        .getState()
+        .wizardAnswers.find((a) => a.questionId === 'travel_status')?.value as
+        | 'none'
+        | 'self'
+        | 'provided';
+
+      // Set journey_fact_flightids based on travel status
+      const journey_fact_flightids_strings =
+        travelStatus === 'none' ? [] : flightIdsAsStrings.slice(0, 1); // Just use first flight if traveled
+
+      // Map travel status to journey_fact_type
+      const journey_fact_type = travelStatus;
+
+      console.log('Selected travel status:', {
+        travelStatus,
+        allAnswers: useStore.getState().wizardAnswers,
       });
 
-      // Validate all required personal details
-      const requiredFields = {
-        salutation,
-        firstName,
-        lastName,
-        email,
-        phone,
-        address,
-        zipCode,
-        city,
-        country,
+      const informedDate = useStore
+        .getState()
+        .wizardAnswers.find((a) => a.questionId === 'informed_date')?.value;
+
+      const specificDate = useStore
+        .getState()
+        .wizardAnswers.find(
+          (a) => a.questionId === 'specific_informed_date'
+        )?.value;
+
+      console.log('Date information:', {
+        informedDate,
+        specificDate,
+        selectedFlightDate: selectedFlights[0]?.date,
+      });
+
+      // Format the date for the API
+      const formattedDate =
+        informedDate === 'on_departure'
+          ? String(selectedFlights[0].date).split('T')[0]
+          : typeof specificDate === 'string'
+            ? specificDate.split('T')[0]
+            : undefined;
+
+      console.log('Formatted date:', formattedDate);
+
+      // Create the evaluation data
+      const evaluationData = {
+        journey_booked_flightids: flightIdsAsStrings,
+        journey_fact_flightids: journey_fact_flightids_strings,
+        information_received_at:
+          formattedDate || new Date().toISOString().split('T')[0],
+        travel_status: journey_fact_type,
+        delay_duration: '240',
+        lang: 'en',
       };
 
-      // Check each field individually and log any missing ones
-      Object.entries(requiredFields).forEach(([field, value]) => {
-        if (!value || (typeof value === 'string' && !value.trim())) {
-          console.error(`Missing or empty field: ${field}, value:`, value);
-        }
-      });
+      console.log('Full evaluation request:', evaluationData);
+      const evaluationResult = await api.evaluateClaim(evaluationData);
+      console.log('Evaluation response:', evaluationResult);
 
-      const missingFields = Object.entries(requiredFields)
-        .filter(([field, value]) => {
-          const isEmpty =
-            !value || (typeof value === 'string' && !value.trim());
-          if (isEmpty) {
-            console.error(`Missing required field: ${field}, value:`, value);
-          }
-          return isEmpty;
-        })
-        .map(([field]) => field);
+      if (evaluationResult.status !== 'accept') {
+        // Get rejection reasons if available
+        const rejectionReasons = evaluationResult.rejection_reasons;
+        const errorMessages = rejectionReasons
+          ? Object.values(rejectionReasons)
+          : ['Claim evaluation was rejected'];
 
-      if (missingFields.length > 0) {
-        console.error('Missing fields:', missingFields);
-        setErrors({
-          submit: [
-            `Missing required fields: ${missingFields.join(
-              ', '
-            )}. Please go back and fill in all required information.`,
-          ],
-        });
+        setErrors(
+          (prev: FormErrors): FormErrors => ({
+            ...prev,
+            submit: errorMessages,
+          })
+        );
         hideLoading();
         return;
       }
 
-      // Validate city before making the API call
-      if (!city || !city.trim()) {
-        console.error('City is empty or whitespace');
-        setErrors({
-          submit: ['City is required. Please go back and provide your city.'],
-        });
-        hideLoading();
-        return;
-      }
+      // Get personal details from store
+      const personalDetails = useStore.getState().personalDetails;
+      console.log('Personal details from store:', personalDetails);
 
-      // Ensure city is properly formatted
-      const formattedCity = city.trim();
-      console.log('City value before API call:', formattedCity);
-      console.log('City value length:', formattedCity.length);
-      console.log('City value type:', typeof formattedCity);
+      // Create the order request data
+      const formDataEntries =
+        formData instanceof FormData ? formData : new FormData();
+      const formDataValues = Object.fromEntries(
+        [
+          'salutation',
+          'firstName',
+          'lastName',
+          'street',
+          'postalCode',
+          'city',
+          'country',
+          'email',
+          'phone',
+          'hasAcceptedMarketing',
+          'hasAcceptedTerms',
+          'hasAcceptedPrivacy',
+        ].map((key) => [key, formDataEntries.get(key)?.toString() || ''])
+      ) as Record<string, string>;
 
-      if (formattedCity.length < 2) {
-        console.error('City name too short:', formattedCity);
-        setErrors({
-          submit: ['City name must be at least 2 characters long.'],
-        });
-        hideLoading();
-        return;
-      }
+      const orderRequestData: OrderClaimRequest = {
+        journey_booked_flightids: flightIdsAsStrings,
+        journey_fact_flightids: journey_fact_flightids_strings,
+        journey_fact_type,
+        information_received_at:
+          formattedDate || new Date().toISOString().split('T')[0],
+        journey_booked_pnr: bookingNumber || '',
+        owner_salutation: formDataValues.salutation === 'Mr' ? 'herr' : 'frau',
+        owner_firstname:
+          personalDetails?.firstName || formDataValues.firstName || '',
+        owner_lastname:
+          personalDetails?.lastName || formDataValues.lastName || '',
+        owner_street: personalDetails?.address || formDataValues.street || '',
+        owner_place:
+          personalDetails?.zipCode || formDataValues.postalCode || '',
+        owner_city: personalDetails?.city || formDataValues.city || '',
+        owner_zip: personalDetails?.zipCode || formDataValues.postalCode || '',
+        owner_country: personalDetails?.country || formDataValues.country || '',
+        owner_email: personalDetails?.email || formDataValues.email || '',
+        owner_phone: personalDetails?.phone || formDataValues.phone || '',
+        owner_marketable_status: true,
+        contract_signature: signatureRef.current?.toDataURL() || '',
+        contract_tac: true,
+        contract_dp: true,
+        guid: evaluationResult.guid,
+        recommendation_guid: evaluationResult.recommendation_guid,
+      };
 
-      // Validate booking number before making the API call
-      const currentBookingNumber =
-        bookingNumber || localStorage.getItem('bookingNumber') || '';
+      console.log('Submitting order with data:', orderRequestData);
 
-      // Ensure booking number is properly formatted
-      const formattedBookingNumber = currentBookingNumber.trim();
+      // Submit the order
+      const response = await api.orderClaim(orderRequestData);
 
-      // Debug logs
-      console.log('Debug - Booking Number Validation:', {
-        bookingNumberFromRedux: bookingNumber,
-        bookingNumberFromLocalStorage: localStorage.getItem('bookingNumber'),
-        currentBookingNumber: formattedBookingNumber,
-        length: formattedBookingNumber.length,
-        value: formattedBookingNumber,
-      });
+      hideLoading(); // Hide loading before redirect
 
-      if (
-        !formattedBookingNumber ||
-        (formattedBookingNumber.length !== 6 &&
-          formattedBookingNumber.length !== 13)
-      ) {
-        console.error('Invalid booking number:', {
-          value: formattedBookingNumber,
-          length: formattedBookingNumber.length,
-        });
-        setErrors({
-          submit: ['Invalid booking reference. Must be 6 or 13 characters.'],
-        });
-        hideLoading();
-        return;
-      }
-
-      // First, get the stored evaluation result
-      const storedEvaluation = localStorage.getItem('evaluationResult');
-      if (!storedEvaluation) {
-        setErrors({
-          submit: [
-            'No evaluation result found. Please go back and evaluate your claim first.',
-          ],
-        });
-        hideLoading();
-        return;
-      }
-
-      try {
-        const evaluationResponse = JSON.parse(storedEvaluation);
-        console.log('Using stored evaluation result:', evaluationResponse);
-
-        // Format date as YYYY-MM-DD
-        const formattedDate = new Date().toISOString().split('T')[0];
-
-        // Add evaluation data to request
-        const orderRequestData: OrderClaimRequest = {
-          journey_booked_flightids: [flightId],
-          journey_fact_flightids: [flightId],
-          information_received_at: formattedDate,
-          journey_booked_pnr: currentBookingNumber,
-          journey_fact_type: 'self',
-          owner_salutation: salutation === 'Mr' ? 'herr' : 'frau',
-          owner_firstname: firstName,
-          owner_lastname: lastName,
-          owner_street: address,
-          owner_place: formattedCity,
-          owner_city: formattedCity,
-          owner_zip: zipCode,
-          owner_country: country,
-          owner_email: email,
-          owner_phone: phone || '',
-          owner_marketable_status: formData.hasAcceptedMarketing,
-          contract_signature: signatureData,
-          contract_tac: formData.hasAcceptedTerms,
-          contract_dp: formData.hasAcceptedPrivacy,
-        };
-
-        console.log('Full request data:', orderRequestData);
-
-        // Immediately submit the order with the same data
-        await api.orderClaim(orderRequestData);
-
-        // Only redirect on successful submission
+      if (response.data?.guid && response.data?.recommendation_guid) {
         router.push('/claim-submitted');
-      } catch (error) {
-        console.error('API Error:', error);
-        hideLoading();
-
-        // Handle API errors
-        if (error instanceof Error) {
-          const apiError = error as {
-            data?: {
-              errors?: Record<string, string[]>;
-              message?: string;
-              error?: string;
-              body?: string;
-            };
-            message?: string;
-          };
-
-          // Handle error with specific field errors
-          if (apiError.data?.errors) {
-            const fieldErrors = apiError.data.errors;
-
-            // Handle specific field errors
-            if (fieldErrors.owner_place) {
-              setErrors({
-                submit: [
-                  'City is required. Please check your city information.',
-                ],
-              });
-              return;
-            }
-
-            if (fieldErrors.journey_booked_pnr) {
-              setErrors({
-                submit: [
-                  'Booking reference is required. Please check your booking number.',
-                ],
-              });
-              return;
-            }
-
-            // Handle other field errors
-            const errorMessages = Object.entries(fieldErrors)
-              .map(([field, messages]) => {
-                const fieldName = field.replace(/_/g, ' ');
-                const message = Array.isArray(messages)
-                  ? messages[0]
-                  : messages;
-                return `${fieldName}: ${message}`;
-              })
-              .join('\n');
-
-            setErrors({
-              submit: [`Validation failed:\n${errorMessages}`],
-            });
-            return;
-          }
-
-          // Try to parse error from response body
-          if (apiError.data?.body) {
-            try {
-              const originalError = JSON.parse(apiError.data.body);
-              if (originalError.errors) {
-                const fieldErrors = originalError.errors;
-                const errorMessages = Object.entries(fieldErrors)
-                  .map(([field, messages]) => {
-                    const fieldName = field.replace(/_/g, ' ');
-                    const message = Array.isArray(messages)
-                      ? messages[0]
-                      : messages;
-                    return `${fieldName}: ${message}`;
-                  })
-                  .join('\n');
-
-                setErrors({
-                  submit: [`Validation failed:\n${errorMessages}`],
-                });
-                return;
-              }
-            } catch (parseError) {
-              console.error('Could not parse original error:', parseError);
-            }
-          }
-
-          // Handle error message from API
-          const errorMessage =
-            apiError.data?.message ||
-            apiError.data?.error ||
-            apiError.message ||
-            'An unknown error occurred';
-
-          // Translate common German error messages
-          if (errorMessage === 'Diese Angabe ist ein Pflichtfeld.') {
-            setErrors({
-              submit: [
-                'This field is required. Please check all required fields.',
-              ],
-            });
-          } else {
-            setErrors({
-              submit: [errorMessage],
-            });
-          }
-          return;
-        }
-
-        // Handle generic errors
-        setErrors({
-          submit: [
-            'Failed to submit claim. Please try again or contact support if the problem persists.',
-          ],
-        });
+      } else {
+        throw new Error(response.message || 'Failed to submit claim');
       }
     } catch (error) {
       console.error('Form submission error:', error);
-      setErrors({
-        submit: ['An unexpected error occurred. Please try again.'],
-      });
-      hideLoading();
+      setErrors(
+        (prev: FormErrors): FormErrors => ({
+          ...prev,
+          submit: ['An unexpected error occurred. Please try again.'],
+        })
+      );
+      hideLoading(); // Hide loading on error
     }
   };
 
-  const canSubmit = () => {
-    const signatureValid =
-      hasSignature && formData.signature.length > 0 && !isSignatureEmpty();
-    const termsValid = formData.hasAcceptedTerms && formData.hasAcceptedPrivacy;
-    console.log('Submit validation:', {
-      signatureValid,
-      hasSignature,
-      signatureLength: formData.signature.length,
-      isEmpty: isSignatureEmpty(),
-      termsValid,
-      hasAcceptedTerms: formData.hasAcceptedTerms,
-      hasAcceptedPrivacy: formData.hasAcceptedPrivacy,
-    });
-    return signatureValid && termsValid;
+  // Add back navigation handler
+  const handleBack = () => {
+    if (!isNavigatingBack) {
+      setIsNavigatingBack(true);
+      router.push('/phases/claim-success');
+    }
   };
 
-  // Add state for handling back navigation
-  const [isNavigatingBack, setIsNavigatingBack] = useState(false);
+  const handleSignatureChange = (dataUrl: string) => {
+    const store = useStore.getState();
+    store.setSignature(dataUrl);
+    store.setHasSignature(true);
 
-  // Add effect for handling back navigation
-  useEffect(() => {
-    if (!isNavigatingBack) return;
+    const isValid = store.validateSignature();
+    if (isValid) {
+      store.updateValidationState({
+        isSignatureValid: true,
+      });
+    }
+  };
 
-    const handleBackNavigation = async () => {
-      try {
-        // Set phase information before navigation
-        localStorage.setItem('currentPhase', '5');
-        localStorage.setItem(
-          'completedPhases',
-          JSON.stringify([1, 2, 3, 4, 5])
-        );
-
-        // Get evaluation result and selected flight for URL parameters
-        const searchParams = new URLSearchParams();
-        const evaluationResult = localStorage.getItem('evaluationResult');
-
-        if (evaluationResult) {
-          const result = JSON.parse(evaluationResult);
-          searchParams.set(
-            'amount',
-            (result.contract?.amount || 600).toString()
-          );
-          searchParams.set('currency', 'EUR');
-          searchParams.set(
-            'provision',
-            (result.contract?.provision || '30%').toString()
-          );
-        } else {
-          searchParams.set('amount', '600');
-          searchParams.set('currency', 'EUR');
-          searchParams.set('provision', '30%');
-        }
-
-        // Add flight details to URL parameters
-        const flight = Array.isArray(flightDetails)
-          ? flightDetails[0]
-          : flightDetails;
-        if (flight) {
-          if (flight.departureAirport || flight.departure) {
-            searchParams.set(
-              'depAirport',
-              flight.departureAirport || flight.departure
-            );
-          }
-          if (flight.arrivalAirport || flight.arrival) {
-            searchParams.set(
-              'arrAirport',
-              flight.arrivalAirport || flight.arrival
-            );
-          }
-          if (flight.scheduledDepartureTime || flight.dep_time_sched) {
-            searchParams.set(
-              'depTime',
-              flight.scheduledDepartureTime || flight.dep_time_sched
-            );
-          }
-          if (flight.bookingReference || bookingNumber) {
-            searchParams.set(
-              'bookingRef',
-              flight.bookingReference || bookingNumber
-            );
-          }
-        }
-
-        // Navigate to claim success page
-        await router.push(`/claim-success?${searchParams.toString()}`);
-      } catch (error) {
-        console.error('Error during back navigation:', error);
-      } finally {
-        // Reset navigation state
-        setIsNavigatingBack(false);
+  const toggleStep = (step: number | string) => {
+    setOpenSteps((prev: Array<number | string>): Array<number | string> => {
+      if (prev.includes(step)) {
+        return prev.filter((s: number | string): boolean => s !== step);
       }
-    };
+      return [...prev, step];
+    });
+  };
 
-    handleBackNavigation();
+  const handleStepInteraction = (step: number) => {
+    setInteractedSteps((prev: number[]) => {
+      if (!prev.includes(step)) {
+        return [...prev, step];
+      }
+      return prev;
+    });
+  };
 
-    // Cleanup function
-    return () => {
-      setIsNavigatingBack(false);
-    };
-  }, [isNavigatingBack, router, flightDetails, bookingNumber]);
+  const handleFormDataChange = (data: Partial<FormData>) => {
+    setFormData((prev: FormData) => ({
+      ...prev,
+      ...data,
+    }));
+  };
+  /* eslint-enable @typescript-eslint/no-unused-vars */
 
   return (
-    <PhaseGuard phase={6}>
+    <PhaseGuard phase={6} allowDevAccess>
       <div className="min-h-screen bg-[#f5f7fa]">
         <PhaseNavigation currentPhase={6} completedPhases={completedPhases} />
         <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
           <div className="mt-4 sm:mt-8 mb-8">
             <SpeechBubble
-              message={`I, ${personalDetails?.salutation || ''} ${
-                personalDetails?.firstName || ''
-              } ${personalDetails?.lastName || ''}, residing at ${
-                personalDetails?.address || ''
-              }, ${personalDetails?.zipCode || ''} ${
-                personalDetails?.city || ''
+              message={`I, ${personalDetails?.salutation ?? ''} ${
+                personalDetails?.firstName ?? ''
+              } ${personalDetails?.lastName ?? ''}, residing at ${
+                personalDetails?.address ?? ''
+              }, ${personalDetails?.zipCode ?? ''} ${
+                personalDetails?.city ?? ''
               }, ${
-                personalDetails?.country || ''
+                personalDetails?.country ?? ''
               }, hereby assign my claims for compensation from the flight connection with PNR/booking number ${
-                bookingNumber || ''
+                bookingNumber ?? ''
               } from ${
                 Array.isArray(flightDetails) && flightDetails.length > 0
                   ? flightDetails[0].departure ||
@@ -1143,11 +669,11 @@ Captain Frank GmbH accepts the declaration of assignment.`}
               title="Digital Signature"
               subtitle="Please sign to confirm your agreement"
               eyebrow="Step 1"
-              isCompleted={hasSignature}
-              hasInteracted={hasInteractedWithSignature && !hasSignature}
+              isCompleted={validationState.isSignatureValid}
+              hasInteracted={hasInteractedWithSignature}
               className={accordionConfig.padding.wrapper}
               stepId="digital-signature"
-              isOpenByDefault={!hasSignature}
+              isOpenByDefault={!validationState.isSignatureValid}
               shouldStayOpen={false}
               summary="Sign the agreement to proceed"
               isOpen={openSteps.includes('digital-signature')}
@@ -1164,13 +690,14 @@ Captain Frank GmbH accepts the declaration of assignment.`}
                   <SignaturePad
                     ref={signatureRef}
                     onBegin={handleSignatureStart}
-                    onChange={(data) => {
-                      setFormData((prev) => ({
-                        ...prev,
-                        signature: data,
-                      }));
-                      setHasSignature(true);
-                      setErrors((prev) => ({ ...prev, signature: [] }));
+                    onChange={(data: string): void => {
+                      handleSignatureChange(data);
+                      setErrors(
+                        (prev: FormErrors): FormErrors => ({
+                          ...prev,
+                          signature: [],
+                        })
+                      );
                     }}
                     onEnd={handleSignatureEnd}
                   />
@@ -1196,13 +723,11 @@ Captain Frank GmbH accepts the declaration of assignment.`}
               title="Terms and Conditions"
               subtitle="Please review and accept the terms to proceed."
               eyebrow="Step 2"
-              isCompleted={
-                formData.hasAcceptedTerms && formData.hasAcceptedPrivacy
-              }
+              isCompleted={validationState[2] || false}
               hasInteracted={Object.keys(errors).length > 0}
               className={accordionConfig.padding.wrapper}
               stepId="terms-and-conditions"
-              isOpenByDefault={false}
+              isOpenByDefault={!validationState[2]}
               shouldStayOpen={false}
               summary="Accept the terms and conditions"
               isOpen={openSteps.includes('terms-and-conditions')}
@@ -1218,22 +743,23 @@ Captain Frank GmbH accepts the declaration of assignment.`}
                 <div className="space-y-4">
                   <ConsentCheckbox
                     id="terms"
+                    type="terms"
                     label="I have read and agree to the terms and conditions."
                     checked={formData.hasAcceptedTerms}
                     onChange={handleTermsChange('hasAcceptedTerms')}
                     required
-                    error={errors.hasAcceptedTerms?.length > 0}
                   />
                   <ConsentCheckbox
                     id="privacy"
+                    type="privacy"
                     label="I have read and agree to the privacy policy."
                     checked={formData.hasAcceptedPrivacy}
                     onChange={handleTermsChange('hasAcceptedPrivacy')}
                     required
-                    error={errors.hasAcceptedPrivacy?.length > 0}
                   />
                   <ConsentCheckbox
                     id="marketing"
+                    type="marketing"
                     label="I agree that Captain Frank may send me advertising about Captain Frank's services, promotions and satisfaction surveys by email. Captain Frank will process my personal data for this purpose (see privacy policy). I can revoke this consent at any time."
                     checked={formData.hasAcceptedMarketing}
                     onChange={handleTermsChange('hasAcceptedMarketing')}
@@ -1248,11 +774,7 @@ Captain Frank GmbH accepts the declaration of assignment.`}
             <div className="flex justify-between">
               <button
                 type="button"
-                onClick={() => {
-                  if (!isNavigatingBack) {
-                    setIsNavigatingBack(true);
-                  }
-                }}
+                onClick={handleBack}
                 className="px-6 py-3 text-[#F54538] hover:bg-[#FEF2F2] rounded-lg transition-colors"
                 disabled={isNavigatingBack}
               >

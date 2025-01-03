@@ -1,23 +1,18 @@
 'use client';
 
-import React, { useEffect } from 'react';
-import { useDispatch } from 'react-redux';
-import { completeStep } from '@/store/slices/progressSlice';
+import { useEffect } from 'react';
+import { useStore } from '@/lib/state/store';
 
-interface DevBypassInitializerProps {
-  onComplete: () => void;
-}
-
-export const DevBypassInitializer: React.FC<DevBypassInitializerProps> = ({
-  onComplete,
-}) => {
-  const dispatch = useDispatch();
+export const DevBypassInitializer = () => {
+  const { setCurrentPhase, completePhase } = useStore();
 
   useEffect(() => {
-    const steps = [1, 2, 3, 4, 5];
-    steps.forEach((step) => dispatch(completeStep(step)));
-    onComplete();
-  }, [dispatch, onComplete]);
+    if (process.env.NODE_ENV === 'development') {
+      setCurrentPhase(3);
+      completePhase(1);
+      completePhase(2);
+    }
+  }, [setCurrentPhase, completePhase]);
 
   return null;
 };

@@ -116,6 +116,7 @@ export async function POST(request: Request) {
     console.log('Parsed API response:', result);
 
     const status = result.status || (result.data && result.data.status);
+
     if (!status || !['accept', 'reject'].includes(status)) {
       console.error('Invalid response format from external API:', result);
       return NextResponse.json(

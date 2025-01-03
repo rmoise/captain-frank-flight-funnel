@@ -1,14 +1,14 @@
 'use client';
 
 import React from 'react';
+import { WelcomeSection } from '@/components/booking';
 import { Navbar } from '@/components/Navbar';
-import { WelcomeSection } from '@/components/booking/WelcomeSection';
 
-export default function PhasesLayout({
-  children,
-}: {
+interface PhaseLayoutProps {
   children: React.ReactNode;
-}) {
+}
+
+export default function PhaseLayout({ children }: PhaseLayoutProps) {
   return (
     <div className="min-h-screen bg-[#F4F7FA]">
       <Navbar />

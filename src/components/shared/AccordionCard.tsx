@@ -80,7 +80,11 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
       data-step={stepId}
     >
       <button
-        onClick={toggleAccordion}
+        onClick={(e) => {
+          e.preventDefault();
+          toggleAccordion();
+        }}
+        type="button"
         className="w-full flex items-start justify-between cursor-pointer text-left px-4 sm:px-8 py-6 transition-all duration-300"
       >
         <div className="flex-1">

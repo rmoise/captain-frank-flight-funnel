@@ -1,19 +1,18 @@
 'use client';
 
 import { ReactNode, useEffect } from 'react';
-import { useAppDispatch } from '@/store/hooks';
-import { initializeState } from '@/store/slices/progressSlice';
+import { useStore } from '@/lib/state/store';
 
 interface ClientLayoutProps {
   children: ReactNode;
 }
 
 export default function ClientLayout({ children }: ClientLayoutProps) {
-  const dispatch = useAppDispatch();
+  const { resetStore } = useStore();
 
   useEffect(() => {
-    dispatch(initializeState());
-  }, [dispatch]);
+    resetStore();
+  }, [resetStore]);
 
   return <>{children}</>;
 }

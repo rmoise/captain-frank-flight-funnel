@@ -9,6 +9,8 @@ import type { Flight } from '@/types/store';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { CustomDateInput } from '@/components/shared/CustomDateInput';
+import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
+import { formatDateToYYYYMMDD, isValidYYYYMMDD } from '@/utils/dateUtils';
 
 export interface QuestionAnswerProps {
   question: Question;
@@ -16,17 +18,17 @@ export interface QuestionAnswerProps {
   onSelect: (questionId: string, value: string) => void;
   currentStep: number;
   totalSteps: number;
-  selectedFlight?: Flight | Flight[] | null;
+  initialSelectedFlight?: Flight | Flight[] | null;
   hideProgress?: boolean;
 }
 
-export const QuestionAnswer: React.FC<QuestionAnswerProps> = ({
+const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
   question,
   selectedOption,
   onSelect,
   currentStep,
   totalSteps,
-  selectedFlight = null,
+  initialSelectedFlight = null,
   hideProgress = false,
 }) => {
   console.log('=== QuestionAnswer Render ===', {
@@ -34,7 +36,7 @@ export const QuestionAnswer: React.FC<QuestionAnswerProps> = ({
     selectedOption,
     currentStep,
     totalSteps,
-    selectedFlight,
+    initialSelectedFlight,
     hideProgress,
   });
 
@@ -62,14 +64,13 @@ export const QuestionAnswer: React.FC<QuestionAnswerProps> = ({
     onSelect(question.id, value);
   };
 
-  const progress = ((currentStep + 1) / totalSteps) * 100;
-
   const renderQuestionInput = () => {
     console.log('=== QuestionAnswer renderQuestionInput ===', {
       questionType: question.type,
       questionId: question.id,
       questionText: question.text,
       options: question.options,
+      selectedOption,
     });
 
     switch (question.type) {
@@ -80,44 +81,48 @@ export const QuestionAnswer: React.FC<QuestionAnswerProps> = ({
         }
         return (
           <div className="space-y-3">
-            {question.options.map((option) => (
-              <div key={option.value}>
-                <label
-                  className={`flex items-center w-full p-3 rounded-lg border cursor-pointer transition-all duration-200
-                    ${
-                      selectedOption === option.value
-                        ? 'border-[#F54538] bg-[#FEF2F2]'
-                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                    }`}
-                  onClick={() => {
-                    if (option.externalLink) {
-                      window.open(
-                        option.externalLink,
-                        option.openInNewTab ? '_blank' : '_self'
-                      );
-                      return;
-                    }
-                    onSelect(question.id, option.value);
-                  }}
-                >
-                  <input
-                    type="radio"
-                    name={question.id}
-                    value={option.value}
-                    checked={selectedOption === option.value}
-                    onChange={() => {
-                      if (!option.externalLink) {
+            {question.options.map((option) => {
+              const isSelected = selectedOption === option.value;
+              console.log('Rendering radio option:', {
+                questionId: question.id,
+                optionValue: option.value,
+                selectedOption,
+                isSelected,
+              });
+
+              return (
+                <div key={option.value}>
+                  <label
+                    className={`flex items-center w-full p-3 rounded-lg border cursor-pointer transition-all duration-200
+                      ${
+                        isSelected
+                          ? 'border-[#F54538] bg-[#FEF2F2]'
+                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      }`}
+                  >
+                    <input
+                      type="radio"
+                      name={question.id}
+                      value={option.value}
+                      checked={isSelected}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        if (option.externalLink) {
+                          window.open(option.externalLink, '_blank');
+                          return;
+                        }
+                        setLocalValue(option.value);
                         onSelect(question.id, option.value);
-                      }
-                    }}
-                    className="w-4 h-4 border-gray-300 text-[#F54538] focus:ring-[#F54538] focus:ring-offset-0 accent-[#F54538]"
-                  />
-                  <span className="ml-3 text-base text-gray-900">
-                    {option.label}
-                  </span>
-                </label>
-              </div>
-            ))}
+                      }}
+                      className="w-4 h-4 border-gray-300 text-[#F54538] focus:ring-[#F54538] focus:ring-offset-0 accent-[#F54538]"
+                    />
+                    <span className="ml-3 text-base text-gray-900 flex-grow">
+                      {option.label}
+                    </span>
+                  </label>
+                </div>
+              );
+            })}
           </div>
         );
 
@@ -172,15 +177,63 @@ export const QuestionAnswer: React.FC<QuestionAnswerProps> = ({
         const parsedDate = localValue ? new Date(localValue) : null;
         const isValidDate = parsedDate && !isNaN(parsedDate.getTime());
 
+        console.log('Rendering date picker:', {
+          questionId: question.id,
+          localValue,
+          selectedOption,
+          parsedDate,
+          isValidDate,
+        });
+
         return (
           <div className="mt-4">
             <DatePicker
               selected={isValidDate ? parsedDate : null}
               onChange={(date) => {
+                console.log('DatePicker onChange called with:', {
+                  date,
+                  questionId: question.id,
+                  currentValue: localValue,
+                });
+
                 if (date) {
-                  const dateStr = date.toISOString().split('T')[0];
-                  setLocalValue(dateStr);
-                  onSelect(question.id, dateStr);
+                  const formattedDate = formatDateToYYYYMMDD(date);
+                  console.log('DatePicker formatting date:', {
+                    originalDate: date,
+                    formattedDate,
+                    questionId: question.id,
+                    currentValue: localValue,
+                  });
+
+                  if (formattedDate) {
+                    // Validate the formatted date
+                    if (isValidYYYYMMDD(formattedDate)) {
+                      console.log('Setting valid formatted date:', {
+                        formattedDate,
+                        questionId: question.id,
+                      });
+                      setLocalValue(formattedDate);
+                      onSelect(question.id, formattedDate);
+                    } else {
+                      console.error('Invalid date format:', {
+                        date,
+                        formattedDate,
+                        questionId: question.id,
+                      });
+                    }
+                  } else {
+                    console.error('Failed to format date:', {
+                      date,
+                      questionId: question.id,
+                    });
+                  }
+                } else {
+                  console.log('DatePicker cleared:', {
+                    questionId: question.id,
+                    currentValue: localValue,
+                  });
+                  setLocalValue('');
+                  onSelect(question.id, '');
                 }
               }}
               customInput={
@@ -195,6 +248,7 @@ export const QuestionAnswer: React.FC<QuestionAnswerProps> = ({
                       : ''
                   }
                   onClear={() => {
+                    console.log('DatePicker onClear');
                     setLocalValue('');
                     onSelect(question.id, '');
                   }}
@@ -222,21 +276,25 @@ export const QuestionAnswer: React.FC<QuestionAnswerProps> = ({
             <FlightSelector
               onSelect={(flight) => {
                 if (flight) {
-                  onSelect(
-                    question.id,
-                    JSON.stringify(Array.isArray(flight) ? flight[0] : flight)
-                  );
+                  // Debounce the state update to prevent infinite loops
+                  setTimeout(() => {
+                    onSelect(
+                      question.id,
+                      JSON.stringify(Array.isArray(flight) ? flight[0] : flight)
+                    );
+                  }, 0);
                 }
               }}
-              selectedFlight={
-                Array.isArray(selectedFlight)
-                  ? selectedFlight[0]
-                  : selectedFlight
+              initialSelectedFlight={
+                typeof initialSelectedFlight === 'string'
+                  ? JSON.parse(initialSelectedFlight)
+                  : initialSelectedFlight
               }
               showFlightSearch={true}
               showFlightDetails={true}
               showResults={true}
               onInteract={() => {}}
+              stepNumber={currentStep}
             />
             {question.relatedQuestions?.map((relatedQ) => (
               <div key={relatedQ.id} className="mt-24 pt-12 pb-12 mb-12">
@@ -274,13 +332,13 @@ export const QuestionAnswer: React.FC<QuestionAnswerProps> = ({
             <motion.div
               className="h-full bg-[#F54538] rounded-full"
               initial={{ width: 0 }}
-              animate={{ width: `${progress}%` }}
+              animate={{ width: `${(currentStep / totalSteps) * 100}%` }}
               transition={{ duration: 0.3, ease: 'easeOut' }}
             />
           </div>
           <div className="text-sm text-gray-500">
             <span>
-              Question {currentStep + 1} of {totalSteps}
+              Question {currentStep} of {totalSteps}
             </span>
           </div>
         </div>
@@ -289,12 +347,49 @@ export const QuestionAnswer: React.FC<QuestionAnswerProps> = ({
       {/* Question */}
       <div className="space-y-4">
         <h3
-          className={`text-lg font-medium text-gray-900 ${question.type === 'flight_selector' ? 'mb-12' : ''}`}
+          className={`text-lg font-medium text-gray-900 ${
+            question.type === 'flight_selector' ? 'mb-12' : ''
+          }`}
         >
           {question.text}
         </h3>
         {renderQuestionInput()}
       </div>
     </div>
+  );
+};
+
+export const QuestionAnswer: React.FC<QuestionAnswerProps> = (props) => {
+  return (
+    <ErrorBoundary
+      fallback={
+        <div className="flex flex-col items-center justify-center min-h-[200px] text-center">
+          <div className="text-red-500 mb-4">
+            <svg
+              className="w-12 h-12 mx-auto"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
+            Unable to display question
+          </h3>
+          <p className="text-sm text-gray-500">
+            There was a problem displaying this question. Please try refreshing
+            the page.
+          </p>
+        </div>
+      }
+    >
+      <QuestionAnswerContent {...props} />
+    </ErrorBoundary>
   );
 };

@@ -2,13 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { setCurrentPhase, completePhase } from '@/store/slices/progressSlice';
-import { SpeechBubble } from '@/components/SpeechBubble';
+import { useStore } from '@/lib/state/store';
 import { PhaseGuard } from '@/components/shared/PhaseGuard';
+import { SpeechBubble } from '@/components/SpeechBubble';
 import { ContinueButton } from '@/components/shared/ContinueButton';
 import { BackButton } from '@/components/shared/BackButton';
 import { PhaseNavigation } from '@/components/PhaseNavigation';
+import type { Flight } from '@/types/store';
 
 type RouteInfo = {
   departureCity: string;
@@ -19,172 +19,240 @@ type RouteInfo = {
 
 export default function CompensationEstimatePage() {
   const router = useRouter();
-  const dispatch = useAppDispatch();
+  const {
+    completedPhases,
+    personalDetails,
+    fromLocation,
+    toLocation,
+    setCurrentPhase,
+    completePhase,
+    compensationAmount,
+    compensationLoading,
+    compensationError,
+    setCompensationAmount,
+    setCompensationLoading,
+    setCompensationError,
+    goToPreviousPhase,
+    selectedType,
+    selectedFlights,
+    shouldRecalculateCompensation,
+    compensationCache,
+    directFlight,
+    flightSegments,
+  } = useStore();
+
   const [mounted, setMounted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null);
-  const compensationAmount = useAppSelector(
-    (state) => state.compensation.compensationAmount
-  );
-  const compensationLoading = useAppSelector(
-    (state) => state.compensation.compensationLoading
-  );
-  const compensationError = useAppSelector(
-    (state) => state.compensation.compensationError
-  );
-  const completedPhases = useAppSelector(
-    (state) => state.progress.completedPhases
-  );
-  const personalDetails = useAppSelector(
-    (state) => state.booking.personalDetails
-  );
 
   useEffect(() => {
     setMounted(true);
+    setCurrentPhase(2);
+    completePhase(1);
+  }, [setCurrentPhase, completePhase]);
 
-    // Set current phase to 2
-    dispatch(setCurrentPhase(2));
-    localStorage.setItem('currentPhase', '2');
-
-    // Ensure only phase 1 is marked as completed
-    dispatch(completePhase(1));
-
-    // Save completed phases to localStorage (only phase 1)
-    const phases = [1];
-    localStorage.setItem('completedPhases', JSON.stringify(phases));
-
-    // Load flight information from previous phase
-    const fromLocation = localStorage.getItem('fromLocation');
-    const toLocation = localStorage.getItem('toLocation');
-    const multiCityLocations = localStorage.getItem('multiCityLocations');
-
-    if (fromLocation && toLocation) {
-      try {
-        const from = JSON.parse(fromLocation);
-        const to = JSON.parse(toLocation);
-
-        // Set route information for display only
-        setRouteInfo({
-          departure: from.value,
-          arrival: to.value,
-          departureCity: from.city,
-          arrivalCity: to.city,
-        });
-      } catch (error) {
-        console.error('Error parsing location details:', error);
-      }
-    } else if (multiCityLocations) {
-      try {
-        const locations = JSON.parse(multiCityLocations);
-        if (locations && locations.length > 0) {
-          const firstLeg = locations[0];
-          // Set route information for first leg
-          setRouteInfo({
-            departure: firstLeg.from.value,
-            arrival: firstLeg.to.value,
-            departureCity: firstLeg.from.city,
-            arrivalCity: firstLeg.to.city,
-          });
-        }
-      } catch (error) {
-        console.error('Error parsing multi-city location details:', error);
-      }
-    }
-  }, [dispatch]);
-
-  // Calculate compensation in a separate effect
   useEffect(() => {
-    if (!mounted || !routeInfo) return;
+    if (!fromLocation || !toLocation) return;
 
-    const calculateEstimate = async () => {
+    try {
+      const from =
+        typeof fromLocation === 'string'
+          ? JSON.parse(fromLocation)
+          : fromLocation;
+      const to =
+        typeof toLocation === 'string' ? JSON.parse(toLocation) : toLocation;
+
+      const fromCity =
+        from.city || from.dropdownLabel?.split('(')[0]?.trim() || from.value;
+      const toCity =
+        to.city || to.dropdownLabel?.split('(')[0]?.trim() || to.value;
+
+      setRouteInfo({
+        departure: from.value,
+        arrival: to.value,
+        departureCity: fromCity,
+        arrivalCity: toCity,
+      });
+
+      console.log('Route info updated:', {
+        from: fromCity,
+        to: toCity,
+        rawFrom: from,
+        rawTo: to,
+      });
+    } catch (error) {
+      console.error('Error parsing location details:', error);
+    }
+  }, [fromLocation, toLocation]);
+
+  useEffect(() => {
+    const calculateCompensation = async () => {
+      console.log('Starting compensation calculation');
+      console.log('Selected Flights:', selectedFlights);
+      console.log('Selected Type:', selectedType);
+      console.log('Route Info:', routeInfo);
+
+      // Check if we need to recalculate
+      if (
+        !shouldRecalculateCompensation() &&
+        compensationCache.amount !== null
+      ) {
+        console.log('Using cached amount:', compensationCache.amount);
+        setCompensationAmount(compensationCache.amount);
+        return;
+      }
+
+      setCompensationLoading(true);
+      setCompensationError(null);
+
       try {
+        let flightData;
+
+        // First try to get flight data from selectedFlights
+        if (
+          selectedFlights?.length > 0 &&
+          selectedFlights.some((flight) => flight !== null)
+        ) {
+          const validFlights = selectedFlights.filter(
+            (flight) => flight !== null
+          );
+          flightData =
+            selectedType === 'direct'
+              ? validFlights[0]
+              : validFlights[validFlights.length - 1];
+        }
+        // If no valid selectedFlights, use routeInfo
+        else if (routeInfo) {
+          flightData = {
+            departure: routeInfo.departure,
+            arrival: routeInfo.arrival,
+            departureCity: routeInfo.departureCity,
+            arrivalCity: routeInfo.arrivalCity,
+          };
+        }
+
+        console.log('Flight data for calculation:', flightData);
+
+        if (!flightData) {
+          console.error('No flight data available');
+          throw new Error('No flight data available');
+        }
+
+        const queryParams = new URLSearchParams({
+          from_iata: flightData.departure,
+          to_iata: flightData.arrival,
+        });
+
         const response = await fetch(
-          `/api/calculatecompensationbyfromiatatoiata?${new URLSearchParams({
-            from_iata: routeInfo.departure,
-            to_iata: routeInfo.arrival,
-          })}`
+          `/.netlify/functions/calculateCompensation?${queryParams}`,
+          {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          }
         );
 
+        console.log('Response status:', response.status);
+
         if (!response.ok) {
+          const errorText = await response.text();
+          console.error('API Error:', errorText);
           throw new Error('Failed to calculate compensation');
         }
 
         const data = await response.json();
-        const amount = data.amount || 0;
+        console.log('API Response:', data);
 
-        dispatch({
-          type: 'compensation/setCompensationAmount',
-          payload: amount,
+        if (data.amount === 0 || data.amount === null) {
+          console.error('No compensation amount in response');
+          throw new Error('No compensation amount available');
+        }
+
+        // Cache the compensation data
+        useStore.getState().setCompensationCache({
+          amount: data.amount,
+          flightData: {
+            selectedType,
+            directFlight:
+              selectedType === 'direct'
+                ? {
+                    fromLocation: directFlight?.fromLocation || null,
+                    toLocation: directFlight?.toLocation || null,
+                    date: directFlight?.date || null,
+                    selectedFlight: directFlight?.selectedFlight || null,
+                  }
+                : null,
+            flightSegments:
+              selectedType === 'multi'
+                ? flightSegments.map((segment) => ({
+                    fromLocation: segment.fromLocation,
+                    toLocation: segment.toLocation,
+                    date: segment.date,
+                    selectedFlight: segment.selectedFlight,
+                  }))
+                : [],
+            selectedFlights,
+          },
         });
 
-        localStorage.setItem('compensationAmount', JSON.stringify(amount));
-        localStorage.setItem(
-          'compensationRoute',
-          `${routeInfo.departure}-${routeInfo.arrival}`
-        );
+        setCompensationAmount(data.amount);
       } catch (error) {
         console.error('Error calculating compensation:', error);
-        dispatch({
-          type: 'compensation/setCompensationAmount',
-          payload: 600,
-        });
+        setCompensationError(
+          'Unable to calculate compensation. Please try again.'
+        );
+      } finally {
+        setCompensationLoading(false);
       }
     };
 
-    calculateEstimate();
-  }, [mounted, routeInfo, dispatch]);
+    // Call calculation if we have either selectedFlights or routeInfo
+    if (selectedFlights?.length > 0 || routeInfo) {
+      calculateCompensation();
+    } else {
+      console.log('No flight data available');
+    }
+  }, [
+    selectedFlights,
+    selectedType,
+    routeInfo,
+    directFlight,
+    flightSegments,
+    setCompensationAmount,
+    setCompensationLoading,
+    setCompensationError,
+    shouldRecalculateCompensation,
+    compensationCache.amount,
+  ]);
 
   const handleContinue = async () => {
     if (isLoading) return;
     setIsLoading(true);
 
     try {
-      // Complete phase 2 before transitioning to phase 3
-      dispatch({ type: 'progress/completePhase', payload: 2 });
-      dispatch({ type: 'progress/setCurrentPhase', payload: 3 });
-
-      // Set next phase and clear back navigation flag
-      localStorage.setItem('currentPhase', '3');
-      localStorage.removeItem('isBackNavigation');
-      localStorage.setItem('previousPhase', '2');
-
-      // Navigate to flight details
-      router.replace('/phases/flight-details');
+      await completePhase(2);
+      await setCurrentPhase(3);
+      const nextPhaseUrl = '/phases/flight-details';
+      if (!nextPhaseUrl) {
+        throw new Error('Invalid next phase URL');
+      }
+      await router.push(nextPhaseUrl);
     } catch (error) {
       console.error('Error during continue:', error);
+      setCurrentPhase(2);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleBack = () => {
-    // Save current state before navigating back
-    const currentState = {
-      selectedFlights: localStorage.getItem('selectedFlights'),
-      flightSummary: localStorage.getItem('flightSummary'),
-      fromLocation: localStorage.getItem('fromLocation'),
-      toLocation: localStorage.getItem('toLocation'),
-      bookingNumber: localStorage.getItem('bookingNumber'),
-      validationState: localStorage.getItem('validationState'),
-      completedSteps: localStorage.getItem('completedSteps'),
-      completedPhases: localStorage.getItem('completedPhases'),
-    };
-
-    // Set back navigation flag
-    localStorage.setItem('isBackNavigation', 'true');
-    localStorage.setItem('previousPhase', '1');
-
-    // Save current state to be restored
-    localStorage.setItem('savedFlightState', JSON.stringify(currentState));
-
-    // Update phase in localStorage
-    localStorage.setItem('currentPhase', '1');
-
-    // Navigate back to initial assessment
-    router.push('/phases/initial-assessment');
+    const previousUrl = goToPreviousPhase();
+    if (previousUrl !== null) {
+      router.push(previousUrl);
+    }
   };
 
-  // Don't render anything until after hydration
   if (!mounted) {
     return null;
   }
@@ -209,14 +277,47 @@ export default function CompensationEstimatePage() {
                     </div>
                   )}
                   <div className="space-y-4">
-                    <div>
-                      <p className="text-gray-600">From</p>
-                      <p className="font-medium">{routeInfo.departureCity}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-600">To</p>
-                      <p className="font-medium">{routeInfo.arrivalCity}</p>
-                    </div>
+                    {selectedType === 'direct' ? (
+                      <>
+                        <div>
+                          <p className="text-gray-600">From</p>
+                          <p className="font-medium">
+                            {routeInfo.departureCity}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-600">To</p>
+                          <p className="font-medium">{routeInfo.arrivalCity}</p>
+                        </div>
+                      </>
+                    ) : (
+                      (selectedFlights as Flight[]).map(
+                        (flight: Flight, index: number) => (
+                          <div
+                            key={index}
+                            className="pb-4 border-b border-gray-100 last:border-b-0"
+                          >
+                            <p className="text-gray-600 font-medium mb-2">
+                              Flight {index + 1}
+                            </p>
+                            <div className="space-y-2">
+                              <div>
+                                <p className="text-gray-600">From</p>
+                                <p className="font-medium">
+                                  {flight.departureCity}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-gray-600">To</p>
+                                <p className="font-medium">
+                                  {flight.arrivalCity}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      )
+                    )}
                   </div>
                 </div>
               ) : (

@@ -2,36 +2,34 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
-  // Only handle phase routes
-  if (request.nextUrl.pathname.startsWith('/phases/')) {
-    const response = NextResponse.next();
+  // Get the pathname of the request
+  const pathname = request.nextUrl.pathname;
 
-    // Get the current phase from the URL
-    const urlPhase = getPhaseFromUrl(request.nextUrl.pathname);
-    if (urlPhase) {
-      // Set the phase in a cookie to persist it
-      response.cookies.set('currentPhase', urlPhase.toString(), {
-        path: '/',
-        sameSite: 'lax',
-      });
-    }
+  // Handle /claim-success route
+  if (pathname === '/claim-success') {
+    // Create a new URL for the rewrite
+    const url = request.nextUrl.clone();
 
-    return response;
+    // Preserve all query parameters
+    const searchParams = new URLSearchParams(request.nextUrl.search);
+
+    // Add flags to indicate this is a redirected request and bypass phase check
+    searchParams.set('redirected', 'true');
+    searchParams.set('bypass_phase_check', 'true');
+
+    // Update the pathname and search params
+    url.pathname = '/phases/claim-success';
+    url.search = searchParams.toString();
+
+    // Use temporary redirect (307) to preserve the request method and body
+    return NextResponse.redirect(url, { status: 307 });
   }
 
+  // Continue with the request for all other routes
   return NextResponse.next();
 }
 
-function getPhaseFromUrl(url: string): number | null {
-  if (url.includes('/phases/initial-assessment')) return 1;
-  if (url.includes('/phases/compensation-estimate')) return 2;
-  if (url.includes('/phases/flight-details')) return 3;
-  if (url.includes('/phases/trip-experience')) return 4;
-  if (url.includes('/phases/claim-success')) return 5;
-  if (url.includes('/phases/agreement')) return 6;
-  return null;
-}
-
+// Configure the paths that should trigger this middleware
 export const config = {
-  matcher: ['/api/:path*', '/phases/:path*'],
+  matcher: ['/claim-success'],
 };

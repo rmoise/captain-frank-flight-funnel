@@ -78,4 +78,39 @@ export const wizardQuestions: Question[] = [
       answers.find((a) => a.questionId === 'issue_type')?.value === 'missed' &&
       answers.find((a) => a.questionId === 'missed_costs')?.value === 'yes',
   },
+  {
+    id: 'alternative_flight_airline_expense',
+    text: 'Did the airline provide an alternative flight?',
+    type: 'radio',
+    options: [
+      { id: 'yes', label: 'Yes', value: 'yes' },
+      { id: 'no', label: 'No', value: 'no' },
+    ],
+    showIf: (answers: Answer[]) =>
+      answers.find((a) => a.questionId === 'issue_type')?.value === 'cancel',
+  },
+  {
+    id: 'alternative_flight_own_expense',
+    text: 'Did you book an alternative flight at your own expense?',
+    type: 'radio',
+    options: [
+      { id: 'yes', label: 'Yes', value: 'yes' },
+      { id: 'no', label: 'No', value: 'no' },
+    ],
+    showIf: (answers: Answer[]) =>
+      answers.find((a) => a.questionId === 'issue_type')?.value === 'cancel' &&
+      answers.find((a) => a.questionId === 'alternative_flight_airline_expense')
+        ?.value === 'no',
+  },
+  {
+    id: 'refund_status',
+    text: 'Were your ticket costs refunded?',
+    type: 'radio',
+    options: [
+      { id: 'yes', label: 'Yes', value: 'yes' },
+      { id: 'no', label: 'No', value: 'no' },
+    ],
+    showIf: (answers: Answer[]) =>
+      answers.find((a) => a.questionId === 'issue_type')?.value === 'cancel',
+  },
 ];

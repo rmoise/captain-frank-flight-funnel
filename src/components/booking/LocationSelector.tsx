@@ -1,70 +1,91 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useAppDispatch } from '@/store/hooks';
-import { setFromLocation, setToLocation } from '@/store/slices/bookingSlice';
+import React from 'react';
 import { AutocompleteInput } from '@/components/shared/AutocompleteInput';
-import type { Airport } from '@/types/store';
-import type { Location } from '@/types/location';
+import type { LocationData } from '@/types/store';
+
+interface Airport {
+  iata_code: string;
+  name: string;
+  city?: string;
+}
 
 interface LocationSelectorProps {
-  onSelect?: () => void;
+  fromLocation: LocationData | null;
+  toLocation: LocationData | null;
+  onFromLocationSelect: (location: LocationData | null) => void;
+  onToLocationSelect: (location: LocationData | null) => void;
+  disabled?: boolean;
 }
 
 export const LocationSelector: React.FC<LocationSelectorProps> = ({
-  onSelect = () => {},
+  fromLocation,
+  toLocation,
+  onFromLocationSelect,
+  onToLocationSelect,
+  disabled = false,
 }) => {
-  const dispatch = useAppDispatch();
-  const [fromLocation, setFromLoc] = useState<Location | null>(null);
-  const [toLocation, setToLoc] = useState<Location | null>(null);
+  const searchAirports = async (term: string): Promise<LocationData[]> => {
+    if (!term || term.length < 3) {
+      return [];
+    }
 
-  const handleFromLocationChange = (location: Location | null) => {
-    setFromLoc(location);
-    dispatch(setFromLocation(location?.value || null));
-    if (location) onSelect();
-  };
-
-  const handleToLocationChange = (location: Location | null) => {
-    setToLoc(location);
-    dispatch(setToLocation(location?.value || null));
-    if (location) onSelect();
-  };
-
-  const handleSearchLocations = async (term: string): Promise<Location[]> => {
     try {
-      const response = await fetch(`/api/airports?search=${term}`);
-      const airports: Airport[] = await response.json();
-      return airports.map((airport) => ({
+      const response = await fetch(
+        `/api/searchairports?${new URLSearchParams({
+          term,
+          lang: 'en',
+        })}`
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch airports');
+      }
+
+      const data = await response.json();
+      const airports = data.data || [];
+
+      return airports.map((airport: Airport) => ({
         value: airport.iata_code,
-        label: `${airport.name} (${airport.iata_code})`,
+        label: airport.iata_code,
+        description: airport.city || '',
+        city: airport.city || '',
+        dropdownLabel: `${airport.name} (${airport.iata_code})`,
       }));
     } catch (error) {
-      console.error('Failed to fetch airports:', error);
+      console.error('Error searching airports:', error);
       return [];
     }
   };
 
+  const handleFromLocationSelect = (location: LocationData | null) => {
+    onFromLocationSelect(location);
+  };
+
+  const handleToLocationSelect = (location: LocationData | null) => {
+    onToLocationSelect(location);
+  };
+
   return (
-    <div className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700">From</label>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="relative">
         <AutocompleteInput
-          label="From"
           value={fromLocation}
-          onChange={handleFromLocationChange}
-          onSearch={handleSearchLocations}
-          placeholder="Search for departure airport"
+          label="From"
+          onChange={handleFromLocationSelect}
+          onSearch={searchAirports}
+          leftIcon="departure"
+          disabled={disabled}
         />
       </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700">To</label>
+      <div className="relative">
         <AutocompleteInput
-          label="To"
           value={toLocation}
-          onChange={handleToLocationChange}
-          onSearch={handleSearchLocations}
-          placeholder="Search for arrival airport"
+          label="To"
+          onChange={handleToLocationSelect}
+          onSearch={searchAirports}
+          leftIcon="arrival"
+          disabled={disabled}
         />
       </div>
     </div>

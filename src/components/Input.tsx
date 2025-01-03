@@ -50,16 +50,26 @@ export const Input: React.FC<InputProps> = ({
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     onChange(newValue);
+    if (!newValue.trim()) {
+      setIsTouched(false);
+    }
   };
 
   const handleClear = (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
     onChange('');
+    setIsTouched(false);
     if (inputRef.current) {
       inputRef.current.focus();
     }
   };
+
+  useEffect(() => {
+    if (!error) {
+      setIsTouched(false);
+    }
+  }, [error]);
 
   const showError = error && isTouched;
   const showRequiredError = required && isTouched && !value.trim();
@@ -85,9 +95,9 @@ export const Input: React.FC<InputProps> = ({
             transition-colors duration-[250ms] ease-in-out
             ${
               isFieldFocused
-                ? 'border-2 border-[#F54538]'
-                : showError
-                  ? 'border border-red-500'
+                ? 'border-2 border-blue-500'
+                : showError || showRequiredError
+                  ? 'border border-[#F54538]'
                   : 'border border-gray-300 hover:border-blue-500'
             }
             focus:outline-none
@@ -101,6 +111,10 @@ export const Input: React.FC<InputProps> = ({
           placeholder=""
           maxLength={maxLength}
           aria-label={label}
+          aria-invalid={showError || showRequiredError}
+          aria-describedby={
+            showError || showRequiredError ? `${label}-error` : undefined
+          }
         />
         {value && (
           <button

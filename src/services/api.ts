@@ -1,6 +1,7 @@
 // Types
 import type { Flight } from '@/types';
 import type { Location } from '@/components/shared/AutocompleteInput';
+import type { TravelStatus, JourneyFactType } from '@/types/travel';
 
 export interface ApiResponse<T> {
   data: T[];
@@ -44,10 +45,13 @@ export interface CompensationResponse {
 
 export interface EvaluationResponse {
   status: 'accept' | 'reject';
+  guid: string;
+  recommendation_guid: string;
   contract?: {
     amount: number;
     provision: number;
   };
+  rejection_reasons?: Record<string, string>;
 }
 
 export interface OrderClaimRequest {
@@ -55,7 +59,7 @@ export interface OrderClaimRequest {
   journey_fact_flightids: string[];
   information_received_at: string;
   journey_booked_pnr: string;
-  journey_fact_type: 'none' | 'self' | 'provided';
+  journey_fact_type: JourneyFactType;
   owner_salutation: 'herr' | 'frau';
   owner_firstname: string;
   owner_lastname: string;
@@ -70,6 +74,8 @@ export interface OrderClaimRequest {
   contract_signature: string;
   contract_tac: boolean;
   contract_dp: boolean;
+  guid?: string;
+  recommendation_guid?: string;
 }
 
 export interface OrderClaimResponse {
@@ -79,6 +85,10 @@ export interface OrderClaimResponse {
   contract?: {
     amount: number;
     provision: number;
+  };
+  data?: {
+    guid: string;
+    recommendation_guid: string;
   };
 }
 
@@ -389,11 +399,7 @@ class ApiClient {
       console.log('Evaluating claim with data:', data);
 
       const response = await fetch(
-        `https://secure.captain-frank.net/api/services/euflightclaim/evaluateeuflightclaim?${new URLSearchParams(
-          {
-            lang: 'en',
-          }
-        )}`,
+        '/.netlify/functions/evaluateeuflightclaim',
         {
           method: 'POST',
           headers: {
@@ -428,7 +434,7 @@ class ApiClient {
     try {
       console.log('Ordering claim with data:', data);
 
-      const response = await fetch(`${BASE_URL}/ordereuflightclaim`, {
+      const response = await fetch('/.netlify/functions/orderEuFlightClaim', {
         method: 'POST',
         headers: {
           Accept: 'application/json',
@@ -446,6 +452,7 @@ class ApiClient {
           owner_street: data.owner_street,
           owner_place: data.owner_place,
           owner_city: data.owner_city,
+          owner_zip: data.owner_zip,
           owner_country: data.owner_country,
           owner_email: data.owner_email,
           owner_phone: data.owner_phone || '',
@@ -453,6 +460,8 @@ class ApiClient {
           contract_signature: data.contract_signature,
           contract_tac: data.contract_tac,
           contract_dp: data.contract_dp,
+          guid: data.guid,
+          recommendation_guid: data.recommendation_guid,
         }),
       });
 
@@ -462,7 +471,7 @@ class ApiClient {
 
       const responseData = await response.json();
 
-      if (!responseData || !responseData.status) {
+      if (!responseData || !responseData.data) {
         throw new Error('Invalid response format from API');
       }
 
@@ -476,6 +485,8 @@ class ApiClient {
   async evaluateEuflightClaim(params: {
     journey_booked_flightids: string[];
     information_received_at: string;
+    delay_duration?: string;
+    travel_status?: string;
   }): Promise<EvaluationResponse> {
     try {
       console.log('Evaluating claim with params:', params);
@@ -510,10 +521,7 @@ class ApiClient {
     }
   }
 
-  async orderEuflightClaim(params: {
-    journey_booked_flightids: number[];
-    journey_fact_flightids?: number[];
-  }): Promise<{
+  async orderEuflightClaim(params: OrderClaimRequest): Promise<{
     guid: string;
     recommendation_guid: string;
   }> {
@@ -521,15 +529,27 @@ class ApiClient {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        Accept: 'application/json',
       },
       body: JSON.stringify(params),
     });
 
     if (!response.ok) {
-      throw new Error('Failed to order EU flight claim');
+      const errorText = await response.text();
+      try {
+        const errorData = JSON.parse(errorText);
+        throw new Error(
+          errorData.message ||
+            errorData.error ||
+            'Failed to order EU flight claim'
+        );
+      } catch (e) {
+        throw new Error('Failed to order EU flight claim');
+      }
     }
 
-    return response.json();
+    const result = await response.json();
+    return result.data;
   }
 }
 

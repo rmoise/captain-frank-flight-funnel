@@ -1,5 +1,9 @@
+import type { LocationLike } from './location';
+import type { Question } from './experience';
+
 export interface Flight {
   id: string;
+  flightNumber: string;
   departure: string;
   arrival: string;
   departureCity: string;
@@ -7,33 +11,27 @@ export interface Flight {
   departureTime: string;
   arrivalTime: string;
   date: string;
-  duration: string;
-  flightNumber: string;
   airline: string;
-  price: number;
+  status: string;
+  departureAirport: string;
+  arrivalAirport: string;
+  scheduledDepartureTime: string;
+  scheduledArrivalTime: string;
+  actualDeparture: string | null;
+  actualArrival: string | null;
+  arrivalDelay: number | null;
+  duration: string;
   stops: number;
   aircraft: string;
   class: string;
-  status?: string;
-  departureAirport?: string;
-  arrivalAirport?: string;
-  scheduledDepartureTime?: string;
+  price: number;
   bookingReference?: string;
-  flightDate?: string;
-  actualDeparture?: string | null;
-  actualArrival?: string | null;
-  dep_city?: string;
-  arr_city?: string;
-  dep_iata?: string;
-  arr_iata?: string;
-  dep_time_sched?: string;
-  arr_time_sched?: string;
-  arrivalDelay?: number | null;
 }
 
 export interface Answer {
   questionId: string;
-  value: string;
+  value: string | number | boolean;
+  shouldShow?: boolean;
 }
 
 export interface PassengerDetails {
@@ -42,25 +40,27 @@ export interface PassengerDetails {
   email: string;
   salutation: string;
   phone: string;
-  address: string;
-  city: string;
-  country: string;
-  zipCode: string;
-}
-
-export interface Question {
-  id: string;
-  type: 'text' | 'money' | 'date' | 'select';
-  text: string;
-  options?: string[];
-  showIf?: (answers: Answer[]) => boolean;
+  address?: string;
+  zipCode?: string;
+  city?: string;
+  country?: string;
 }
 
 export interface LocationData {
   value: string;
   label: string;
-  description: string;
-  city: string;
+  description?: string;
+  city?: string;
+  dropdownLabel?: string;
+}
+
+export type { Question };
+
+export interface FlightSegmentData {
+  fromLocation: LocationLike | null;
+  toLocation: LocationLike | null;
+  selectedFlight: Flight | null;
+  date: Date | null;
 }
 
 export interface Airport {
@@ -91,4 +91,39 @@ export interface ProgressState {
   currentPhase: number;
   completedPhases: number[];
   completedSteps: number[];
+}
+
+export interface StoreState {
+  // Flight related
+  selectedFlights: Flight[];
+  fromLocation: string | null;
+  toLocation: string | null;
+  selectedDate: string | null;
+
+  // Wizard related
+  wizardCurrentStep: number;
+  wizardAnswers: Answer[];
+  wizardIsCompleted: boolean;
+  wizardSuccessMessage: string;
+  wizardIsEditingMoney: boolean;
+  wizardLastActiveStep: number | null;
+  wizardShowingSuccess: boolean;
+  wizardValidationState: Record<number, boolean>;
+  wizardIsValidating: boolean;
+
+  // User related
+  personalDetails: PassengerDetails | null;
+  termsAccepted: boolean;
+  privacyAccepted: boolean;
+  marketingAccepted: boolean;
+
+  // Navigation related
+  currentPhase: number;
+  completedPhases: number[];
+  currentStep: number;
+  completedSteps: number[];
+  openSteps: number[];
+
+  // Error handling
+  locationError: string | null;
 }

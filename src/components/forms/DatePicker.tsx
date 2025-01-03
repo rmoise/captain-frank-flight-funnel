@@ -3,29 +3,40 @@ import ReactDatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import clsx from 'clsx';
 
+// Custom CSS to fix dropdown width issues
+const customDatePickerStyles = `
+  .react-datepicker__month-dropdown {
+    width: 12rem !important;
+  }
+  .react-datepicker__year-dropdown {
+    width: 8rem !important;
+  }
+  .react-datepicker__month-dropdown-container,
+  .react-datepicker__year-dropdown-container {
+    font-size: 0.875rem;
+  }
+`;
+
 interface DatePickerProps {
-  value: string;
-  onChange: (value: string) => void;
+  selected: Date | null;
+  onChange: (date: Date | null) => void;
   label?: string;
   error?: string;
   required?: boolean;
+  className?: string;
 }
 
 export const DatePicker: React.FC<DatePickerProps> = ({
-  value,
+  selected,
   onChange,
   label,
   error,
   required,
+  className,
 }) => {
-  const handleChange = (date: Date | null) => {
-    if (date) {
-      onChange(date.toISOString().split('T')[0]);
-    }
-  };
-
   return (
     <div className="space-y-2">
+      <style>{customDatePickerStyles}</style>
       {label && (
         <label className="block text-sm font-medium text-gray-700">
           {label}
@@ -33,22 +44,21 @@ export const DatePicker: React.FC<DatePickerProps> = ({
         </label>
       )}
       <ReactDatePicker
-        selected={value ? new Date(value) : null}
-        onChange={handleChange}
-        dateFormat="dd.MM.yyyy"
-        maxDate={new Date()}
-        showMonthDropdown
-        showYearDropdown
-        dropdownMode="select"
-        isClearable={false}
-        placeholderText="DD.MM.YYYY"
-        shouldCloseOnSelect={true}
+        selected={selected}
+        onChange={onChange}
         className={clsx(
-          'block w-full rounded-md border-gray-300 shadow-sm focus:border-[#F54538] focus:ring-[#F54538] sm:text-sm',
-          error && 'border-red-500'
+          'block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm',
+          className,
+          {
+            'border-red-500': error,
+          }
         )}
       />
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && (
+        <p className="mt-2 text-sm text-red-600" role="alert">
+          {error}
+        </p>
+      )}
     </div>
   );
 };
