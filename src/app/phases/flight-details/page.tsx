@@ -236,7 +236,7 @@ export default function FlightDetailsPage() {
               </AccordionCard>
             </div>
 
-            <div className="flex items-center justify-between pt-8">
+            <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
               <BackButton onClick={handleBack} />
               <ContinueButton
                 onClick={handleContinue}

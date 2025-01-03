@@ -17,6 +17,8 @@ import type { OrderClaimRequest } from '@/services/api';
 import { PhaseNavigation } from '@/components/PhaseNavigation';
 import { AccordionCard } from '@/components/shared/AccordionCard';
 import { accordionConfig } from '@/config/accordion';
+import { BackButton } from '@/components/shared/BackButton';
+import { ContinueButton } from '@/components/shared/ContinueButton';
 
 interface FormData {
   hasAcceptedTerms: boolean;
@@ -771,26 +773,13 @@ Captain Frank GmbH accepts the declaration of assignment.`}
 
             <FormError errors={errors.submit} />
 
-            <div className="flex justify-between">
-              <button
-                type="button"
-                onClick={handleBack}
-                className="px-6 py-3 text-[#F54538] hover:bg-[#FEF2F2] rounded-lg transition-colors"
-                disabled={isNavigatingBack}
-              >
-                Back
-              </button>
-              <button
-                type="submit"
+            <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
+              <BackButton onClick={handleBack} />
+              <ContinueButton
+                onClick={handleSubmit}
                 disabled={!canSubmit()}
-                className={`px-6 py-3 rounded-lg transition-colors ${
-                  canSubmit()
-                    ? 'bg-[#F54538] text-white hover:bg-[#E03F33]'
-                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                }`}
-              >
-                Submit Claim
-              </button>
+                text="Submit Claim"
+              />
             </div>
           </form>
         </main>

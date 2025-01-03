@@ -575,46 +575,48 @@ export default function TripExperiencePage() {
             {/* Trip Experience Wizard */}
             <AccordionCard
               title="Travel Status"
-              subtitle="Tell us what happened with your travel plans"
               isOpen={true}
-              shouldStayOpen={true}
+              shouldStayOpen={false}
               isCompleted={validationState.stepValidation[2]}
               hasInteracted={validationState.stepInteraction[2]}
               stepId="travel-status"
               className={accordionConfig.padding.wrapper}
             >
-              <QAWizard
-                questions={questions}
-                onComplete={(answers) => {
-                  setWizardAnswers(answers);
-                  handleTripExperienceComplete();
-                }}
-                onInteract={handleTripExperienceInteract}
-                initialAnswers={tripExperienceAnswers}
-                selectedFlight={selectedFlights[0] || null}
-              />
+              <div className={accordionConfig.padding.content}>
+                <QAWizard
+                  questions={questions}
+                  onComplete={(answers) => {
+                    setWizardAnswers(answers);
+                    handleTripExperienceComplete();
+                  }}
+                  onInteract={handleTripExperienceInteract}
+                  initialAnswers={tripExperienceAnswers}
+                  selectedFlight={selectedFlights[0] || null}
+                />
+              </div>
             </AccordionCard>
 
             {/* Informed Date Wizard */}
             <AccordionCard
               title="Informed Date"
-              subtitle="When were you informed about the changes?"
               isOpen={true}
-              shouldStayOpen={true}
+              shouldStayOpen={false}
               isCompleted={validationState.stepValidation[3]}
               hasInteracted={validationState.stepInteraction[3]}
               stepId="informed-date"
               className={accordionConfig.padding.wrapper}
             >
-              <QAWizard
-                questions={informedDateQuestions}
-                onComplete={(answers) => {
-                  setWizardAnswers(answers);
-                  handleInformedDateComplete();
-                }}
-                onInteract={handleInformedDateInteract}
-                initialAnswers={informedDateAnswers}
-              />
+              <div className={accordionConfig.padding.content}>
+                <QAWizard
+                  questions={informedDateQuestions}
+                  onComplete={(answers) => {
+                    setWizardAnswers(answers);
+                    handleInformedDateComplete();
+                  }}
+                  onInteract={handleInformedDateInteract}
+                  initialAnswers={informedDateAnswers}
+                />
+              </div>
             </AccordionCard>
 
             {/* Navigation */}

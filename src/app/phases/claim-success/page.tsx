@@ -240,7 +240,7 @@ function ClaimSuccessContent() {
                 </AccordionCard>
               </div>
 
-              <div className="mt-8 flex justify-between">
+              <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
                 <BackButton
                   onClick={() => router.push('/phases/trip-experience')}
                 />

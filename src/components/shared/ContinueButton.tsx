@@ -120,7 +120,9 @@ export function ContinueButton({
           </div>
         ) : (
           <div className="flex items-center space-x-2">
-            <span className="block sm:hidden">Continue</span>
+            <span className="block sm:hidden">
+              {text === 'Submit Claim' ? text : 'Continue'}
+            </span>
             <span className="hidden sm:block">{children || text}</span>
           </div>
         )}

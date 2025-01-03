@@ -66,7 +66,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
 
   return (
     <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <Select
             label="Salutation"
@@ -167,7 +167,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
                 required={isClaimSuccess}
               />
             </div>
-            <div className="col-span-2">
+            <div className="col-span-1 md:col-span-2">
               <Select
                 label="Country"
                 value={storedDetails?.country || ''}
