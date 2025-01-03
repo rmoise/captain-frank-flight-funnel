@@ -1333,6 +1333,82 @@ export const useStore = create<StoreState & StoreActions>()(
         console.log('New phase:', phase);
         console.log('Current validation state:', state.validationState);
         console.log('Current completed steps:', state.completedSteps);
+        console.log('Current wizard answers:', state.wizardAnswers);
+
+        // If transitioning to phase 1, preserve wizard answers and validation
+        if (phase === 1) {
+          console.log('Entering phase 1');
+          const store = get();
+
+          // Get existing validation states
+          const flightValid = validateFlightSelection(state);
+          const wizardValid = validateQAWizard(state).isValid;
+          const personalValid = validatePersonalDetails(state);
+          const termsValid = !!(state.termsAccepted && state.privacyAccepted);
+
+          console.log('Phase 1 validation results:', {
+            flightValid,
+            wizardValid,
+            personalValid,
+            termsValid,
+            wizardAnswers: state.wizardAnswers,
+            lastAnsweredQuestion: state.lastAnsweredQuestion,
+          });
+
+          // Create new validation state while preserving existing validations
+          const newValidationState = {
+            ...state.validationState,
+            isFlightValid: flightValid,
+            isWizardValid: wizardValid,
+            isPersonalValid: personalValid,
+            isTermsValid: termsValid,
+            stepValidation: {
+              ...state.validationState.stepValidation,
+              1: flightValid,
+              2: wizardValid,
+              3: personalValid,
+              4: termsValid,
+            },
+            stepInteraction: {
+              ...state.validationState.stepInteraction,
+              1:
+                !!state.directFlight?.selectedFlight ||
+                state.selectedFlights?.length > 0,
+              2: state.wizardAnswers.length > 0,
+              3: personalValid,
+              4: termsValid,
+            },
+            1: flightValid,
+            2: wizardValid,
+            3: personalValid,
+            4: termsValid,
+            _timestamp: Date.now(),
+          };
+
+          // Calculate new completed steps
+          const newCompletedSteps = [
+            ...(flightValid ? [1] : []),
+            ...(wizardValid ? [2] : []),
+            ...(personalValid ? [3] : []),
+            ...(termsValid ? [4] : []),
+          ].sort((a, b) => a - b);
+
+          // Update state with preserved validation and wizard state
+          set({
+            currentPhase: phase,
+            validationState: newValidationState,
+            completedSteps: newCompletedSteps,
+            wizardIsValid: wizardValid,
+            wizardIsCompleted: state.wizardIsCompleted,
+            lastAnsweredQuestion: state.lastAnsweredQuestion,
+            wizardAnswers: state.wizardAnswers,
+            wizardCurrentSteps: state.wizardCurrentSteps,
+            wizardValidationState: state.wizardValidationState,
+            wizardLastActiveStep: state.wizardLastActiveStep,
+            _lastUpdate: Date.now(),
+          });
+          return;
+        }
 
         // If transitioning to phase 4 (trip experience), handle wizard state
         if (phase === 4) {
@@ -1730,12 +1806,15 @@ export const useStore = create<StoreState & StoreActions>()(
       setCurrentSegmentIndex: (index: number) =>
         set({ currentSegmentIndex: index }),
 
-      setSelectedType: (type: 'direct' | 'multi') => {
+      setSelectedType: (type: 'direct' | 'multi') =>
         set((state) => {
           console.log('\n=== setSelectedType called ===');
           console.log('Current type:', state.selectedType);
           console.log('New type:', type);
           console.log('Current completed steps:', state.completedSteps);
+          console.log('Current selected flights:', state.selectedFlights);
+          console.log('Current direct flight:', state.directFlight);
+          console.log('Current flight segments:', state.flightSegments);
 
           // Skip if type hasn't changed
           if (state.selectedType === type) {
@@ -1749,8 +1828,6 @@ export const useStore = create<StoreState & StoreActions>()(
           // Create base state updates
           let newState: Partial<StoreState> = {
             selectedType: type,
-            selectedFlights: [],
-            selectedFlight: null,
           };
 
           // If switching to multi, initialize segments
@@ -1760,7 +1837,7 @@ export const useStore = create<StoreState & StoreActions>()(
                 fromLocation: state.directFlight.fromLocation,
                 toLocation: state.directFlight.toLocation,
                 date: state.directFlight.date,
-                selectedFlight: null,
+                selectedFlight: state.directFlight.selectedFlight, // Preserve selected flight
               },
               {
                 fromLocation: null,
@@ -1774,6 +1851,10 @@ export const useStore = create<StoreState & StoreActions>()(
               ...newState,
               flightSegments: newSegments,
               currentSegmentIndex: 0,
+              selectedFlights: state.directFlight.selectedFlight
+                ? [state.directFlight.selectedFlight]
+                : [], // Preserve selected flights
+              selectedFlight: state.directFlight.selectedFlight, // Preserve selected flight
             };
           }
 
@@ -1792,6 +1873,10 @@ export const useStore = create<StoreState & StoreActions>()(
             newState = {
               ...newState,
               directFlight: newDirectFlight,
+              selectedFlights: firstSegment?.selectedFlight
+                ? [firstSegment.selectedFlight]
+                : [], // Preserve selected flights
+              selectedFlight: firstSegment?.selectedFlight || null, // Preserve selected flight
             };
           }
 
@@ -1806,15 +1891,24 @@ export const useStore = create<StoreState & StoreActions>()(
           const isValid = validateFlightSelection(updatedState);
           console.log('Flight validation result:', isValid);
 
+          // For phase 3, also validate booking number
+          const bookingValid =
+            state.currentPhase === 3
+              ? validateBookingNumber(state)
+              : existingValidationState.isBookingValid;
+
           // Create final validation state while preserving other validations
           const finalValidationState = {
             ...existingValidationState,
             isFlightValid: isValid,
+            isBookingValid: bookingValid,
             stepValidation: {
               ...existingValidationState.stepValidation,
               1: isValid,
+              2: bookingValid,
             },
             1: isValid,
+            2: bookingValid,
             _timestamp: Date.now(),
           };
 
@@ -1836,7 +1930,27 @@ export const useStore = create<StoreState & StoreActions>()(
             );
           }
 
+          // For phase 3, handle booking validation in completed steps
+          if (state.currentPhase === 3) {
+            if (bookingValid && !finalCompletedSteps.includes(2)) {
+              finalCompletedSteps = Array.from(
+                new Set([...finalCompletedSteps, 2])
+              ).sort((a, b) => a - b);
+            } else if (!bookingValid) {
+              finalCompletedSteps = finalCompletedSteps.filter(
+                (step) => step !== 2
+              );
+            }
+          }
+
           console.log('Calculated completed steps:', finalCompletedSteps);
+          console.log('Final state:', {
+            selectedType: type,
+            selectedFlights: newState.selectedFlights,
+            selectedFlight: newState.selectedFlight,
+            directFlight: newState.directFlight,
+            flightSegments: newState.flightSegments,
+          });
           console.log('=== End setSelectedType ===\n');
 
           // Return final state with all updates
@@ -1847,8 +1961,7 @@ export const useStore = create<StoreState & StoreActions>()(
             openSteps: Array.from(new Set([...state.openSteps, 1])),
             _lastUpdate: Date.now(),
           };
-        });
-      },
+        }),
 
       setDirectFlight: (flight: FlightSlice['directFlight']) =>
         set({ directFlight: flight }),

@@ -16,7 +16,7 @@ interface SignaturePadProps {
 }
 
 const SignaturePad = React.forwardRef<SignaturePadRef, SignaturePadProps>(
-  ({ width = 1000, height = 400, onBegin, onChange, onEnd }, ref) => {
+  ({ width = 600, height = 200, onBegin, onChange, onEnd }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const contextRef = useRef<CanvasRenderingContext2D | null>(null);
     const [isDrawing, setIsDrawing] = useState(false);
@@ -41,7 +41,7 @@ const SignaturePad = React.forwardRef<SignaturePadRef, SignaturePadProps>(
 
       // Set up the context for smooth signature drawing
       context.strokeStyle = '#000';
-      context.lineWidth = 2.5;
+      context.lineWidth = 2;
       context.lineCap = 'round';
       context.lineJoin = 'round';
       context.shadowBlur = 0;
@@ -59,7 +59,8 @@ const SignaturePad = React.forwardRef<SignaturePadRef, SignaturePadProps>(
         onChange?.('');
       },
       toDataURL: () => {
-        return canvasRef.current?.toDataURL() || '';
+        // Convert to data URL with reduced quality PNG
+        return canvasRef.current?.toDataURL('image/png', 0.5) || '';
       },
       isEmpty: () => {
         const canvas = canvasRef.current;
@@ -95,7 +96,7 @@ const SignaturePad = React.forwardRef<SignaturePadRef, SignaturePadProps>(
 
           // Reset the drawing settings
           context.strokeStyle = '#000';
-          context.lineWidth = 2.5;
+          context.lineWidth = 2;
           context.lineCap = 'round';
           context.lineJoin = 'round';
 
