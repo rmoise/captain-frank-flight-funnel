@@ -1338,7 +1338,6 @@ export const useStore = create<StoreState & StoreActions>()(
         // If transitioning to phase 1, preserve wizard answers and validation
         if (phase === 1) {
           console.log('Entering phase 1');
-          const store = get();
 
           // Get existing validation states
           const flightValid = validateFlightSelection(state);
