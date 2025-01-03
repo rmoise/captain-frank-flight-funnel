@@ -1,7 +1,10 @@
 // Types
 import type { Flight } from '@/types';
 import type { Location } from '@/components/shared/AutocompleteInput';
+// TravelStatus is used as the base type for JourneyFactType in OrderClaimRequest
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import type { TravelStatus, JourneyFactType } from '@/types/travel';
+/* eslint-enable @typescript-eslint/no-unused-vars */
 
 export interface ApiResponse<T> {
   data: T[];

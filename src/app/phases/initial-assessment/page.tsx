@@ -172,6 +172,7 @@ const summaryInitialState: StoreStateValues = {
   evaluationResult: {
     status: null,
   },
+  isLoading: false,
 };
 
 export default function InitialAssessment() {

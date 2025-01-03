@@ -1327,7 +1327,6 @@ export const useStore = create<StoreState & StoreActions>()(
 
       setCurrentPhase: (phase: number) => {
         const state = get();
-        const { validateTerms } = get();
 
         console.log('\n=== setCurrentPhase called ===');
         console.log('Current phase:', state.currentPhase);
