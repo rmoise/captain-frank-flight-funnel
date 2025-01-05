@@ -45,6 +45,14 @@ export const PhaseNavigation: React.FC<PhaseNavigationProps> = () => {
         return completedPhases.includes(1) && completedSteps.includes(1);
       }
 
+      // For phase 5, require phase 4 to be completed AND both steps in phase 4 to be completed
+      if (phaseNumber === 5) {
+        const phase4Completed = completedPhases.includes(4);
+        const phase4StepsCompleted =
+          completedSteps.includes(2) && completedSteps.includes(3);
+        return phase4Completed && phase4StepsCompleted;
+      }
+
       // For other phases, require previous phase to be completed
       return completedPhases.includes(phaseNumber - 1);
     },

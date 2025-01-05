@@ -25,7 +25,17 @@ export const PhaseGuard: React.FC<PhaseGuardProps> = ({
   }, [allowDevAccess]);
 
   const isPhaseAccessible =
-    isDevMode || phase <= currentPhase || completedPhases.includes(phase);
+    isDevMode ||
+    phase === currentPhase ||
+    completedPhases.includes(phase) ||
+    (phase < currentPhase && completedPhases.includes(phase - 1)) ||
+    (phase === 2 && completedPhases.includes(1)) ||
+    (phase === 3 && completedPhases.includes(2)) ||
+    (phase === 4 && completedPhases.includes(3)) ||
+    (phase === 5 &&
+      completedPhases.includes(4) &&
+      useStore.getState().validationState.stepValidation[2] &&
+      useStore.getState().validationState.stepValidation[3]);
 
   if (!isPhaseAccessible) {
     return null;
