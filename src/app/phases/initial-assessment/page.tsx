@@ -192,7 +192,6 @@ export default function InitialAssessment() {
     toLocation,
     currentStep,
     openSteps,
-    completedPhases,
     validationState,
     setWizardAnswers,
     setPersonalDetails,
@@ -216,14 +215,11 @@ export default function InitialAssessment() {
     const initialize = async () => {
       try {
         if (!mounted) {
-          console.log('\n=== Initializing Initial Assessment Page ===');
           await initializeStore();
           setCurrentPhase(1);
           setMounted(true);
-          console.log('=== Initialization Complete ===\n');
         }
       } catch (error) {
-        console.error('Failed to initialize state:', error);
       }
     };
 
@@ -235,31 +231,7 @@ export default function InitialAssessment() {
     if (!mounted) return;
 
     // Log overall state
-    console.log('\n=== Initial Assessment Step State ===');
-    console.log('Completed Steps:', completedSteps);
-    console.log('Current Step:', currentStep);
-    console.log('Flight State:', {
-      fromLocation,
-      toLocation,
-      selectedFlights,
-      isValid: isStepValid(1),
-    });
-    console.log('Wizard State:', {
-      wizardAnswers,
-      isValid: isStepValid(2),
-    });
-    console.log('Personal Details State:', {
-      personalDetails,
-      isValid: isStepValid(3),
-    });
-    console.log('Terms State:', {
-      termsAccepted,
-      privacyAccepted,
-      marketingAccepted,
-      isValid: isStepValid(4),
-    });
-    console.log('Validation State:', validationState);
-    console.log('=== End Initial Assessment Step State ===\n');
+
   }, [
     mounted,
     validationState,
@@ -279,8 +251,7 @@ export default function InitialAssessment() {
   // QA Wizard completion handler
   const handleComplete = useCallback(
     (answers: Answer[]) => {
-      console.log('\n=== QAWizard Completion ===');
-      console.log('Answers:', answers);
+
 
       // Store the answers and let the store handle validation
       setWizardAnswers(answers);
@@ -288,7 +259,6 @@ export default function InitialAssessment() {
       validateQAWizard();
       setInteractedSteps((prev) => [...new Set([...prev, 2])]);
 
-      console.log('=== End QAWizard Completion ===\n');
     },
     [setWizardAnswers, markWizardComplete, validateQAWizard]
   );
@@ -361,7 +331,6 @@ export default function InitialAssessment() {
           questions: wizardQuestions,
           onComplete: handleComplete,
           onInteract: () => {
-            console.log('QAWizard onInteract called');
             setInteractedSteps((prev) => [...new Set([...prev, 2])]);
           },
           phase: 1,
@@ -493,7 +462,6 @@ export default function InitialAssessment() {
       await new Promise((resolve) => setTimeout(resolve, 300));
       router.push(PHASE_TO_URL[2]);
     } catch (error) {
-      console.error('Error completing phase:', error);
     } finally {
       setIsLoading(false);
     }
@@ -593,7 +561,7 @@ export default function InitialAssessment() {
 
   return (
     <div className="min-h-screen bg-[#f5f7fa]">
-      <PhaseNavigation currentPhase={1} completedPhases={completedPhases} />
+      <PhaseNavigation />
       <div className="relative">
         <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
           <div className="space-y-6">

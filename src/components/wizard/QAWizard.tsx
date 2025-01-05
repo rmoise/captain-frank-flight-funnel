@@ -106,19 +106,10 @@ export const QAWizard: React.FC<QAWizardProps> = ({
 
   // Filter answers specific to this wizard instance
   const instanceAnswers = useMemo(() => {
-    console.log('\n=== QAWizard instanceAnswers initialization ===');
-    console.log('Initial state:', {
-      wizardType,
-      initialAnswers,
-      wizardAnswers,
-    });
-
     let answers: Answer[] = [];
     if (initialAnswers && initialAnswers.length > 0) {
-      console.log('Using initial answers:', initialAnswers);
       answers = initialAnswers;
     } else if (wizardType === 'travel_status') {
-      console.log('Using travel_status answers');
       // Get all relevant answers from wizardAnswers
       answers = wizardAnswers.filter(
         (a) =>
@@ -126,118 +117,68 @@ export const QAWizard: React.FC<QAWizardProps> = ({
           a.questionId === 'refund_status' ||
           a.questionId === 'ticket_cost'
       );
-      console.log('Using filtered travel status answers:', answers);
     } else if (wizardType === 'informed_date') {
-      console.log('Using informed_date answers');
       answers =
         wizardAnswers.filter(
           (a) =>
             a.questionId === 'informed_date' ||
             a.questionId === 'specific_informed_date'
         ) || [];
-      console.log('Filtered informed date answers:', answers);
     } else {
-      console.log('Using wizard answers:', wizardAnswers);
       answers = wizardAnswers || [];
     }
-
-    console.log('Final instance answers:', {
-      wizardType,
-      answers,
-    });
-    console.log('=== End QAWizard instanceAnswers initialization ===\n');
 
     return answers;
   }, [wizardType, initialAnswers, wizardAnswers]);
 
   // All memoized values must be at the top level
   const visibleQuestions = useMemo(() => {
-    try {
-      console.log('\n=== QAWizard visibleQuestions calculation ===');
-      console.log('Initial state:', {
-        questions,
-        instanceAnswers,
-        wizardType,
-      });
-
-      if (!questions || !Array.isArray(questions) || questions.length === 0) {
-        console.log('Early return due to no questions:', {
-          hasQuestions: !!questions,
-          isArray: Array.isArray(questions),
-          length: questions?.length,
-          wizardType,
-        });
-        return [];
-      }
-
-      // Always include the first question
-      const firstQuestion = questions[0];
-      const remainingQuestions = questions.slice(1);
-
-      // Filter remaining questions based on showIf conditions
-      const filteredRemaining = remainingQuestions.filter(
-        (question: Question) => {
-          // If this question has a showIf condition, evaluate it
-          if (question.showIf) {
-            try {
-              // Get all answers for evaluation
-              const shouldShow = question.showIf(wizardAnswers);
-              console.log(`Evaluating showIf for question ${question.id}:`, {
-                shouldShow,
-                answers: wizardAnswers,
-                condition: question.showIf.toString(),
-              });
-              return shouldShow;
-            } catch (err) {
-              console.error('Error evaluating showIf condition:', err);
-              return false;
-            }
-          }
-
-          // If no showIf condition, show the question
-          console.log(
-            'Question has no showIf condition, showing:',
-            question.id
-          );
-          return true;
-        }
-      );
-
-      // Combine first question with filtered remaining questions
-      const filtered = [firstQuestion, ...filteredRemaining];
-
-      console.log('Filtered questions:', filtered);
-      console.log('=== End QAWizard visibleQuestions calculation ===\n');
-
-      return filtered;
-    } catch (err) {
-      console.error('Error getting visible questions:', err);
+    if (!questions || !Array.isArray(questions) || questions.length === 0) {
       return [];
     }
-  }, [questions, instanceAnswers, wizardType, wizardAnswers]);
+
+    // Always include the first question
+    const firstQuestion = questions[0];
+    const remainingQuestions = questions.slice(1);
+
+    // Filter remaining questions based on showIf conditions
+    const filteredRemaining = remainingQuestions.filter(
+      (question: Question) => {
+        // If this question has a showIf condition, evaluate it
+        if (question.showIf) {
+          try {
+            // Get all answers for evaluation
+            const shouldShow = question.showIf(wizardAnswers);
+            return shouldShow;
+          } catch (err) {
+            return false;
+          }
+        }
+
+        // If no showIf condition, show the question
+        return true;
+      }
+    );
+
+    // Combine first question with filtered remaining questions
+    const filtered = [firstQuestion, ...filteredRemaining];
+
+    return filtered;
+  }, [questions, wizardAnswers]);
 
   // Get current question with defensive checks
   const currentQuestion = useMemo(() => {
-    console.log('\n=== QAWizard currentQuestion calculation ===');
-    console.log('Current state:', {
-      visibleQuestions,
-      wizardCurrentStep,
-      questionsLength: visibleQuestions?.length,
-    });
-
     // Ensure we have valid questions and step
     if (
       !visibleQuestions ||
       !Array.isArray(visibleQuestions) ||
       visibleQuestions.length === 0
     ) {
-      console.log('No visible questions available');
       return null;
     }
 
     // Ensure step is within bounds
     if (wizardCurrentStep < 0 || wizardCurrentStep >= visibleQuestions.length) {
-      console.log('Step out of bounds, resetting to 0');
       batchUpdateWizardState({
         wizardCurrentSteps: {
           ...wizardCurrentSteps,
@@ -248,8 +189,6 @@ export const QAWizard: React.FC<QAWizardProps> = ({
     }
 
     const question = visibleQuestions[wizardCurrentStep];
-    console.log('Selected question:', question);
-    console.log('=== End QAWizard currentQuestion calculation ===\n');
     return question;
   }, [
     visibleQuestions,
@@ -262,11 +201,6 @@ export const QAWizard: React.FC<QAWizardProps> = ({
   // Check if current question is answered
   const isCurrentQuestionAnswered = useMemo(() => {
     if (!currentQuestion) return false;
-    console.log('Checking if question is answered:', {
-      questionId: currentQuestion.id,
-      instanceAnswers,
-      wizardAnswers,
-    });
     return (
       instanceAnswers.some((a) => a.questionId === currentQuestion.id) ||
       wizardAnswers.some((a) => a.questionId === currentQuestion.id)
@@ -287,19 +221,9 @@ export const QAWizard: React.FC<QAWizardProps> = ({
   // Handle answer selection
   const handleSelect = useCallback(
     (questionId: string, value: string) => {
-      // Call onInteract when user selects an answer
       if (onInteract) {
         onInteract();
       }
-
-      console.log('\n=== QAWizard handleSelect ===');
-      console.log('Initial state:', {
-        questionId,
-        value,
-        currentAnswers: wizardAnswers,
-        instanceAnswers,
-        wizardType,
-      });
 
       const newAnswer: Answer = {
         questionId,
@@ -307,73 +231,28 @@ export const QAWizard: React.FC<QAWizardProps> = ({
         shouldShow: true,
       };
 
-      // Get all existing answers except for the one we're updating
       const otherAnswers = wizardAnswers.filter(
         (a) => a.questionId !== questionId
       );
 
-      // For informed_date wizard, ensure we keep both the informed_date and specific_informed_date answers
-      // Also preserve answers from other wizards
       let updatedAnswers = [...otherAnswers, newAnswer];
 
       if (wizardType === 'informed_date') {
-        console.log('Handling informed date answer:', {
-          questionId,
-          value,
-          existingAnswers: wizardAnswers,
-        });
-
-        // Keep answers from travel_status wizard
         const travelStatusAnswers = wizardAnswers.filter(
           (a) =>
             a.questionId === 'travel_status' ||
             a.questionId === 'refund_status' ||
             a.questionId === 'ticket_cost'
         );
-
-        // For specific_informed_date, ensure we keep both answers
-        if (questionId === 'specific_informed_date') {
-          const informedDateAnswer = wizardAnswers.find(
-            (a) => a.questionId === 'informed_date'
-          );
-          if (informedDateAnswer) {
-            updatedAnswers = [...updatedAnswers, informedDateAnswer];
-          }
-        }
-
         updatedAnswers = [...travelStatusAnswers, ...updatedAnswers];
-      } else if (wizardType === 'travel_status') {
-        // Keep answers from informed_date wizard
-        const informedDateAnswers = wizardAnswers.filter(
-          (a) =>
-            a.questionId === 'informed_date' ||
-            a.questionId === 'specific_informed_date'
-        );
-        updatedAnswers = [...informedDateAnswers, ...updatedAnswers];
       }
 
-      console.log('Updating answers:', {
-        newAnswer,
-        updatedAnswers,
-        wizardType,
-        preservedAnswers: updatedAnswers.filter(
-          (a) => a.questionId !== questionId
-        ),
-      });
-
-      // Update the store with new answers
       batchUpdateWizardState({
         wizardAnswers: updatedAnswers,
         lastAnsweredQuestion: questionId,
       });
     },
-    [
-      wizardAnswers,
-      batchUpdateWizardState,
-      onInteract,
-      instanceAnswers,
-      wizardType,
-    ]
+    [wizardAnswers, batchUpdateWizardState, onInteract, wizardType]
   );
 
   const goToNext = useCallback(() => {
@@ -408,13 +287,6 @@ export const QAWizard: React.FC<QAWizardProps> = ({
 
       // Let the store handle completion with current answers
       if (completeWizardId) {
-        console.log('Completing wizard:', {
-          wizardId: completeWizardId,
-          wizardType,
-          successMessage,
-          selectedOption,
-        });
-
         // Get only the relevant answers for this wizard type
         const relevantAnswers =
           wizardType === 'informed_date'
@@ -450,14 +322,6 @@ export const QAWizard: React.FC<QAWizardProps> = ({
               : [];
 
         const combinedAnswers = [...otherWizardAnswers, ...relevantAnswers];
-
-        console.log('Completing with filtered answers:', {
-          wizardType,
-          relevantAnswers,
-          otherWizardAnswers,
-          combinedAnswers,
-          allAnswers: wizardAnswers,
-        });
 
         handleWizardComplete(completeWizardId, combinedAnswers, successMessage);
 
@@ -514,11 +378,6 @@ export const QAWizard: React.FC<QAWizardProps> = ({
   // Simplify initialization effect to only run once
   useEffect(() => {
     if (wizardAnswers.length > 0 && !lastAnsweredQuestion) {
-      console.log('Initializing wizard answers:', {
-        wizardType,
-        currentAnswers: wizardAnswers,
-      });
-
       // Filter answers for this wizard type
       const relevantAnswers =
         wizardType === 'travel_status'
@@ -557,13 +416,6 @@ export const QAWizard: React.FC<QAWizardProps> = ({
         // Find the last answered question for this wizard type
         const lastAnswer = relevantAnswers[relevantAnswers.length - 1];
         if (lastAnswer) {
-          console.log('Updating wizard state:', {
-            lastAnsweredQuestion: lastAnswer.questionId,
-            relevantAnswers,
-            otherWizardAnswers,
-            combinedAnswers: [...otherWizardAnswers, ...relevantAnswers],
-          });
-
           batchUpdateWizardState({
             lastAnsweredQuestion: lastAnswer.questionId,
             wizardAnswers: [...otherWizardAnswers, ...relevantAnswers],

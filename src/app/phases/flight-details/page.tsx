@@ -35,6 +35,7 @@ export default function FlightDetailsPage() {
     bookingNumber: storedBookingNumber,
     setSelectedFlights,
     setBookingNumber,
+    completePhase,
   } = useStore();
 
   // Initialize store and phase
@@ -85,9 +86,10 @@ export default function FlightDetailsPage() {
 
   const handleContinue = useCallback(() => {
     if (canContinue) {
+      completePhase(3);
       router.push('/phases/trip-experience');
     }
-  }, [canContinue, router]);
+  }, [canContinue, router, completePhase]);
 
   const handleInteraction = useCallback(
     (step: number) => {
@@ -108,7 +110,7 @@ export default function FlightDetailsPage() {
   return (
     <PhaseGuard phase={3}>
       <div className="min-h-screen bg-[#f5f7fa]">
-        <PhaseNavigation currentPhase={3} completedPhases={completedSteps} />
+        <PhaseNavigation />
         <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
           <div className="space-y-6">
             <SpeechBubble message="Please provide some additional details about your flight." />

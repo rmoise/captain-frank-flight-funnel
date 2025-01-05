@@ -34,7 +34,6 @@ export const QAWizardWrapper: React.FC<QAWizardWrapperProps> = (props) => {
         await new Promise((resolve) => setTimeout(resolve, 0));
         setIsInitializing(false);
       } catch (err) {
-        console.error('Error initializing QA wizard:', err);
         setError('Failed to initialize questionnaire');
         setIsInitializing(false);
       }

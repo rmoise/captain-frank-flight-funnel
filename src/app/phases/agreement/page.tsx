@@ -139,7 +139,6 @@ export default function AgreementPage() {
           validateSignature();
           setMounted(true);
         } catch (error) {
-          console.error('Error initializing agreement page:', error);
           router.push('/phases/initial-assessment');
         }
       };
@@ -185,20 +184,14 @@ export default function AgreementPage() {
     if (isRedirected && completedPhasesStr && currentPhaseStr) {
       // Parse completed phases
       const phases = completedPhasesStr.split(',').map(Number);
-      console.log('Initializing completed phases:', phases);
       phases.forEach((phase) => completePhase(phase));
 
       // Set current phase
       const phase = parseInt(currentPhaseStr, 10);
-      console.log('Setting current phase to:', phase);
       setCurrentPhase(phase);
 
       // Validate personal details
       const isValid = useStore.getState().validatePersonalDetails();
-      console.log('Personal details validation on init:', {
-        isValid,
-        personalDetails,
-      });
 
       if (isValid) {
         const store = useStore.getState();
@@ -218,19 +211,8 @@ export default function AgreementPage() {
   // Add effect to check flight details and validate personal details on mount
   useEffect(() => {
     if (mounted) {
-      console.log('Flight details on mount:', {
-        flightDetails,
-        selectedFlights,
-        completedPhases,
-        personalDetails,
-      });
-
       // Validate personal details
       const isValid = useStore.getState().validatePersonalDetails();
-      console.log('Personal details validation on mount:', {
-        isValid,
-        personalDetails,
-      });
 
       if (isValid) {
         const store = useStore.getState();
@@ -345,14 +327,6 @@ export default function AgreementPage() {
     const termsValid =
       validationState.isTermsValid && termsAccepted && privacyAccepted;
 
-    console.log('Submit validation:', {
-      signatureValid,
-      termsValid,
-      validationState,
-      termsAccepted,
-      privacyAccepted,
-    });
-
     return signatureValid && termsValid;
   };
 
@@ -405,11 +379,6 @@ export default function AgreementPage() {
       // Map travel status to journey_fact_type
       const journey_fact_type = travelStatus;
 
-      console.log('Selected travel status:', {
-        travelStatus,
-        allAnswers: useStore.getState().wizardAnswers,
-      });
-
       const informedDate = useStore
         .getState()
         .wizardAnswers.find((a) => a.questionId === 'informed_date')?.value;
@@ -420,12 +389,6 @@ export default function AgreementPage() {
           (a) => a.questionId === 'specific_informed_date'
         )?.value;
 
-      console.log('Date information:', {
-        informedDate,
-        specificDate,
-        selectedFlightDate: selectedFlights[0]?.date,
-      });
-
       // Format the date for the API
       const formattedDate =
         informedDate === 'on_departure'
@@ -433,8 +396,6 @@ export default function AgreementPage() {
           : typeof specificDate === 'string'
             ? specificDate.split('T')[0]
             : undefined;
-
-      console.log('Formatted date:', formattedDate);
 
       // Create the evaluation data
       const evaluationData = {
@@ -447,9 +408,7 @@ export default function AgreementPage() {
         lang: 'en',
       };
 
-      console.log('Full evaluation request:', evaluationData);
       const evaluationResult = await api.evaluateClaim(evaluationData);
-      console.log('Evaluation response:', evaluationResult);
 
       if (evaluationResult.status !== 'accept') {
         // Get rejection reasons if available
@@ -470,7 +429,6 @@ export default function AgreementPage() {
 
       // Get personal details from store
       const personalDetails = useStore.getState().personalDetails;
-      console.log('Personal details from store:', personalDetails);
 
       // Create the order request data
       const formDataEntries =
@@ -520,8 +478,6 @@ export default function AgreementPage() {
         recommendation_guid: evaluationResult.recommendation_guid,
       };
 
-      console.log('Submitting order with data:', orderRequestData);
-
       // Submit the order
       const response = await api.orderClaim(orderRequestData);
 
@@ -533,7 +489,6 @@ export default function AgreementPage() {
         throw new Error(response.message || 'Failed to submit claim');
       }
     } catch (error) {
-      console.error('Form submission error:', error);
       setErrors(
         (prev: FormErrors): FormErrors => ({
           ...prev,

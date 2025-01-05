@@ -39,6 +39,12 @@ const questions: Question[] = [
         label: "I traveled differently at the airline's expense",
         showConfetti: true,
       },
+      {
+        id: 'alternative_own',
+        value: 'took_alternative_own',
+        label: 'I booked a different flight at my own expense',
+        showConfetti: true,
+      },
     ],
   },
   {
@@ -65,12 +71,7 @@ const questions: Question[] = [
       const hasNoRefund = answers.some(
         (a: Answer) => a.questionId === 'refund_status' && a.value === 'no'
       );
-      console.log('=== ticket_cost showIf evaluation ===', {
-        answers,
-        hasNoneTravel,
-        hasNoRefund,
-        shouldShow: hasNoneTravel && hasNoRefund,
-      });
+
       return hasNoneTravel && hasNoRefund;
     },
   },
@@ -89,13 +90,16 @@ const questions: Question[] = [
     id: 'alternative_flight_own_expense',
     text: 'Please search for the alternative flight you took at your own expense.',
     type: 'flight_selector',
-    relatedQuestions: [
-      {
-        id: 'trip_costs',
-        text: 'Please enter the costs you spent on your trip',
-        type: 'money',
-      },
-    ],
+    showIf: (answers: Answer[]) =>
+      answers.some(
+        (a: Answer) =>
+          a.questionId === 'travel_status' && a.value === 'took_alternative_own'
+      ),
+  },
+  {
+    id: 'trip_costs',
+    text: 'Please enter the costs you spent on your trip',
+    type: 'money',
     showIf: (answers: Answer[]) =>
       answers.some(
         (a: Answer) =>
@@ -143,7 +147,6 @@ export default function TripExperiencePage() {
   const {
     wizardAnswers,
     selectedFlights,
-    completedPhases,
     validationState,
     updateValidationState,
     goToPreviousPhase,
@@ -155,24 +158,36 @@ export default function TripExperiencePage() {
   } = useStore();
 
   // Filter answers for each wizard
-  const tripExperienceAnswers = useMemo(
-    () =>
+  const tripExperienceAnswers = useMemo(() => {
+    const answers =
       wizardAnswers?.filter((a) => a.questionId.startsWith('travel_status')) ??
-      [],
-    [wizardAnswers]
-  );
+      [];
+    console.log('Filtered trip experience answers:', answers);
+    return answers;
+  }, [wizardAnswers]);
 
-  const informedDateAnswers = useMemo(
-    () =>
+  const informedDateAnswers = useMemo(() => {
+    const answers =
       wizardAnswers?.filter((a) => a.questionId.startsWith('informed_date')) ??
-      [],
-    [wizardAnswers]
-  );
+      [];
+    console.log('Filtered informed date answers:', answers);
+    return answers;
+  }, [wizardAnswers]);
 
   // Handler functions for completing steps
-  const handleTripExperienceComplete = useCallback(() => {
-    // Update validation state for travel status
+  const handleTripExperienceComplete = useCallback((answers: Answer[]) => {
+    console.log('Trip experience completed with answers:', answers);
+    // Get the last answer
+    const lastAnswer = answers[answers.length - 1];
+
+    // Batch all state updates together
     const store = useStore.getState();
+    store.setWizardAnswers(answers);
+
+    if (lastAnswer) {
+      store.setLastAnsweredQuestion(lastAnswer.questionId);
+    }
+
     store.updateValidationState({
       stepValidation: {
         ...store.validationState.stepValidation,
@@ -187,9 +202,19 @@ export default function TripExperiencePage() {
     });
   }, []);
 
-  const handleInformedDateComplete = useCallback(() => {
-    // Update validation state for informed date
+  const handleInformedDateComplete = useCallback((answers: Answer[]) => {
+    console.log('Informed date completed with answers:', answers);
+    // Get the last answer
+    const lastAnswer = answers[answers.length - 1];
+
+    // Batch all state updates together
     const store = useStore.getState();
+    store.setWizardAnswers(answers);
+
+    if (lastAnswer) {
+      store.setLastAnsweredQuestion(lastAnswer.questionId);
+    }
+
     store.updateValidationState({
       stepValidation: {
         ...store.validationState.stepValidation,
@@ -209,12 +234,100 @@ export default function TripExperiencePage() {
     if (!mounted) {
       const initializeState = async () => {
         try {
+          console.log('Initializing state...');
           // Set current phase
           setCurrentPhase(4);
 
-          // If we have answers, validate them
-          if (tripExperienceAnswers.length > 0) {
+          // Get all saved data at once
+          const savedData = {
+            tripExperience: localStorage.getItem('tripExperienceAnswers'),
+            informedDate: localStorage.getItem('informedDateAnswers'),
+            selectedFlights: localStorage.getItem('selectedFlights'),
+          };
+          console.log('Retrieved saved data:', savedData);
+
+          // Get current answers from store
+          const currentAnswers = useStore.getState().wizardAnswers || [];
+          console.log('Current answers in store:', currentAnswers);
+          let newAnswers = [...currentAnswers];
+
+          // Process trip experience answers
+          if (savedData.tripExperience) {
+            try {
+              const parsedAnswers = JSON.parse(savedData.tripExperience);
+              console.log('Parsed trip experience answers:', parsedAnswers);
+              if (Array.isArray(parsedAnswers) && parsedAnswers.length > 0) {
+                // Remove any existing travel status answers
+                newAnswers = newAnswers.filter(
+                  (a) => !a.questionId.startsWith('travel_status')
+                );
+                // Add saved travel status answers
+                newAnswers.push(...parsedAnswers);
+              }
+            } catch (error) {
+              console.error(
+                'Error parsing saved trip experience answers:',
+                error
+              );
+            }
+          }
+
+          // Process informed date answers
+          if (savedData.informedDate) {
+            try {
+              const parsedAnswers = JSON.parse(savedData.informedDate);
+              console.log('Parsed informed date answers:', parsedAnswers);
+              if (Array.isArray(parsedAnswers) && parsedAnswers.length > 0) {
+                // Remove any existing informed date answers
+                newAnswers = newAnswers.filter(
+                  (a) => !a.questionId.startsWith('informed_date')
+                );
+                // Add saved informed date answers
+                newAnswers.push(...parsedAnswers);
+              }
+            } catch (error) {
+              console.error(
+                'Error parsing saved informed date answers:',
+                error
+              );
+            }
+          }
+
+          // Set all answers at once if we have any
+          if (newAnswers.length > 0) {
+            console.log('Setting wizard answers:', newAnswers);
             const store = useStore.getState();
+            store.setWizardAnswers(newAnswers);
+
+            // Find the last answer and update lastAnsweredQuestion
+            const lastAnswer = newAnswers[newAnswers.length - 1];
+            if (lastAnswer) {
+              store.setLastAnsweredQuestion(lastAnswer.questionId);
+            }
+          }
+
+          // Process selected flights
+          if (savedData.selectedFlights) {
+            try {
+              const parsedFlights = JSON.parse(savedData.selectedFlights);
+              console.log('Parsed selected flights:', parsedFlights);
+              if (Array.isArray(parsedFlights) && parsedFlights.length > 0) {
+                useStore.getState().setSelectedFlights(parsedFlights);
+                console.log('Set selected flights in store');
+              }
+            } catch (error) {
+              console.error('Error parsing saved selected flights:', error);
+            }
+          }
+
+          // Update validation state based on restored answers
+          const store = useStore.getState();
+          console.log('Current validation state:', store.validationState);
+
+          if (
+            newAnswers.some((a) => a.questionId.startsWith('travel_status'))
+          ) {
+            console.log('Updating validation state for travel status');
             store.updateValidationState({
               stepValidation: {
                 ...store.validationState.stepValidation,
@@ -228,8 +341,11 @@ export default function TripExperiencePage() {
               _timestamp: Date.now(),
             });
           }
-          if (informedDateAnswers.length > 0) {
-            const store = useStore.getState();
+
+          if (
+            newAnswers.some((a) => a.questionId.startsWith('informed_date'))
+          ) {
+            console.log('Updating validation state for informed date');
             store.updateValidationState({
               stepValidation: {
                 ...store.validationState.stepValidation,
@@ -244,15 +360,78 @@ export default function TripExperiencePage() {
             });
           }
 
+          console.log('Final validation state:', store.validationState);
           setMounted(true);
+          console.log('State initialization complete');
         } catch (error) {
-          console.error('Error initializing trip experience page:', error);
+          console.error('Error initializing state:', error);
         }
       };
 
       initializeState();
     }
-  }, [mounted, setCurrentPhase, tripExperienceAnswers, informedDateAnswers]);
+  }, [mounted, setCurrentPhase, setWizardAnswers]);
+
+  // Save answers to localStorage when they change
+  useEffect(() => {
+    if (tripExperienceAnswers.length > 0) {
+      console.log('Saving trip experience answers:', tripExperienceAnswers);
+      localStorage.setItem(
+        'tripExperienceAnswers',
+        JSON.stringify(tripExperienceAnswers)
+      );
+    }
+  }, [tripExperienceAnswers]);
+
+  useEffect(() => {
+    if (informedDateAnswers.length > 0) {
+      console.log('Saving informed date answers:', informedDateAnswers);
+      localStorage.setItem(
+        'informedDateAnswers',
+        JSON.stringify(informedDateAnswers)
+      );
+    }
+  }, [informedDateAnswers]);
+
+  useEffect(() => {
+    if (selectedFlights.length > 0) {
+      console.log('Saving selected flights:', selectedFlights);
+      localStorage.setItem('selectedFlights', JSON.stringify(selectedFlights));
+    }
+  }, [selectedFlights]);
+
+  // Handle component unmount
+  useEffect(() => {
+    return () => {
+      // Save current state before unmounting
+      const currentAnswers = useStore.getState().wizardAnswers || [];
+      const tripAnswers = currentAnswers.filter((a) =>
+        a.questionId.startsWith('travel_status')
+      );
+      const dateAnswers = currentAnswers.filter((a) =>
+        a.questionId.startsWith('informed_date')
+      );
+
+      if (tripAnswers.length > 0) {
+        localStorage.setItem(
+          'tripExperienceAnswers',
+          JSON.stringify(tripAnswers)
+        );
+      }
+      if (dateAnswers.length > 0) {
+        localStorage.setItem(
+          'informedDateAnswers',
+          JSON.stringify(dateAnswers)
+        );
+      }
+      if (selectedFlights.length > 0) {
+        localStorage.setItem(
+          'selectedFlights',
+          JSON.stringify(selectedFlights)
+        );
+      }
+    };
+  }, [selectedFlights]);
 
   // Check if we can continue
   const canContinue = useCallback(() => {
@@ -279,27 +458,14 @@ export default function TripExperiencePage() {
         (a: Answer) => a.questionId === 'travel_status'
       )?.value;
 
-      // Log the travel status for debugging
-      console.log('Trip Experience - Travel Status:', {
-        travelStatus,
-        allTripExperienceAnswers: tripExperienceAnswers,
-        allWizardAnswers: useStore.getState().wizardAnswers,
-      });
-
       // Get the booked flight IDs based on travel status
       const bookedFlightIds: string[] = [];
       if (selectedFlights[0]) {
         bookedFlightIds.push(selectedFlights[0].id);
       }
 
-      console.log('Trip Experience - Flight IDs:', {
-        bookedFlightIds,
-        selectedFlights,
-      });
-
       // Validate flight IDs
       if (bookedFlightIds.length === 0) {
-        console.error('No flight IDs available');
         return;
       }
 
@@ -307,21 +473,6 @@ export default function TripExperiencePage() {
       const informedDate = informedDateAnswers
         .find((a) => a.questionId === 'informed_date')
         ?.value?.toString();
-
-      console.log('Trip Experience - Raw Date Information:', {
-        informedDate,
-        informedDateAnswers: informedDateAnswers.map((a) => ({
-          questionId: a.questionId,
-          value: a.value,
-          shouldShow: a.shouldShow,
-        })),
-        selectedFlightDate: selectedFlights[0]?.date,
-        allAnswers: useStore.getState().wizardAnswers.map((a) => ({
-          questionId: a.questionId,
-          value: a.value,
-          shouldShow: a.shouldShow,
-        })),
-      });
 
       // Format the date for the API
       let formattedDate: string | undefined;
@@ -341,151 +492,80 @@ export default function TripExperiencePage() {
             (answer) => answer.questionId === 'specific_informed_date'
           );
 
-        console.log('Trip Experience - Specific Date Processing:', {
-          specificDateAnswer: specificDateAnswer
-            ? {
-                questionId: specificDateAnswer.questionId,
-                value: specificDateAnswer.value,
-                shouldShow: specificDateAnswer.shouldShow,
-              }
-            : undefined,
-          informedDateAnswers: informedDateAnswers.map((a) => ({
-            questionId: a.questionId,
-            value: a.value,
-            shouldShow: a.shouldShow,
-          })),
-          allWizardAnswers: useStore
-            .getState()
-            .wizardAnswers.filter((a) => a.questionId.includes('informed_date'))
-            .map((a) => ({
-              questionId: a.questionId,
-              value: a.value,
-              shouldShow: a.shouldShow,
-            })),
-        });
-
         if (specificDateAnswer?.value) {
           formattedDate = specificDateAnswer.value.toString();
-          console.log('Found specific date:', {
-            rawValue: specificDateAnswer.value,
-            formattedDate,
-            isValid: isValidYYYYMMDD(formattedDate),
-          });
-        } else {
-          console.error('No specific date found in answers. Current state:', {
-            informedDate,
-            informedDateAnswers: informedDateAnswers.map((a) => ({
-              questionId: a.questionId,
-              value: a.value,
-              shouldShow: a.shouldShow,
-            })),
-            allAnswers: useStore
-              .getState()
-              .wizardAnswers.filter((a) =>
-                a.questionId.includes('informed_date')
-              )
-              .map((a) => ({
-                questionId: a.questionId,
-                value: a.value,
-                shouldShow: a.shouldShow,
-              })),
-          });
         }
       }
 
-      console.log('Trip Experience - Date Processing Result:', {
-        informedDate,
-        formattedDate,
-        isValidFormat: formattedDate ? isValidYYYYMMDD(formattedDate) : false,
-        allAnswers: informedDateAnswers.map((a) => ({
-          questionId: a.questionId,
-          value: a.value,
-          shouldShow: a.shouldShow,
-        })),
-      });
-
       // Validate formatted date
       if (!formattedDate || !isValidYYYYMMDD(formattedDate)) {
-        console.error('Date validation failed:', {
-          informedDate,
-          informedDateAnswers,
-          selectedFlightDate: selectedFlights[0]?.date,
-          formattedDate,
-          allAnswers: useStore.getState().wizardAnswers,
-        });
         throw new Error('No valid date available');
       }
 
       // Verify the date format matches YYYY-MM-DD
       const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
       if (!dateRegex.test(formattedDate)) {
-        console.error('Invalid date format:', {
-          formattedDate,
-          originalSpecificDate: informedDate,
-          informedDate,
-          selectedFlightDate: selectedFlights[0]?.date,
-        });
         throw new Error('Invalid date format. Expected YYYY-MM-DD');
       }
 
       // Validate that the date is a valid date
       const dateObj = new Date(formattedDate);
       if (isNaN(dateObj.getTime())) {
-        console.error('Invalid date value:', {
-          formattedDate,
-          dateObj,
-          originalSpecificDate: informedDate,
-          selectedFlightDate: selectedFlights[0]?.date,
-        });
         throw new Error('Invalid date value. Please select a valid date.');
       }
 
-      console.log('Trip Experience - Formatted Date:', {
-        formattedDate,
-        originalSpecificDate: informedDate,
-        selectedFlightDate: selectedFlights[0]?.date,
-        dateObj,
-      });
-
       // Create the current evaluation data
+      console.log('Travel status from answers:', travelStatus);
+
       const currentEvalData = {
         journey_booked_flightids: bookedFlightIds,
-        journey_fact_flightids: [], // Always empty for no travel
+        journey_fact_flightids: travelStatus === 'self' ? bookedFlightIds : [], // Use booked flights if they took them
         information_received_at: formattedDate,
         travel_status:
-          travelStatus === 'none' ? 'no_travel' : travelStatus?.toString(),
-        delay_duration: '240', // Always set for no travel claims
+          travelStatus === 'none'
+            ? 'no_travel'
+            : travelStatus === 'self'
+              ? 'took_booked'
+              : travelStatus === 'provided'
+                ? 'took_alternative_airline'
+                : travelStatus?.toString(),
+        ...(travelStatus === 'none' && { delay_duration: '240' }), // Only set delay_duration for no-travel claims
         lang: 'en',
       };
+
+      console.log('Current evaluation data:', currentEvalData);
 
       // Remove undefined values from the request
       const cleanedEvalData = Object.fromEntries(
         Object.entries(currentEvalData).filter(([, v]) => v !== undefined)
       );
 
-      console.log(
-        'Trip Experience - Full Evaluation Request:',
-        cleanedEvalData
-      );
+      console.log('Cleaned evaluation data:', cleanedEvalData);
 
-      // Check if we have a stored evaluation result with the same data
-      const storedEvalResult = useStore.getState().evaluationResult;
-      const hasDataChanged =
-        !storedEvalResult ||
-        JSON.stringify(cleanedEvalData) !==
-          JSON.stringify({
-            journey_booked_flightids: storedEvalResult.journey_booked_flightids,
-            journey_fact_flightids: storedEvalResult.journey_fact_flightids,
-            information_received_at: storedEvalResult.information_received_at,
-            travel_status: storedEvalResult.travel_status,
-            delay_duration: storedEvalResult.delay_duration,
-          });
+      // Create a cache key based on the evaluation data
+      const cacheKey = `evaluation_${JSON.stringify(cleanedEvalData)}`;
+      const cachedData = localStorage.getItem(cacheKey);
 
-      let result = storedEvalResult;
+      let result;
 
-      // Only make the API call if the data has changed
-      if (hasDataChanged) {
-        console.log('Evaluation data has changed, making API call');
+      // Check if we have valid cached data
+      if (cachedData) {
+        try {
+          const { data, timestamp } = JSON.parse(cachedData);
+          console.log('Found cached data:', data);
+          // Cache is valid for 24 hours
+          if (Date.now() - timestamp < 24 * 60 * 60 * 1000) {
+            result = data;
+          }
+        } catch (error) {
+          console.error('Error parsing cached evaluation data:', error);
+        }
+      }
+
+      // If no valid cache, make the API call
+      if (!result) {
+        console.log('Making API call with data:', cleanedEvalData);
+
         // Call the evaluate claim API using the Netlify function
         const response = await fetch(
           '/.netlify/functions/evaluateeuflightclaim',
@@ -503,32 +583,57 @@ export default function TripExperiencePage() {
         }
 
         result = await response.json();
-        console.log('New claim evaluation result:', result);
+        console.log('API response:', result);
 
-        setEvaluationResult({
-          ...result,
-          journey_booked_flightids: currentEvalData.journey_booked_flightids,
-          information_received_at: currentEvalData.information_received_at,
-          travel_status: currentEvalData.travel_status,
-        });
-      } else {
-        console.log('Using stored evaluation result:', result);
+        // Cache the result
+        localStorage.setItem(
+          cacheKey,
+          JSON.stringify({
+            data: result,
+            timestamp: Date.now(),
+          })
+        );
       }
+
+      console.log('Final result before setting:', result);
+
+      setEvaluationResult({
+        ...result,
+        journey_booked_flightids: currentEvalData.journey_booked_flightids,
+        information_received_at: currentEvalData.information_received_at,
+        travel_status: currentEvalData.travel_status,
+      });
 
       // Complete the current phase
       completePhase(currentPhase);
 
       // Get the next phase URL based on evaluation result
       const nextPhase = currentPhase + 1;
+      console.log('Checking result status:', {
+        resultStatus: result.status,
+        resultDataStatus: result.data?.status,
+      });
       const nextUrl =
-        result.status === 'accept'
+        result.status === 'accept' ||
+        (result.data && result.data.status === 'accept')
           ? PHASE_TO_URL[nextPhase]
           : '/phases/claim-rejected';
+
+      console.log('Redirection decision:', {
+        nextUrl,
+        nextPhase,
+        isAccepted:
+          result.status === 'accept' ||
+          (result.data && result.data.status === 'accept'),
+      });
 
       if (nextUrl) {
         // Set the next phase in the store and navigate
         setCurrentPhase(nextPhase);
-        if (result.status === 'reject') {
+        if (
+          result.status === 'reject' ||
+          (result.data && result.data.status === 'reject')
+        ) {
           // Add rejection reasons to URL
           const searchParams = new URLSearchParams();
           searchParams.set('reasons', JSON.stringify(result));
@@ -538,7 +643,7 @@ export default function TripExperiencePage() {
         }
       }
     } catch (error) {
-      console.error('Error during claim evaluation:', error);
+      console.error('Error in handleContinue:', error);
     }
   };
 
@@ -567,7 +672,7 @@ export default function TripExperiencePage() {
   return (
     <PhaseGuard phase={4}>
       <div className="min-h-screen bg-[#f5f7fa]">
-        <PhaseNavigation currentPhase={4} completedPhases={completedPhases} />
+        <PhaseNavigation />
         <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
           <div className="space-y-6">
             <SpeechBubble message="Let's talk about your trip experience. This will help us understand what happened and how we can help you." />
@@ -585,10 +690,7 @@ export default function TripExperiencePage() {
               <div className={accordionConfig.padding.content}>
                 <QAWizard
                   questions={questions}
-                  onComplete={(answers) => {
-                    setWizardAnswers(answers);
-                    handleTripExperienceComplete();
-                  }}
+                  onComplete={handleTripExperienceComplete}
                   onInteract={handleTripExperienceInteract}
                   initialAnswers={tripExperienceAnswers}
                   selectedFlight={selectedFlights[0] || null}
@@ -609,10 +711,7 @@ export default function TripExperiencePage() {
               <div className={accordionConfig.padding.content}>
                 <QAWizard
                   questions={informedDateQuestions}
-                  onComplete={(answers) => {
-                    setWizardAnswers(answers);
-                    handleInformedDateComplete();
-                  }}
+                  onComplete={handleInformedDateComplete}
                   onInteract={handleInformedDateInteract}
                   initialAnswers={informedDateAnswers}
                 />

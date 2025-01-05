@@ -43,7 +43,6 @@ function ClaimSuccessContent() {
   // Initialize answers from wizard answers
   useEffect(() => {
     if (wizardAnswers) {
-      console.log('Wizard answers updated:', wizardAnswers);
     }
   }, [wizardAnswers]);
 
@@ -78,7 +77,6 @@ function ClaimSuccessContent() {
 
   const handlePersonalDetailsComplete = useCallback(
     (details: PassengerDetails | null) => {
-      console.log('handlePersonalDetailsComplete called with:', details);
 
       // Always update personal details to maintain form state
       // The store will handle validation
@@ -99,23 +97,19 @@ function ClaimSuccessContent() {
         maximumFractionDigits: 0,
       }).format(amount);
     } catch (err) {
-      console.error('Error formatting amount:', err);
       return `${amount} ${currency}`;
     }
   };
 
   const handleContinue = async () => {
     if (!isStepValid(1)) {
-      console.log('Cannot continue - validation failed');
       return;
     }
 
     try {
-      console.log('Starting navigation to agreement page...');
 
       // Complete all required phases
       [1, 2, 3, 4, 5].forEach((phase) => {
-        console.log(`Completing phase ${phase}...`);
         completePhase(phase);
       });
 
@@ -140,7 +134,6 @@ function ClaimSuccessContent() {
       // Use replace instead of push to prevent history stack issues
       router.replace(`/phases/agreement?${searchParams.toString()}`);
     } catch (err) {
-      console.error('Error in handleContinue:', err);
       setError(
         'An error occurred while navigating to the agreement page. Please try again.'
       );

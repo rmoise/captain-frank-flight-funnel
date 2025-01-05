@@ -52,6 +52,4 @@ export function pushToDataLayer({
   // Push the structured data to the data layer
   window.dataLayer = window.dataLayer || [];
   window.dataLayer.push(eventData);
-
-  console.log('Data pushed to dataLayer:', eventData);
 }

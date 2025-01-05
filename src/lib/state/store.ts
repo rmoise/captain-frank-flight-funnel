@@ -3,32 +3,18 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Flight, Answer, PassengerDetails } from '@/types/store';
 import type { LocationLike } from '@/types/location';
 import { formatDateToYYYYMMDD, isValidYYYYMMDD } from '@/utils/dateUtils';
+import { parseISO, isValid } from 'date-fns';
 
 // Add validation helper functions
 export const validateFlightSelection = (state: StoreStateValues): boolean => {
-  console.log('\n=== validateFlightSelection called ===');
-  console.log('Current phase:', state.currentPhase);
-  console.log('Selected type:', state.selectedType);
-
   // For phase 3 and above, only validate selected flights
   if (state.currentPhase >= 3) {
-    console.log('Validating flight selection in phase 3 or above');
-    console.log('Selected type:', state.selectedType);
-    console.log('Direct flight:', state.directFlight);
-    console.log('Selected flights:', state.selectedFlights);
-
     // For direct flights
     if (state.selectedType === 'direct') {
       // Check if we have either a selected flight in directFlight or in selectedFlights
       const hasSelectedFlight = !!state.directFlight?.selectedFlight;
       const hasSelectedFlights = state.selectedFlights?.length > 0;
       const isValid = hasSelectedFlight || hasSelectedFlights;
-
-      console.log('Direct flight validation:', {
-        hasSelectedFlight,
-        hasSelectedFlights,
-        isValid,
-      });
 
       // Update validation state
       state.validationState = {
@@ -52,9 +38,6 @@ export const validateFlightSelection = (state: StoreStateValues): boolean => {
         );
       }
 
-      console.log('Phase 3+ validation result:', isValid);
-      console.log('Updated validation state:', state.validationState);
-      console.log('Updated completed steps:', state.completedSteps);
       return isValid;
     }
 
@@ -89,28 +72,15 @@ export const validateFlightSelection = (state: StoreStateValues): boolean => {
       state.completedSteps = state.completedSteps.filter((step) => step !== 1);
     }
 
-    console.log('Phase 3+ validation result:', isValid);
-    console.log('Updated validation state:', state.validationState);
-    console.log('Updated completed steps:', state.completedSteps);
     return isValid;
   }
 
   // For phase 1
   if (state.currentPhase === 1) {
-    console.log('Validating flight selection in phase 1');
-
     // For direct flights
     if (state.selectedType === 'direct') {
-      console.log('Validating direct flight');
-      console.log('Raw fromLocation:', state.fromLocation);
-      console.log('Raw toLocation:', state.toLocation);
-
       // Early return if either location is missing
       if (!state.fromLocation || !state.toLocation) {
-        console.log('Missing location(s):', {
-          fromLocation: state.fromLocation,
-          toLocation: state.toLocation,
-        });
         state.validationState = {
           ...state.validationState,
           isFlightValid: false,
@@ -130,9 +100,7 @@ export const validateFlightSelection = (state: StoreStateValues): boolean => {
           typeof state.fromLocation === 'string'
             ? JSON.parse(state.fromLocation)
             : state.fromLocation;
-        console.log('Parsed fromLocation:', fromLocation);
       } catch (e) {
-        console.error('Error parsing fromLocation:', e);
         state.validationState = {
           ...state.validationState,
           isFlightValid: false,
@@ -152,9 +120,7 @@ export const validateFlightSelection = (state: StoreStateValues): boolean => {
           typeof state.toLocation === 'string'
             ? JSON.parse(state.toLocation)
             : state.toLocation;
-        console.log('Parsed toLocation:', toLocation);
       } catch (e) {
-        console.error('Error parsing toLocation:', e);
         state.validationState = {
           ...state.validationState,
           isFlightValid: false,
@@ -169,10 +135,6 @@ export const validateFlightSelection = (state: StoreStateValues): boolean => {
 
       // Validate location objects
       if (!fromLocation?.value || !toLocation?.value) {
-        console.log('Invalid location object(s):', {
-          fromLocation,
-          toLocation,
-        });
         state.validationState = {
           ...state.validationState,
           isFlightValid: false,
@@ -187,11 +149,6 @@ export const validateFlightSelection = (state: StoreStateValues): boolean => {
 
       // Check if locations are different
       const isValid = fromLocation.value !== toLocation.value;
-      console.log('Location values:', {
-        from: fromLocation.value,
-        to: toLocation.value,
-        isValid,
-      });
 
       // Update directFlight object with parsed locations
       if (isValid) {
@@ -218,14 +175,8 @@ export const validateFlightSelection = (state: StoreStateValues): boolean => {
 
     // For multi-segment flights
     if (state.selectedType === 'multi') {
-      console.log('Validating multi-segment flight');
-
       // Check if we have at least two segments
       if (!state.flightSegments || state.flightSegments.length < 2) {
-        console.log('Not enough segments:', {
-          segmentCount: state.flightSegments?.length || 0,
-          required: 2,
-        });
         state.validationState = {
           ...state.validationState,
           isFlightValid: false,
@@ -239,12 +190,8 @@ export const validateFlightSelection = (state: StoreStateValues): boolean => {
       }
 
       // For multi-segment flights, require all segments to be complete
-      const allSegmentsValid = state.flightSegments.every((segment, index) => {
+      const allSegmentsValid = state.flightSegments.every((segment) => {
         if (!segment.fromLocation || !segment.toLocation) {
-          console.log(`Segment ${index + 1} missing location(s):`, {
-            fromLocation: segment.fromLocation,
-            toLocation: segment.toLocation,
-          });
           return false;
         }
 
@@ -259,7 +206,6 @@ export const validateFlightSelection = (state: StoreStateValues): boolean => {
             toLocation = JSON.parse(toLocation);
           }
         } catch (e) {
-          console.error(`Error parsing segment ${index + 1} locations:`, e);
           return false;
         }
 
@@ -269,16 +215,8 @@ export const validateFlightSelection = (state: StoreStateValues): boolean => {
           fromLocation.value !== toLocation.value
         );
 
-        console.log(`Segment ${index + 1} validation result:`, {
-          from: fromLocation?.value,
-          to: toLocation?.value,
-          isValid: segmentValid,
-        });
-
         return segmentValid;
       });
-
-      console.log('Multi-segment validation result:', allSegmentsValid);
 
       // Update validation state
       state.validationState = {
@@ -335,10 +273,6 @@ export const validateFlightSelection = (state: StoreStateValues): boolean => {
   // Force immediate UI update
   state._lastUpdate = Date.now();
 
-  console.log('Validation result:', isValid);
-  console.log('Updated validation state:', state.validationState);
-  console.log('Updated completed steps:', state.completedSteps);
-  console.log('Updated open steps:', state.openSteps);
   return isValid;
 };
 
@@ -814,6 +748,7 @@ export interface StoreActions {
   resetStore: () => void;
   showLoading: () => void;
   hideLoading: () => void;
+  setLastAnsweredQuestion: (questionId: string | null) => void;
 }
 
 // Define CompensationCache type
@@ -1110,15 +1045,8 @@ export const useStore = create<StoreState & StoreActions>()(
           // Format any date answers to YYYY-MM-DD
           const formattedAnswers = answers.map((answer) => {
             if (answer.questionId === 'specific_informed_date') {
-              console.log('Store - Processing date answer:', {
-                questionId: answer.questionId,
-                value: answer.value,
-                type: typeof answer.value,
-              });
-
               // Ensure the value is not undefined
               if (!answer.value) {
-                console.error('Store - Date answer has no value:', answer);
                 return answer;
               }
 
@@ -1127,20 +1055,12 @@ export const useStore = create<StoreState & StoreActions>()(
                 typeof answer.value === 'string' &&
                 isValidYYYYMMDD(answer.value)
               ) {
-                console.log(
-                  'Store - Date is already in correct format:',
-                  answer.value
-                );
                 return answer;
               }
 
               // Convert the value to string before formatting
               const stringValue = String(answer.value);
               const formattedDate = formatDateToYYYYMMDD(stringValue);
-              console.log('Store - Formatted date:', {
-                originalValue: answer.value,
-                formattedDate,
-              });
 
               return {
                 ...answer,
@@ -1150,23 +1070,18 @@ export const useStore = create<StoreState & StoreActions>()(
             return answer;
           });
 
-          // Filter out any existing answers with the same questionIds
-          const existingAnswers = state.wizardAnswers.filter(
-            (a) =>
-              !formattedAnswers.some((na) => na.questionId === a.questionId)
-          );
+          // Get the prefix of the current answers being set (e.g., 'travel_status', 'informed_date')
+          const currentPrefix = formattedAnswers[0]?.questionId?.split('_')[0];
+
+          // Keep all answers that don't start with the current prefix
+          const existingAnswers = state.wizardAnswers.filter((a) => {
+            const prefix = a.questionId.split('_')[0];
+            return prefix !== currentPrefix;
+          });
 
           const newAnswers = [...existingAnswers, ...formattedAnswers];
 
-          console.log('Store - Setting wizard answers:', {
-            formattedAnswers,
-            existingAnswers,
-            newAnswers,
-            dateAnswer: newAnswers.find(
-              (a) => a.questionId === 'specific_informed_date'
-            ),
-          });
-
+          // Return updated state
           return {
             ...state,
             wizardAnswers: newAnswers,
@@ -1246,12 +1161,6 @@ export const useStore = create<StoreState & StoreActions>()(
         answers: Answer[],
         successMessage: string
       ): boolean => {
-        console.log('handleWizardComplete called with:', {
-          wizardId,
-          answers,
-          successMessage,
-        });
-
         const state = get();
         // Get wizard type from ID
         let wizardType = wizardId.split('_')[0] as WizardStepKey;
@@ -1262,12 +1171,6 @@ export const useStore = create<StoreState & StoreActions>()(
         } else if (wizardId.startsWith('informed')) {
           wizardType = 'informed_date';
         }
-
-        console.log('Setting success state for:', {
-          wizardType,
-          successMessage,
-          currentState: state.wizardSuccessStates[wizardType],
-        });
 
         // Update wizard success states
         const wizardSuccessStates = {
@@ -1306,10 +1209,7 @@ export const useStore = create<StoreState & StoreActions>()(
             clearTimeout(window.__wizardSuccessTimeout);
           window.__wizardSuccessTimeout = setTimeout(() => {
             const currentState = get();
-            console.log('Clearing success state for:', {
-              wizardType: finalWizardType,
-              currentState: currentState.wizardSuccessStates[finalWizardType],
-            });
+
             set({
               ...currentState,
               wizardSuccessStates: {
@@ -1328,31 +1228,32 @@ export const useStore = create<StoreState & StoreActions>()(
       setCurrentPhase: (phase: number) => {
         const state = get();
 
-        console.log('\n=== setCurrentPhase called ===');
-        console.log('Current phase:', state.currentPhase);
-        console.log('New phase:', phase);
-        console.log('Current validation state:', state.validationState);
-        console.log('Current completed steps:', state.completedSteps);
-        console.log('Current wizard answers:', state.wizardAnswers);
+        // When going backwards, preserve all completed phases
+        const newCompletedPhases = [...state.completedPhases];
+        if (phase < state.currentPhase) {
+          // Keep all completed phases when going backwards
+          newCompletedPhases.push(state.currentPhase);
+        } else {
+          // Add all phases up to but not including the current phase
+          for (let i = 1; i < phase; i++) {
+            if (!newCompletedPhases.includes(i)) {
+              newCompletedPhases.push(i);
+            }
+          }
+        }
+
+        // Sort and deduplicate completed phases
+        const uniqueCompletedPhases = Array.from(
+          new Set(newCompletedPhases)
+        ).sort((a, b) => a - b);
 
         // If transitioning to phase 1, preserve wizard answers and validation
         if (phase === 1) {
-          console.log('Entering phase 1');
-
           // Get existing validation states
           const flightValid = validateFlightSelection(state);
           const wizardValid = validateQAWizard(state).isValid;
           const personalValid = validatePersonalDetails(state);
           const termsValid = !!(state.termsAccepted && state.privacyAccepted);
-
-          console.log('Phase 1 validation results:', {
-            flightValid,
-            wizardValid,
-            personalValid,
-            termsValid,
-            wizardAnswers: state.wizardAnswers,
-            lastAnsweredQuestion: state.lastAnsweredQuestion,
-          });
 
           // Create new validation state while preserving existing validations
           const newValidationState = {
@@ -1395,6 +1296,9 @@ export const useStore = create<StoreState & StoreActions>()(
           // Update state with preserved validation and wizard state
           set({
             currentPhase: phase,
+            completedPhases: Array.from(new Set(uniqueCompletedPhases)).sort(
+              (a, b) => a - b
+            ),
             validationState: newValidationState,
             completedSteps: newCompletedSteps,
             wizardIsValid: wizardValid,
@@ -1411,8 +1315,6 @@ export const useStore = create<StoreState & StoreActions>()(
 
         // If transitioning to phase 4 (trip experience), handle wizard state
         if (phase === 4) {
-          console.log('Transitioning to phase 4 (trip experience)');
-
           // Get existing wizard answers
           const tripExperienceAnswers = state.wizardAnswers.filter((a) =>
             a.questionId.startsWith('travel_status_')
@@ -1471,13 +1373,13 @@ export const useStore = create<StoreState & StoreActions>()(
           set({
             currentPhase: phase,
             validationState: newValidationState,
-            completedSteps: [
-              ...state.completedSteps.filter(
-                (stepNum: number) => stepNum !== 2 && stepNum !== 3
-              ),
-              ...(travelStatusValid ? [2] : []),
-              ...(informedDateValid ? [3] : []),
-            ].sort((a, b) => a - b),
+            completedSteps: Array.from(
+              new Set([
+                ...state.completedSteps,
+                ...(travelStatusValid ? [2] : []),
+                ...(informedDateValid ? [3] : []),
+              ])
+            ).sort((a, b) => a - b),
             completedWizards: {
               ...state.completedWizards,
               travel_status: travelStatusValid,
@@ -1503,7 +1405,6 @@ export const useStore = create<StoreState & StoreActions>()(
 
         // If we're in phase 1, validate terms
         if (phase === 1) {
-          console.log('Entering phase 1');
           const store = get();
           store.validateTerms();
 
@@ -1543,13 +1444,15 @@ export const useStore = create<StoreState & StoreActions>()(
             _timestamp: Date.now(),
           };
 
-          // Calculate new completed steps while preserving existing ones
+          // Calculate new completed steps while preserving only properly completed phases
           const newCompletedSteps = [
             ...(flightValid ? [1] : []),
             ...(wizardValid ? [2] : []),
             ...(personalValid ? [3] : []),
             ...(termsValid ? [4] : []),
-          ].sort((a, b) => a - b);
+          ]
+            .filter((step) => step <= 2 || state.completedPhases.includes(step))
+            .sort((a, b) => a - b);
 
           // Update state with preserved validation
           set({
@@ -1561,8 +1464,6 @@ export const useStore = create<StoreState & StoreActions>()(
         }
         // If we're in phase 5 (claim success), validate personal details
         else if (phase === 5) {
-          console.log('Entering phase 5');
-
           // Reset validation state for personal details and force revalidation
           const newValidationState = {
             ...existingValidationState,
@@ -1590,9 +1491,7 @@ export const useStore = create<StoreState & StoreActions>()(
         }
         // For phase 3, validate booking number
         else if (phase === 3) {
-          console.log('Entering phase 3');
           const bookingValid = validateBookingNumber(state);
-          console.log('Booking number validation result:', bookingValid);
 
           // Check flight validation
           const flightValid = !!(state.selectedType === 'direct'
@@ -1626,6 +1525,7 @@ export const useStore = create<StoreState & StoreActions>()(
           const newCompletedSteps = [
             ...(flightValid ? [1] : []),
             ...(bookingValid ? [2] : []),
+            ...(state.completedSteps.includes(3) ? [3] : []),
           ].sort((a, b) => a - b);
 
           // Update state with preserved validation
@@ -1646,8 +1546,6 @@ export const useStore = create<StoreState & StoreActions>()(
             _lastUpdate: Date.now(),
           });
         }
-
-        console.log('=== End setCurrentPhase ===\n');
       },
 
       completePhase: (phase: number) =>
@@ -1655,6 +1553,7 @@ export const useStore = create<StoreState & StoreActions>()(
           completedPhases: Array.from(
             new Set([...state.completedPhases, phase])
           ),
+          completedSteps: Array.from(new Set([...state.completedSteps, phase])),
         })),
 
       completeStep: (step: number) =>
@@ -1671,9 +1570,6 @@ export const useStore = create<StoreState & StoreActions>()(
 
       setBookingNumber: (bookingNumber: string) => {
         const state = get();
-        console.log('\n=== setBookingNumber called ===');
-        console.log('Current phase:', state.currentPhase);
-        console.log('New booking number:', bookingNumber);
 
         // Preserve existing validation state
         const existingValidationState = { ...state.validationState };
@@ -1691,7 +1587,6 @@ export const useStore = create<StoreState & StoreActions>()(
         const isValid =
           bookingNumberTrimmed.length >= 6 &&
           /^[A-Z0-9]+$/i.test(bookingNumberTrimmed);
-        console.log('Validation result:', isValid);
 
         // Create new validation state while preserving other validations
         const newValidationState = {
@@ -1727,11 +1622,6 @@ export const useStore = create<StoreState & StoreActions>()(
           // Force immediate UI update
           _lastUpdate: Date.now(),
         });
-
-        console.log('=== End setBookingNumber ===\n');
-        console.log('Final validation state:', newValidationState);
-        console.log('Final completed steps:', newCompletedSteps);
-        console.log('Final open steps:', newOpenSteps);
       },
 
       setSelectedFlights: (flights: Flight[]) => {
@@ -1786,9 +1676,6 @@ export const useStore = create<StoreState & StoreActions>()(
 
       initializeNavigationFromUrl: () => {
         const state = get();
-        console.log('\n=== initializeNavigationFromUrl called ===');
-        console.log('Current phase:', state.currentPhase);
-        console.log('Current booking number:', state.bookingNumber);
 
         // Get current pathname and phase
         const pathname = window.location.pathname;
@@ -1798,8 +1685,6 @@ export const useStore = create<StoreState & StoreActions>()(
         if (state.currentPhase !== phase) {
           get().setCurrentPhase(phase);
         }
-
-        console.log('=== End initializeNavigationFromUrl ===\n');
       },
 
       setCurrentSegmentIndex: (index: number) =>
@@ -1807,14 +1692,6 @@ export const useStore = create<StoreState & StoreActions>()(
 
       setSelectedType: (type: 'direct' | 'multi') =>
         set((state) => {
-          console.log('\n=== setSelectedType called ===');
-          console.log('Current type:', state.selectedType);
-          console.log('New type:', type);
-          console.log('Current completed steps:', state.completedSteps);
-          console.log('Current selected flights:', state.selectedFlights);
-          console.log('Current direct flight:', state.directFlight);
-          console.log('Current flight segments:', state.flightSegments);
-
           // Skip if type hasn't changed
           if (state.selectedType === type) {
             return state;
@@ -1886,9 +1763,7 @@ export const useStore = create<StoreState & StoreActions>()(
           };
 
           // Run validation with the updated state
-          console.log('Running validation...');
           const isValid = validateFlightSelection(updatedState);
-          console.log('Flight validation result:', isValid);
 
           // For phase 3, also validate booking number
           const bookingValid =
@@ -1911,19 +1786,13 @@ export const useStore = create<StoreState & StoreActions>()(
             _timestamp: Date.now(),
           };
 
-          console.log('Final validation state:', finalValidationState);
-
           // Calculate completed steps while preserving existing ones
           let finalCompletedSteps = [...existingCompletedSteps];
           if (isValid && !finalCompletedSteps.includes(1)) {
-            console.log('Adding step 1 to completed steps (flight valid)');
             finalCompletedSteps = Array.from(
               new Set([...finalCompletedSteps, 1])
             ).sort((a, b) => a - b);
           } else if (!isValid) {
-            console.log(
-              'Removing step 1 from completed steps (flight invalid)'
-            );
             finalCompletedSteps = finalCompletedSteps.filter(
               (step) => step !== 1
             );
@@ -1942,16 +1811,6 @@ export const useStore = create<StoreState & StoreActions>()(
             }
           }
 
-          console.log('Calculated completed steps:', finalCompletedSteps);
-          console.log('Final state:', {
-            selectedType: type,
-            selectedFlights: newState.selectedFlights,
-            selectedFlight: newState.selectedFlight,
-            directFlight: newState.directFlight,
-            flightSegments: newState.flightSegments,
-          });
-          console.log('=== End setSelectedType ===\n');
-
           // Return final state with all updates
           return {
             ...updatedState,
@@ -1967,19 +1826,12 @@ export const useStore = create<StoreState & StoreActions>()(
 
       setFromLocation: (location: string | null) => {
         set((state) => {
-          console.log('\n=== setFromLocation called ===');
-          console.log('Setting fromLocation:', location);
-          console.log('Current state:', state);
-          console.log('Current completed steps:', state.completedSteps);
-
           // Parse location if it's a string
           let parsedLocation = null;
           try {
             parsedLocation =
               typeof location === 'string' ? JSON.parse(location) : location;
-            console.log('Parsed location:', parsedLocation);
           } catch (e) {
-            console.error('Error parsing fromLocation:', e);
             parsedLocation = location;
           }
 
@@ -1992,12 +1844,9 @@ export const useStore = create<StoreState & StoreActions>()(
               fromLocation: parsedLocation,
             },
           };
-          console.log('New state:', newState);
 
           // Run validation with the new state
-          console.log('Running validation...');
           const isValid = validateFlightSelection(newState);
-          console.log('Validation result:', isValid);
 
           // Update validation state
           const newValidationState = {
@@ -2014,30 +1863,21 @@ export const useStore = create<StoreState & StoreActions>()(
                 ? state.validationState.isSignatureValid
                 : true,
           };
-          console.log('New validation state:', newValidationState);
 
           // Calculate completed steps based on validation state
           const completedSteps = [];
           if (isValid) {
-            console.log('Adding step 1 to completed steps (flight valid)');
             completedSteps.push(1);
           }
           if (state.validationState.isWizardValid) {
-            console.log('Adding step 2 to completed steps (wizard valid)');
             completedSteps.push(2);
           }
           if (state.validationState.isPersonalValid) {
-            console.log(
-              'Adding step 3 to completed steps (personal details valid)'
-            );
             completedSteps.push(3);
           }
           if (state.validationState.isTermsValid) {
-            console.log('Adding step 4 to completed steps (terms valid)');
             completedSteps.push(4);
           }
-
-          console.log('Calculated completed steps:', completedSteps);
 
           // Return updated state
           const finalState = {
@@ -2045,27 +1885,19 @@ export const useStore = create<StoreState & StoreActions>()(
             validationState: newValidationState,
             completedSteps,
           };
-          console.log('Final state:', finalState);
-          console.log('=== End setFromLocation ===\n');
+
           return finalState;
         });
       },
 
       setToLocation: (location: string | null) => {
         set((state) => {
-          console.log('\n=== setToLocation called ===');
-          console.log('Setting toLocation:', location);
-          console.log('Current state:', state);
-          console.log('Current completed steps:', state.completedSteps);
-
           // Parse location if it's a string
           let parsedLocation = null;
           try {
             parsedLocation =
               typeof location === 'string' ? JSON.parse(location) : location;
-            console.log('Parsed location:', parsedLocation);
           } catch (e) {
-            console.error('Error parsing toLocation:', e);
             parsedLocation = location;
           }
 
@@ -2078,12 +1910,10 @@ export const useStore = create<StoreState & StoreActions>()(
               toLocation: parsedLocation,
             },
           };
-          console.log('New state:', newState);
 
           // Run validation with the new state
-          console.log('Running validation...');
+
           const isValid = validateFlightSelection(newState);
-          console.log('Validation result:', isValid);
 
           // Update validation state
           const newValidationState = {
@@ -2100,30 +1930,21 @@ export const useStore = create<StoreState & StoreActions>()(
                 ? state.validationState.isSignatureValid
                 : true,
           };
-          console.log('New validation state:', newValidationState);
 
           // Calculate completed steps based on validation state
           const completedSteps = [];
           if (isValid) {
-            console.log('Adding step 1 to completed steps (flight valid)');
             completedSteps.push(1);
           }
           if (state.validationState.isWizardValid) {
-            console.log('Adding step 2 to completed steps (wizard valid)');
             completedSteps.push(2);
           }
           if (state.validationState.isPersonalValid) {
-            console.log(
-              'Adding step 3 to completed steps (personal details valid)'
-            );
             completedSteps.push(3);
           }
           if (state.validationState.isTermsValid) {
-            console.log('Adding step 4 to completed steps (terms valid)');
             completedSteps.push(4);
           }
-
-          console.log('Calculated completed steps:', completedSteps);
 
           // Return updated state
           const finalState = {
@@ -2131,8 +1952,7 @@ export const useStore = create<StoreState & StoreActions>()(
             validationState: newValidationState,
             completedSteps,
           };
-          console.log('Final state:', finalState);
-          console.log('=== End setToLocation ===\n');
+
           return finalState;
         });
       },
@@ -2277,19 +2097,14 @@ export const useStore = create<StoreState & StoreActions>()(
 
       validateBookingNumber: () => {
         const state = get();
-        console.log('\n=== validateBookingNumber action called ===');
-        console.log('Current phase:', state.currentPhase);
-        console.log('Current booking number:', state.bookingNumber);
 
         // Only validate booking number in phase 3
         if (state.currentPhase !== 3) {
-          console.log('Not in phase 3, returning');
           return;
         }
 
         // Get validation result
         const isValid = validateBookingNumber(state);
-        console.log('Validation result:', isValid);
 
         // Preserve existing validation state
         const existingValidationState = { ...state.validationState };
@@ -2329,11 +2144,6 @@ export const useStore = create<StoreState & StoreActions>()(
           // Force immediate UI update
           _lastUpdate: Date.now(),
         });
-
-        console.log('=== End validateBookingNumber action ===\n');
-        console.log('Final validation state:', newValidationState);
-        console.log('Final completed steps:', newCompletedSteps);
-        console.log('Final open steps:', newOpenSteps);
       },
 
       shouldRecalculateCompensation: () => {
@@ -2355,9 +2165,6 @@ export const useStore = create<StoreState & StoreActions>()(
 
       setPersonalDetails: (details: PassengerDetails | null) => {
         const state = get();
-        console.log('\n=== setPersonalDetails called ===');
-        console.log('Current phase:', state.currentPhase);
-        console.log('New details:', details);
 
         // Get the step ID based on the current phase
         const stepId =
@@ -2391,7 +2198,6 @@ export const useStore = create<StoreState & StoreActions>()(
             _lastUpdate: Date.now(),
           });
 
-          console.log('Reset validation state:', newValidationState);
           return;
         }
 
@@ -2470,18 +2276,6 @@ export const useStore = create<StoreState & StoreActions>()(
           value?.trim()
         );
 
-        // Log validation state for debugging
-        console.log('Personal details validation:', {
-          ...validationDetails,
-          isValid,
-          hasInteracted,
-          details,
-          currentPhase: state.currentPhase,
-          isClaimSuccess: isClaimSuccessPhase,
-          stepId,
-          fieldErrors,
-        });
-
         // Update validation state
         const newValidationState = {
           ...state.validationState,
@@ -2518,9 +2312,6 @@ export const useStore = create<StoreState & StoreActions>()(
           completedSteps: newCompletedSteps,
           _lastUpdate: Date.now(),
         });
-
-        console.log('Updated validation state:', newValidationState);
-        console.log('Updated completed steps:', newCompletedSteps);
       },
 
       setOpenSteps: (steps: number[]) => set({ openSteps: steps }),
@@ -2728,10 +2519,6 @@ export const useStore = create<StoreState & StoreActions>()(
             a.questionId === 'ticket_cost'
         );
 
-        console.log('\n=== handleTripExperienceComplete ===');
-        console.log('Current answers:', state.wizardAnswers);
-        console.log('Filtered answers:', answers);
-
         // Check if we have the main travel status answer
         const hasTravelStatus = answers.some(
           (a) =>
@@ -2739,13 +2526,11 @@ export const useStore = create<StoreState & StoreActions>()(
             ['none', 'self', 'provided'].includes(String(a.value))
         );
 
-        // Get travel status value and convert it
+        // Get travel status value
         const travelStatusAnswer = answers.find(
           (a) => a.questionId === 'travel_status'
         );
         const travelStatus = travelStatusAnswer?.value;
-        const convertedTravelStatus =
-          travelStatus === 'none' ? 'no_travel' : travelStatus;
 
         // Get refund status value
         const refundStatus = answers.find(
@@ -2758,15 +2543,6 @@ export const useStore = create<StoreState & StoreActions>()(
         const hasTicketCost = needsTicketCost
           ? answers.some((a) => a.questionId === 'ticket_cost' && a.value)
           : true;
-
-        console.log('Answer validation:', {
-          hasTravelStatus,
-          travelStatus,
-          convertedTravelStatus,
-          refundStatus,
-          needsTicketCost,
-          hasTicketCost,
-        });
 
         // If we have a travel status answer and all required fields, it's valid
         const isValid = hasTravelStatus && (!needsTicketCost || hasTicketCost);
@@ -2799,15 +2575,6 @@ export const useStore = create<StoreState & StoreActions>()(
               shouldShow,
               value,
             };
-          });
-
-          // Log the answers being set
-          console.log('Setting answers:', {
-            otherAnswers,
-            travelAnswers,
-            needsTicketCost,
-            travelStatus,
-            refundStatus,
           });
 
           return {
@@ -2892,14 +2659,6 @@ export const useStore = create<StoreState & StoreActions>()(
           const wizardValid = state.validationState.isWizardValid;
           const personalValid = state.validationState.isPersonalValid;
           const termsValid = state.validationState.isTermsValid;
-
-          console.log('Phase 1 validation:', {
-            flightValid,
-            wizardValid,
-            personalValid,
-            termsValid,
-            validationState: state.validationState,
-          });
 
           return flightValid && wizardValid && personalValid && termsValid;
         }
@@ -3059,89 +2818,61 @@ export const useStore = create<StoreState & StoreActions>()(
 
       showLoading: () => set({ isLoading: true }),
       hideLoading: () => set({ isLoading: false }),
+      setLastAnsweredQuestion: (questionId: string | null) =>
+        set((state) => ({
+          ...state,
+          lastAnsweredQuestion: questionId,
+          _lastUpdate: Date.now(),
+        })),
     }),
     {
       name: 'wizard-store',
       storage: createJSONStorage(() => localStorage),
       partialize: (
         state: StoreState & StoreActions
-      ): Partial<StoreState & StoreActions> => ({
-        // Flight related
-        selectedType: state.selectedType,
-        directFlight: state.directFlight,
-        flightSegments: state.flightSegments,
-        currentSegmentIndex: state.currentSegmentIndex,
-        fromLocation: state.fromLocation,
-        toLocation: state.toLocation,
-        selectedDate: state.selectedDate,
-        selectedFlights: state.selectedFlights,
-        selectedFlight: state.selectedFlight,
-        flightDetails: state.flightDetails,
-        delayDuration: state.delayDuration,
-
-        // Navigation related
-        currentPhase: state.currentPhase,
-        completedPhases: state.completedPhases,
-        completedSteps: state.completedSteps,
-        currentStep: state.currentStep,
-        openSteps: state.openSteps,
-
-        // Validation related
-        validationState: state.validationState,
-        isValidating: state.isValidating,
-
-        // User related
-        personalDetails: state.personalDetails,
-        termsAccepted: state.termsAccepted,
-        privacyAccepted: state.privacyAccepted,
-        marketingAccepted: state.marketingAccepted,
-        signature: state.signature,
-        hasSignature: state.hasSignature,
-        bookingNumber: state.bookingNumber,
-
-        // Wizard related
-        wizardAnswers: state.wizardAnswers,
-        wizardCurrentSteps: state.wizardCurrentSteps,
-        wizardShowingSuccess: state.wizardShowingSuccess,
-        wizardSuccessMessage: state.wizardSuccessMessage,
-        wizardIsCompleted: state.wizardIsCompleted,
-        wizardIsValid: state.wizardIsValid,
-        wizardIsValidating: state.wizardIsValidating,
-        lastAnsweredQuestion: state.lastAnsweredQuestion,
-        completedWizards: state.completedWizards,
-        lastValidAnswers: state.lastValidAnswers,
-        lastValidStep: state.lastValidStep,
-        wizardIsEditingMoney: state.wizardIsEditingMoney,
-        wizardLastActiveStep: state.wizardLastActiveStep,
-        wizardValidationState: state.wizardValidationState,
-        wizardSuccessStates: state.wizardSuccessStates,
-        tripExperienceAnswers: state.tripExperienceAnswers,
-
-        // Compensation related
-        compensationAmount: state.compensationAmount,
-        compensationLoading: state.compensationLoading,
-        compensationError: state.compensationError,
-        compensationCache: state.compensationCache,
-        evaluationResult: state.evaluationResult,
-
-        // Other
-        locationError: state.locationError,
-        isTransitioningPhases: state.isTransitioningPhases,
-        isInitializing: state.isInitializing,
-        _lastUpdate: state._lastUpdate,
-      }),
+      ): Partial<StoreState & StoreActions> => {
+        console.log('Persisting state:', {
+          directFlight: state.directFlight,
+          flightSegments: state.flightSegments,
+          selectedDate: state.selectedDate,
+        });
+        return {
+          // Flight related
+          selectedType: state.selectedType,
+          directFlight: state.directFlight,
+          flightSegments: state.flightSegments,
+          currentSegmentIndex: state.currentSegmentIndex,
+          fromLocation: state.fromLocation,
+          toLocation: state.toLocation,
+          selectedDate: state.selectedDate,
+          selectedFlights: state.selectedFlights,
+          selectedFlight: state.selectedFlight,
+          flightDetails: state.flightDetails,
+          delayDuration: state.delayDuration,
+          // ... rest of partialize ...
+        };
+      },
       onRehydrateStorage: () => {
-        console.log('\n=== onRehydrateStorage called ===');
         return (state: (StoreState & StoreActions) | undefined) => {
           if (state) {
-            console.log('Rehydrating state:', {
-              currentPhase: state.currentPhase,
-              bookingNumber: state.bookingNumber,
-              validationState: state.validationState,
-              completedSteps: state.completedSteps,
-              openSteps: state.openSteps,
-              wizardAnswers: state.wizardAnswers,
-              lastAnsweredQuestion: state.lastAnsweredQuestion,
+            console.log('Before rehydration:', {
+              directFlight: state.directFlight,
+              flightSegments: state.flightSegments,
+              selectedDate: state.selectedDate,
+            });
+
+            // Transform dates in the rehydrated state
+            if (state.directFlight) {
+              state.directFlight = transformDates(state.directFlight);
+            }
+            if (state.flightSegments) {
+              state.flightSegments = transformDates(state.flightSegments);
+            }
+
+            console.log('After rehydration:', {
+              directFlight: state.directFlight,
+              flightSegments: state.flightSegments,
+              selectedDate: state.selectedDate,
             });
 
             // Reset wizard success states
@@ -3157,8 +2888,6 @@ export const useStore = create<StoreState & StoreActions>()(
 
             // For phase 4 (trip experience), handle wizard state
             if (state.currentPhase === 4) {
-              console.log('Handling phase 4 state');
-
               // Get existing wizard answers
               const tripExperienceAnswers = state.wizardAnswers.filter((a) =>
                 a.questionId.startsWith('travel_status_')
@@ -3245,16 +2974,7 @@ export const useStore = create<StoreState & StoreActions>()(
 
             // Add timestamp to force re-render
             state._lastUpdate = Date.now();
-
-            console.log('Rehydration complete:', {
-              validationState: state.validationState,
-              completedSteps: state.completedSteps,
-              openSteps: state.openSteps,
-              wizardAnswers: state.wizardAnswers,
-              lastAnsweredQuestion: state.lastAnsweredQuestion,
-            });
           }
-          console.log('=== End rehydration ===\n');
         };
       },
     }
@@ -3326,19 +3046,13 @@ export interface WizardStateType {
 }
 
 export const validateBookingNumber = (state: StoreStateValues): boolean => {
-  console.log('\n=== validateBookingNumber called ===');
-  console.log('Current phase:', state.currentPhase);
-  console.log('Booking number:', state.bookingNumber);
-
   // Only validate booking number in phase 3
   if (state.currentPhase !== 3) {
-    console.log('Not in phase 3, returning false');
     return false;
   }
 
   // Don't validate if booking number is not set
   if (!state.bookingNumber) {
-    console.log('No booking number set');
     return false;
   }
 
@@ -3346,7 +3060,6 @@ export const validateBookingNumber = (state: StoreStateValues): boolean => {
   const bookingNumber = state.bookingNumber.trim();
   const isValid =
     bookingNumber.length >= 6 && /^[A-Z0-9]+$/i.test(bookingNumber);
-  console.log('Booking number validation:', { bookingNumber, isValid });
 
   // Preserve existing validation state
   const existingValidationState = { ...state.validationState };
@@ -3386,11 +3099,6 @@ export const validateBookingNumber = (state: StoreStateValues): boolean => {
   // Force immediate UI update
   state._lastUpdate = Date.now();
 
-  console.log('Updated validation state:', newValidationState);
-  console.log('Updated completed steps:', state.completedSteps);
-  console.log('Updated open steps:', state.openSteps);
-  console.log('Validation result:', isValid);
-
   return isValid;
 };
 
@@ -3417,9 +3125,6 @@ export const validateInformedDate = (state: StoreStateValues): boolean => {
     a.questionId.startsWith('informed_date')
   );
 
-  console.log('\n=== validateInformedDate ===');
-  console.log('Validating answers:', answers);
-
   // Check if we have the main informed date answer
   const hasInformedDate = answers.some(
     (a) => a.questionId === 'informed_date' && a.value
@@ -3434,53 +3139,94 @@ export const validateInformedDate = (state: StoreStateValues): boolean => {
       .find((a) => a.questionId === 'specific_informed_date')
       ?.value?.toString();
 
-    console.log('Validating specific date:', {
-      informedDate,
-      specificDate,
-      answers,
-    });
-
     // Check if we have a specific date value
     if (!specificDate) {
-      console.log('No specific date value found');
       return false;
     }
+
+    let formattedDate: string | null = null;
 
     // Check if the date is in YYYY-MM-DD format
     const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
     if (dateRegex.test(specificDate)) {
-      // Validate that it's a real date
-      const dateObj = new Date(specificDate);
-      informedDateValid = !isNaN(dateObj.getTime());
-      console.log('Date validation result:', {
-        specificDate,
-        isValidFormat: true,
-        isValidDate: informedDateValid,
-      });
+      formattedDate = specificDate;
     } else if (specificDate.includes('.')) {
       // Try to convert from DD.MM.YYYY format
       const [day, month, year] = specificDate.split('.');
-      const formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-      const dateObj = new Date(formattedDate);
-      informedDateValid = !isNaN(dateObj.getTime());
-      console.log('Date validation result:', {
-        specificDate,
-        formattedDate,
-        isValidFormat: true,
-        isValidDate: informedDateValid,
-      });
-    } else {
-      console.log('Invalid date format:', specificDate);
-      informedDateValid = false;
+      formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
     }
+
+    if (!formattedDate) {
+      return false;
+    }
+
+    // Validate that it's a real date
+    const dateObj = new Date(formattedDate);
+    if (isNaN(dateObj.getTime())) {
+      return false;
+    }
+
+    // Check if the date is within the last 3 years
+    const threeYearsAgo = new Date();
+    threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 3);
+    if (dateObj < threeYearsAgo) {
+      return false;
+    }
+
+    informedDateValid = true;
   }
 
-  console.log('Final validation result:', {
-    hasInformedDate,
-    informedDate,
-    informedDateValid,
-  });
-  console.log('=== End validateInformedDate ===\n');
-
   return informedDateValid;
+};
+
+// TODO: Replace 'any' types with more specific types in transformDates function for better type safety
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- temporarily disable for both parameter and return type
+const transformDates = (obj: any): any => {
+  if (!obj) return obj;
+
+  if (Array.isArray(obj)) {
+    return obj.map(transformDates);
+  }
+
+  if (typeof obj === 'object') {
+    const transformed = { ...obj };
+    for (const key in transformed) {
+      if (
+        (key === 'date' || key === 'information_received_at') &&
+        typeof transformed[key] === 'string'
+      ) {
+        try {
+          console.log('Transforming date:', key, transformed[key]);
+          let dateStr = transformed[key];
+
+          // Handle DD.MM.YYYY format
+          if (dateStr.includes('.')) {
+            const [day, month, year] = dateStr.split('.');
+            dateStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+          }
+
+          // Parse and validate the date
+          const parsed = parseISO(dateStr);
+          if (isValid(parsed)) {
+            // For information_received_at, keep as YYYY-MM-DD string
+            if (key === 'information_received_at') {
+              transformed[key] = dateStr;
+            } else {
+              transformed[key] = parsed;
+            }
+            console.log('Successfully transformed to:', transformed[key]);
+          } else {
+            console.log('Invalid date after parsing:', dateStr);
+          }
+        } catch (error) {
+          console.error('Error parsing date:', error);
+        }
+      } else if (typeof transformed[key] === 'object') {
+        transformed[key] = transformDates(transformed[key]);
+      }
+    }
+    return transformed;
+  }
+
+  return obj;
 };

@@ -38,6 +38,27 @@ const handler: Handler = async (event: HandlerEvent) => {
       };
     }
 
+    // Convert delay duration to minutes for the API
+    let delay_minutes = 0;
+    if (requestBody.delay_duration) {
+      if (
+        requestBody.delay_duration === '>3' ||
+        requestBody.delay_duration === 'gt3'
+      ) {
+        delay_minutes = 181; // More than 3 hours
+      } else if (
+        requestBody.delay_duration === '2-3' ||
+        requestBody.delay_duration === '2to3'
+      ) {
+        delay_minutes = 120; // 2-3 hours
+      } else if (
+        requestBody.delay_duration === '<2' ||
+        requestBody.delay_duration === 'lt2'
+      ) {
+        delay_minutes = 90; // Less than 2 hours
+      }
+    }
+
     // Validate date format (YYYY-MM-DD)
     const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
     if (!dateRegex.test(requestBody.information_received_at)) {
@@ -58,7 +79,8 @@ const handler: Handler = async (event: HandlerEvent) => {
       journey_booked_flightids: requestBody.journey_booked_flightids,
       journey_fact_flightids: requestBody.journey_fact_flightids || [], // Optional field
       information_received_at: requestBody.information_received_at,
-      lang: 'en',
+      delay_minutes,
+      lang: 'de',
     };
 
     console.log(

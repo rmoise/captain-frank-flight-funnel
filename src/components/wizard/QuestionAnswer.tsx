@@ -20,25 +20,16 @@ export const QuestionAnswer: React.FC<QuestionAnswerProps> = ({
   const [localValue, setLocalValue] = useState(selectedOption);
 
   // Handle answer selection
-  const handleSelect = useCallback(
+  const handleChange = useCallback(
     (value: string) => {
-      console.log('QuestionAnswer handleSelect:', {
-        questionId: question.id,
-        value,
-        currentValue: localValue,
-      });
       setLocalValue(value);
       onSelect(question.id, value);
     },
-    [question.id, onSelect, localValue]
+    [question.id, onSelect]
   );
 
   // Update local value when selected option changes
   useEffect(() => {
-    console.log('QuestionAnswer useEffect:', {
-      selectedOption,
-      localValue,
-    });
     if (selectedOption !== localValue) {
       setLocalValue(selectedOption);
     }
@@ -46,14 +37,6 @@ export const QuestionAnswer: React.FC<QuestionAnswerProps> = ({
 
   // Render question input based on type
   const renderQuestionInput = () => {
-    console.log('QuestionAnswer renderQuestionInput:', {
-      questionType: question.type,
-      questionId: question.id,
-      questionText: question.text,
-      options: question.options,
-      selectedOption: localValue,
-    });
-
     switch (question.type) {
       case 'radio':
         return (
@@ -61,12 +44,6 @@ export const QuestionAnswer: React.FC<QuestionAnswerProps> = ({
             {question.options?.map(
               (option: { value: string | number; label: string }) => {
                 const isSelected = localValue === option.value.toString();
-                console.log('Rendering radio option:', {
-                  questionId: question.id,
-                  optionValue: option.value,
-                  selectedOption: localValue,
-                  isSelected,
-                });
                 return (
                   <div
                     key={option.value.toString()}
@@ -78,7 +55,7 @@ export const QuestionAnswer: React.FC<QuestionAnswerProps> = ({
                       name={question.id}
                       value={option.value.toString()}
                       checked={isSelected}
-                      onChange={(e) => handleSelect(e.target.value)}
+                      onChange={(e) => handleChange(e.target.value)}
                       className="h-4 w-4 text-[#F54538] border-gray-300 focus:ring-[#F54538]"
                     />
                     <label

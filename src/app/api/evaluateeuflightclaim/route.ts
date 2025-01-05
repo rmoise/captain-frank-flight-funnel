@@ -77,7 +77,7 @@ export async function POST(request: Request) {
       journey_fact_flightids,
       information_received_at,
       delay_minutes,
-      lang: 'en',
+      lang: 'de',
     };
     console.log(
       'Sending request to external API:',

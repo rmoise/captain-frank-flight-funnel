@@ -1,10 +1,11 @@
 'use client';
 
-import React, { forwardRef, useState, useEffect } from 'react';
+import React, { forwardRef, useState, useEffect, useRef } from 'react';
 import { CalendarIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { format, isValid } from 'date-fns';
 
 export interface CustomDateInputProps {
-  value?: string;
+  value?: string | Date;
   onClick?: () => void;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   placeholder?: string;
@@ -28,61 +29,131 @@ export const CustomDateInput = forwardRef<
     ref
   ) => {
     const [inputValue, setInputValue] = useState('');
+    const lastManualInput = useRef<string>('');
+    const isCalendarSelection = useRef(false);
+    const previousLength = useRef(0);
+    const isInitialMount = useRef(true);
+    const isManualInput = useRef(false);
+    const isPartialInput = useRef(false);
 
-    // inputValue is managed internally and only needs to be updated when the external value changes
     useEffect(() => {
-      console.log('CustomDateInput useEffect:', {
-        receivedValue: value,
-        currentInputValue: inputValue,
+      console.log('CustomDateInput value changed:', {
+        value,
+        type: value instanceof Date ? 'Date' : typeof value,
+        isCalendarSelection: isCalendarSelection.current,
+        isInitialMount: isInitialMount.current,
+        isManualInput: isManualInput.current,
       });
 
-      // Format the date if it's in yyyy-MM-dd format
-      if (value && value.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        const [year, month, day] = value.split('-');
-        const newValue = `${day}.${month}.${year}`;
-        console.log('Formatting date:', { value, newValue });
-        setInputValue(newValue);
-      } else if (value !== inputValue) {
-        console.log('Using value as is:', value);
-        setInputValue(value || '');
+      // Skip if this is a manual input
+      if (isManualInput.current) {
+        return;
       }
-    }, [value, inputValue]);
+
+      // Only update on calendar selection or initial mount with a value
+      if (value && (isCalendarSelection.current || isInitialMount.current)) {
+        let formattedValue = '';
+        if (value instanceof Date && isValid(value)) {
+          formattedValue = format(value, 'dd.MM.yyyy');
+        } else if (typeof value === 'string') {
+          if (value.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            const [year, month, day] = value.split('-');
+            formattedValue = `${day}.${month}.${year}`;
+          } else if (value.match(/^\d{2}\.\d{2}\.\d{4}$/)) {
+            formattedValue = value;
+          }
+        }
+
+        if (formattedValue) {
+          setInputValue(formattedValue);
+          lastManualInput.current = formattedValue;
+        }
+      } else if (
+        !value &&
+        (isCalendarSelection.current || isInitialMount.current)
+      ) {
+        setInputValue('');
+        lastManualInput.current = '';
+      }
+
+      isCalendarSelection.current = false;
+      isInitialMount.current = false;
+    }, [value]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      console.log('handleChange:', {
-        currentValue: e.target.value,
-        currentInputValue: inputValue,
-      });
+      isManualInput.current = true;
+      const newValue = e.target.value;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- might be used in future cursor position handling
+      const cursorPosition = e.target.selectionStart || 0;
 
-      let newValue = e.target.value.replace(/[^\d.]/g, '');
+      // Only allow digits
+      const digits = newValue.replace(/[^\d]/g, '');
+      let formattedValue = digits;
 
-      // Auto-add dots after day and month
-      if (newValue.length === 2 && !inputValue.includes('.')) {
-        newValue += '.';
-      } else if (newValue.length === 5 && inputValue.length === 4) {
-        newValue += '.';
+      // Format as DD.MM.YYYY
+      if (digits.length > 0) {
+        // Add first dot after DD
+        if (digits.length >= 2) {
+          formattedValue = digits.slice(0, 2) + '.';
+          // Add month digits
+          if (digits.length > 2) {
+            formattedValue += digits.slice(2, 4);
+            // Add second dot after MM
+            if (digits.length >= 4) {
+              formattedValue += '.';
+              // Add year digits
+              if (digits.length > 4) {
+                formattedValue += digits.slice(4);
+              }
+            }
+          }
+        }
       }
 
       // Limit to 10 characters (DD.MM.YYYY)
-      if (newValue.length <= 10) {
-        console.log('Setting new value:', newValue);
-        setInputValue(newValue);
+      if (formattedValue.length <= 10) {
+        console.log('Manual input:', formattedValue);
+        setInputValue(formattedValue);
+        lastManualInput.current = formattedValue;
+
         const syntheticEvent = {
           ...e,
-          target: { ...e.target, value: newValue },
+          target: { ...e.target, value: formattedValue },
         };
         onChange?.(syntheticEvent);
+
+        // Set cursor position
+        if (e.target instanceof HTMLInputElement) {
+          requestAnimationFrame(() => {
+            // Calculate how many dots are before the cursor
+            const digitsBeforeCursor = newValue.replace(/[^\d]/g, '').length;
+            let newPosition = digitsBeforeCursor;
+            if (digitsBeforeCursor > 4) newPosition += 2;
+            else if (digitsBeforeCursor > 2) newPosition += 1;
+            e.target.setSelectionRange(newPosition, newPosition);
+          });
+        }
       }
     };
 
+    const handleCalendarClick = () => {
+      console.log('Calendar clicked, setting isCalendarSelection');
+      isCalendarSelection.current = true;
+      isManualInput.current = false;
+      isPartialInput.current = false;
+      onClick?.();
+    };
+
     const handleClear = () => {
-      console.log('handleClear called');
+      console.log('Clearing input');
+      isManualInput.current = true;
+      isPartialInput.current = false;
       setInputValue('');
-      // Only call onClear if it's provided
+      lastManualInput.current = '';
+      previousLength.current = 0;
       if (onClear) {
         onClear();
       } else {
-        // If no onClear provided, simulate a change event with empty value
         const syntheticEvent = {
           target: { value: '' },
         } as React.ChangeEvent<HTMLInputElement>;
@@ -90,35 +161,24 @@ export const CustomDateInput = forwardRef<
       }
     };
 
-    const handleInputClick = (e: React.MouseEvent) => {
-      console.log('handleInputClick:', { hasOnClick: !!onClick });
-      e.preventDefault();
-      onClick?.();
-    };
-
-    console.log('CustomDateInput render:', {
-      inputValue,
-      value,
-      hasOnClick: !!onClick,
-      hasOnChange: !!onChange,
-      hasOnClear: !!onClear,
-    });
-
     return (
       <div className="relative">
         <input
           type="text"
           value={inputValue}
           onChange={handleChange}
-          onClick={handleInputClick}
           ref={ref}
           className="peer w-full h-14 px-3 pl-10 pr-10 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#F54538] focus:border-transparent bg-white text-[#4B616D]"
           placeholder={placeholder}
-          readOnly
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck="false"
+          data-form-type="other"
         />
         <button
           type="button"
-          onClick={handleInputClick}
+          onClick={handleCalendarClick}
           className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#F54538] transition-colors cursor-pointer"
         >
           <CalendarIcon className="w-5 h-5" />

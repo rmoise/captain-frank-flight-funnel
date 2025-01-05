@@ -34,11 +34,14 @@ export function PhaseGuard({ phase, children }: PhaseGuardProps) {
     return <>{children}</>;
   }
 
-  // Allow access to current phase, completed phases, or the next phase after the current phase
+  // Allow access to current phase, completed phases, or phases after completed phases
   const isPhaseAccessible =
-    phase <= currentPhase ||
-    completedPhases.includes(phase) ||
-    phase === currentPhase + 1;
+    phase === currentPhase ||
+    (phase < currentPhase && completedPhases.includes(phase - 1)) ||
+    (phase === 2 && completedPhases.includes(1)) ||
+    (phase === 3 && completedPhases.includes(2)) ||
+    (phase === 4 && completedPhases.includes(3)) ||
+    (phase === 5 && completedPhases.includes(4));
 
   if (!isPhaseAccessible) {
     // Redirect to the appropriate phase

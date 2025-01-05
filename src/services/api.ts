@@ -411,7 +411,7 @@ class ApiClient {
           },
           body: JSON.stringify({
             ...data,
-            lang: 'en',
+            lang: 'de',
           }),
         }
       );
@@ -504,7 +504,7 @@ class ApiClient {
           body: JSON.stringify({
             ...params,
             journey_fact_flightids,
-            lang: 'en',
+            lang: 'de',
           }),
         }
       );

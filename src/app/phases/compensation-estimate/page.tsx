@@ -20,7 +20,6 @@ type RouteInfo = {
 export default function CompensationEstimatePage() {
   const router = useRouter();
   const {
-    completedPhases,
     personalDetails,
     fromLocation,
     toLocation,
@@ -73,31 +72,16 @@ export default function CompensationEstimatePage() {
         departureCity: fromCity,
         arrivalCity: toCity,
       });
-
-      console.log('Route info updated:', {
-        from: fromCity,
-        to: toCity,
-        rawFrom: from,
-        rawTo: to,
-      });
-    } catch (error) {
-      console.error('Error parsing location details:', error);
-    }
+    } catch (error) {}
   }, [fromLocation, toLocation]);
 
   useEffect(() => {
     const calculateCompensation = async () => {
-      console.log('Starting compensation calculation');
-      console.log('Selected Flights:', selectedFlights);
-      console.log('Selected Type:', selectedType);
-      console.log('Route Info:', routeInfo);
-
       // Check if we need to recalculate
       if (
         !shouldRecalculateCompensation() &&
         compensationCache.amount !== null
       ) {
-        console.log('Using cached amount:', compensationCache.amount);
         setCompensationAmount(compensationCache.amount);
         return;
       }
@@ -131,11 +115,27 @@ export default function CompensationEstimatePage() {
           };
         }
 
-        console.log('Flight data for calculation:', flightData);
-
         if (!flightData) {
-          console.error('No flight data available');
           throw new Error('No flight data available');
+        }
+
+        // Create a cache key based on the flight data
+        const cacheKey = `compensation_${flightData.departure}_${flightData.arrival}`;
+        const cachedData = localStorage.getItem(cacheKey);
+
+        // Check if we have valid cached data
+        if (cachedData) {
+          try {
+            const { amount, timestamp } = JSON.parse(cachedData);
+            // Cache is valid for 24 hours
+            if (Date.now() - timestamp < 24 * 60 * 60 * 1000) {
+              setCompensationAmount(amount);
+              setCompensationLoading(false);
+              return;
+            }
+          } catch (error) {
+            console.error('Error parsing cached compensation data:', error);
+          }
         }
 
         const queryParams = new URLSearchParams({
@@ -153,19 +153,13 @@ export default function CompensationEstimatePage() {
           }
         );
 
-        console.log('Response status:', response.status);
-
         if (!response.ok) {
-          const errorText = await response.text();
-          console.error('API Error:', errorText);
           throw new Error('Failed to calculate compensation');
         }
 
         const data = await response.json();
-        console.log('API Response:', data);
 
         if (data.amount === 0 || data.amount === null) {
-          console.error('No compensation amount in response');
           throw new Error('No compensation amount available');
         }
 
@@ -196,11 +190,21 @@ export default function CompensationEstimatePage() {
           },
         });
 
+        // Cache in localStorage with timestamp
+        localStorage.setItem(
+          cacheKey,
+          JSON.stringify({
+            amount: data.amount,
+            timestamp: Date.now(),
+          })
+        );
+
         setCompensationAmount(data.amount);
       } catch (error) {
-        console.error('Error calculating compensation:', error);
         setCompensationError(
-          'Unable to calculate compensation. Please try again.'
+          error instanceof Error
+            ? error.message
+            : 'Failed to calculate compensation'
         );
       } finally {
         setCompensationLoading(false);
@@ -211,7 +215,6 @@ export default function CompensationEstimatePage() {
     if (selectedFlights?.length > 0 || routeInfo) {
       calculateCompensation();
     } else {
-      console.log('No flight data available');
     }
   }, [
     selectedFlights,
@@ -239,7 +242,6 @@ export default function CompensationEstimatePage() {
       }
       await router.push(nextPhaseUrl);
     } catch (error) {
-      console.error('Error during continue:', error);
       setCurrentPhase(2);
     } finally {
       setIsLoading(false);
@@ -260,7 +262,7 @@ export default function CompensationEstimatePage() {
   return (
     <PhaseGuard phase={2}>
       <div className="min-h-screen bg-[#f5f7fa]">
-        <PhaseNavigation currentPhase={2} completedPhases={completedPhases} />
+        <PhaseNavigation />
         <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
           <div className="space-y-6">
             <SpeechBubble message="There's a good chance that you're entitled to a claim! Let me help you. Completely risk-free: I only receive a commission fee of 30% (including VAT) if I'm successful." />

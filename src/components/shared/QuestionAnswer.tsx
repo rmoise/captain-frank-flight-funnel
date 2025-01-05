@@ -31,64 +31,30 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
   initialSelectedFlight = null,
   hideProgress = false,
 }) => {
-  console.log('=== QuestionAnswer Render ===', {
-    question,
-    selectedOption,
-    currentStep,
-    totalSteps,
-    initialSelectedFlight,
-    hideProgress,
-  });
-
   const [isFocused, setIsFocused] = useState(false);
   const [localValue, setLocalValue] = useState(selectedOption);
 
   useEffect(() => {
-    console.log('=== QuestionAnswer useEffect ===', {
-      selectedOption,
-      localValue,
-    });
     if (selectedOption !== localValue) {
       setLocalValue(selectedOption);
     }
   }, [selectedOption, localValue]);
 
   const handleMoneyInputChange = (value: string) => {
-    console.log('=== QuestionAnswer handleMoneyInputChange ===', {
-      value,
-      selectedOption,
-      questionId: question.id,
-    });
-
     // Pass through the value directly to onSelect
     onSelect(question.id, value);
   };
 
   const renderQuestionInput = () => {
-    console.log('=== QuestionAnswer renderQuestionInput ===', {
-      questionType: question.type,
-      questionId: question.id,
-      questionText: question.text,
-      options: question.options,
-      selectedOption,
-    });
-
     switch (question.type) {
       case 'radio':
         if (!question.options) {
-          console.warn('No options provided for radio question:', question.id);
           return null;
         }
         return (
           <div className="space-y-3">
             {question.options.map((option) => {
               const isSelected = selectedOption === option.value;
-              console.log('Rendering radio option:', {
-                questionId: question.id,
-                optionValue: option.value,
-                selectedOption,
-                isSelected,
-              });
 
               return (
                 <div key={option.value}>
@@ -133,17 +99,11 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
               label={question.label || question.text}
               value={localValue || ''}
               onChange={(value) => {
-                console.log('=== MoneyInput onChange ===', {
-                  value,
-                  selectedOption,
-                  questionId: question.id,
-                });
                 if (value === '+') {
                   const currentValue = parseFloat(
                     localValue?.replace(/[^0-9.-]+/g, '') || '0'
                   );
                   const newValue = `€${(currentValue + 1).toFixed(2)}`;
-                  console.log('Incrementing to:', newValue);
                   setLocalValue(newValue);
                   handleMoneyInputChange(newValue);
                 } else if (value === '-') {
@@ -154,7 +114,6 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
                     const newValue = `€${Math.max(0, currentValue - 1).toFixed(
                       2
                     )}`;
-                    console.log('Decrementing to:', newValue);
                     setLocalValue(newValue);
                     handleMoneyInputChange(newValue);
                   }
@@ -177,61 +136,21 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
         const parsedDate = localValue ? new Date(localValue) : null;
         const isValidDate = parsedDate && !isNaN(parsedDate.getTime());
 
-        console.log('Rendering date picker:', {
-          questionId: question.id,
-          localValue,
-          selectedOption,
-          parsedDate,
-          isValidDate,
-        });
-
         return (
           <div className="mt-4">
             <DatePicker
               selected={isValidDate ? parsedDate : null}
               onChange={(date) => {
-                console.log('DatePicker onChange called with:', {
-                  date,
-                  questionId: question.id,
-                  currentValue: localValue,
-                });
-
                 if (date) {
                   const formattedDate = formatDateToYYYYMMDD(date);
-                  console.log('DatePicker formatting date:', {
-                    originalDate: date,
-                    formattedDate,
-                    questionId: question.id,
-                    currentValue: localValue,
-                  });
-
                   if (formattedDate) {
                     // Validate the formatted date
                     if (isValidYYYYMMDD(formattedDate)) {
-                      console.log('Setting valid formatted date:', {
-                        formattedDate,
-                        questionId: question.id,
-                      });
                       setLocalValue(formattedDate);
                       onSelect(question.id, formattedDate);
-                    } else {
-                      console.error('Invalid date format:', {
-                        date,
-                        formattedDate,
-                        questionId: question.id,
-                      });
                     }
-                  } else {
-                    console.error('Failed to format date:', {
-                      date,
-                      questionId: question.id,
-                    });
                   }
                 } else {
-                  console.log('DatePicker cleared:', {
-                    questionId: question.id,
-                    currentValue: localValue,
-                  });
                   setLocalValue('');
                   onSelect(question.id, '');
                 }
@@ -248,7 +167,6 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
                       : ''
                   }
                   onClear={() => {
-                    console.log('DatePicker onClear');
                     setLocalValue('');
                     onSelect(question.id, '');
                   }}

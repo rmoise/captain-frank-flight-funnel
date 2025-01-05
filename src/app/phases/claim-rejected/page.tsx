@@ -24,18 +24,14 @@ export default function ClaimRejectedPage() {
     // Get rejection reasons from URL parameters
     const searchParams = new URLSearchParams(window.location.search);
     const reasonsParam = searchParams.get('reasons');
-    console.log('Raw reasons param:', reasonsParam);
     if (reasonsParam) {
       try {
         const reasons = JSON.parse(decodeURIComponent(reasonsParam));
-        console.log('Parsed reasons:', reasons);
         // Get rejection reasons directly from the response structure
         const rejectionReasons =
           reasons?.data?.rejection_reasons || reasons?.rejection_reasons || {};
-        console.log('Final rejection reasons:', rejectionReasons);
         setRejectionReasons(rejectionReasons);
       } catch (error) {
-        console.error('Error parsing rejection reasons:', error);
         setRejectionReasons({ error: 'Failed to parse rejection reasons' });
       }
     }
@@ -46,7 +42,6 @@ export default function ClaimRejectedPage() {
     try {
       router.push('/');
     } catch (error) {
-      console.error('Error during continue:', error);
     } finally {
       setIsLoading(false);
     }
