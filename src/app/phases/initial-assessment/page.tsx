@@ -1,6 +1,12 @@
 'use client';
 
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+} from 'react';
 import { AccordionCard } from '@/components/shared/AccordionCard';
 import type { Flight, Answer, PassengerDetails } from '@/types/store';
 import FlightSelector from '@/components/booking/FlightSelector';
@@ -180,6 +186,7 @@ export default function InitialAssessment() {
   const [isLoading, setIsLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [interactedSteps, setInteractedSteps] = useState<number[]>([]);
+  const initRef = useRef(false);
 
   const {
     wizardAnswers,
@@ -219,19 +226,67 @@ export default function InitialAssessment() {
           setCurrentPhase(1);
           setMounted(true);
         }
-      } catch (error) {
-      }
+      } catch (error) {}
     };
 
     initialize();
   }, [mounted, initializeStore, setCurrentPhase]);
+
+  // Initialize with step 1 open
+  useEffect(() => {
+    if (!mounted && !initRef.current) {
+      initRef.current = true;
+      setOpenSteps([1]);
+    }
+  }, [mounted, setOpenSteps]);
+
+  // Keep steps open when completed and handle transitions
+  useEffect(() => {
+    console.log('Validation state changed:', validationState.stepValidation);
+    console.log('Current open steps:', openSteps);
+
+    const completedStepIds = Object.entries(validationState.stepValidation)
+      .filter(([, isValid]) => isValid)
+      .map(([id]) => parseInt(id));
+
+    console.log('Completed step IDs:', completedStepIds);
+
+    if (completedStepIds.length > 0) {
+      const newOpenSteps = [...openSteps];
+      let hasChanges = false;
+
+      completedStepIds.forEach((id) => {
+        // Keep completed steps open
+        if (!openSteps.includes(id)) {
+          console.log(`Step ${id} is validated, adding to open steps`);
+          newOpenSteps.push(id);
+          hasChanges = true;
+        }
+
+        // Open next step when current step is completed
+        const nextStep = id + 1;
+        if (nextStep <= 4 && !openSteps.includes(nextStep)) {
+          console.log(`Opening next step ${nextStep}`);
+          newOpenSteps.push(nextStep);
+          hasChanges = true;
+        }
+      });
+
+      if (hasChanges) {
+        const uniqueSteps = Array.from(new Set(newOpenSteps)).sort(
+          (a, b) => a - b
+        );
+        console.log('Setting new open steps:', uniqueSteps);
+        setOpenSteps(uniqueSteps);
+      }
+    }
+  }, [validationState.stepValidation, openSteps, setOpenSteps]);
 
   // State logging effect
   useEffect(() => {
     if (!mounted) return;
 
     // Log overall state
-
   }, [
     mounted,
     validationState,
@@ -251,14 +306,11 @@ export default function InitialAssessment() {
   // QA Wizard completion handler
   const handleComplete = useCallback(
     (answers: Answer[]) => {
-
-
       // Store the answers and let the store handle validation
       setWizardAnswers(answers);
       markWizardComplete('initial_assessment');
       validateQAWizard();
       setInteractedSteps((prev) => [...new Set([...prev, 2])]);
-
     },
     [setWizardAnswers, markWizardComplete, validateQAWizard]
   );
@@ -523,8 +575,8 @@ export default function InitialAssessment() {
           isCompleted={isCompleted}
           hasInteracted={hasInteracted}
           summary={summary}
-          shouldStayOpen={step.shouldStayOpen}
-          isOpenByDefault={step.isOpenByDefault}
+          shouldStayOpen={false}
+          isOpenByDefault={step.id === 1}
           className={accordionConfig.padding.wrapper}
           stepId={
             step.id === 1
@@ -538,7 +590,7 @@ export default function InitialAssessment() {
           onToggle={() => {
             const isCurrentlyOpen = openSteps.includes(step.id);
             const newOpenSteps = isCurrentlyOpen
-              ? openSteps.filter((id: number) => id !== step.id)
+              ? openSteps.filter((id) => id !== step.id)
               : [...openSteps, step.id];
             setOpenSteps(newOpenSteps);
           }}

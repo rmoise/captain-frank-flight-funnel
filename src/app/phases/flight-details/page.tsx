@@ -24,8 +24,10 @@ export default function FlightDetailsPage() {
   const [bookingNumber, setLocalBookingNumber] = useState('');
   const [interactedSteps, setInteractedSteps] = useState<number[]>([]);
   const [isBookingInputFocused, setIsBookingInputFocused] = useState(false);
-  const [openSteps, setOpenSteps] = useState<number[]>([]);
+  const [openSteps, setOpenSteps] = useState<number[]>([1]);
+  const [mounted, setMounted] = useState(false);
   const phaseInitialized = useRef(false);
+  const initRef = useRef(false);
 
   const {
     selectedFlights,
@@ -38,30 +40,32 @@ export default function FlightDetailsPage() {
     completePhase,
   } = useStore();
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   // Initialize store and phase
   useEffect(() => {
     if (!phaseInitialized.current) {
       phaseInitialized.current = true;
       setCurrentPhase(3);
 
-      // Initialize openSteps with step 1 if a flight is selected
-      if (selectedFlights?.[0]) {
-        setOpenSteps([1]);
-      }
-
       // Set local booking number if not already set
       if (!bookingNumber) {
         setLocalBookingNumber(storedBookingNumber || '');
       }
+
+      // Only open step 1 initially
+      setOpenSteps([1]);
     }
-  }, [setCurrentPhase, selectedFlights, storedBookingNumber, bookingNumber]);
+  }, [setCurrentPhase, storedBookingNumber, bookingNumber]);
 
   // Keep flight selection accordion open when a flight is selected
   useEffect(() => {
     if (selectedFlights?.[0] && !openSteps.includes(1)) {
       setOpenSteps((prev) => [...prev, 1]);
     }
-  }, [selectedFlights, openSteps]);
+  }, [selectedFlights, openSteps, setOpenSteps]);
 
   // Sync local booking number with store
   useEffect(() => {
@@ -74,6 +78,13 @@ export default function FlightDetailsPage() {
     (step: number) => completedSteps.includes(step),
     [completedSteps]
   );
+
+  // Automatically open step 2 when step 1 is completed
+  useEffect(() => {
+    if (isStepCompleted(1)) {
+      setOpenSteps((prev) => Array.from(new Set([...prev, 2])));
+    }
+  }, [isStepCompleted]);
 
   const handleBookingNumberChange = (value: string) => {
     setLocalBookingNumber(value);
@@ -107,6 +118,14 @@ export default function FlightDetailsPage() {
     }
   };
 
+  // Initialize with step 1 open
+  useEffect(() => {
+    if (!mounted && !initRef.current) {
+      initRef.current = true;
+      setOpenSteps([1]);
+    }
+  }, [mounted, setOpenSteps, openSteps]);
+
   return (
     <PhaseGuard phase={3}>
       <div className="min-h-screen bg-[#f5f7fa]">
@@ -123,18 +142,16 @@ export default function FlightDetailsPage() {
                 isCompleted={isStepCompleted(1)}
                 hasInteracted={interactedSteps.includes(1)}
                 className={accordionConfig.padding.wrapper}
-                shouldStayOpen={Boolean(selectedFlights?.[0])}
+                shouldStayOpen={false}
                 isOpenByDefault={true}
-                isOpen={openSteps.includes(1) || Boolean(selectedFlights?.[0])}
+                isOpen={openSteps.includes(1)}
                 stepId="flight-selection"
                 onToggle={() => {
-                  if (!selectedFlights?.[0]) {
-                    const isCurrentlyOpen = openSteps.includes(1);
-                    if (!isCurrentlyOpen) {
-                      setOpenSteps((prev) => [...prev, 1]);
-                    } else {
-                      setOpenSteps((prev) => prev.filter((id) => id !== 1));
-                    }
+                  const isCurrentlyOpen = openSteps.includes(1);
+                  if (!isCurrentlyOpen) {
+                    setOpenSteps((prev) => [...prev, 1]);
+                  } else {
+                    setOpenSteps((prev) => prev.filter((id) => id !== 1));
                   }
                 }}
               >
@@ -165,7 +182,7 @@ export default function FlightDetailsPage() {
                 hasInteracted={interactedSteps.includes(2)}
                 className={accordionConfig.padding.wrapper}
                 shouldStayOpen={false}
-                isOpenByDefault={false}
+                isOpenByDefault={isStepCompleted(2)}
                 isOpen={openSteps.includes(2)}
                 stepId="booking-number"
                 onToggle={() => {

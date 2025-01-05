@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useCallback, useMemo, useEffect, useState } from 'react';
+import { useCallback, useMemo, useEffect, useState, useRef } from 'react';
 import { useStore } from '@/lib/state/store';
 import { Answer } from '@/types/wizard';
 import { Question } from '@/types/experience';
@@ -155,7 +155,11 @@ export default function TripExperiencePage() {
     setEvaluationResult,
     currentPhase,
     setWizardAnswers,
+    openSteps,
+    setOpenSteps,
   } = useStore();
+
+  const initRef = useRef(false);
 
   // Filter answers for each wizard
   const tripExperienceAnswers = useMemo(() => {
@@ -229,7 +233,7 @@ export default function TripExperiencePage() {
     });
   }, []);
 
-  // Initialize state and restore validation
+  // Initialize state
   useEffect(() => {
     if (!mounted) {
       const initializeState = async () => {
@@ -293,17 +297,9 @@ export default function TripExperiencePage() {
             }
           }
 
-          // Set all answers at once if we have any
+          // Set the answers in the store
           if (newAnswers.length > 0) {
-            console.log('Setting wizard answers:', newAnswers);
-            const store = useStore.getState();
-            store.setWizardAnswers(newAnswers);
-
-            // Find the last answer and update lastAnsweredQuestion
-            const lastAnswer = newAnswers[newAnswers.length - 1];
-            if (lastAnswer) {
-              store.setLastAnsweredQuestion(lastAnswer.questionId);
-            }
+            setWizardAnswers(newAnswers);
           }
 
           // Process selected flights
@@ -371,6 +367,60 @@ export default function TripExperiencePage() {
       initializeState();
     }
   }, [mounted, setCurrentPhase, setWizardAnswers]);
+
+  // Initialize with step 2 open only
+  useEffect(() => {
+    if (!mounted && !initRef.current) {
+      initRef.current = true;
+      setOpenSteps([2]);
+    }
+  }, [mounted, setOpenSteps]);
+
+  // Keep steps open when completed and handle transitions
+  useEffect(() => {
+    console.log('Validation state changed:', validationState.stepValidation);
+    console.log('Current open steps:', openSteps);
+
+    if (
+      validationState.stepValidation[2] ||
+      validationState.stepValidation[3]
+    ) {
+      const newOpenSteps = [...openSteps];
+      let hasChanges = false;
+
+      // Keep completed steps open and handle transitions
+      if (validationState.stepValidation[2]) {
+        // Keep step 1 (ID: 2) open if completed
+        if (!openSteps.includes(2)) {
+          console.log('Step 1 (ID: 2) is validated, adding to open steps');
+          newOpenSteps.push(2);
+          hasChanges = true;
+        }
+
+        // Automatically open step 2 (ID: 3) when step 1 is completed
+        if (!openSteps.includes(3)) {
+          console.log('Opening step 2 (ID: 3) after step 1 completion');
+          newOpenSteps.push(3);
+          hasChanges = true;
+        }
+      }
+
+      // Keep step 2 (ID: 3) open if completed
+      if (validationState.stepValidation[3] && !openSteps.includes(3)) {
+        console.log('Step 2 (ID: 3) is validated, adding to open steps');
+        newOpenSteps.push(3);
+        hasChanges = true;
+      }
+
+      if (hasChanges) {
+        const uniqueSteps = Array.from(new Set(newOpenSteps)).sort(
+          (a, b) => a - b
+        );
+        console.log('Setting new open steps:', uniqueSteps);
+        setOpenSteps(uniqueSteps);
+      }
+    }
+  }, [validationState.stepValidation, openSteps, setOpenSteps]);
 
   // Save answers to localStorage when they change
   useEffect(() => {
@@ -679,13 +729,21 @@ export default function TripExperiencePage() {
 
             {/* Trip Experience Wizard */}
             <AccordionCard
-              title="Travel Status"
-              isOpen={true}
+              title="What happened with your flight?"
+              eyebrow="Step 1"
+              isOpen={openSteps.includes(2)}
               shouldStayOpen={false}
               isCompleted={validationState.stepValidation[2]}
               hasInteracted={validationState.stepInteraction[2]}
-              stepId="travel-status"
+              stepId="trip-experience"
               className={accordionConfig.padding.wrapper}
+              onToggle={() => {
+                const isCurrentlyOpen = openSteps.includes(2);
+                const newOpenSteps = isCurrentlyOpen
+                  ? openSteps.filter((id) => id !== 2)
+                  : [...openSteps, 2];
+                setOpenSteps(newOpenSteps);
+              }}
             >
               <div className={accordionConfig.padding.content}>
                 <QAWizard
@@ -700,13 +758,21 @@ export default function TripExperiencePage() {
 
             {/* Informed Date Wizard */}
             <AccordionCard
-              title="Informed Date"
-              isOpen={true}
+              title="When were you informed?"
+              eyebrow="Step 2"
+              isOpen={openSteps.includes(3)}
               shouldStayOpen={false}
               isCompleted={validationState.stepValidation[3]}
               hasInteracted={validationState.stepInteraction[3]}
               stepId="informed-date"
               className={accordionConfig.padding.wrapper}
+              onToggle={() => {
+                const isCurrentlyOpen = openSteps.includes(3);
+                const newOpenSteps = isCurrentlyOpen
+                  ? openSteps.filter((id) => id !== 3)
+                  : [...openSteps, 3];
+                setOpenSteps(newOpenSteps);
+              }}
             >
               <div className={accordionConfig.padding.content}>
                 <QAWizard

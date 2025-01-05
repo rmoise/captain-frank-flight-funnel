@@ -74,7 +74,9 @@ export default function AgreementPage() {
   const signatureRef = useRef<SignaturePadRef>(null);
   const [mounted, setMounted] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
-  const [openSteps, setOpenSteps] = React.useState<Array<number | string>>([1]);
+  const [openSteps, setOpenSteps] = React.useState<Array<number | string>>([
+    'digital-signature',
+  ]);
   // Kept for consistency with other pages
   /* eslint-disable @typescript-eslint/no-unused-vars */
   const [interactedSteps, setInteractedSteps] = React.useState<number[]>([]);
@@ -544,6 +546,19 @@ export default function AgreementPage() {
       ...data,
     }));
   };
+
+  // Add effect to handle step opening behavior
+  useEffect(() => {
+    if (mounted && validationState.isSignatureValid) {
+      setOpenSteps((prev) => {
+        if (!prev.includes('terms-and-conditions')) {
+          return [...prev, 'terms-and-conditions'];
+        }
+        return prev;
+      });
+    }
+  }, [mounted, validationState.isSignatureValid]);
+
   /* eslint-enable @typescript-eslint/no-unused-vars */
 
   return (

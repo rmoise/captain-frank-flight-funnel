@@ -9,6 +9,7 @@ export interface AccordionCardProps {
   isOpenByDefault?: boolean;
   className?: string;
   eyebrow?: string;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   subtitle?: string;
   summary?: string;
   showError?: boolean;
@@ -26,6 +27,7 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
   isOpenByDefault = false,
   className = '',
   eyebrow,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   subtitle,
   summary,
   showError = false,
@@ -94,9 +96,6 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
           <div className="flex items-center space-x-3">
             <h3 className="text-2xl font-semibold text-gray-900">{title}</h3>
           </div>
-          {isAccordionOpen && subtitle && (
-            <p className="mt-2 text-gray-500">{subtitle}</p>
-          )}
           {!isAccordionOpen && summary && (
             <p className="mt-2 text-gray-500">{summary}</p>
           )}
