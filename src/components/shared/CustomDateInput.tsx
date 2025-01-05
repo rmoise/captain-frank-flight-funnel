@@ -29,12 +29,12 @@ export const CustomDateInput = forwardRef<
     ref
   ) => {
     const [inputValue, setInputValue] = useState('');
+    const [isValidDate, setIsValidDate] = useState(true);
     const lastManualInput = useRef<string>('');
     const isCalendarSelection = useRef(false);
     const previousLength = useRef(0);
     const isInitialMount = useRef(true);
     const isManualInput = useRef(false);
-    const isPartialInput = useRef(false);
 
     useEffect(() => {
       console.log('CustomDateInput value changed:', {
@@ -80,6 +80,25 @@ export const CustomDateInput = forwardRef<
       isInitialMount.current = false;
     }, [value]);
 
+    const validateDateFormat = (date: string): boolean => {
+      if (date === '') return true;
+
+      // Check for complete date format DD.MM.YYYY
+      const formatRegex = /^\d{2}\.\d{2}\.\d{4}$/;
+      if (!formatRegex.test(date)) {
+        return false;
+      }
+
+      // Check if it's a valid date
+      const [day, month, year] = date.split('.').map(Number);
+      const dateObj = new Date(year, month - 1, day);
+      return (
+        dateObj.getDate() === day &&
+        dateObj.getMonth() === month - 1 &&
+        dateObj.getFullYear() === year
+      );
+    };
+
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       isManualInput.current = true;
       const newValue = e.target.value;
@@ -116,11 +135,26 @@ export const CustomDateInput = forwardRef<
         setInputValue(formattedValue);
         lastManualInput.current = formattedValue;
 
-        const syntheticEvent = {
-          ...e,
-          target: { ...e.target, value: formattedValue },
-        };
-        onChange?.(syntheticEvent);
+        // Check if it's a complete date and validate
+        const isComplete = formattedValue.length === 10;
+        const isValid = isComplete && validateDateFormat(formattedValue);
+        setIsValidDate(isValid);
+
+        // Only trigger onChange for complete valid dates or empty input
+        if (formattedValue === '' || (isComplete && isValid)) {
+          const syntheticEvent = {
+            ...e,
+            target: { ...e.target, value: formattedValue },
+          };
+          onChange?.(syntheticEvent);
+        } else {
+          // For incomplete or invalid dates, trigger onChange with empty value
+          const syntheticEvent = {
+            ...e,
+            target: { ...e.target, value: '' },
+          };
+          onChange?.(syntheticEvent);
+        }
 
         // Set cursor position
         if (e.target instanceof HTMLInputElement) {
@@ -140,15 +174,14 @@ export const CustomDateInput = forwardRef<
       console.log('Calendar clicked, setting isCalendarSelection');
       isCalendarSelection.current = true;
       isManualInput.current = false;
-      isPartialInput.current = false;
       onClick?.();
     };
 
     const handleClear = () => {
       console.log('Clearing input');
       isManualInput.current = true;
-      isPartialInput.current = false;
       setInputValue('');
+      setIsValidDate(true);
       lastManualInput.current = '';
       previousLength.current = 0;
       if (onClear) {
@@ -168,7 +201,9 @@ export const CustomDateInput = forwardRef<
           value={inputValue}
           onChange={handleChange}
           ref={ref}
-          className="peer w-full h-14 px-3 pl-10 pr-10 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#F54538] focus:border-transparent bg-white text-[#4B616D]"
+          className={`peer w-full h-14 px-3 pl-10 pr-10 border ${
+            !isValidDate ? 'border-red-500' : 'border-gray-300'
+          } rounded-xl focus:outline-none focus:ring-2 focus:ring-[#F54538] focus:border-transparent bg-white text-[#4B616D]`}
           placeholder={placeholder}
           autoComplete="off"
           autoCorrect="off"

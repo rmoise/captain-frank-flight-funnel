@@ -230,6 +230,60 @@ const isValidFlight = (flight: unknown): flight is Flight => {
   }
 };
 
+const isValidDate = (date: string | Date | null): boolean => {
+  console.log('Validating date:', date);
+  if (!date) {
+    console.log('Date is null or undefined');
+    return false;
+  }
+
+  // If it's already a Date object
+  if (date instanceof Date) {
+    const isValidDateObj = isValid(date);
+    console.log('Date object validation result:', isValidDateObj);
+    return isValidDateObj;
+  }
+
+  // If it's a string, check if it matches DD.MM.YYYY format
+  if (typeof date === 'string') {
+    console.log('Date string length:', date.length);
+
+    // Reject any partial inputs that don't match the full format length
+    if (date.length < 10) {
+      console.log('Rejecting partial date input');
+      return false;
+    }
+
+    // Check if it matches DD.MM.YYYY format with complete values
+    if (date.match(/^\d{2}\.\d{2}\.\d{4}$/)) {
+      console.log('Matched DD.MM.YYYY format');
+      const [day, month, year] = date.split('.');
+      // Ensure we have complete values for day, month, and year
+      if (day.length !== 2 || month.length !== 2 || year.length !== 4) {
+        console.log('Invalid component lengths:', { day, month, year });
+        return false;
+      }
+      const parsedDate = new Date(Number(year), Number(month) - 1, Number(day));
+      const isValidParsed = isValid(parsedDate);
+      console.log('Date validation result:', isValidParsed);
+      return isValidParsed;
+    }
+
+    // Check if it matches YYYY-MM-DD format with complete values
+    if (date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const isValidISO = isValid(new Date(date));
+      console.log('ISO date validation result:', isValidISO);
+      return isValidISO;
+    }
+
+    console.log('Date format did not match any expected patterns');
+    return false;
+  }
+
+  console.log('Date is neither string nor Date object');
+  return false;
+};
+
 export const FlightSelector: React.FC<FlightSelectorProps> = ({
   onSelect = () => {},
   showResults = true,
@@ -2184,7 +2238,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                           setIsSearchModalOpen(true);
                           handleSearchFlights(index);
                         }}
-                        disabled={!segment.date}
+                        disabled={!segment.date || !isValidDate(segment.date)}
                         className="h-14 w-full text-white bg-[#F54538] rounded-xl hover:bg-[#F54538]/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#F54538] disabled:opacity-50 disabled:cursor-not-allowed font-sans font-medium text-base"
                       >
                         Search Flights
@@ -2321,7 +2375,9 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                         setIsSearchModalOpen(true);
                         handleSearchFlights();
                       }}
-                      disabled={!directFlight.date}
+                      disabled={
+                        !directFlight.date || !isValidDate(directFlight.date)
+                      }
                       className="w-full h-12 px-4 py-2 text-white bg-[#F54538] rounded-xl hover:bg-[#F54538]/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#F54538] disabled:opacity-50 disabled:cursor-not-allowed font-sans font-medium text-base"
                     >
                       Search Flights
