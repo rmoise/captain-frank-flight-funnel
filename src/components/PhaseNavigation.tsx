@@ -25,36 +25,46 @@ export const PhaseNavigation: React.FC<PhaseNavigationProps> = () => {
 
   const isPhaseAccessible = React.useCallback(
     (phaseNumber: number) => {
+      // For phase 5, ALWAYS require phase 4 to be completed AND both steps in phase 4 to be completed
+      // This check needs to be first to ensure it's enforced regardless of other conditions
+      if (phaseNumber === 5) {
+        const phase4Completed = completedPhases.includes(4);
+        const phase4StepsCompleted =
+          completedSteps.includes(2) && completedSteps.includes(3);
+        const validationState = useStore.getState().validationState;
+        const phase4CompletedViaContinue = useStore
+          .getState()
+          .phasesCompletedViaContinue.includes(4);
+        return (
+          phase4Completed &&
+          phase4StepsCompleted &&
+          validationState.stepValidation[2] &&
+          validationState.stepValidation[3] &&
+          phase4CompletedViaContinue
+        );
+      }
+
+      // Get the highest completed phase
+      const highestCompletedPhase = Math.max(...completedPhases, currentPhase);
+
       // Allow access to current phase
       if (phaseNumber === currentPhase) {
         return true;
       }
 
-      // Allow access to completed phases
-      if (completedPhases.includes(phaseNumber)) {
+      // Allow access to any phase up to the highest completed phase, as long as previous phases were completed via continue
+      if (phaseNumber <= highestCompletedPhase) {
+        // For phase 2 and above, check if previous phase was completed via continue
+        if (phaseNumber >= 2) {
+          const prevPhaseCompletedViaContinue = useStore
+            .getState()
+            .phasesCompletedViaContinue.includes(phaseNumber - 1);
+          return prevPhaseCompletedViaContinue;
+        }
         return true;
       }
 
-      // Allow access to previous phases
-      if (phaseNumber < currentPhase) {
-        return true;
-      }
-
-      // For phase 2, require phase 1 to be completed AND step 1 to be completed
-      if (phaseNumber === 2) {
-        return completedPhases.includes(1) && completedSteps.includes(1);
-      }
-
-      // For phase 5, require phase 4 to be completed AND both steps in phase 4 to be completed
-      if (phaseNumber === 5) {
-        const phase4Completed = completedPhases.includes(4);
-        const phase4StepsCompleted =
-          completedSteps.includes(2) && completedSteps.includes(3);
-        return phase4Completed && phase4StepsCompleted;
-      }
-
-      // For other phases, require previous phase to be completed
-      return completedPhases.includes(phaseNumber - 1);
+      return false;
     },
     [currentPhase, completedSteps, completedPhases]
   );

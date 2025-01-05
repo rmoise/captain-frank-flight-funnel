@@ -643,6 +643,7 @@ interface NavigationSlice {
   completedSteps: number[];
   currentStep: number;
   openSteps: number[];
+  phasesCompletedViaContinue: number[]; // Track phases completed via continue button
 }
 
 interface ValidationSlice {
@@ -877,6 +878,7 @@ const initialState: StoreState = {
   currentStep: 1,
   completedSteps: [],
   openSteps: [1],
+  phasesCompletedViaContinue: [], // Initialize empty array
 
   // Validation related
   validationState: {
@@ -1247,6 +1249,11 @@ export const useStore = create<StoreState & StoreActions>()(
           new Set(newCompletedPhases)
         ).sort((a, b) => a - b);
 
+        // Always preserve phase 4 validation state if it was completed
+        const phase4Completed = state.completedPhases.includes(4);
+        const phase4StepsCompleted =
+          state.completedSteps.includes(2) && state.completedSteps.includes(3);
+
         // If transitioning to phase 1, preserve wizard answers and validation
         if (phase === 1) {
           // Get existing validation states
@@ -1265,8 +1272,12 @@ export const useStore = create<StoreState & StoreActions>()(
             stepValidation: {
               ...state.validationState.stepValidation,
               1: flightValid,
-              2: wizardValid,
-              3: personalValid,
+              2: phase4Completed
+                ? state.validationState.stepValidation[2]
+                : wizardValid,
+              3: phase4Completed
+                ? state.validationState.stepValidation[3]
+                : personalValid,
               4: termsValid,
             },
             stepInteraction: {
@@ -1279,17 +1290,16 @@ export const useStore = create<StoreState & StoreActions>()(
               4: termsValid,
             },
             1: flightValid,
-            2: wizardValid,
-            3: personalValid,
+            2: phase4Completed ? state.validationState[2] : wizardValid,
+            3: phase4Completed ? state.validationState[3] : personalValid,
             4: termsValid,
             _timestamp: Date.now(),
           };
 
-          // Calculate new completed steps
+          // Calculate new completed steps while preserving phase 4 steps if completed
           const newCompletedSteps = [
             ...(flightValid ? [1] : []),
-            ...(wizardValid ? [2] : []),
-            ...(personalValid ? [3] : []),
+            ...(phase4Completed && phase4StepsCompleted ? [2, 3] : []),
             ...(termsValid ? [4] : []),
           ].sort((a, b) => a - b);
 
@@ -1554,6 +1564,9 @@ export const useStore = create<StoreState & StoreActions>()(
             new Set([...state.completedPhases, phase])
           ),
           completedSteps: Array.from(new Set([...state.completedSteps, phase])),
+          phasesCompletedViaContinue: Array.from(
+            new Set([...state.phasesCompletedViaContinue, phase])
+          ),
         })),
 
       completeStep: (step: number) =>

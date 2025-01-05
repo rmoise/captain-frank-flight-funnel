@@ -179,6 +179,7 @@ const summaryInitialState: StoreStateValues = {
     status: null,
   },
   isLoading: false,
+  phasesCompletedViaContinue: [],
 };
 
 export default function InitialAssessment() {
