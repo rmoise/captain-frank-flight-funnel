@@ -3,11 +3,14 @@ import { NextResponse } from 'next/server';
 const API_BASE_URL =
   'https://secure.captain-frank.net/api/services/euflightclaim';
 
-export async function GET(request: Request) {
+export async function GET(
+  request: Request,
+  { params }: { params: { from_iata?: string; to_iata?: string } }
+) {
   try {
-    const { searchParams } = new URL(request.url);
-    const from_iata = searchParams.get('from_iata')?.toUpperCase();
-    const to_iata = searchParams.get('to_iata')?.toUpperCase();
+    const url = new URL(request.url);
+    const from_iata = url.searchParams.get('from_iata')?.toUpperCase();
+    const to_iata = url.searchParams.get('to_iata')?.toUpperCase();
 
     console.log('Compensation calculation request:', { from_iata, to_iata });
 
