@@ -11,6 +11,7 @@ import 'react-datepicker/dist/react-datepicker.css';
 import { CustomDateInput } from '@/components/shared/CustomDateInput';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { formatDateToYYYYMMDD, isValidYYYYMMDD } from '@/utils/dateUtils';
+import { useStore } from '@/lib/state/store';
 
 export interface QuestionAnswerProps {
   question: Question;
@@ -31,6 +32,7 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
   initialSelectedFlight = null,
   hideProgress = false,
 }) => {
+  const { updateValidationState } = useStore();
   const [isFocused, setIsFocused] = useState(false);
   const [localValue, setLocalValue] = useState(selectedOption);
 
@@ -198,21 +200,48 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
                   setTimeout(() => {
                     onSelect(
                       question.id,
-                      JSON.stringify(Array.isArray(flight) ? flight[0] : flight)
+                      Array.isArray(flight)
+                        ? flight.map((f) => f.id).join(',')
+                        : flight.id
                     );
                   }, 0);
                 }
               }}
               initialSelectedFlight={
-                typeof initialSelectedFlight === 'string'
-                  ? JSON.parse(initialSelectedFlight)
+                Array.isArray(initialSelectedFlight)
+                  ? initialSelectedFlight[0]
                   : initialSelectedFlight
               }
               showFlightSearch={true}
               showFlightDetails={true}
               showResults={true}
               onInteract={() => {}}
-              stepNumber={currentStep}
+              stepNumber={1}
+              setValidationState={(state) => {
+                // Update validation state for step 1
+                if (typeof state === 'function') {
+                  const newState = state({} as Record<number, boolean>);
+                  updateValidationState({
+                    stepValidation: {
+                      1: newState[1] || false,
+                      2: false,
+                      3: false,
+                      4: false,
+                    },
+                    1: newState[1] || false,
+                  });
+                } else {
+                  updateValidationState({
+                    stepValidation: {
+                      1: state[1] || false,
+                      2: false,
+                      3: false,
+                      4: false,
+                    },
+                    1: state[1] || false,
+                  });
+                }
+              }}
             />
             {question.relatedQuestions?.map((relatedQ) => (
               <div key={relatedQ.id} className="mt-24 pt-12 pb-12 mb-12">

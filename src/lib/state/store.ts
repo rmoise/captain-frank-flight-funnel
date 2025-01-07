@@ -5,55 +5,64 @@ import type { LocationLike } from '@/types/location';
 import { formatDateToYYYYMMDD, isValidYYYYMMDD } from '@/utils/dateUtils';
 import { parseISO, isValid } from 'date-fns';
 
+// Add FlightSegment type definition at the top of the file
+export type FlightSegment = {
+  fromLocation: LocationLike | null;
+  toLocation: LocationLike | null;
+  date: Date | null;
+  selectedFlight: Flight | null;
+};
+
 // Add validation helper functions
 export const validateFlightSelection = (state: StoreStateValues): boolean => {
-  // For phase 3 and above, only validate selected flights
-  if (state.currentPhase >= 3) {
-    // For direct flights
+  try {
+    let isValid = false;
+
     if (state.selectedType === 'direct') {
-      // Check if we have either a selected flight in directFlight or in selectedFlights
-      const hasSelectedFlight = !!state.directFlight?.selectedFlight;
-      const hasSelectedFlights = state.selectedFlights?.length > 0;
-      const isValid = hasSelectedFlight || hasSelectedFlights;
-
-      // Update validation state
-      state.validationState = {
-        ...state.validationState,
-        isFlightValid: isValid,
-        stepValidation: {
-          ...state.validationState.stepValidation,
-          1: isValid,
-        },
-        1: isValid,
-      };
-
-      // Update completed steps
-      if (isValid && !state.completedSteps.includes(1)) {
-        state.completedSteps = Array.from(
-          new Set([...state.completedSteps, 1])
-        ).sort((a, b) => a - b);
-      } else if (!isValid) {
-        state.completedSteps = state.completedSteps.filter(
-          (step) => step !== 1
+      // For phase 1, validate if both locations are filled
+      if (state.currentPhase === 1) {
+        isValid = !!(
+          state.directFlight.fromLocation && state.directFlight.toLocation
         );
+      } else {
+        // For other phases, require selected flight
+        isValid = !!state.directFlight.selectedFlight;
       }
+    } else {
+      // For multi-city flights
+      const segments = state.flightSegments;
 
-      return isValid;
+      if (state.currentPhase === 1) {
+        // For phase 1, validate if first segment has both locations
+        isValid = !!(
+          segments.length >= 2 &&
+          segments[0]?.fromLocation &&
+          segments[0]?.toLocation
+        );
+      } else {
+        // For other phases, check if we have all segments and flights
+        const hasAllSegments = segments.length >= 2;
+        const hasAllFlights = segments.every(
+          (segment) => !!segment.selectedFlight
+        );
+
+        if (!hasAllSegments || !hasAllFlights) {
+          isValid = false;
+        } else {
+          // Validate flight times between consecutive segments
+          isValid = segments.every((segment, index) => {
+            if (index === segments.length - 1) return true;
+            return validateFlightTimes(
+              segment.selectedFlight!,
+              segments[index + 1].selectedFlight!
+            );
+          });
+        }
+      }
     }
 
-    // For multi-segment flights
-    const hasAllSegments = !!(
-      state.flightSegments &&
-      state.flightSegments.length >= 2 &&
-      state.flightSegments.every((segment) => segment.selectedFlight !== null)
-    );
-    const hasAllFlights = !!(
-      state.selectedFlights?.length === state.flightSegments.length
-    );
-    const isValid = hasAllSegments && hasAllFlights;
-
-    // Update validation state
-    state.validationState = {
+    // Create a new validation state object
+    const newValidationState: ValidationState = {
       ...state.validationState,
       isFlightValid: isValid,
       stepValidation: {
@@ -61,219 +70,28 @@ export const validateFlightSelection = (state: StoreStateValues): boolean => {
         1: isValid,
       },
       1: isValid,
+      _timestamp: Date.now(),
     };
 
-    // Update completed steps
-    if (isValid && !state.completedSteps.includes(1)) {
-      state.completedSteps = Array.from(
-        new Set([...state.completedSteps, 1])
-      ).sort((a, b) => a - b);
-    } else if (!isValid) {
-      state.completedSteps = state.completedSteps.filter((step) => step !== 1);
-    }
+    // Create a new completed steps array
+    const newCompletedSteps = isValid
+      ? Array.from(new Set([...state.completedSteps, 1])).sort((a, b) => a - b)
+      : state.completedSteps.filter((step) => step !== 1);
+
+    // Create a new open steps array
+    const newOpenSteps = Array.from(new Set([...state.openSteps, 1]));
+
+    // Update the state immutably
+    state.validationState = newValidationState;
+    state.completedSteps = newCompletedSteps;
+    state.openSteps = newOpenSteps;
+    state._lastUpdate = Date.now();
 
     return isValid;
+  } catch (error) {
+    console.error('Error in validateFlightSelection:', error);
+    return false;
   }
-
-  // For phase 1
-  if (state.currentPhase === 1) {
-    // For direct flights
-    if (state.selectedType === 'direct') {
-      // Early return if either location is missing
-      if (!state.fromLocation || !state.toLocation) {
-        state.validationState = {
-          ...state.validationState,
-          isFlightValid: false,
-          stepValidation: {
-            ...state.validationState.stepValidation,
-            1: false,
-          },
-          1: false,
-        };
-        return false;
-      }
-
-      // Parse fromLocation
-      let fromLocation = null;
-      try {
-        fromLocation =
-          typeof state.fromLocation === 'string'
-            ? JSON.parse(state.fromLocation)
-            : state.fromLocation;
-      } catch (e) {
-        state.validationState = {
-          ...state.validationState,
-          isFlightValid: false,
-          stepValidation: {
-            ...state.validationState.stepValidation,
-            1: false,
-          },
-          1: false,
-        };
-        return false;
-      }
-
-      // Parse toLocation
-      let toLocation = null;
-      try {
-        toLocation =
-          typeof state.toLocation === 'string'
-            ? JSON.parse(state.toLocation)
-            : state.toLocation;
-      } catch (e) {
-        state.validationState = {
-          ...state.validationState,
-          isFlightValid: false,
-          stepValidation: {
-            ...state.validationState.stepValidation,
-            1: false,
-          },
-          1: false,
-        };
-        return false;
-      }
-
-      // Validate location objects
-      if (!fromLocation?.value || !toLocation?.value) {
-        state.validationState = {
-          ...state.validationState,
-          isFlightValid: false,
-          stepValidation: {
-            ...state.validationState.stepValidation,
-            1: false,
-          },
-          1: false,
-        };
-        return false;
-      }
-
-      // Check if locations are different
-      const isValid = fromLocation.value !== toLocation.value;
-
-      // Update directFlight object with parsed locations
-      if (isValid) {
-        state.directFlight = {
-          ...state.directFlight,
-          fromLocation,
-          toLocation,
-        };
-      }
-
-      // Update validation state
-      state.validationState = {
-        ...state.validationState,
-        isFlightValid: isValid,
-        stepValidation: {
-          ...state.validationState.stepValidation,
-          1: isValid,
-        },
-        1: isValid,
-      };
-
-      return isValid;
-    }
-
-    // For multi-segment flights
-    if (state.selectedType === 'multi') {
-      // Check if we have at least two segments
-      if (!state.flightSegments || state.flightSegments.length < 2) {
-        state.validationState = {
-          ...state.validationState,
-          isFlightValid: false,
-          stepValidation: {
-            ...state.validationState.stepValidation,
-            1: false,
-          },
-          1: false,
-        };
-        return false;
-      }
-
-      // For multi-segment flights, require all segments to be complete
-      const allSegmentsValid = state.flightSegments.every((segment) => {
-        if (!segment.fromLocation || !segment.toLocation) {
-          return false;
-        }
-
-        let fromLocation = segment.fromLocation;
-        let toLocation = segment.toLocation;
-
-        try {
-          if (typeof fromLocation === 'string') {
-            fromLocation = JSON.parse(fromLocation);
-          }
-          if (typeof toLocation === 'string') {
-            toLocation = JSON.parse(toLocation);
-          }
-        } catch (e) {
-          return false;
-        }
-
-        const segmentValid = !!(
-          fromLocation?.value &&
-          toLocation?.value &&
-          fromLocation.value !== toLocation.value
-        );
-
-        return segmentValid;
-      });
-
-      // Update validation state
-      state.validationState = {
-        ...state.validationState,
-        isFlightValid: allSegmentsValid,
-        stepValidation: {
-          ...state.validationState.stepValidation,
-          1: allSegmentsValid,
-        },
-        1: allSegmentsValid,
-      };
-
-      return allSegmentsValid;
-    }
-  }
-
-  // For other phases, check if we have a selected flight
-  const hasSelectedFlight = !!state.directFlight?.selectedFlight;
-  const hasSelectedFlights = state.selectedFlights?.length > 0;
-  const isValid = hasSelectedFlight || hasSelectedFlights;
-
-  // Create new validation state with timestamp
-  state.validationState = {
-    ...state.validationState,
-    isFlightValid: isValid,
-    stepValidation: {
-      ...state.validationState.stepValidation,
-      1: isValid,
-    },
-    1: isValid,
-    // Preserve signature validation based on phase
-    isSignatureValid:
-      state.currentPhase === URL_TO_PHASE['/phases/agreement']
-        ? state.validationState.isSignatureValid
-        : true,
-    // Add timestamp to force re-render
-    _timestamp: Date.now(),
-  };
-
-  // Create new completed steps array
-  if (isValid && !state.completedSteps.includes(1)) {
-    state.completedSteps = Array.from(
-      new Set([...state.completedSteps, 1])
-    ).sort((a, b) => a - b);
-  } else if (!isValid) {
-    state.completedSteps = state.completedSteps.filter((step) => step !== 1);
-  }
-
-  // Create new open steps array
-  if (!state.openSteps.includes(1)) {
-    state.openSteps = Array.from(new Set([...state.openSteps, 1]));
-  }
-
-  // Force immediate UI update
-  state._lastUpdate = Date.now();
-
-  return isValid;
 };
 
 export const validateQAWizard = (state: StoreStateValues) => {
@@ -576,18 +394,8 @@ export const initialValidationState: ValidationState = {
 // Define state slices
 export interface FlightSlice {
   selectedType: 'direct' | 'multi';
-  directFlight: {
-    fromLocation: LocationLike | null;
-    toLocation: LocationLike | null;
-    date: Date | null;
-    selectedFlight: Flight | null;
-  };
-  flightSegments: Array<{
-    fromLocation: LocationLike | null;
-    toLocation: LocationLike | null;
-    date: Date | null;
-    selectedFlight: Flight | null;
-  }>;
+  directFlight: FlightSegment;
+  flightSegments: FlightSegment[];
   currentSegmentIndex: number;
   fromLocation: string | null;
   toLocation: string | null;
@@ -649,6 +457,20 @@ interface NavigationSlice {
 interface ValidationSlice {
   validationState: ValidationState;
   isValidating: boolean;
+}
+
+export interface FlightSearchSlice {
+  isSearchModalOpen: boolean;
+  searchTerm: string;
+  displayedFlights: Flight[];
+  allFlights: Flight[];
+  loading: boolean;
+  errorMessage: string | null;
+  errorMessages: {
+    from?: string;
+    to?: string;
+    date?: string;
+  };
 }
 
 // Define store actions
@@ -750,6 +572,18 @@ export interface StoreActions {
   showLoading: () => void;
   hideLoading: () => void;
   setLastAnsweredQuestion: (questionId: string | null) => void;
+  setSearchModalOpen: (isOpen: boolean) => void;
+  setSearchTerm: (term: string) => void;
+  setDisplayedFlights: (flights: Flight[]) => void;
+  setAllFlights: (flights: Flight[]) => void;
+  setFlightSearchLoading: (loading: boolean) => void;
+  setFlightErrorMessage: (message: string | null) => void;
+  setFlightErrorMessages: (messages: {
+    from?: string;
+    to?: string;
+    date?: string;
+  }) => void;
+  clearFlightErrors: () => void;
 }
 
 // Define CompensationCache type
@@ -803,7 +637,8 @@ export interface StoreState
     UserSlice,
     NavigationSlice,
     ValidationSlice,
-    CompensationSlice {
+    CompensationSlice,
+    FlightSearchSlice {
   locationError: string | null;
   bookingNumber: string;
   isTransitioningPhases: boolean;
@@ -812,6 +647,8 @@ export interface StoreState
   signature: string;
   hasSignature: boolean;
   _lastUpdate?: number;
+  _lastPersist?: number;
+  _lastPersistedState?: string;
   isLoading: boolean;
 }
 
@@ -878,7 +715,7 @@ const initialState: StoreState = {
   currentStep: 1,
   completedSteps: [],
   openSteps: [1],
-  phasesCompletedViaContinue: [], // Initialize empty array
+  phasesCompletedViaContinue: [],
 
   // Validation related
   validationState: {
@@ -915,11 +752,21 @@ const initialState: StoreState = {
   isTransitioningPhases: false,
   isInitializing: false,
   _lastUpdate: Date.now(),
+  _lastPersistedState: '',
 
   // Trip experience related
   tripExperienceAnswers: [],
 
   isLoading: false,
+
+  // Flight search related
+  isSearchModalOpen: false,
+  searchTerm: '',
+  displayedFlights: [],
+  allFlights: [],
+  loading: false,
+  errorMessage: null,
+  errorMessages: {},
 };
 
 // URL mappings
@@ -988,57 +835,72 @@ export const useStore = create<StoreState & StoreActions>()(
 
       // Actions
       batchUpdateWizardState: (updates: Partial<StoreState>) => {
-        set((state) => {
-          // Create a new state object with only the fields we want to update
-          const newState = { ...state };
+        const state = get();
 
-          // Update wizard answers if provided
-          if (updates.wizardAnswers) {
-            newState.wizardAnswers = updates.wizardAnswers;
-          }
+        // Create new state with all updates
+        const newState = {
+          ...state,
+          ...updates,
+          _lastUpdate: Date.now(),
+        };
 
-          // Update last answered question if provided
-          if (updates.lastAnsweredQuestion) {
-            newState.lastAnsweredQuestion = updates.lastAnsweredQuestion;
-          }
+        // Run validation with new state
+        const isValid = validateFlightSelection(newState);
 
-          // Update current steps if provided
-          if (updates.wizardCurrentSteps) {
-            newState.wizardCurrentSteps = {
-              ...state.wizardCurrentSteps,
-              ...updates.wizardCurrentSteps,
-            };
-          }
-
-          // Only validate if we're not on the first answer
-          const isFirstAnswer = newState.wizardAnswers.length === 1;
-          if (!isFirstAnswer) {
-            // Update validation state
-            newState.validationState = {
-              ...state.validationState,
-              isWizardValid: newState.wizardAnswers.length > 0,
-            };
-          }
-
-          return newState;
+        // Apply all updates with validation in a single operation
+        set({
+          ...newState,
+          validationState: {
+            ...state.validationState,
+            isFlightValid: isValid,
+            stepValidation: {
+              ...state.validationState.stepValidation,
+              1: isValid,
+            },
+            1: isValid,
+            _timestamp: Date.now(),
+          },
+          completedSteps: isValid
+            ? Array.from(new Set([...state.completedSteps, 1])).sort(
+                (a, b) => a - b
+              )
+            : state.completedSteps.filter((step) => step !== 1),
+          openSteps: Array.from(new Set([...state.openSteps, 1])),
         });
       },
 
       setFlightState: (updates: Partial<FlightSlice>) => {
         const state = get();
-        // Deep compare current state with updates
-        const hasChanges = Object.entries(updates).some(([key, value]) => {
-          const currentValue = state[key as keyof FlightSlice];
-          return JSON.stringify(currentValue) !== JSON.stringify(value);
-        });
 
-        // Skip update if nothing has changed
-        if (!hasChanges) return;
-
-        // Apply updates directly
-        set({
+        // Create new state with updates
+        const newState = {
           ...state,
           ...updates,
+        };
+
+        // Run validation with new state
+        const isValid = validateFlightSelection(newState);
+
+        // Apply updates with validation results
+        set({
+          ...newState,
+          validationState: {
+            ...state.validationState,
+            isFlightValid: isValid,
+            stepValidation: {
+              ...state.validationState.stepValidation,
+              1: isValid,
+            },
+            1: isValid,
+            _timestamp: Date.now(),
+          },
+          completedSteps: isValid
+            ? Array.from(new Set([...state.completedSteps, 1])).sort(
+                (a, b) => a - b
+              )
+            : state.completedSteps.filter((step) => step !== 1),
+          openSteps: Array.from(new Set([...state.openSteps, 1])),
+          _lastUpdate: Date.now(),
         });
       },
 
@@ -1504,10 +1366,14 @@ export const useStore = create<StoreState & StoreActions>()(
           const bookingValid = validateBookingNumber(state);
 
           // Check flight validation
-          const flightValid = !!(state.selectedType === 'direct'
-            ? state.directFlight?.selectedFlight
-            : state.selectedFlights?.length >= 2 &&
-              state.flightSegments?.every((segment) => segment.selectedFlight));
+          const flightValid =
+            state.selectedType === 'direct'
+              ? !!state.directFlight?.selectedFlight
+              : state.flightSegments?.length >= 2 &&
+                state.flightSegments?.every(
+                  (segment) => segment.selectedFlight
+                ) &&
+                state.selectedFlights?.length === state.flightSegments?.length;
 
           // Create new validation state while preserving existing validations
           const newValidationState = {
@@ -1522,8 +1388,9 @@ export const useStore = create<StoreState & StoreActions>()(
             stepInteraction: {
               ...existingValidationState.stepInteraction,
               1:
-                !!state.directFlight?.selectedFlight ||
-                state.selectedFlights?.length > 0,
+                state.selectedType === 'direct'
+                  ? !!state.directFlight?.selectedFlight
+                  : state.selectedFlights?.length > 0,
               2: !!state.bookingNumber?.trim(),
             },
             1: flightValid,
@@ -1974,35 +1841,45 @@ export const useStore = create<StoreState & StoreActions>()(
 
       setSelectedFlight: (flight: Flight | null) => {
         set((state) => {
-          // For direct flights, update both selectedFlight and selectedFlights
-          if (state.selectedType === 'direct') {
-            // Calculate validation state first
-            const isValid = !!flight;
+          console.log('=== setSelectedFlight START ===');
+          console.log('Input flight:', flight);
+          console.log('Current state:', {
+            selectedType: state.selectedType,
+            currentSegmentIndex: state.currentSegmentIndex,
+            flightSegments: state.flightSegments,
+            selectedFlights: state.selectedFlights,
+            selectedFlight: state.selectedFlight,
+            directFlight: state.directFlight,
+          });
 
-            // Return new state with all updates in a single atomic operation
-            return {
+          // For direct flights
+          if (state.selectedType === 'direct') {
+            console.log('Processing direct flight selection');
+            const newDirectFlight = {
+              ...state.directFlight,
+              selectedFlight: flight,
+            };
+
+            const newState = {
               ...state,
               selectedFlight: flight,
               selectedFlights: flight ? [flight] : [],
-              directFlight: {
-                ...state.directFlight,
-                selectedFlight: flight,
-              },
+              directFlight: newDirectFlight,
               validationState: {
                 ...state.validationState,
-                isFlightValid: isValid,
+                isFlightValid: !!flight,
                 stepValidation: {
                   ...state.validationState.stepValidation,
-                  1: isValid,
+                  1: !!flight,
                 },
-                1: isValid,
+                1: !!flight,
                 isSignatureValid:
                   state.currentPhase === URL_TO_PHASE['/phases/agreement']
                     ? state.validationState.isSignatureValid
                     : true,
                 _timestamp: Date.now(),
               },
-              completedSteps: isValid
+              completedSteps: flight
                 ? Array.from(new Set([...state.completedSteps, 1])).sort(
                     (a, b) => a - b
                   )
@@ -2010,22 +1887,55 @@ export const useStore = create<StoreState & StoreActions>()(
               openSteps: Array.from(new Set([...state.openSteps, 1])),
               _lastUpdate: Date.now(),
             };
+
+            console.log('New state for direct flight:', newState);
+            return newState;
           }
 
           // For multi-segment flights
+          console.log('Processing multi-segment flight selection');
+
+          // Create a new array of selected flights
           const newSelectedFlights = [...state.selectedFlights];
+
+          // Update or add the flight at the current segment index
           if (flight) {
-            newSelectedFlights[state.currentSegmentIndex] = flight;
+            // Ensure we're using the same date for all segments
+            const updatedFlight = {
+              ...flight,
+              date: state.selectedDate || flight.date,
+            };
+
+            // If we're updating an existing index
+            if (state.currentSegmentIndex < newSelectedFlights.length) {
+              newSelectedFlights[state.currentSegmentIndex] = updatedFlight;
+            } else {
+              // If we're adding a new flight
+              newSelectedFlights.push(updatedFlight);
+            }
           } else {
+            // If removing a flight, remove it from the array
             newSelectedFlights.splice(state.currentSegmentIndex, 1);
           }
 
+          console.log('Updated selectedFlights:', newSelectedFlights);
+
+          // Update flight segments
           const newFlightSegments = state.flightSegments.map(
             (segment, index) =>
               index === state.currentSegmentIndex
-                ? { ...segment, selectedFlight: flight }
+                ? {
+                    ...segment,
+                    selectedFlight: flight
+                      ? {
+                          ...flight,
+                          date: state.selectedDate || flight.date,
+                        }
+                      : null,
+                  }
                 : segment
           );
+          console.log('Updated flightSegments:', newFlightSegments);
 
           // Calculate validation state
           const hasAllSegments = !!(
@@ -2036,18 +1946,137 @@ export const useStore = create<StoreState & StoreActions>()(
             )
           );
           const hasAllFlights = !!(
-            newSelectedFlights.length === newFlightSegments.length
+            newSelectedFlights.length === newFlightSegments.length &&
+            newSelectedFlights.every((f) => f !== null)
           );
-          const isValid = hasAllSegments && hasAllFlights;
+
+          // Check if dates are in chronological order
+          let datesAreValid = true;
+          if (hasAllSegments && newFlightSegments.length >= 2) {
+            for (let i = 0; i < newFlightSegments.length - 1; i++) {
+              const currentFlight = newFlightSegments[i].selectedFlight;
+              const nextFlight = newFlightSegments[i + 1].selectedFlight;
+
+              if (currentFlight && nextFlight) {
+                const currentArrivalTime = new Date(
+                  `${currentFlight.date}T${currentFlight.arrivalTime}:00.000Z`
+                );
+                const nextDepartureTime = new Date(
+                  `${nextFlight.date}T${nextFlight.departureTime}:00.000Z`
+                );
+
+                console.log('Validating flight times:', {
+                  currentFlight: {
+                    date: currentFlight.date,
+                    arrivalTime: currentFlight.arrivalTime,
+                    fullArrivalTime: currentArrivalTime.toISOString(),
+                  },
+                  nextFlight: {
+                    date: nextFlight.date,
+                    departureTime: nextFlight.departureTime,
+                    fullDepartureTime: nextDepartureTime.toISOString(),
+                  },
+                  timeDiff:
+                    (nextDepartureTime.getTime() -
+                      currentArrivalTime.getTime()) /
+                    60000, // in minutes
+                });
+
+                // First check if dates are in chronological order
+                if (nextDepartureTime <= currentArrivalTime) {
+                  datesAreValid = false;
+                  console.log(
+                    'Invalid flight order - second flight departs before first flight arrives:',
+                    {
+                      currentFlight: {
+                        date: currentFlight.date,
+                        arrivalTime: currentFlight.arrivalTime,
+                        fullTime: currentArrivalTime.toLocaleString(),
+                      },
+                      nextFlight: {
+                        date: nextFlight.date,
+                        departureTime: nextFlight.departureTime,
+                        fullTime: nextDepartureTime.toLocaleString(),
+                      },
+                    }
+                  );
+                  break;
+                }
+
+                // Then check minimum connection time
+                const timeDiff =
+                  nextDepartureTime.getTime() - currentArrivalTime.getTime();
+                if (timeDiff < 1800000) {
+                  // 30 minutes in milliseconds
+                  datesAreValid = false;
+                  console.log('Connection time too short:', {
+                    currentFlight: {
+                      date: currentFlight.date,
+                      arrivalTime: currentFlight.arrivalTime,
+                    },
+                    nextFlight: {
+                      date: nextFlight.date,
+                      departureTime: nextFlight.departureTime,
+                    },
+                    timeDiff: timeDiff / 60000, // Convert to minutes for logging
+                  });
+                  break;
+                }
+              }
+            }
+          }
+
+          // Check if segments are properly linked
+          let segmentsAreLinked = true;
+          if (hasAllSegments && newFlightSegments.length >= 2) {
+            for (let i = 0; i < newFlightSegments.length - 1; i++) {
+              const currentFlight = newFlightSegments[i].selectedFlight;
+              const nextFlight = newFlightSegments[i + 1].selectedFlight;
+
+              if (currentFlight && nextFlight) {
+                // Check if arrival city of current flight matches departure city of next flight
+                if (currentFlight.arrivalCity !== nextFlight.departureCity) {
+                  segmentsAreLinked = false;
+                  console.log('Segments not properly linked:', {
+                    currentFlight,
+                    nextFlight,
+                  });
+                  break;
+                }
+              }
+            }
+          }
+
+          const isValid =
+            hasAllSegments &&
+            hasAllFlights &&
+            datesAreValid &&
+            segmentsAreLinked;
+
+          console.log('Validation results:', {
+            hasAllSegments,
+            hasAllFlights,
+            datesAreValid,
+            segmentsAreLinked,
+            isValid,
+          });
+
+          // Calculate new segment index
+          const newSegmentIndex =
+            flight && state.currentSegmentIndex < newFlightSegments.length - 1
+              ? state.currentSegmentIndex + 1
+              : state.currentSegmentIndex;
+          console.log('New segment index:', newSegmentIndex);
 
           // Return new state with all updates in a single atomic operation
-          return {
+          const newState = {
             ...state,
             selectedFlight: flight,
             selectedFlights: newSelectedFlights.filter(
               (f): f is Flight => f !== null
             ),
             flightSegments: newFlightSegments,
+            currentSegmentIndex: newSegmentIndex,
             validationState: {
               ...state.validationState,
               isFlightValid: isValid,
@@ -2070,11 +2099,52 @@ export const useStore = create<StoreState & StoreActions>()(
             openSteps: Array.from(new Set([...state.openSteps, 1])),
             _lastUpdate: Date.now(),
           };
+
+          console.log('Final new state:', newState);
+          console.log('=== setSelectedFlight END ===');
+          return newState;
         });
       },
 
       setFlightSegments: (segments: FlightSlice['flightSegments']) =>
-        set({ flightSegments: segments }),
+        set((state) => {
+          // Skip update if nothing has changed
+          if (
+            JSON.stringify(state.flightSegments) === JSON.stringify(segments)
+          ) {
+            return state;
+          }
+
+          // Create new state with updated segments
+          const newState = {
+            ...state,
+            flightSegments: segments,
+          };
+
+          // Run validation with new state
+          const isValid = validateFlightSelection(newState);
+
+          // Return updated state with validation results
+          return {
+            ...newState,
+            validationState: {
+              ...state.validationState,
+              isFlightValid: isValid,
+              stepValidation: {
+                ...state.validationState.stepValidation,
+                1: isValid,
+              },
+              1: isValid,
+              _timestamp: Date.now(),
+            },
+            completedSteps: isValid
+              ? Array.from(new Set([...state.completedSteps, 1])).sort(
+                  (a, b) => a - b
+                )
+              : state.completedSteps.filter((step) => step !== 1),
+            _lastUpdate: Date.now(),
+          };
+        }),
 
       validateFlightSelection: () => {
         const state = get();
@@ -2837,33 +2907,102 @@ export const useStore = create<StoreState & StoreActions>()(
           lastAnsweredQuestion: questionId,
           _lastUpdate: Date.now(),
         })),
+      setSearchModalOpen: (isOpen: boolean) =>
+        set({ isSearchModalOpen: isOpen }),
+      setSearchTerm: (term: string) => set({ searchTerm: term }),
+      setDisplayedFlights: (flights: Flight[]) =>
+        set({ displayedFlights: flights }),
+      setAllFlights: (flights: Flight[]) => set({ allFlights: flights }),
+      setFlightSearchLoading: (loading: boolean) => set({ loading }),
+      setFlightErrorMessage: (message: string | null) =>
+        set({ errorMessage: message }),
+      setFlightErrorMessages: (messages: {
+        from?: string;
+        to?: string;
+        date?: string;
+      }) =>
+        set((state) => ({
+          errorMessages: {
+            ...state.errorMessages,
+            ...messages,
+          },
+        })),
+      clearFlightErrors: () =>
+        set({
+          errorMessage: null,
+          errorMessages: {},
+        }),
     }),
     {
       name: 'wizard-store',
       storage: createJSONStorage(() => localStorage),
       partialize: (
         state: StoreState & StoreActions
-      ): Partial<StoreState & StoreActions> => {
-        console.log('Persisting state:', {
-          directFlight: state.directFlight,
-          flightSegments: state.flightSegments,
-          selectedDate: state.selectedDate,
-        });
-        return {
-          // Flight related
-          selectedType: state.selectedType,
-          directFlight: state.directFlight,
-          flightSegments: state.flightSegments,
-          currentSegmentIndex: state.currentSegmentIndex,
-          fromLocation: state.fromLocation,
-          toLocation: state.toLocation,
-          selectedDate: state.selectedDate,
-          selectedFlights: state.selectedFlights,
-          selectedFlight: state.selectedFlight,
-          flightDetails: state.flightDetails,
-          delayDuration: state.delayDuration,
-          // ... rest of partialize ...
-        };
+      ): Partial<StoreState & StoreActions> | null => {
+        // Debounce logging and state persistence
+        const now = Date.now();
+        if (!state._lastPersist || now - state._lastPersist > 5000) {
+          // Increased debounce time to 5 seconds
+          // Only persist if state has actually changed
+          const currentState = {
+            directFlight: state.directFlight,
+            flightSegments: state.flightSegments,
+            selectedDate: state.selectedDate,
+            personalDetails: state.personalDetails,
+          };
+
+          const stateKey = JSON.stringify(currentState);
+          if (state._lastPersistedState !== stateKey) {
+            console.log('Persisting state:', currentState);
+            state._lastPersist = now;
+            state._lastPersistedState = stateKey;
+
+            return {
+              // Flight related
+              selectedType: state.selectedType,
+              directFlight: state.directFlight,
+              flightSegments: state.flightSegments,
+              currentSegmentIndex: state.currentSegmentIndex,
+              fromLocation: state.fromLocation,
+              toLocation: state.toLocation,
+              selectedDate: state.selectedDate,
+              selectedFlights: state.selectedFlights,
+              selectedFlight: state.selectedFlight,
+              flightDetails: state.flightDetails,
+              delayDuration: state.delayDuration,
+
+              // User related
+              personalDetails: state.personalDetails,
+              termsAccepted: state.termsAccepted,
+              privacyAccepted: state.privacyAccepted,
+              marketingAccepted: state.marketingAccepted,
+              signature: state.signature,
+              hasSignature: state.hasSignature,
+
+              // Navigation related
+              currentPhase: state.currentPhase,
+              completedPhases: state.completedPhases,
+              completedSteps: state.completedSteps,
+              openSteps: state.openSteps,
+              phasesCompletedViaContinue: state.phasesCompletedViaContinue,
+
+              // Validation related
+              validationState: state.validationState,
+
+              // Wizard related
+              wizardAnswers: state.wizardAnswers,
+              wizardCurrentSteps: state.wizardCurrentSteps,
+              wizardIsCompleted: state.wizardIsCompleted,
+              wizardIsValid: state.wizardIsValid,
+              completedWizards: state.completedWizards,
+              lastAnsweredQuestion: state.lastAnsweredQuestion,
+              tripExperienceAnswers: state.tripExperienceAnswers,
+            };
+          }
+        }
+
+        // Return null to skip persistence if within debounce period or no changes
+        return null;
       },
       onRehydrateStorage: () => {
         return (state: (StoreState & StoreActions) | undefined) => {
@@ -2874,12 +3013,12 @@ export const useStore = create<StoreState & StoreActions>()(
               selectedDate: state.selectedDate,
             });
 
-            // Transform dates in the rehydrated state
+            // Transform dates in the rehydrated state using separate functions
             if (state.directFlight) {
-              state.directFlight = transformDates(state.directFlight);
+              state.directFlight = transformDatesSingle(state.directFlight);
             }
             if (state.flightSegments) {
-              state.flightSegments = transformDates(state.flightSegments);
+              state.flightSegments = transformDatesArray(state.flightSegments);
             }
 
             console.log('After rehydration:', {
@@ -3157,89 +3296,50 @@ export const validateInformedDate = (state: StoreStateValues): boolean => {
       return false;
     }
 
-    let formattedDate: string | null = null;
-
-    // Check if the date is in YYYY-MM-DD format
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (dateRegex.test(specificDate)) {
-      formattedDate = specificDate;
-    } else if (specificDate.includes('.')) {
-      // Try to convert from DD.MM.YYYY format
-      const [day, month, year] = specificDate.split('.');
-      formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    // Validate the date format
+    try {
+      const date = parseISO(specificDate);
+      informedDateValid = isValid(date);
+    } catch (e) {
+      informedDateValid = false;
     }
-
-    if (!formattedDate) {
-      return false;
-    }
-
-    // Validate that it's a real date
-    const dateObj = new Date(formattedDate);
-    if (isNaN(dateObj.getTime())) {
-      return false;
-    }
-
-    // Check if the date is within the last 3 years
-    const threeYearsAgo = new Date();
-    threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 3);
-    if (dateObj < threeYearsAgo) {
-      return false;
-    }
-
-    informedDateValid = true;
   }
 
   return informedDateValid;
 };
 
-// TODO: Replace 'any' types with more specific types in transformDates function for better type safety
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- temporarily disable for both parameter and return type
-const transformDates = (obj: any): any => {
-  if (!obj) return obj;
+// Add validateFlightTimes function at the top
+export const validateFlightTimes = (
+  currentFlight: Flight,
+  nextFlight: Flight
+): boolean => {
+  if (!currentFlight || !nextFlight) return false;
 
-  if (Array.isArray(obj)) {
-    return obj.map(transformDates);
+  const currentArrivalTime = new Date(
+    `${currentFlight.date}T${currentFlight.arrivalTime}:00.000Z`
+  );
+  const nextDepartureTime = new Date(
+    `${nextFlight.date}T${nextFlight.departureTime}:00.000Z`
+  );
+
+  // Check if dates are in chronological order
+  if (nextDepartureTime <= currentArrivalTime) {
+    return false;
   }
 
-  if (typeof obj === 'object') {
-    const transformed = { ...obj };
-    for (const key in transformed) {
-      if (
-        (key === 'date' || key === 'information_received_at') &&
-        typeof transformed[key] === 'string'
-      ) {
-        try {
-          console.log('Transforming date:', key, transformed[key]);
-          let dateStr = transformed[key];
-
-          // Handle DD.MM.YYYY format
-          if (dateStr.includes('.')) {
-            const [day, month, year] = dateStr.split('.');
-            dateStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-          }
-
-          // Parse and validate the date
-          const parsed = parseISO(dateStr);
-          if (isValid(parsed)) {
-            // For information_received_at, keep as YYYY-MM-DD string
-            if (key === 'information_received_at') {
-              transformed[key] = dateStr;
-            } else {
-              transformed[key] = parsed;
-            }
-            console.log('Successfully transformed to:', transformed[key]);
-          } else {
-            console.log('Invalid date after parsing:', dateStr);
-          }
-        } catch (error) {
-          console.error('Error parsing date:', error);
-        }
-      } else if (typeof transformed[key] === 'object') {
-        transformed[key] = transformDates(transformed[key]);
-      }
-    }
-    return transformed;
-  }
-
-  return obj;
+  // Check minimum connection time (30 minutes)
+  const timeDiff = nextDepartureTime.getTime() - currentArrivalTime.getTime();
+  return timeDiff >= 1800000; // 30 minutes in milliseconds
 };
+
+// Add separate transform functions for single objects and arrays
+export const transformDatesSingle = (data: FlightSegment): FlightSegment => ({
+  ...data,
+  date: data.date ? new Date(data.date) : null,
+});
+
+export const transformDatesArray = (data: FlightSegment[]): FlightSegment[] =>
+  data.map((item) => ({
+    ...item,
+    date: item.date ? new Date(item.date) : null,
+  }));

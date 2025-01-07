@@ -42,6 +42,7 @@ export interface Flight {
   departureAirport?: string;
   arrivalAirport?: string;
   scheduledDepartureTime?: string;
+  scheduledArrivalTime?: string;
   bookingReference?: string;
   connection?: string;
 }

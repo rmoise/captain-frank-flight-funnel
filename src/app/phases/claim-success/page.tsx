@@ -77,7 +77,6 @@ function ClaimSuccessContent() {
 
   const handlePersonalDetailsComplete = useCallback(
     (details: PassengerDetails | null) => {
-
       // Always update personal details to maintain form state
       // The store will handle validation
       setPersonalDetails(details);
@@ -107,7 +106,6 @@ function ClaimSuccessContent() {
     }
 
     try {
-
       // Complete all required phases
       [1, 2, 3, 4, 5].forEach((phase) => {
         completePhase(phase);
@@ -228,6 +226,7 @@ function ClaimSuccessContent() {
                         }
                       }}
                       isClaimSuccess={true}
+                      showAdditionalFields={true}
                     />
                   </div>
                 </AccordionCard>

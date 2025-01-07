@@ -15,6 +15,7 @@ import { PhaseNavigation } from '@/components/PhaseNavigation';
 import { accordionConfig } from '@/config/accordion';
 import { PHASE_TO_URL } from '@/lib/state/store';
 import { isValidYYYYMMDD } from '@/utils/dateUtils';
+import api from '@/services/api';
 
 const questions: Question[] = [
   {
@@ -616,33 +617,41 @@ export default function TripExperiencePage() {
       if (!result) {
         console.log('Making API call with data:', cleanedEvalData);
 
-        // Call the evaluate claim API using the Netlify function
-        const response = await fetch(
-          '/.netlify/functions/evaluateeuflightclaim',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(cleanedEvalData),
-          }
-        );
+        try {
+          // Use the api client instead of direct fetch
+          result = await api.evaluateClaim({
+            journey_booked_flightids: Array.isArray(
+              cleanedEvalData.journey_booked_flightids
+            )
+              ? cleanedEvalData.journey_booked_flightids
+              : ([cleanedEvalData.journey_booked_flightids].filter(
+                  Boolean
+                ) as string[]),
+            journey_fact_flightids: Array.isArray(
+              cleanedEvalData.journey_fact_flightids
+            )
+              ? cleanedEvalData.journey_fact_flightids
+              : cleanedEvalData.journey_fact_flightids
+                ? [cleanedEvalData.journey_fact_flightids]
+                : undefined,
+            information_received_at: String(
+              cleanedEvalData.information_received_at
+            ),
+          });
+          console.log('API response:', result);
 
-        if (!response.ok) {
+          // Cache the result
+          localStorage.setItem(
+            cacheKey,
+            JSON.stringify({
+              data: result,
+              timestamp: Date.now(),
+            })
+          );
+        } catch (error) {
+          console.error('API call failed:', error);
           throw new Error('Failed to evaluate claim');
         }
-
-        result = await response.json();
-        console.log('API response:', result);
-
-        // Cache the result
-        localStorage.setItem(
-          cacheKey,
-          JSON.stringify({
-            data: result,
-            timestamp: Date.now(),
-          })
-        );
       }
 
       console.log('Final result before setting:', result);

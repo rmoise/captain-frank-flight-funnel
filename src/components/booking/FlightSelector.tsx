@@ -44,6 +44,7 @@ import './FlightSelector.css';
 
 import type { ReactDatePickerProps } from 'react-datepicker';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { Flight as FlightData } from '@/types/flight';
 
 interface RawFlight {
   id: number;
@@ -85,6 +86,11 @@ interface FlightSelectorProps {
   currentPhase?: number;
   disabled?: boolean;
   stepNumber: number;
+  setValidationState: (
+    state:
+      | Record<number, boolean>
+      | ((prev: Record<number, boolean>) => Record<number, boolean>)
+  ) => void;
 }
 
 type FlightType = 'direct' | 'multi';
@@ -169,19 +175,38 @@ const calculateDuration = (
   }
 };
 
-const formatSafeDate = (date: Date | string | null): string => {
+const formatSafeDate = (date: string | Date | null): string => {
   if (!date) return '';
-  try {
-    // If date is a string, try to parse it
-    const safeDate = date instanceof Date ? date : new Date(date);
-    if (isNaN(safeDate.getTime())) return '';
 
-    // Format as DD.MM.YYYY
-    const day = String(safeDate.getDate()).padStart(2, '0');
-    const month = String(safeDate.getMonth() + 1).padStart(2, '0');
-    const year = safeDate.getFullYear();
-    return `${day}.${month}.${year}`;
+  try {
+    // If it's a string, try to parse it
+    if (typeof date === 'string') {
+      // If it's already in dd.MM.yyyy format, return as is
+      if (date.match(/^\d{2}\.\d{2}\.\d{4}$/)) {
+        return date;
+      }
+
+      // Try parsing as ISO date (YYYY-MM-DD)
+      if (date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        const [year, month, day] = date.split('-').map(Number);
+        if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+          return `${day.toString().padStart(2, '0')}.${month.toString().padStart(2, '0')}.${year}`;
+        }
+      }
+    }
+
+    // If it's a Date object or needs to be converted to one
+    const dateObj = date instanceof Date ? date : new Date(date);
+    if (!isNaN(dateObj.getTime())) {
+      const day = dateObj.getUTCDate().toString().padStart(2, '0');
+      const month = (dateObj.getUTCMonth() + 1).toString().padStart(2, '0');
+      const year = dateObj.getUTCFullYear();
+      return `${day}.${month}.${year}`;
+    }
+
+    return '';
   } catch (error) {
+    console.error('Error formatting date:', error, date);
     return '';
   }
 };
@@ -230,58 +255,19 @@ const isValidFlight = (flight: unknown): flight is Flight => {
   }
 };
 
-const isValidDate = (date: string | Date | null): boolean => {
-  console.log('Validating date:', date);
-  if (!date) {
-    console.log('Date is null or undefined');
-    return false;
-  }
-
-  // If it's already a Date object
-  if (date instanceof Date) {
-    const isValidDateObj = isValid(date);
-    console.log('Date object validation result:', isValidDateObj);
-    return isValidDateObj;
-  }
-
-  // If it's a string, check if it matches DD.MM.YYYY format
-  if (typeof date === 'string') {
-    console.log('Date string length:', date.length);
-
-    // Reject any partial inputs that don't match the full format length
-    if (date.length < 10) {
-      console.log('Rejecting partial date input');
-      return false;
+// Helper function to safely format a date
+const safeFormatDate = (date: Date | string | null): string | null => {
+  if (!date) return null;
+  try {
+    const dateObj = date instanceof Date ? date : new Date(date);
+    if (isValid(dateObj)) {
+      return format(dateObj, 'dd.MM.yyyy');
     }
-
-    // Check if it matches DD.MM.YYYY format with complete values
-    if (date.match(/^\d{2}\.\d{2}\.\d{4}$/)) {
-      console.log('Matched DD.MM.YYYY format');
-      const [day, month, year] = date.split('.');
-      // Ensure we have complete values for day, month, and year
-      if (day.length !== 2 || month.length !== 2 || year.length !== 4) {
-        console.log('Invalid component lengths:', { day, month, year });
-        return false;
-      }
-      const parsedDate = new Date(Number(year), Number(month) - 1, Number(day));
-      const isValidParsed = isValid(parsedDate);
-      console.log('Date validation result:', isValidParsed);
-      return isValidParsed;
-    }
-
-    // Check if it matches YYYY-MM-DD format with complete values
-    if (date.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      const isValidISO = isValid(new Date(date));
-      console.log('ISO date validation result:', isValidISO);
-      return isValidISO;
-    }
-
-    console.log('Date format did not match any expected patterns');
-    return false;
+    return '';
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return '';
   }
-
-  console.log('Date is neither string nor Date object');
-  return false;
 };
 
 export const FlightSelector: React.FC<FlightSelectorProps> = ({
@@ -295,6 +281,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
   currentPhase = 3,
   disabled = false,
   stepNumber,
+  setValidationState,
 }): React.ReactElement => {
   // Get store state and actions first
   const {
@@ -305,6 +292,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
     directFlight,
     flightSegments,
     selectedFlight,
+    selectedFlights,
     currentSegmentIndex,
     currentPhase: storeCurrentPhase,
     isTransitioningPhases,
@@ -322,22 +310,28 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
     setFlightState,
     validationState,
     completedSteps,
+    batchUpdateWizardState,
+    // Add new store state and actions
+    isSearchModalOpen,
+    searchTerm,
+    displayedFlights,
+    allFlights,
+    loading,
+    errorMessage,
+    errorMessages,
+    setSearchModalOpen,
+    setSearchTerm,
+    setDisplayedFlights,
+    setAllFlights,
+    setFlightSearchLoading,
+    setFlightErrorMessage,
+    setFlightErrorMessages,
+    clearFlightErrors,
   } = useStore();
 
   // Component state
   const [mounted, setMounted] = useState(false);
-  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [displayedFlights, setDisplayedFlights] = useState<Flight[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [allFlights, setAllFlights] = useState<Flight[]>([]);
   const [view, setView] = useState<'list' | 'card'>('card');
-  const [errorMessages, setErrorMessages] = useState<{
-    from?: string;
-    to?: string;
-    date?: string;
-  }>({});
   const [selectedFlightNumber, setSelectedFlightNumber] = useState<
     string | null
   >(null);
@@ -388,87 +382,59 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
     if (isInitializing) return;
 
     try {
-      // Parse stored locations
-      let storedFromLocation = null;
-      let storedToLocation = null;
-
-      try {
-        if (fromLocation && fromLocation !== '{}') {
-          storedFromLocation = JSON.parse(fromLocation);
-        }
-        if (toLocation && toLocation !== '{}') {
-          storedToLocation = JSON.parse(toLocation);
-        }
-      } catch (error) {
-        return;
-      }
-
-      // Only update if values have changed
-      const shouldUpdateDirectFlight =
-        JSON.stringify(directFlight.fromLocation) !==
-          JSON.stringify(storedFromLocation) ||
-        JSON.stringify(directFlight.toLocation) !==
-          JSON.stringify(storedToLocation);
-
-      if (shouldUpdateDirectFlight) {
-        // Update direct flight state
-        setDirectFlight({
-          ...directFlight,
-          fromLocation: storedFromLocation,
-          toLocation: storedToLocation,
+      // Handle direct flight date initialization
+      if (selectedType === 'direct') {
+        console.log('Initializing direct flight dates:', {
+          selectedDate,
+          directFlightDate: directFlight.date,
         });
 
-        // Sync with flightSegments if in direct mode
-        if (selectedType === 'direct' && directFlight.selectedFlight) {
-          const newSegments = [
-            {
-              fromLocation: storedFromLocation,
-              toLocation: storedToLocation,
-              selectedFlight: directFlight.selectedFlight,
-              date: directFlight.date,
-            },
-          ];
-          setFlightSegments(newSegments);
+        // Only update if we have a selectedDate but no directFlight.date
+        if (selectedDate && !directFlight.date) {
+          console.log('Found selectedDate:', selectedDate);
+          const parsedDate = parseISO(selectedDate);
+          if (isValid(parsedDate)) {
+            console.log('Parsed selectedDate is valid');
+            // Set the time to noon to avoid timezone issues
+            const normalizedDate = new Date(
+              parsedDate.getFullYear(),
+              parsedDate.getMonth(),
+              parsedDate.getDate(),
+              12
+            );
+
+            console.log('Setting directFlight date to:', normalizedDate);
+            // Update directFlight with the normalized date
+            setDirectFlight({
+              ...directFlight,
+              date: normalizedDate,
+            });
+          }
         }
-
-        // Validate after state updates
-        validateFlightSelection();
+        // If we have a directFlight.date but no selectedDate
+        else if (directFlight.date && !selectedDate) {
+          console.log('Found directFlight.date:', directFlight.date);
+          const formattedDate = format(
+            directFlight.date instanceof Date
+              ? directFlight.date
+              : new Date(directFlight.date),
+            'yyyy-MM-dd'
+          );
+          console.log('Setting selectedDate to:', formattedDate);
+          setSelectedDate(formattedDate);
+        }
       }
-    } catch (error) {}
-  }, [
-    fromLocation,
-    toLocation,
-    directFlight,
-    isInitializing,
-    setDirectFlight,
-    selectedType,
-    setFlightSegments,
-    validateFlightSelection,
-  ]);
-
-  // Remove cleanup effect and only keep initialization
-  useEffect(() => {
-    if (selectedType !== 'multi') return;
-
-    // Only initialize on mount
-    if (flightSegments.length === 0) {
-      const initialSegments = [
-        {
-          fromLocation: null,
-          toLocation: null,
-          selectedFlight: null,
-          date: null,
-        },
-        {
-          fromLocation: null,
-          toLocation: null,
-          selectedFlight: null,
-          date: null,
-        },
-      ];
-      setFlightSegments(initialSegments);
+    } catch (error) {
+      console.error('Error initializing dates:', error);
     }
-  }, [selectedType, flightSegments.length, setFlightSegments]);
+  }, [
+    isInitializing,
+    selectedType,
+    selectedDate,
+    directFlight,
+    setDirectFlight,
+    setSelectedDate,
+  ]);
 
   const handleDateClear = () => {
     if (selectedType === 'direct') {
@@ -511,58 +477,50 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
   };
 
   const handleDateChange = (newDate: Date | null) => {
-    if (newDate) {
-      // Set the time to noon to avoid timezone issues
-      const normalizedDate = new Date(
-        newDate.getFullYear(),
-        newDate.getMonth(),
-        newDate.getDate(),
-        12
-      );
-
-      // Update direct flight state with proper typing, preserving the selected flight
+    if (!newDate) {
+      // Handle date clear in a single update
       setDirectFlight({
         ...directFlight,
-        date: normalizedDate,
-      });
-
-      // Update store state with formatted date string
-      const formattedDate = format(normalizedDate, 'yyyy-MM-dd');
-      setSelectedDate(formattedDate);
-    } else {
-      // Handle date clear
-      setDirectFlight({
-        fromLocation: directFlight.fromLocation,
-        toLocation: directFlight.toLocation,
         date: null,
         selectedFlight: null,
       });
       setSelectedDate(null);
-      setSelectedFlights([]);
+      return;
     }
+
+    // Create a safe copy of the date and normalize it to noon UTC
+    const safeDate = new Date(
+      Date.UTC(
+        newDate.getFullYear(),
+        newDate.getMonth(),
+        newDate.getDate(),
+        12,
+        0,
+        0,
+        0
+      )
+    );
+
+    // Format the date for the store
+    const formattedDate = format(safeDate, 'yyyy-MM-dd');
+
+    // Update both states in a single render cycle
+    setDirectFlight({
+      ...directFlight,
+      date: safeDate,
+    });
+    setSelectedDate(formattedDate);
   };
 
   const CustomInput = React.forwardRef<HTMLInputElement, CustomDateInputProps>(
     ({ value = '', onClear, onClick }, ref) => {
-      let displayValue = '';
-      try {
-        // Only attempt to format if value is a valid date string
-        if (value && typeof value === 'string') {
-          const parsedDate = parseISO(value);
-          if (isValid(parsedDate)) {
-            displayValue = format(parsedDate, 'dd.MM.yyyy');
-          }
-        }
-      } catch (error) {
-        console.error('Error formatting date:', error);
-      }
-
       return (
         <CustomDateInput
-          value={displayValue}
+          value={value}
           ref={ref}
           onClear={onClear}
           onClick={onClick}
+          label="Departure Date"
         />
       );
     }
@@ -570,12 +528,12 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
 
   CustomInput.displayName = 'CustomInput';
 
+  // Update the handleSearchFlights function
   const handleSearchFlights = async (segmentIndex: number = 0) => {
     try {
-      setLoading(true);
-      setErrorMessage(null);
+      setFlightSearchLoading(true);
+      setFlightErrorMessage(null);
 
-      // Get the current segment based on flight type
       const currentSegment =
         selectedType === 'multi' ? flightSegments[segmentIndex] : directFlight;
 
@@ -584,26 +542,39 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
         !currentSegment.toLocation ||
         !currentSegment.date
       ) {
-        setErrorMessage('Please select origin, destination, and date');
-        setLoading(false);
+        setFlightErrorMessage('Please select origin, destination, and date');
+        setFlightSearchLoading(false);
         return;
       }
 
-      // Format the date consistently
-      const segmentDate =
-        currentSegment.date instanceof Date
-          ? currentSegment.date
-          : new Date(currentSegment.date);
+      // Format date consistently
+      let searchDate = currentSegment.date;
+      if (searchDate instanceof Date) {
+        if (!isValid(searchDate)) {
+          setFlightErrorMessage('Invalid date selected');
+          setFlightSearchLoading(false);
+          return;
+        }
+      } else if (typeof searchDate === 'string') {
+        const dateStr = searchDate as string;
+        if (dateStr.match(/^\d{4}-\d{2}-\d{2}/)) {
+          searchDate = parseISO(dateStr);
+        } else if (dateStr.includes('.')) {
+          const [day, month, year] = dateStr.split('.');
+          searchDate = new Date(Number(year), Number(month) - 1, Number(day));
+        } else {
+          searchDate = new Date(dateStr);
+        }
+      }
 
-      if (isNaN(segmentDate.getTime())) {
-        setErrorMessage('Invalid date selected');
-        setLoading(false);
+      if (!isValid(searchDate)) {
+        setFlightErrorMessage('Invalid date selected');
+        setFlightSearchLoading(false);
         return;
       }
 
-      // Normalize the date to noon UTC to avoid timezone issues
-      segmentDate.setHours(12, 0, 0, 0);
-      const formattedDate = format(segmentDate, 'yyyy-MM-dd');
+      // Format date as YYYY-MM-DD for the API
+      const formattedDate = format(searchDate, 'yyyy-MM-dd');
 
       // Extract IATA codes from locations
       const fromIata = currentSegment.fromLocation.value;
@@ -614,172 +585,259 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
         from_iata: fromIata,
         to_iata: toIata,
         date: formattedDate,
+        lang: 'en',
       });
 
-      const response = await fetch(
-        `/.netlify/functions/searchFlights?${params}`
-      );
-      if (!response.ok) {
-        throw new Error('Failed to fetch flights');
-      }
-
-      const data = await response.json();
-      const flights = data.data || [];
-
-      // Transform and validate the flights
-      const validFlights = flights
-        .map((flight: RawFlight) => ({
-          id: flight.id?.toString() || Math.random().toString(),
-          flightNumber: flight.flightnumber_iata || '',
-          airline: flight.flightnumber_iata?.substring(0, 2) || '',
-          departureCity: flight.dep_city || flight.dep_iata || '',
-          arrivalCity: flight.arr_city || flight.arr_iata || '',
-          departureTime: formatTime(flight.dep_time_sched),
-          arrivalTime: formatTime(flight.arr_time_sched),
-          departure: flight.dep_iata || '',
-          arrival: flight.arr_iata || '',
-          duration: calculateDuration(
-            formatTime(flight.dep_time_sched),
-            formatTime(flight.arr_time_sched)
-          ),
-          stops: 0,
-          date: formattedDate,
-          status: flight.status || 'Unknown',
-          aircraft: flight.aircraft_type || 'Unknown',
-          class: 'economy',
-          price: 0,
-          departureAirport: flight.dep_iata || '',
-          arrivalAirport: flight.arr_iata || '',
-          scheduledDepartureTime: formatTime(flight.dep_time_sched),
-          actualDeparture: flight.dep_time_fact
-            ? formatTime(flight.dep_time_fact)
-            : null,
-          actualArrival: flight.arr_time_fact
-            ? formatTime(flight.arr_time_fact)
-            : null,
-          arrivalDelay: flight.arr_delay_min || null,
-        }))
-        .filter(isValidFlight);
-
-      setDisplayedFlights(validFlights);
-      setAllFlights(validFlights);
-      setLoading(false);
-
-      // Open the search modal if we have flights
-      if (validFlights.length > 0) {
-        setIsSearchModalOpen(true);
-      } else {
-        setErrorMessage('No flights found for the selected route and date.');
-      }
-    } catch (error) {
-      setErrorMessage('Failed to search flights. Please try again.');
-      setLoading(false);
-    }
-  };
-
-  const handleFlightSelect = React.useCallback(
-    (flight: Flight, segmentIndex: number) => {
       try {
-        // Close the search modal first
-        setIsSearchModalOpen(false);
+        const response = await fetch(
+          `/.netlify/functions/searchFlights?${params.toString()}`
+        );
 
-        // Update local state immediately
-        setSelectedFlightNumber(flight.flightNumber);
-
-        // Prepare flight-specific updates
-        const flightUpdates: Partial<StoreState> = {
-          selectedFlight: flight,
-          _lastUpdate: Date.now(),
-        };
-
-        // For direct flights, update both selected flights array and direct flight
-        if (selectedType === 'direct') {
-          flightUpdates.selectedFlights = [flight];
-          flightUpdates.directFlight = {
-            ...directFlight,
-            selectedFlight: flight,
-          };
-
-          // Update validation state immediately
-          flightUpdates.validationState = {
-            ...validationState,
-            isFlightValid: true,
-            stepValidation: {
-              ...validationState.stepValidation,
-              1: true,
-            },
-            1: true,
-            _timestamp: Date.now(),
-          };
-
-          // Update completed steps immediately
-          flightUpdates.completedSteps = Array.from(
-            new Set([...completedSteps, 1])
-          ).sort((a, b) => a - b);
-        } else {
-          // For multi-segment flights
-          const newSegments = [...flightSegments];
-          newSegments[currentSegmentIndex] = {
-            ...newSegments[currentSegmentIndex],
-            selectedFlight: flight,
-          };
-          flightUpdates.flightSegments = newSegments;
-          flightUpdates.selectedFlights = newSegments
-            .map((segment) => segment.selectedFlight)
-            .filter((f): f is Flight => f !== null);
-
-          // Update validation state for multi-segment
-          const hasAllSegments = newSegments.every(
-            (segment) => segment.selectedFlight !== null
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(
+            `Failed to fetch flights: ${response.status} - ${errorText}`
           );
-          flightUpdates.validationState = {
-            ...validationState,
-            isFlightValid: hasAllSegments,
-            stepValidation: {
-              ...validationState.stepValidation,
-              1: hasAllSegments,
-            },
-            1: hasAllSegments,
-            _timestamp: Date.now(),
-          };
+        }
 
-          // Update completed steps for multi-segment
-          if (hasAllSegments) {
-            flightUpdates.completedSteps = Array.from(
-              new Set([...completedSteps, 1])
-            ).sort((a, b) => a - b);
+        const data = await response.json();
+        const flights = data.data || [];
+
+        // Transform and validate the flights
+        let validFlights = flights
+          .map((flight: RawFlight) => {
+            try {
+              return {
+                id: flight.id?.toString() || Math.random().toString(),
+                flightNumber: flight.flightnumber_iata || '',
+                airline: flight.flightnumber_iata?.substring(0, 2) || '',
+                departureCity: flight.dep_city || flight.dep_iata || '',
+                arrivalCity: flight.arr_city || flight.arr_iata || '',
+                departureTime: formatTime(flight.dep_time_sched),
+                arrivalTime: formatTime(flight.arr_time_sched),
+                departure: flight.dep_iata || '',
+                arrival: flight.arr_iata || '',
+                duration: calculateDuration(
+                  formatTime(flight.dep_time_sched),
+                  formatTime(flight.arr_time_sched)
+                ),
+                stops: 0,
+                date: formattedDate,
+                status: flight.status || 'Unknown',
+                aircraft: flight.aircraft_type || 'Unknown',
+                class: 'economy',
+                price: 0,
+                departureAirport: flight.dep_iata || '',
+                arrivalAirport: flight.arr_iata || '',
+                scheduledDepartureTime: formatTime(flight.dep_time_sched),
+                scheduledArrivalTime: formatTime(flight.arr_time_sched),
+                actualDeparture: flight.dep_time_fact
+                  ? formatTime(flight.dep_time_fact)
+                  : null,
+                actualArrival: flight.arr_time_fact
+                  ? formatTime(flight.arr_time_fact)
+                  : null,
+                arrivalDelay: flight.arr_delay_min || null,
+                bookingReference: generateBookingReference(),
+              };
+            } catch (error) {
+              console.error('Error transforming flight:', error);
+              return null;
+            }
+          })
+          .filter(
+            (flight: unknown): flight is Flight =>
+              flight !== null && isValidFlight(flight)
+          );
+
+        // For multi-segment flights after the first segment, filter based on previous segment's arrival time
+        if (selectedType === 'multi' && segmentIndex > 0) {
+          const previousSegment = flightSegments[segmentIndex - 1];
+          if (previousSegment?.selectedFlight) {
+            const previousArrivalTime = new Date(
+              `${previousSegment.selectedFlight.date}T${previousSegment.selectedFlight.arrivalTime}:00.000Z`
+            );
+
+            // Filter flights that depart at least 30 minutes after previous flight arrives
+            validFlights = validFlights.filter((flight: Flight) => {
+              const departureTime = new Date(
+                `${flight.date}T${flight.departureTime}:00.000Z`
+              );
+              const timeDiff =
+                (departureTime.getTime() - previousArrivalTime.getTime()) /
+                60000; // in minutes
+              return timeDiff >= 30;
+            });
           }
         }
 
-        // Update flight state in a single batch
-        setFlightState(flightUpdates);
+        setDisplayedFlights(validFlights);
+        setAllFlights(validFlights);
+        setFlightSearchLoading(false);
 
-        // Force component update
-        setDisplayedFlights((prev) => [...prev]);
-
-        // Notify parent components
-        onSelect(flight);
-        onInteract();
+        if (validFlights.length > 0) {
+          setSearchModalOpen(true);
+        } else {
+          setFlightErrorMessage(
+            segmentIndex > 0
+              ? 'No valid connecting flights found. Please try a different date or route.'
+              : 'No flights found for the selected route and date.'
+          );
+        }
       } catch (error) {
-        setErrorMessage('Error selecting flight');
+        console.error('Search flights error:', error);
+        setFlightErrorMessage('Failed to search flights. Please try again.');
+        setFlightSearchLoading(false);
       }
-    },
-    [
-      selectedType,
-      currentSegmentIndex,
-      directFlight,
-      flightSegments,
-      validationState,
-      completedSteps,
-      setFlightState,
-      onSelect,
-      onInteract,
-      setIsSearchModalOpen,
-      setSelectedFlightNumber,
-      setDisplayedFlights,
-      setErrorMessage,
-    ]
-  );
+    } catch (error) {
+      console.error('Error handling search flights:', error);
+      setFlightErrorMessage('Failed to search flights. Please try again.');
+      setFlightSearchLoading(false);
+    }
+  };
+
+  const validateFlightTimes = (
+    prevFlight: Flight | null,
+    newFlight: Flight
+  ): boolean => {
+    if (!prevFlight) return true;
+
+    const prevArrivalTime = new Date(
+      `${prevFlight.date}T${prevFlight.arrivalTime}:00.000Z`
+    );
+    const newDepartureTime = new Date(
+      `${newFlight.date}T${newFlight.departureTime}:00.000Z`
+    );
+
+    const timeDiff =
+      (newDepartureTime.getTime() - prevArrivalTime.getTime()) / (1000 * 60);
+    console.log('Flight time validation:', {
+      prevFlight,
+      newFlight,
+      timeDiff,
+      isValid: timeDiff >= 30,
+    });
+
+    return timeDiff >= 30;
+  };
+
+  // Update the handleFlightSelect callback
+  const handleFlightSelect = (data: {
+    flight: FlightData;
+    segmentIndex: number;
+    selectedType: 'direct' | 'multi';
+  }) => {
+    try {
+      console.log('=== handleFlightSelect START ===');
+      console.log('Input data:', data);
+
+      const { flight, segmentIndex, selectedType } = data;
+
+      // Convert flight data to store format
+      const storeFormatFlight: Flight = {
+        id: flight.id,
+        flightNumber: flight.flightNumber,
+        airline: flight.airline,
+        departureCity: flight.departureCity,
+        arrivalCity: flight.arrivalCity,
+        departureTime: flight.departureTime,
+        arrivalTime: flight.arrivalTime,
+        date: flight.date,
+        price: flight.price,
+        departure: flight.departureCity,
+        arrival: flight.arrivalCity,
+        status: flight.status || 'unknown',
+        departureAirport: flight.departureAirport || flight.departureCity,
+        arrivalAirport: flight.arrivalAirport || flight.arrivalCity,
+        duration: flight.duration || '',
+        stops: flight.stops || 0,
+        aircraft: flight.aircraft || '',
+        class: flight.class || 'economy',
+        scheduledDepartureTime:
+          flight.scheduledDepartureTime || flight.departureTime,
+        scheduledArrivalTime: flight.scheduledArrivalTime || flight.arrivalTime,
+        actualDeparture: flight.actualDeparture || null,
+        actualArrival: flight.actualArrival || null,
+        arrivalDelay: flight.arrivalDelay || null,
+        bookingReference: flight.bookingReference || undefined,
+      };
+
+      if (selectedType === 'direct') {
+        // For direct flights, batch update state
+        batchUpdateWizardState({
+          selectedFlight: storeFormatFlight,
+          selectedFlights: [storeFormatFlight],
+          directFlight: {
+            ...directFlight,
+            selectedFlight: storeFormatFlight,
+          },
+        });
+      } else {
+        // For multi-segment flights
+        // Validate flight times if this is not the first segment
+        if (segmentIndex > 0) {
+          const previousFlight =
+            flightSegments[segmentIndex - 1].selectedFlight;
+          if (previousFlight) {
+            const timeDiff = validateFlightTimes(
+              previousFlight,
+              storeFormatFlight
+            );
+            console.log('Flight time validation:', {
+              prevFlight: previousFlight,
+              newFlight: storeFormatFlight,
+              timeDiff,
+              isValid: timeDiff,
+            });
+            if (!timeDiff) {
+              console.error(
+                'Invalid flight time: Less than 30 minutes between flights'
+              );
+              return;
+            }
+          }
+        }
+
+        // Create new segments array with the updated segment
+        const newSegments = flightSegments.map((segment, index) =>
+          index === segmentIndex
+            ? { ...segment, selectedFlight: storeFormatFlight }
+            : segment
+        );
+
+        // Get all selected flights from segments, filtering out nulls
+        const updatedSelectedFlights = newSegments
+          .map((segment) => segment.selectedFlight)
+          .filter((flight): flight is Flight => flight !== null);
+
+        // Batch update all state
+        batchUpdateWizardState({
+          selectedFlight: storeFormatFlight,
+          selectedFlights: updatedSelectedFlights,
+          flightSegments: newSegments,
+          currentSegmentIndex:
+            segmentIndex < newSegments.length - 1
+              ? segmentIndex + 1
+              : segmentIndex,
+        });
+      }
+
+      // Close the search modal
+      setSearchModalOpen(false);
+
+      // Update validation state if needed
+      if (setValidationState) {
+        setValidationState((prev: Record<number, boolean>) => ({
+          ...prev,
+          [stepNumber || 1]: true,
+        }));
+      }
+
+      console.log('=== handleFlightSelect END ===');
+    } catch (error) {
+      console.error('Error in handleFlightSelect:', error);
+    }
+  };
 
   // Helper function to generate a booking reference
   const generateBookingReference = () => {
@@ -845,68 +903,152 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
   };
 
   const handleFlightDelete = (index?: number, e?: React.MouseEvent) => {
+    console.log('=== handleFlightDelete START ===');
+    console.log('Input:', { index, selectedType });
+    console.log('Initial state:', {
+      flightSegments: JSON.parse(JSON.stringify(flightSegments)),
+      selectedFlights: JSON.parse(JSON.stringify(selectedFlights)),
+      selectedFlight: JSON.parse(JSON.stringify(selectedFlight)),
+      currentSegmentIndex,
+      validationState,
+    });
+
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
 
+    // For direct flights
     if (selectedType === 'direct') {
-      // Only clear the selected flight, preserve all other fields
-      setDirectFlight({
-        ...directFlight,
-        selectedFlight: null,
-      });
-
-      // Update selected flights in store
-      setSelectedFlights([]);
-      setSelectedFlight(null);
-
-      // Notify parent component
-      onSelect(null);
-    } else if (typeof index === 'number') {
-      // Remove the segment at the specified index
-      const newSegments = flightSegments.filter((_, i) => i !== index);
-
-      // Ensure we have at least two segments
-      while (newSegments.length < 2) {
-        newSegments.push({
-          fromLocation: null,
-          toLocation: null,
+      console.log('Handling direct flight deletion');
+      const updates = {
+        directFlight: {
+          ...directFlight,
           selectedFlight: null,
-          date: null,
-        });
+        },
+        selectedFlights: [],
+        selectedFlight: null,
+        validationState: {
+          ...validationState,
+          isFlightValid: false,
+          stepValidation: {
+            ...validationState.stepValidation,
+            1: false,
+          },
+          1: false,
+        },
+      };
+
+      console.log(
+        'Direct flight updates:',
+        JSON.parse(JSON.stringify(updates))
+      );
+      batchUpdateWizardState(updates);
+      onSelect(null);
+      return;
+    }
+
+    // For multi-segment flights
+    if (typeof index === 'number') {
+      console.log('Handling multi-segment flight deletion at index:', index);
+
+      // For segments beyond the first two, remove the entire segment
+      if (index > 1) {
+        const newSegments = flightSegments.filter((_, i) => i !== index);
+        const remainingFlights = newSegments
+          .map((segment) => segment.selectedFlight)
+          .filter((flight): flight is Flight => flight !== null);
+
+        const updates = {
+          flightSegments: newSegments,
+          selectedFlights: remainingFlights,
+          selectedFlight: null,
+          currentSegmentIndex: Math.min(index - 1, newSegments.length - 1),
+          validationState: {
+            ...validationState,
+            isFlightValid: false,
+            stepValidation: {
+              ...validationState.stepValidation,
+              1: false,
+            },
+            1: false,
+          },
+        };
+
+        console.log(
+          'Multi-segment updates:',
+          JSON.parse(JSON.stringify(updates))
+        );
+        batchUpdateWizardState(updates);
+        onSelect(remainingFlights.length > 0 ? remainingFlights : null);
+        return;
       }
 
-      // Update the segments in the store
-      setFlightSegments(newSegments);
+      // For first two segments, just clear the flight data
+      const newSegments = [...flightSegments];
+      newSegments[index] = {
+        ...newSegments[index],
+        selectedFlight: null,
+      };
 
-      // Update selected flights in store while maintaining order
-      const updatedSelectedFlights = newSegments
+      // Clear all flights after the deleted index
+      const updatedSegments = newSegments.map((segment, idx) => {
+        if (idx >= index) {
+          return {
+            ...segment,
+            selectedFlight: null,
+          };
+        }
+        return segment;
+      });
+
+      // Get all remaining selected flights, excluding the deleted one and all after it
+      const remainingFlights = updatedSegments
         .map((segment) => segment.selectedFlight)
         .filter((flight): flight is Flight => flight !== null);
 
-      // Update the store's selected flights
-      setSelectedFlights(updatedSelectedFlights);
+      console.log('Remaining flights:', remainingFlights);
 
-      // Update selected flight in store if it was the deleted one
-      if (selectedFlight && index === currentSegmentIndex) {
-        setSelectedFlight(null);
-      }
+      // Batch update all state changes
+      const updates = {
+        flightSegments: updatedSegments,
+        selectedFlights: remainingFlights,
+        selectedFlight: null,
+        currentSegmentIndex: index,
+        validationState: {
+          ...validationState,
+          isFlightValid: false,
+          stepValidation: {
+            ...validationState.stepValidation,
+            1: false,
+          },
+          1: false,
+        },
+      };
 
-      // Update current segment index if needed
-      if (currentSegmentIndex >= newSegments.length) {
-        setCurrentSegmentIndex(Math.max(0, newSegments.length - 1));
-      }
+      console.log(
+        'Multi-segment updates:',
+        JSON.parse(JSON.stringify(updates))
+      );
 
-      // Notify parent component
-      if (updatedSelectedFlights.length === 0) {
-        onSelect(null);
-      } else {
-        onSelect(updatedSelectedFlights);
+      // Update all state at once
+      setFlightSegments(updatedSegments);
+      setSelectedFlights(remainingFlights);
+      setSelectedFlight(null);
+      batchUpdateWizardState(updates);
+
+      // Always notify parent component and update validation
+      onSelect(remainingFlights.length > 0 ? remainingFlights : null);
+      if (setValidationState) {
+        setValidationState((prev: Record<number, boolean>) => {
+          const newState = { ...prev, [stepNumber || 1]: false };
+          console.log('Updated validation state:', newState);
+          return newState;
+        });
       }
     }
 
-    onInteract();
+    console.log('=== handleFlightDelete END ===');
   };
 
   const handleClearField = (
@@ -977,7 +1119,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
     setCurrentSegmentIndex(index);
 
     // Open search modal first
-    setIsSearchModalOpen(true);
+    setSearchModalOpen(true);
 
     // Get the current segment
     const segment =
@@ -1139,102 +1281,131 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
     return { fromLoc, toLoc };
   };
 
+  // Update the handleFlightTypeChange to handle state updates properly
   const handleFlightTypeChange = useCallback(
     (newType: 'direct' | 'multi') => {
-      // Get current locations from either direct flight or first segment
-      let currentFromLocation = null;
-      let currentToLocation = null;
-      let currentDate = null;
-      let currentSelectedFlight = null;
+      if (newType === selectedType) return;
 
-      if (selectedType === 'direct') {
-        currentFromLocation = directFlight.fromLocation;
-        currentToLocation = directFlight.toLocation;
-        currentDate = directFlight.date;
-        currentSelectedFlight = directFlight.selectedFlight;
-      } else if (flightSegments.length > 0) {
-        currentFromLocation = flightSegments[0].fromLocation;
-        currentToLocation = flightSegments[0].toLocation;
-        currentDate = flightSegments[0].date;
-        currentSelectedFlight = flightSegments[0].selectedFlight;
-      }
+      console.log('=== handleFlightTypeChange START ===');
+      console.log('Current state:', {
+        newType,
+        selectedType,
+        directFlight: JSON.parse(JSON.stringify(directFlight)),
+        flightSegments: JSON.parse(JSON.stringify(flightSegments)),
+      });
 
-      // If switching to multi, preserve current locations and flight
-      if (newType === 'multi') {
-        // If we're coming from direct mode, create new segments
-        if (selectedType === 'direct') {
-          const newSegments = [
-            {
-              // Preserve first segment data from direct flight
-              fromLocation: currentFromLocation,
-              toLocation: currentToLocation,
-              selectedFlight: currentSelectedFlight,
-              date: currentDate,
-            },
-            {
-              // Link second segment's from location to first segment's to location
-              fromLocation: currentToLocation ? { ...currentToLocation } : null,
-              toLocation: null,
-              selectedFlight: null,
-              date: null,
-            },
-          ];
-          setFlightSegments(newSegments);
+      // Helper function to safely parse dates
+      const safeParseDateToUTC = (date: Date | string | null): Date | null => {
+        if (!date) return null;
+        try {
+          const parsed = typeof date === 'string' ? parseISO(date) : date;
+          return new Date(
+            Date.UTC(
+              parsed.getFullYear(),
+              parsed.getMonth(),
+              parsed.getDate(),
+              12,
+              0,
+              0,
+              0
+            )
+          );
+        } catch (error) {
+          console.error('Error parsing date:', error);
+          return null;
         }
+      };
 
-        // Preserve the selected flight in both segments and selectedFlights array
-        if (currentSelectedFlight) {
-          setSelectedFlights([currentSelectedFlight]);
-          setSelectedFlight(currentSelectedFlight);
+      if (newType === 'direct') {
+        // When switching to direct, use the first segment's data
+        const firstSegment = flightSegments[0];
+        if (firstSegment) {
+          const parsedDate = safeParseDateToUTC(firstSegment.date);
+          const formattedDate = parsedDate
+            ? format(parsedDate, 'yyyy-MM-dd')
+            : null;
+
+          // Create updates object
+          const updates = {
+            selectedType: newType,
+            directFlight: {
+              fromLocation: firstSegment.fromLocation,
+              toLocation: firstSegment.toLocation,
+              date: parsedDate,
+              selectedFlight: firstSegment.selectedFlight,
+            },
+            selectedFlight: firstSegment.selectedFlight,
+            selectedFlights: firstSegment.selectedFlight
+              ? [firstSegment.selectedFlight]
+              : [],
+            currentSegmentIndex: 0,
+            flightSegments: [firstSegment], // Only keep first segment in direct mode
+          };
+
+          // Update state in a single batch
+          batchUpdateWizardState(updates);
+
+          // Update store state
+          if (firstSegment.fromLocation) {
+            setFromLocation(JSON.stringify(firstSegment.fromLocation));
+          }
+          if (firstSegment.toLocation) {
+            setToLocation(JSON.stringify(firstSegment.toLocation));
+          }
+          if (formattedDate) {
+            setSelectedDate(formattedDate);
+          }
         }
       } else {
-        // If switching to direct, preserve first segment's data
-        setDirectFlight({
-          fromLocation: currentFromLocation,
-          toLocation: currentToLocation,
-          date: currentDate,
-          selectedFlight: currentSelectedFlight,
-        });
-        // In direct mode, preserve the selected flight
-        if (currentSelectedFlight) {
-          setSelectedFlights([currentSelectedFlight]);
-          setSelectedFlight(currentSelectedFlight);
-        }
+        // When switching to multi-city, create completely fresh segments
+        const newSegments = [
+          {
+            fromLocation: null,
+            toLocation: null,
+            date: null,
+            selectedFlight: null,
+          },
+          {
+            fromLocation: null,
+            toLocation: null,
+            date: null,
+            selectedFlight: null,
+          },
+        ];
+
+        const updates = {
+          selectedType: newType,
+          flightSegments: newSegments,
+          selectedFlight: null,
+          selectedFlights: [],
+          currentSegmentIndex: 0,
+          directFlight: {
+            fromLocation: null,
+            toLocation: null,
+            date: null,
+            selectedFlight: null,
+          },
+        };
+
+        // Update state in a single batch
+        batchUpdateWizardState(updates);
+
+        // Clear store state
+        setFromLocation(null);
+        setToLocation(null);
+        setSelectedDate(null);
       }
 
-      // Update store state
-      if (currentFromLocation) {
-        setFromLocation(JSON.stringify(currentFromLocation));
-      }
-      if (currentToLocation) {
-        setToLocation(JSON.stringify(currentToLocation));
-      }
-      if (currentDate) {
-        try {
-          // Ensure currentDate is a valid Date object
-          const safeDate =
-            currentDate instanceof Date ? currentDate : new Date(currentDate);
-          if (!isNaN(safeDate.getTime())) {
-            setSelectedDate(format(safeDate, 'yyyy-MM-dd'));
-          }
-        } catch (error) {}
-      }
-
-      // Update type after state is set
-      setSelectedType(newType);
+      console.log('=== handleFlightTypeChange END ===');
     },
     [
+      selectedType,
       directFlight,
       flightSegments,
-      selectedType,
-      setDirectFlight,
-      setFlightSegments,
       setFromLocation,
-      setSelectedDate,
-      setSelectedFlight,
-      setSelectedFlights,
-      setSelectedType,
       setToLocation,
+      setSelectedDate,
+      batchUpdateWizardState,
     ]
   );
 
@@ -1323,7 +1494,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
       );
     });
     setDisplayedFlights(filtered);
-  }, [searchTerm, allFlights]);
+  }, [searchTerm, allFlights, setDisplayedFlights]);
 
   // Ensure currentSegmentIndex stays valid when segments change
   useEffect(() => {
@@ -1342,7 +1513,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
     field: 'fromLocation' | 'toLocation'
   ) => {
     // Clear error message when user starts interacting
-    setErrorMessage(null);
+    setFlightErrorMessage(null);
 
     // Update the appropriate location based on flight type
     if (selectedType === 'direct') {
@@ -1383,10 +1554,10 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
     }
 
     // Clear any error messages for this field
-    setErrorMessages((prev) => ({
-      ...prev,
+    setFlightErrorMessages({
+      ...errorMessages,
       [field === 'fromLocation' ? 'from' : 'to']: '',
-    }));
+    });
 
     // Trigger onSelect callback
     onSelect(null);
@@ -1419,10 +1590,23 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
     setSelectedFlights([]);
 
     // Clear any error messages
-    setErrorMessages((prev) => ({
-      ...prev,
+    setFlightErrorMessages({
+      ...errorMessages,
       from: '',
-    }));
+    });
+
+    // Update validation state if both locations are filled
+    if (setValidationState && location && directFlight.toLocation) {
+      setValidationState((prev: Record<number, boolean>) => ({
+        ...prev,
+        [stepNumber || 1]: true,
+      }));
+    } else if (setValidationState) {
+      setValidationState((prev: Record<number, boolean>) => ({
+        ...prev,
+        [stepNumber || 1]: false,
+      }));
+    }
 
     // Notify parent component
     onSelect(null);
@@ -1455,10 +1639,23 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
     setSelectedFlights([]);
 
     // Clear any error messages
-    setErrorMessages((prev) => ({
-      ...prev,
+    setFlightErrorMessages({
+      ...errorMessages,
       to: '',
-    }));
+    });
+
+    // Update validation state if both locations are filled
+    if (setValidationState && location && directFlight.fromLocation) {
+      setValidationState((prev: Record<number, boolean>) => ({
+        ...prev,
+        [stepNumber || 1]: true,
+      }));
+    } else if (setValidationState) {
+      setValidationState((prev: Record<number, boolean>) => ({
+        ...prev,
+        [stepNumber || 1]: false,
+      }));
+    }
 
     // Notify parent component
     onSelect(null);
@@ -1469,47 +1666,44 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
   const handleDirectDateChange = (newDate: Date | null) => {
     try {
       if (!newDate) {
-        // Handle date clear
+        // Handle date clear in a single update
         setDirectFlight({
           ...directFlight,
           date: null,
           selectedFlight: null,
         });
         setSelectedDate(null);
-        setSelectedFlights([]);
         return;
       }
 
-      // Validate the date
-      if (!(newDate instanceof Date) || isNaN(newDate.getTime())) {
-        console.error('Invalid date provided:', newDate);
-        return;
-      }
-
-      // Set the time to noon to avoid timezone issues
-      const normalizedDate = new Date(
-        newDate.getFullYear(),
-        newDate.getMonth(),
-        newDate.getDate(),
-        12
+      // Create a safe copy of the date and normalize it to noon UTC
+      const safeDate = new Date(
+        Date.UTC(
+          newDate.getFullYear(),
+          newDate.getMonth(),
+          newDate.getDate(),
+          12,
+          0,
+          0,
+          0
+        )
       );
 
-      // Update direct flight state with proper typing
+      // Format the date for the store
+      const formattedDate = format(safeDate, 'yyyy-MM-dd');
+
+      // Update both states in a single render cycle
       setDirectFlight({
         ...directFlight,
-        date: normalizedDate,
-        selectedFlight: null,
+        date: safeDate,
       });
-
-      // Update store state with formatted date string
-      const formattedDate = format(normalizedDate, 'yyyy-MM-dd');
       setSelectedDate(formattedDate);
 
-      // Clear any selected flights since date changed
-      setSelectedFlights([]);
+      // Clear any error messages
+      setFlightErrorMessage(null);
     } catch (error) {
-      console.error('Error handling direct date change:', error);
-      setErrorMessage('Invalid date selection');
+      console.error('Error handling date change:', error);
+      setFlightErrorMessage('Invalid date selection');
     }
   };
 
@@ -1521,22 +1715,34 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
     try {
       const newSegments = [...flightSegments];
 
-      // Update the current segment
-      newSegments[index] = {
-        ...newSegments[index],
-        [field]: location,
-        selectedFlight: null,
-      };
-
-      // If we're changing toLocation and we're not on the last segment
-      // update the next segment's fromLocation to match
-      if (field === 'toLocation' && index < newSegments.length - 1) {
-        newSegments[index + 1] = {
-          ...newSegments[index + 1],
-          fromLocation: location ? { ...location } : null,
+      // Clear selected flights for affected segments
+      if (field === 'fromLocation') {
+        // When changing fromLocation, clear current segment's flight
+        newSegments[index] = {
+          ...newSegments[index],
+          fromLocation: location,
+          selectedFlight: null,
         };
+      } else if (field === 'toLocation') {
+        // When changing toLocation:
+        // 1. Clear current segment's flight
+        newSegments[index] = {
+          ...newSegments[index],
+          toLocation: location,
+          selectedFlight: null,
+        };
+
+        // 2. Update next segment's fromLocation and clear its flight if it exists
+        if (index < newSegments.length - 1) {
+          newSegments[index + 1] = {
+            ...newSegments[index + 1],
+            fromLocation: location,
+            selectedFlight: null,
+          };
+        }
       }
 
+      // Update segments first
       setFlightSegments(newSegments);
 
       // Update store locations if this is the first segment
@@ -1547,8 +1753,30 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
           setToLocation(location ? JSON.stringify(location) : null);
         }
       }
+
+      // Update selected flights array while maintaining order
+      const updatedSelectedFlights = newSegments
+        .map((segment) => segment.selectedFlight)
+        .filter((flight): flight is Flight => flight !== null);
+
+      setSelectedFlights(updatedSelectedFlights);
+
+      // Clear selected flight in store if we cleared the current segment's flight
+      if (currentSegmentIndex === index) {
+        setSelectedFlight(null);
+      }
+
+      // Clear error message
+      setFlightErrorMessage(null);
+
+      // Notify parent of changes
+      onSelect(
+        updatedSelectedFlights.length > 0 ? updatedSelectedFlights : null
+      );
+      onInteract();
     } catch (error) {
-      setErrorMessage('Error updating flight locations');
+      console.error('Error updating flight locations:', error);
+      setFlightErrorMessage('Error updating flight locations');
     }
   };
 
@@ -1565,12 +1793,6 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
         if (index === 0) {
           setSelectedDate(null);
         }
-        return;
-      }
-
-      // Validate the date
-      if (!(date instanceof Date) || isNaN(date.getTime())) {
-        console.error('Invalid date provided:', date);
         return;
       }
 
@@ -1592,10 +1814,10 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
       }
 
       // Clear any error messages
-      setErrorMessage(null);
+      setFlightErrorMessage(null);
     } catch (error) {
       console.error('Error handling date change:', error);
-      setErrorMessage('Invalid date selection');
+      setFlightErrorMessage('Invalid date selection');
     }
   };
 
@@ -1655,7 +1877,8 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
     if (isTransitioningPhases) return;
 
     // Only initialize on mount
-    if (selectedType === 'multi' && flightSegments.length === 0) {
+    if (!mounted && selectedType === 'multi' && flightSegments.length === 0) {
+      setMounted(true);
       setFlightSegments([
         {
           fromLocation: null,
@@ -1672,34 +1895,12 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
       ]);
     }
   }, [
+    mounted,
     selectedType,
     isTransitioningPhases,
     flightSegments.length,
     setFlightSegments,
   ]);
-
-  // Update segment cleanup effect - remove mountedRef from dependencies
-  useEffect(() => {
-    if (selectedType !== 'multi') return;
-
-    // Only initialize if we have no segments
-    if (flightSegments.length === 0) {
-      setFlightSegments([
-        {
-          fromLocation: null,
-          toLocation: null,
-          selectedFlight: null,
-          date: null,
-        },
-        {
-          fromLocation: null,
-          toLocation: null,
-          selectedFlight: null,
-          date: null,
-        },
-      ]);
-    }
-  }, [selectedType, flightSegments.length, setFlightSegments]);
 
   const handleClearDates = () => {
     flightSegments.forEach((_, index) => {
@@ -1834,7 +2035,8 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
     if (isTransitioningPhases) return;
 
     // Only initialize on mount
-    if (selectedType === 'multi' && flightSegments.length === 0) {
+    if (!mounted && selectedType === 'multi' && flightSegments.length === 0) {
+      setMounted(true);
       setFlightSegments([
         {
           fromLocation: null,
@@ -1851,14 +2053,14 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
       ]);
     }
   }, [
+    mounted,
     selectedType,
     isTransitioningPhases,
     flightSegments.length,
     setFlightSegments,
   ]);
 
-  // Flight type switch effect - setSelectedType intentionally included as it's
-  // important for UI state updates
+  // Update the flight type switch effect to prevent loops
   useEffect(() => {
     const uniqueFlights = new Set(
       flightSegments
@@ -1866,17 +2068,18 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
         .filter(isValidFlight)
         .map((flight) => flight.flightNumber)
     );
-    if (uniqueFlights.size > 1) {
+    if (uniqueFlights.size > 1 && selectedType !== 'multi') {
       setSelectedType('multi');
     }
-  }, [flightSegments, setSelectedType]);
+  }, [flightSegments, selectedType, setSelectedType]);
 
   // Update selected flight effect
   useEffect(() => {
     if (
       selectedFlight &&
       directFlight.fromLocation &&
-      directFlight.toLocation
+      directFlight.toLocation &&
+      selectedType === 'direct'
     ) {
       const shouldUpdate =
         JSON.stringify(directFlight.selectedFlight) !==
@@ -1889,11 +2092,15 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
         });
       }
     }
-  }, [selectedFlight, directFlight, setDirectFlight]);
+  }, [selectedFlight, directFlight, setDirectFlight, selectedType]);
 
   // Update flight segments effect
   useEffect(() => {
-    if (selectedType === 'multi' && flightSegments.length > 0) {
+    if (
+      selectedType === 'multi' &&
+      flightSegments.length > 0 &&
+      selectedFlight
+    ) {
       const currentSegment = flightSegments[currentSegmentIndex];
       if (currentSegment) {
         const shouldUpdate =
@@ -1920,26 +2127,73 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
 
   // Add effect to maintain segment linking
   useEffect(() => {
-    if (selectedType === 'multi' && flightSegments.length >= 2) {
-      const firstSegment = flightSegments[0];
-      const secondSegment = flightSegments[1];
+    if (selectedType !== 'multi') return;
 
-      // If first segment has a toLocation but second segment's fromLocation doesn't match
-      if (
-        firstSegment?.toLocation &&
-        (!secondSegment?.fromLocation ||
-          JSON.stringify(secondSegment.fromLocation) !==
-            JSON.stringify(firstSegment.toLocation))
-      ) {
-        const newSegments = [...flightSegments];
-        newSegments[1] = {
-          ...newSegments[1],
-          fromLocation: firstSegment.toLocation,
-        };
-        setFlightSegments(newSegments);
+    console.log('=== Segment Linking Effect START ===');
+    console.log('Current state:', {
+      selectedType,
+      flightSegments,
+      selectedFlights,
+      selectedFlight,
+      currentSegmentIndex,
+    });
+
+    // Only initialize on mount when there are no segments
+    if (flightSegments.length === 0) {
+      const initialSegments = [
+        {
+          fromLocation: null,
+          toLocation: null,
+          selectedFlight: null,
+          date: null,
+        },
+        {
+          fromLocation: null,
+          toLocation: null,
+          selectedFlight: null,
+          date: null,
+        },
+      ];
+      setFlightSegments(initialSegments);
+      return;
+    }
+
+    // Skip segment linking during type transitions
+    if (selectedType === 'multi' && flightSegments.length === 1) {
+      console.log('Skipping segment linking - transitioning flight types');
+      return;
+    }
+
+    // Rest of the segment linking logic...
+    console.log('=== Segment Linking Effect END ===');
+  }, [
+    selectedType,
+    flightSegments,
+    selectedFlights,
+    selectedFlight,
+    currentSegmentIndex,
+    setFlightSegments,
+  ]);
+
+  // Add this effect near the other initialization effects
+  useEffect(() => {
+    if (isInitializing) return;
+
+    // Initialize date from store on mount
+    if (selectedDate && !directFlight.date) {
+      try {
+        const parsedDate = parseISO(selectedDate);
+        if (isValid(parsedDate)) {
+          setDirectFlight({
+            ...directFlight,
+            date: parsedDate,
+          });
+        }
+      } catch (error) {
+        console.error('Error parsing date:', error);
       }
     }
-  }, [selectedType, flightSegments, setFlightSegments]);
+  }, [isInitializing, selectedDate, directFlight, setDirectFlight]);
 
   // Update loading check
   if (isInitializing && (storeCurrentPhase === 3 || storeCurrentPhase === 4)) {
@@ -2189,7 +2443,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                               }
                               onClear={() => {
                                 handleMultiDateChange(null, index);
-                                setErrorMessage(null);
+                                setFlightErrorMessage(null);
                               }}
                             />
                           }
@@ -2235,10 +2489,17 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                       <button
                         onClick={() => {
                           setCurrentSegmentIndex(index);
-                          setIsSearchModalOpen(true);
+                          setSearchModalOpen(true);
                           handleSearchFlights(index);
                         }}
-                        disabled={!segment.date || !isValidDate(segment.date)}
+                        disabled={
+                          !segment.date ||
+                          !isValid(
+                            segment.date instanceof Date
+                              ? segment.date
+                              : new Date(segment.date)
+                          )
+                        }
                         className="h-14 w-full text-white bg-[#F54538] rounded-xl hover:bg-[#F54538]/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#F54538] disabled:opacity-50 disabled:cursor-not-allowed font-sans font-medium text-base"
                       >
                         Search Flights
@@ -2322,15 +2583,20 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                     style={{ marginBottom: '40px' }}
                   >
                     <DatePicker
-                      selected={selectedDate ? parseISO(selectedDate) : null}
-                      onChange={(date: Date | null) => {
-                        handleDateChange(date);
-                      }}
+                      selected={
+                        directFlight.date ? new Date(directFlight.date) : null
+                      }
+                      onChange={handleDirectDateChange}
                       customInput={
                         <CustomDateInput
-                          value={selectedDate || ''}
+                          value={
+                            directFlight.date
+                              ? formatSafeDate(directFlight.date)
+                              : ''
+                          }
                           onClear={() => {
-                            handleDateClear();
+                            handleDirectDateChange(null);
+                            setFlightErrorMessage(null);
                           }}
                           onClick={() => {}}
                           label="Departure Date"
@@ -2355,28 +2621,37 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                       }}
                       className="react-datepicker-popper"
                       calendarClassName="custom-calendar"
-                      onSelect={(date: Date | null) => {
-                        if (date) {
-                          const formattedDate = format(date, 'yyyy-MM-dd');
-                          setSelectedDate(formattedDate);
-                        }
-                      }}
-                      openToDate={
-                        selectedDate ? parseISO(selectedDate) : new Date()
-                      }
+                      openToDate={directFlight.date || new Date()}
                       disabledKeyboardNavigation
                       preventOpenOnFocus
+                      onCalendarClose={() => {
+                        // Ensure we're not in a loop when the calendar closes
+                        if (directFlight.date) {
+                          const formattedDate = format(
+                            directFlight.date,
+                            'yyyy-MM-dd'
+                          );
+                          if (formattedDate !== selectedDate) {
+                            setSelectedDate(formattedDate);
+                          }
+                        }
+                      }}
                     />
                   </div>
 
                   <div className="flex flex-col gap-4">
                     <button
                       onClick={() => {
-                        setIsSearchModalOpen(true);
+                        setSearchModalOpen(true);
                         handleSearchFlights();
                       }}
                       disabled={
-                        !directFlight.date || !isValidDate(directFlight.date)
+                        !directFlight.date ||
+                        !isValid(
+                          directFlight.date instanceof Date
+                            ? directFlight.date
+                            : new Date(directFlight.date)
+                        )
                       }
                       className="w-full h-12 px-4 py-2 text-white bg-[#F54538] rounded-xl hover:bg-[#F54538]/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#F54538] disabled:opacity-50 disabled:cursor-not-allowed font-sans font-medium text-base"
                     >
@@ -2396,8 +2671,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
 
         {/* Flight Details Section */}
         {((selectedType === 'direct' && directFlight.selectedFlight) ||
-          (selectedType === 'multi' &&
-            flightSegments.some((segment) => segment.selectedFlight))) &&
+          (selectedType === 'multi' && selectedFlights.length > 0)) &&
           showFlightDetails &&
           (currentPhase === 3 || currentPhase === 4) && (
             <div className="pt-8">
@@ -2406,14 +2680,18 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                   Your flight details
                 </h3>
                 {showFlightDetails &&
-                  (selectedType === 'direct'
-                    ? directFlight.selectedFlight &&
-                      renderFlightPreviewCard(directFlight.selectedFlight, 0)
-                    : flightSegments.map(
-                        (segment, index) =>
-                          segment.selectedFlight &&
-                          renderFlightPreviewCard(segment.selectedFlight, index)
-                      ))}
+                  (selectedType === 'direct' ? (
+                    directFlight.selectedFlight &&
+                    renderFlightPreviewCard(directFlight.selectedFlight, 0)
+                  ) : (
+                    <>
+                      {selectedFlights
+                        .filter((flight): flight is Flight => flight !== null)
+                        .map((flight, index) =>
+                          renderFlightPreviewCard(flight, index)
+                        )}
+                    </>
+                  ))}
               </div>
             </div>
           )}
@@ -2423,7 +2701,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
           (currentPhase === 3 || currentPhase === 4) && (
             <BottomSheet
               isOpen={isSearchModalOpen}
-              onClose={() => setIsSearchModalOpen(false)}
+              onClose={() => setSearchModalOpen(false)}
               title="Select Flight"
             >
               <div className="flex flex-col h-full">
@@ -2475,7 +2753,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                       </p>
                       <div className="mt-8 flex justify-center w-full">
                         <button
-                          onClick={() => setIsSearchModalOpen(false)}
+                          onClick={() => setSearchModalOpen(false)}
                           className="px-8 h-12 bg-red-50 text-[#F54538] rounded-lg font-medium hover:bg-red-100 transition-colors text-sm"
                         >
                           Flight Not Listed?
@@ -2499,7 +2777,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                       </p>
                       <div className="mt-8 flex justify-center w-full">
                         <button
-                          onClick={() => setIsSearchModalOpen(false)}
+                          onClick={() => setSearchModalOpen(false)}
                           className="px-8 h-12 bg-red-50 text-[#F54538] rounded-lg font-medium hover:bg-red-100 transition-colors text-sm"
                         >
                           Flight Not Listed?
@@ -2594,7 +2872,11 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                                   <tr
                                     key={flight.id}
                                     onClick={() =>
-                                      handleFlightSelect(flight, index)
+                                      handleFlightSelect({
+                                        flight,
+                                        segmentIndex: currentSegmentIndex,
+                                        selectedType: selectedType,
+                                      })
                                     }
                                     className={`cursor-pointer hover:bg-gray-100 ${
                                       index % 2 === 0
@@ -2653,7 +2935,13 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                           filteredFlights.map((flight) => (
                             <button
                               key={flight.id}
-                              onClick={() => handleFlightSelect(flight, 0)}
+                              onClick={() =>
+                                handleFlightSelect({
+                                  flight,
+                                  segmentIndex: currentSegmentIndex,
+                                  selectedType: selectedType,
+                                })
+                              }
                               className="w-full text-left p-4 bg-white border border-gray-200 rounded-lg hover:border-[#F54538] hover:shadow-lg transition-all"
                             >
                               <div className="flex flex-col space-y-3">

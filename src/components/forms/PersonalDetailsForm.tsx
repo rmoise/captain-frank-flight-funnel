@@ -23,12 +23,14 @@ interface PersonalDetailsFormProps {
   onComplete: (details: PassengerDetails | null) => void;
   onInteract?: () => void;
   isClaimSuccess?: boolean;
+  showAdditionalFields?: boolean;
 }
 
 export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
   onComplete,
   onInteract,
   isClaimSuccess = false,
+  showAdditionalFields = false,
 }) => {
   const {
     personalDetails: storedDetails,
@@ -76,8 +78,8 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
               hasInteracted ? validationState.fieldErrors.salutation : undefined
             }
             options={[
-              { value: 'herr', label: 'Mr.' },
-              { value: 'frau', label: 'Mrs./Ms.' },
+              { value: 'herr', label: 'Herr' },
+              { value: 'frau', label: 'Frau' },
             ]}
             required={isClaimSuccess}
           />
@@ -116,7 +118,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
             required={isClaimSuccess}
           />
         </div>
-        {isClaimSuccess && (
+        {showAdditionalFields && (
           <>
             <div>
               <Input

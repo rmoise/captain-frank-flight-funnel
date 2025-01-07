@@ -38,6 +38,11 @@ interface FlightSelectorProps {
   selectedFlight?: Flight | null;
   currentPhase?: number;
   stepNumber: ValidationStateSteps;
+  setValidationState: (
+    state:
+      | Record<number, boolean>
+      | ((prev: Record<number, boolean>) => Record<number, boolean>)
+  ) => void;
 }
 
 interface QAWizardProps {
@@ -52,6 +57,8 @@ interface QAWizardProps {
 interface PersonalDetailsFormProps {
   onComplete: (details: PassengerDetails | null) => void;
   onInteract: () => void;
+  isClaimSuccess?: boolean;
+  showAdditionalFields?: boolean;
 }
 
 interface TermsAndConditionsProps {
@@ -97,33 +104,22 @@ const summaryInitialState: StoreStateValues = {
       selectedFlight: null,
     },
   ],
-  currentSegmentIndex: 0,
+  currentPhase: 1,
+  isSearchModalOpen: false,
+  searchTerm: '',
+  displayedFlights: [],
+  allFlights: [],
+  loading: false,
+  errorMessage: null,
+  errorMessages: {},
+  selectedFlights: [],
+  selectedFlight: null,
   fromLocation: null,
   toLocation: null,
   selectedDate: null,
-  selectedFlights: [],
-  selectedFlight: null,
-  flightDetails: null,
-  delayDuration: null,
-  wizardCurrentSteps: {},
-  wizardAnswers: [],
-  wizardIsCompleted: false,
-  wizardSuccessMessage: '',
-  wizardIsEditingMoney: false,
-  wizardLastActiveStep: null,
-  wizardShowingSuccess: false,
-  wizardValidationState: {},
-  wizardIsValidating: false,
-  personalDetails: null,
-  termsAccepted: false,
-  privacyAccepted: false,
-  marketingAccepted: false,
-  currentPhase: 1,
-  completedPhases: [],
-  currentStep: 1,
-  completedSteps: [],
-  openSteps: [1],
-  locationError: null,
+  currentSegmentIndex: 0,
+  isTransitioningPhases: false,
+  isInitializing: false,
   validationState: {
     isFlightValid: false,
     isWizardValid: false,
@@ -149,22 +145,29 @@ const summaryInitialState: StoreStateValues = {
     3: false,
     4: false,
   },
-  isValidating: false,
+  completedSteps: [],
   bookingNumber: '',
-  lastAnsweredQuestion: null,
-  compensationAmount: null,
-  compensationLoading: false,
-  compensationError: null,
-  isInitializing: false,
-  isTransitioningPhases: false,
-  wizardIsValid: false,
+  phasesCompletedViaContinue: [],
+  locationError: null,
   completedWizards: {},
-  compensationCache: {
-    amount: null,
-    flightData: null,
-  },
   signature: '',
   hasSignature: false,
+  wizardCurrentSteps: {},
+  wizardAnswers: [],
+  wizardIsCompleted: false,
+  wizardSuccessMessage: '',
+  wizardIsEditingMoney: false,
+  wizardLastActiveStep: null,
+  wizardShowingSuccess: false,
+  wizardValidationState: {},
+  wizardIsValidating: false,
+  personalDetails: null,
+  termsAccepted: false,
+  privacyAccepted: false,
+  marketingAccepted: false,
+  completedPhases: [],
+  currentStep: 1,
+  openSteps: [1],
   tripExperienceAnswers: [],
   lastValidAnswers: [],
   lastValidStep: 0,
@@ -179,7 +182,18 @@ const summaryInitialState: StoreStateValues = {
     status: null,
   },
   isLoading: false,
-  phasesCompletedViaContinue: [],
+  flightDetails: null,
+  delayDuration: null,
+  wizardIsValid: false,
+  lastAnsweredQuestion: null,
+  compensationAmount: null,
+  compensationLoading: false,
+  compensationError: null,
+  compensationCache: {
+    amount: null,
+    flightData: null,
+  },
+  isValidating: false,
 };
 
 export default function InitialAssessment() {
@@ -216,6 +230,7 @@ export default function InitialAssessment() {
     isStepValid,
     canProceedToNextPhase,
     completedSteps,
+    updateValidationState,
   } = useStore();
 
   // Single initialization effect
@@ -345,6 +360,35 @@ export default function InitialAssessment() {
           selectedFlight: selectedFlights[0] || null,
           currentPhase: 1,
           stepNumber: 1 as ValidationStateSteps,
+          setValidationState: (
+            state:
+              | Record<number, boolean>
+              | ((prev: Record<number, boolean>) => Record<number, boolean>)
+          ) => {
+            // Update validation state for step 1
+            if (typeof state === 'function') {
+              const newState = state({} as Record<number, boolean>);
+              updateValidationState({
+                stepValidation: {
+                  1: newState[1] || false,
+                  2: false,
+                  3: false,
+                  4: false,
+                },
+                1: newState[1] || false,
+              });
+            } else {
+              updateValidationState({
+                stepValidation: {
+                  1: state[1] || false,
+                  2: false,
+                  3: false,
+                  4: false,
+                },
+                1: state[1] || false,
+              });
+            }
+          },
         },
         getSummary: (state: StoreStateValues) => {
           const from = state.fromLocation;
@@ -421,6 +465,8 @@ export default function InitialAssessment() {
           },
           onInteract: () =>
             setInteractedSteps((prev) => [...new Set([...prev, 3])]),
+          isClaimSuccess: true,
+          showAdditionalFields: false,
         } as PersonalDetailsFormProps,
         getSummary: (state: StoreStateValues) => {
           const details = state.personalDetails;
@@ -502,6 +548,7 @@ export default function InitialAssessment() {
     setPersonalDetails,
     setInteractedSteps,
     handleComplete,
+    updateValidationState,
   ]);
 
   // Define steps with memoization

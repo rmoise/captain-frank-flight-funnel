@@ -21,11 +21,12 @@ import { accordionConfig } from '@/config/accordion';
 
 export default function FlightDetailsPage() {
   const router = useRouter();
-  const [bookingNumber, setLocalBookingNumber] = useState('');
-  const [interactedSteps, setInteractedSteps] = useState<number[]>([]);
-  const [isBookingInputFocused, setIsBookingInputFocused] = useState(false);
-  const [openSteps, setOpenSteps] = useState<number[]>([1]);
   const [mounted, setMounted] = useState(false);
+  const [bookingNumber, setLocalBookingNumber] = useState('');
+  const [isBookingInputFocused, setIsBookingInputFocused] = useState(false);
+  const [interactedSteps, setInteractedSteps] = useState<number[]>([]);
+  const [openSteps, setOpenSteps] = useState<number[]>([]);
+  const [, setValidationState] = useState<Record<number, boolean>>({});
   const phaseInitialized = useRef(false);
   const initRef = useRef(false);
 
@@ -36,7 +37,7 @@ export default function FlightDetailsPage() {
     completedSteps,
     bookingNumber: storedBookingNumber,
     setSelectedFlights,
-    setBookingNumber,
+    setBookingNumber: setStoreBookingNumber,
     completePhase,
   } = useStore();
 
@@ -88,7 +89,7 @@ export default function FlightDetailsPage() {
 
   const handleBookingNumberChange = (value: string) => {
     setLocalBookingNumber(value);
-    setBookingNumber(value);
+    setStoreBookingNumber(value);
   };
 
   const canContinue = useMemo(() => {
@@ -170,6 +171,23 @@ export default function FlightDetailsPage() {
                     currentPhase={3}
                     stepNumber={1}
                     showFlightDetails={true}
+                    setValidationState={(
+                      state:
+                        | Record<number, boolean>
+                        | ((
+                            prev: Record<number, boolean>
+                          ) => Record<number, boolean>)
+                    ) => {
+                      // Update validation state for step 1
+                      if (typeof state === 'function') {
+                        setValidationState(state);
+                      } else {
+                        setValidationState((prev) => ({
+                          ...prev,
+                          1: state[1] || false,
+                        }));
+                      }
+                    }}
                   />
                 </div>
               </AccordionCard>

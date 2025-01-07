@@ -15,6 +15,7 @@ interface InputProps {
   autocomplete?: string;
   maxLength?: number;
   suggestionsVisible?: boolean;
+  placeholder?: string;
 }
 
 export const Input: React.FC<InputProps> = ({
@@ -31,6 +32,7 @@ export const Input: React.FC<InputProps> = ({
   autocomplete,
   maxLength,
   suggestionsVisible = false,
+  placeholder,
 }) => {
   const [isFieldFocused, setIsFieldFocused] = useState(isFocused);
   const [isTouched, setIsTouched] = useState(false);
@@ -108,7 +110,7 @@ export const Input: React.FC<InputProps> = ({
             [&:-webkit-autofill+label]:opacity-0
           `}
           autoComplete={autocomplete}
-          placeholder=""
+          placeholder={placeholder}
           maxLength={maxLength}
           aria-label={label}
           aria-invalid={showError || showRequiredError}

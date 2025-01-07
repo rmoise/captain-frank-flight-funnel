@@ -116,15 +116,16 @@ export const Select: React.FC<SelectProps> = ({
   `;
 
   const labelClassName = `
-    absolute left-4 px-1
+    absolute left-4
     transition-all duration-[200ms] cubic-bezier(0.4, 0, 0.2, 1)
-    pointer-events-none bg-white
-    text-[#9BA3AF] after:content-['*'] after:text-[#F54538] after:ml-[1px] after:align-super after:text-[10px]
+    pointer-events-none select-none
+    text-[#9BA3AF] font-heebo bg-white px-1
     ${
       value || isOpen
-        ? 'translate-y-[-12px] text-[12px] font-medium'
-        : 'translate-y-[14px] text-[14px]'
+        ? '-translate-y-[8px] text-[10px] z-10'
+        : 'translate-y-[14px] text-base'
     }
+    ${isOpen ? 'text-[#464646]' : ''}
   `;
 
   const renderDropdown = () => {
@@ -194,8 +195,10 @@ export const Select: React.FC<SelectProps> = ({
         </button>
         {label && (
           <label className={labelClassName}>
-            {label.replace(' *', '')}
-            {required && <span className="text-red-500 ml-1">*</span>}
+            {label}
+            {required && (
+              <span className="text-[#F54538] ml-0.5 text-base">*</span>
+            )}
           </label>
         )}
         <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">

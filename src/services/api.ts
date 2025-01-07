@@ -401,8 +401,12 @@ class ApiClient {
     try {
       console.log('Evaluating claim with data:', data);
 
+      // Use the correct base URL for development
+      const baseUrl =
+        process.env.NODE_ENV === 'development' ? 'http://localhost:8888' : '';
+
       const response = await fetch(
-        '/.netlify/functions/evaluateeuflightclaim',
+        `${baseUrl}/.netlify/functions/evaluateEuFlightClaim`,
         {
           method: 'POST',
           headers: {

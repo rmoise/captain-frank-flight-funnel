@@ -517,10 +517,10 @@ export const QAWizard: React.FC<QAWizardProps> = ({
                     <motion.button
                       onClick={goToNext}
                       disabled={!isCurrentQuestionAnswered}
-                      className={`px-4 py-2 bg-[#F54538] text-white rounded-md ${
+                      className={`px-4 py-2 bg-[#E5F0F9] text-[#1E3A8A] rounded-md ${
                         !isCurrentQuestionAnswered
                           ? 'opacity-50 cursor-not-allowed'
-                          : 'hover:bg-[#E03E32]'
+                          : 'hover:bg-[#D1E4F5]'
                       }`}
                       whileHover={
                         isCurrentQuestionAnswered ? { scale: 1.05 } : {}
@@ -532,23 +532,27 @@ export const QAWizard: React.FC<QAWizardProps> = ({
                       Next
                     </motion.button>
                   ) : (
-                    <motion.button
-                      onClick={goToNext}
-                      disabled={!isCurrentQuestionAnswered}
-                      className={`px-4 py-2 bg-[#F54538] text-white rounded-md ${
-                        !isCurrentQuestionAnswered
-                          ? 'opacity-50 cursor-not-allowed'
-                          : 'hover:bg-[#E03E32]'
-                      }`}
-                      whileHover={
-                        isCurrentQuestionAnswered ? { scale: 1.05 } : {}
-                      }
-                      whileTap={
-                        isCurrentQuestionAnswered ? { scale: 0.95 } : {}
-                      }
-                    >
-                      Complete
-                    </motion.button>
+                    // Only show Complete button on last question when answered
+                    wizardCurrentStep === visibleQuestions.length - 1 &&
+                    isCurrentQuestionAnswered && (
+                      <motion.button
+                        onClick={goToNext}
+                        disabled={!isCurrentQuestionAnswered}
+                        className={`px-4 py-2 bg-[#DCF5E6] text-[#059669] rounded-md ${
+                          !isCurrentQuestionAnswered
+                            ? 'opacity-50 cursor-not-allowed'
+                            : 'hover:bg-[#C7EBD8]'
+                        }`}
+                        whileHover={
+                          isCurrentQuestionAnswered ? { scale: 1.05 } : {}
+                        }
+                        whileTap={
+                          isCurrentQuestionAnswered ? { scale: 0.95 } : {}
+                        }
+                      >
+                        Complete
+                      </motion.button>
+                    )
                   )}
                 </div>
               </div>

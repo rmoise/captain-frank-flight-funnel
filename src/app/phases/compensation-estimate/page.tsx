@@ -8,7 +8,7 @@ import { SpeechBubble } from '@/components/SpeechBubble';
 import { ContinueButton } from '@/components/shared/ContinueButton';
 import { BackButton } from '@/components/shared/BackButton';
 import { PhaseNavigation } from '@/components/PhaseNavigation';
-import type { Flight } from '@/types/store';
+import type { LocationData } from '@/types/store';
 
 type RouteInfo = {
   departureCity: string;
@@ -48,7 +48,22 @@ export default function CompensationEstimatePage() {
     setMounted(true);
     setCurrentPhase(2);
     completePhase(1);
-  }, [setCurrentPhase, completePhase]);
+
+    // Debug log the state
+    console.log('Flight State:', {
+      selectedType,
+      directFlight,
+      flightSegments,
+      selectedFlights,
+    });
+  }, [
+    setCurrentPhase,
+    completePhase,
+    selectedType,
+    directFlight,
+    flightSegments,
+    selectedFlights,
+  ]);
 
   useEffect(() => {
     if (!fromLocation || !toLocation) return;
@@ -268,63 +283,93 @@ export default function CompensationEstimatePage() {
             <SpeechBubble message="There's a good chance that you're entitled to a claim! Let me help you. Completely risk-free: I only receive a commission fee of 30% (including VAT) if I'm successful." />
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-xl font-semibold mb-4">Flight Summary</h2>
-              {routeInfo ? (
+              <div className="space-y-4">
+                {personalDetails && (
+                  <div className="pb-4 border-b border-gray-100">
+                    <p className="text-gray-600">Passenger</p>
+                    <p className="font-medium">
+                      {personalDetails.firstName} {personalDetails.lastName}
+                    </p>
+                  </div>
+                )}
                 <div className="space-y-4">
-                  {personalDetails && (
-                    <div className="pb-4 border-b border-gray-100">
-                      <p className="text-gray-600">Passenger</p>
-                      <p className="font-medium">
-                        {personalDetails.firstName} {personalDetails.lastName}
-                      </p>
-                    </div>
-                  )}
-                  <div className="space-y-4">
-                    {selectedType === 'direct' ? (
-                      <>
-                        <div>
-                          <p className="text-gray-600">From</p>
-                          <p className="font-medium">
-                            {routeInfo.departureCity}
+                  {selectedType === 'direct' ? (
+                    <>
+                      <div>
+                        <p className="text-gray-600">From</p>
+                        <p className="font-medium">
+                          {directFlight?.selectedFlight?.departureCity ||
+                            (directFlight?.fromLocation as LocationData)
+                              ?.city ||
+                            (
+                              directFlight?.fromLocation as LocationData
+                            )?.dropdownLabel
+                              ?.split('(')[0]
+                              ?.trim() ||
+                            directFlight?.selectedFlight?.departure ||
+                            'No departure city available'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">To</p>
+                        <p className="font-medium">
+                          {directFlight?.selectedFlight?.arrivalCity ||
+                            (directFlight?.toLocation as LocationData)?.city ||
+                            (
+                              directFlight?.toLocation as LocationData
+                            )?.dropdownLabel
+                              ?.split('(')[0]
+                              ?.trim() ||
+                            directFlight?.selectedFlight?.arrival ||
+                            'No arrival city available'}
+                        </p>
+                      </div>
+                    </>
+                  ) : selectedType === 'multi' ? (
+                    flightSegments.map((segment, index) => {
+                      if (!segment) return null;
+                      const fromLocation = segment.fromLocation as LocationData;
+                      const toLocation = segment.toLocation as LocationData;
+                      const selectedFlight = segment.selectedFlight;
+                      const departureCity =
+                        selectedFlight?.departureCity ||
+                        fromLocation?.city ||
+                        fromLocation?.dropdownLabel?.split('(')[0]?.trim() ||
+                        selectedFlight?.departure ||
+                        'No departure city available';
+                      const arrivalCity =
+                        selectedFlight?.arrivalCity ||
+                        toLocation?.city ||
+                        toLocation?.dropdownLabel?.split('(')[0]?.trim() ||
+                        selectedFlight?.arrival ||
+                        'No arrival city available';
+
+                      return (
+                        <div
+                          key={index}
+                          className="pb-4 border-b border-gray-100 last:border-b-0"
+                        >
+                          <p className="text-gray-600 font-medium mb-2">
+                            Flight {index + 1}
                           </p>
-                        </div>
-                        <div>
-                          <p className="text-gray-600">To</p>
-                          <p className="font-medium">{routeInfo.arrivalCity}</p>
-                        </div>
-                      </>
-                    ) : (
-                      (selectedFlights as Flight[]).map(
-                        (flight: Flight, index: number) => (
-                          <div
-                            key={index}
-                            className="pb-4 border-b border-gray-100 last:border-b-0"
-                          >
-                            <p className="text-gray-600 font-medium mb-2">
-                              Flight {index + 1}
-                            </p>
-                            <div className="space-y-2">
-                              <div>
-                                <p className="text-gray-600">From</p>
-                                <p className="font-medium">
-                                  {flight.departureCity}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="text-gray-600">To</p>
-                                <p className="font-medium">
-                                  {flight.arrivalCity}
-                                </p>
-                              </div>
+                          <div className="space-y-2">
+                            <div>
+                              <p className="text-gray-600">From</p>
+                              <p className="font-medium">{departureCity}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-600">To</p>
+                              <p className="font-medium">{arrivalCity}</p>
                             </div>
                           </div>
-                        )
-                      )
-                    )}
-                  </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p>No flight details available</p>
+                  )}
                 </div>
-              ) : (
-                <p>No flight details available</p>
-              )}
+              </div>
             </div>
 
             <div className="bg-white rounded-lg shadow-sm p-6">
