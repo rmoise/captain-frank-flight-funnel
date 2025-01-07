@@ -3,7 +3,6 @@
 import React from 'react';
 import { useStore } from '@/lib/state/store';
 import { PhaseGuard } from '@/components/shared/PhaseGuard';
-import type { Flight } from '@/types/store';
 import { QAWizardWrapper } from '@/components/wizard/QAWizardWrapper';
 import type { ValidationStateSteps } from '@/lib/state/store';
 import type { Answer } from '@/types/wizard';
