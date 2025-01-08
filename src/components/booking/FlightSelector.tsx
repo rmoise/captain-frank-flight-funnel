@@ -2433,60 +2433,116 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                         </div>
                       </div>
                     </div>
-                    {/* Add delete button in a circle for segments after the first two */}
+                    {/* Show delete button for segments after the first two on both mobile and desktop */}
                     {index > 1 && (
-                      <div className="absolute -right-12 top-1/2 -translate-y-1/2">
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
+                      <>
+                        {/* Mobile delete button */}
+                        <div className="md:hidden absolute -right-6 top-1/2 -translate-y-1/2">
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
 
-                            // Remove the segment if it's beyond the minimum required
-                            const newSegments = flightSegments.filter(
-                              (_, i) => i !== index
-                            );
+                              // Remove the segment if it's beyond the minimum required
+                              const newSegments = flightSegments.filter(
+                                (_, i) => i !== index
+                              );
 
-                            // Ensure we maintain connections between segments
-                            if (
-                              index > 0 &&
-                              index < flightSegments.length - 1
-                            ) {
-                              // When removing a middle segment, connect the segments before and after
-                              const prevSegment = newSegments[index - 1];
-                              const nextSegment = newSegments[index];
+                              // Ensure we maintain connections between segments
+                              if (
+                                index > 0 &&
+                                index < flightSegments.length - 1
+                              ) {
+                                // When removing a middle segment, connect the segments before and after
+                                const prevSegment = newSegments[index - 1];
+                                const nextSegment = newSegments[index];
 
-                              // Clear the connection points since they need to be re-established
-                              if (prevSegment && nextSegment) {
-                                prevSegment.toLocation = null;
-                                prevSegment.selectedFlight = null;
-                                nextSegment.fromLocation = null;
-                                nextSegment.selectedFlight = null;
+                                // Clear the connection points since they need to be re-established
+                                if (prevSegment && nextSegment) {
+                                  prevSegment.toLocation = null;
+                                  prevSegment.selectedFlight = null;
+                                  nextSegment.fromLocation = null;
+                                  nextSegment.selectedFlight = null;
+                                }
                               }
-                            }
 
-                            // Update the store with the new segments
-                            setFlightSegments(newSegments);
+                              // Update the store with the new segments
+                              setFlightSegments(newSegments);
 
-                            // Update selected flights array
-                            const remainingFlights = newSegments
-                              .map((segment) => segment.selectedFlight)
-                              .filter(
-                                (flight): flight is Flight => flight !== null
+                              // Update selected flights array
+                              const remainingFlights = newSegments
+                                .map((segment) => segment.selectedFlight)
+                                .filter(
+                                  (flight): flight is Flight => flight !== null
+                                );
+                              setSelectedFlights(remainingFlights);
+
+                              // Reset current segment index if needed
+                              if (currentSegmentIndex >= newSegments.length) {
+                                setCurrentSegmentIndex(
+                                  Math.max(0, newSegments.length - 1)
+                                );
+                              }
+                            }}
+                            className="w-7 h-7 rounded-full bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors shadow-sm"
+                          >
+                            <TrashIcon className="h-3.5 w-3.5 text-gray-500" />
+                          </button>
+                        </div>
+                        {/* Desktop delete button */}
+                        <div className="hidden md:block absolute -right-12 top-1/2 -translate-y-1/2">
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+
+                              // Remove the segment if it's beyond the minimum required
+                              const newSegments = flightSegments.filter(
+                                (_, i) => i !== index
                               );
-                            setSelectedFlights(remainingFlights);
 
-                            // Reset current segment index if needed
-                            if (currentSegmentIndex >= newSegments.length) {
-                              setCurrentSegmentIndex(
-                                Math.max(0, newSegments.length - 1)
-                              );
-                            }
-                          }}
-                          className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors shadow-sm"
-                        >
-                          <TrashIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-500" />
-                        </button>
-                      </div>
+                              // Ensure we maintain connections between segments
+                              if (
+                                index > 0 &&
+                                index < flightSegments.length - 1
+                              ) {
+                                // When removing a middle segment, connect the segments before and after
+                                const prevSegment = newSegments[index - 1];
+                                const nextSegment = newSegments[index];
+
+                                // Clear the connection points since they need to be re-established
+                                if (prevSegment && nextSegment) {
+                                  prevSegment.toLocation = null;
+                                  prevSegment.selectedFlight = null;
+                                  nextSegment.fromLocation = null;
+                                  nextSegment.selectedFlight = null;
+                                }
+                              }
+
+                              // Update the store with the new segments
+                              setFlightSegments(newSegments);
+
+                              // Update selected flights array
+                              const remainingFlights = newSegments
+                                .map((segment) => segment.selectedFlight)
+                                .filter(
+                                  (flight): flight is Flight => flight !== null
+                                );
+                              setSelectedFlights(remainingFlights);
+
+                              // Reset current segment index if needed
+                              if (currentSegmentIndex >= newSegments.length) {
+                                setCurrentSegmentIndex(
+                                  Math.max(0, newSegments.length - 1)
+                                );
+                              }
+                            }}
+                            className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors shadow-sm"
+                          >
+                            <TrashIcon className="h-4 w-4 text-gray-500" />
+                          </button>
+                        </div>
+                      </>
                     )}
                   </div>
                 </div>
