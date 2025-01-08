@@ -80,7 +80,7 @@ export const wizardQuestions: Question[] = [
   },
   {
     id: 'alternative_flight_airline_expense',
-    text: 'Did the airline provide an alternative flight?',
+    text: 'Hat dir die Airline einen alternativen Flug gebucht?',
     type: 'radio',
     options: [
       { id: 'yes', label: 'Ja', value: 'yes' },
@@ -91,7 +91,7 @@ export const wizardQuestions: Question[] = [
   },
   {
     id: 'alternative_flight_own_expense',
-    text: 'Did you book an alternative flight at your own expense?',
+    text: 'Hast du deinen alternativen Flug auf deine eigenen Kosten gebucht?',
     type: 'radio',
     options: [
       { id: 'yes', label: 'Ja', value: 'yes' },
@@ -104,7 +104,7 @@ export const wizardQuestions: Question[] = [
   },
   {
     id: 'refund_status',
-    text: 'Were your ticket costs refunded?',
+    text: 'Wurden deine Ticket Kosten erstattet?',
     type: 'radio',
     options: [
       { id: 'yes', label: 'Ja', value: 'yes' },

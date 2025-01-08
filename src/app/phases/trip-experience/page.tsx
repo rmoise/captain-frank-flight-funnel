@@ -50,7 +50,7 @@ const questions: Question[] = [
   },
   {
     id: 'refund_status',
-    text: 'Wurden dir die Ticketkosten erstattet?',
+    text: 'Wurden deine Ticket Kosten erstattet?',
     type: 'radio',
     options: [
       { id: 'yes', value: 'yes', label: 'Ja' },
@@ -63,7 +63,7 @@ const questions: Question[] = [
   },
   {
     id: 'ticket_cost',
-    text: 'How much did you pay for your ticket?',
+    text: 'Wie viel hast du für dein Ticket bezahlt?',
     type: 'money',
     showIf: (answers: Answer[]) => {
       const hasNoneTravel = answers.some(
@@ -89,7 +89,7 @@ const questions: Question[] = [
   },
   {
     id: 'alternative_flight_own_expense',
-    text: 'Please search for the alternative flight you took at your own expense.',
+    text: 'Hast du deinen alternativen Flug auf deine eigenen Kosten gebucht?',
     type: 'flight_selector',
     showIf: (answers: Answer[]) =>
       answers.some(
@@ -161,6 +161,7 @@ export default function TripExperiencePage() {
   } = useStore();
 
   const initRef = useRef(false);
+  const step2OpenedRef = useRef(false);
 
   // Filter answers for each wizard
   const tripExperienceAnswers = useMemo(() => {
@@ -377,51 +378,20 @@ export default function TripExperiencePage() {
     }
   }, [mounted, setOpenSteps]);
 
-  // Keep steps open when completed and handle transitions
+  // Add effect to handle automatic opening of step 2 when step 1 is completed
   useEffect(() => {
-    console.log('Validation state changed:', validationState.stepValidation);
-    console.log('Current open steps:', openSteps);
-
     if (
-      validationState.stepValidation[2] ||
-      validationState.stepValidation[3]
+      validationState.stepValidation[2] &&
+      !validationState.stepValidation[3] &&
+      !step2OpenedRef.current
     ) {
-      const newOpenSteps = [...openSteps];
-      let hasChanges = false;
-
-      // Keep completed steps open and handle transitions
-      if (validationState.stepValidation[2]) {
-        // Keep step 1 (ID: 2) open if completed
-        if (!openSteps.includes(2)) {
-          console.log('Step 1 (ID: 2) is validated, adding to open steps');
-          newOpenSteps.push(2);
-          hasChanges = true;
-        }
-
-        // Automatically open step 2 (ID: 3) when step 1 is completed
-        if (!openSteps.includes(3)) {
-          console.log('Opening step 2 (ID: 3) after step 1 completion');
-          newOpenSteps.push(3);
-          hasChanges = true;
-        }
-      }
-
-      // Keep step 2 (ID: 3) open if completed
-      if (validationState.stepValidation[3] && !openSteps.includes(3)) {
-        console.log('Step 2 (ID: 3) is validated, adding to open steps');
-        newOpenSteps.push(3);
-        hasChanges = true;
-      }
-
-      if (hasChanges) {
-        const uniqueSteps = Array.from(new Set(newOpenSteps)).sort(
-          (a, b) => a - b
-        );
-        console.log('Setting new open steps:', uniqueSteps);
-        setOpenSteps(uniqueSteps);
+      // Only open step 2 if it's not already in the openSteps array and hasn't been opened before
+      if (!openSteps.includes(3)) {
+        setOpenSteps([...openSteps, 3]);
+        step2OpenedRef.current = true;
       }
     }
-  }, [validationState.stepValidation, openSteps, setOpenSteps]);
+  }, [validationState.stepValidation, openSteps]);
 
   // Save answers to localStorage when they change
   useEffect(() => {
