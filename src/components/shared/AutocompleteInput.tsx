@@ -314,7 +314,9 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
             ))}
           </ul>
         ) : (
-          <div className="px-4 py-2 text-[#4B616D]">No results found</div>
+          <div className="px-4 py-2 text-[#4B616D]">
+            Keine Ergebnisse gefunden
+          </div>
         )}
       </div>
     );

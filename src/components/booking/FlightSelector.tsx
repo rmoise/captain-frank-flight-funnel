@@ -966,9 +966,8 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
           {
             value: '',
             label: '',
-            description: 'Please enter at least 3 characters to search',
-            city: '',
-            dropdownLabel: 'Please enter at least 3 characters to search',
+            description: 'Bitte geben Sie mindestens 3 Zeichen ein',
+            dropdownLabel: 'Bitte geben Sie mindestens 3 Zeichen ein',
           },
         ];
       }
@@ -1383,6 +1382,17 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
     if (selectedType !== 'multi') {
       setSelectedType('multi');
     }
+
+    // Update validation state to false for the new segment
+    if (setValidationState && stepNumber) {
+      setValidationState((prev: Record<number, boolean>) => ({
+        ...prev,
+        [stepNumber]: false,
+      }));
+    }
+
+    // Clear any selected flights array since we have a new incomplete segment
+    setSelectedFlights([]);
   };
 
   // Update the cleanup effect to not remove empty segments that were just added
@@ -1692,8 +1702,15 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
         }
       }
 
-      // Update segments first
-      setFlightSegments(newSegments);
+      // Update store state in a single batch to trigger validation
+      batchUpdateWizardState({
+        flightSegments: newSegments,
+        selectedFlights: newSegments
+          .map((segment) => segment.selectedFlight)
+          .filter((flight): flight is Flight => flight !== null),
+        selectedFlight: null,
+        currentSegmentIndex: index,
+      });
 
       // Update store locations if this is the first segment
       if (index === 0) {
@@ -1704,25 +1721,34 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
         }
       }
 
-      // Update selected flights array while maintaining order
-      const updatedSelectedFlights = newSegments
-        .map((segment) => segment.selectedFlight)
-        .filter((flight): flight is Flight => flight !== null);
-
-      setSelectedFlights(updatedSelectedFlights);
-
-      // Clear selected flight in store if we cleared the current segment's flight
-      if (currentSegmentIndex === index) {
-        setSelectedFlight(null);
-      }
-
       // Clear error message
       setFlightErrorMessage(null);
 
+      // Update validation state based on current phase
+      if (setValidationState && stepNumber) {
+        if (currentPhase === 3) {
+          // For phase 3, all segments must have selected flights
+          const allSegmentsHaveFlights = newSegments.every(
+            (segment) => segment.selectedFlight !== null
+          );
+          setValidationState((prev: Record<number, boolean>) => ({
+            ...prev,
+            [stepNumber]: allSegmentsHaveFlights,
+          }));
+        } else {
+          // For phase 1, all segments must have both locations
+          const allSegmentsHaveLocations = newSegments.every(
+            (segment) => segment.fromLocation && segment.toLocation
+          );
+          setValidationState((prev: Record<number, boolean>) => ({
+            ...prev,
+            [stepNumber]: allSegmentsHaveLocations,
+          }));
+        }
+      }
+
       // Notify parent of changes
-      onSelect(
-        updatedSelectedFlights.length > 0 ? updatedSelectedFlights : null
-      );
+      onSelect(null);
       onInteract();
     } catch (error) {
       console.error('Error updating flight locations:', error);
@@ -2409,7 +2435,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                     </div>
                     {/* Add delete button in a circle for segments after the first two */}
                     {index > 1 && (
-                      <div className="absolute left-[calc(100%-0.25rem)] top-[3.25rem]">
+                      <div className="absolute -right-12 top-1/2 -translate-y-1/2">
                         <button
                           onClick={(e) => {
                             e.preventDefault();
@@ -2723,7 +2749,8 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
 
         {/* Flight Details Section */}
         {((selectedType === 'direct' && directFlight.selectedFlight) ||
-          (selectedType === 'multi' && selectedFlights.length > 0)) &&
+          (selectedType === 'multi' &&
+            flightSegments.some((segment) => segment.selectedFlight))) &&
           showFlightDetails &&
           (currentPhase === 3 || currentPhase === 4) && (
             <div className="pt-8">

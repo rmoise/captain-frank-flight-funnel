@@ -34,11 +34,12 @@ export const validateFlightSelection = (state: StoreStateValues): boolean => {
       const segments = state.flightSegments;
 
       if (state.currentPhase === 1) {
-        // For phase 1, validate if first segment has both locations
+        // For phase 1, validate if all segments have both locations
         isValid = !!(
           segments.length >= 2 &&
-          segments[0]?.fromLocation &&
-          segments[0]?.toLocation
+          segments.every(
+            (segment) => segment.fromLocation && segment.toLocation
+          )
         );
       } else {
         // For other phases, check if we have all segments and flights
@@ -2077,6 +2078,7 @@ export const useStore = create<StoreState & StoreActions>()(
                   (a, b) => a - b
                 )
               : state.completedSteps.filter((step) => step !== 1),
+            openSteps: Array.from(new Set([...state.openSteps, 1])),
             _lastUpdate: Date.now(),
           };
         }),

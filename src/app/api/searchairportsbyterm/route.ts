@@ -43,9 +43,9 @@ export async function GET(request: Request) {
         {
           data: [],
           status: 'success',
-          message: 'Please enter at least 3 characters',
+          message: 'Bitte geben Sie mindestens 3 Zeichen ein',
         },
-        { status: 200 }
+        { status: 400 }
       );
     }
 
