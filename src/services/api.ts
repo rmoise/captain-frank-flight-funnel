@@ -447,8 +447,8 @@ class ApiClient {
       const baseUrl =
         process.env.NODE_ENV === 'development' ? 'http://localhost:8888' : '';
       const functionName =
-        process.env.NODE_ENV === 'development'
-          ? 'orderEuFlightClaim'
+        process.env.NEXT_PUBLIC_USE_NETLIFY_FUNCTIONS === 'true'
+          ? 'ordereuflightclaim'
           : 'ordereuflightclaim';
 
       const response = await fetch(
@@ -545,10 +545,10 @@ class ApiClient {
   }
 
   async orderEuflightClaim(params: OrderClaimRequest): Promise<{
-    guid: string;
-    recommendation_guid: string;
+    status: string;
+    message?: string;
   }> {
-    const response = await fetch('/.netlify/functions/orderEuFlightClaim', {
+    const response = await fetch('/.netlify/functions/ordereuflightclaim', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
