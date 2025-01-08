@@ -6,6 +6,7 @@ import { NavigationProvider } from '@/components/providers/NavigationProvider';
 import './globals.css';
 import '@/styles/autofill.css';
 import Script from 'next/script';
+import { HotjarScript } from '@/components/shared/HotjarScript';
 
 const heebo = Heebo({
   subsets: ['latin'],
@@ -31,6 +32,7 @@ export default function RootLayout({
             })(window,document,'script','dataLayer','GTM-MBBVJT3C');
           `}
         </Script>
+        <HotjarScript />
       </head>
       <body suppressHydrationWarning>
         <noscript>
