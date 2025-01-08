@@ -516,7 +516,7 @@ export const QAWizard: React.FC<QAWizardProps> = ({
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                     >
-                      Previous
+                      Zurück
                     </motion.button>
                   )}
                 </div>
@@ -537,7 +537,7 @@ export const QAWizard: React.FC<QAWizardProps> = ({
                         isCurrentQuestionAnswered ? { scale: 0.95 } : {}
                       }
                     >
-                      Next
+                      Weiter
                     </motion.button>
                   ) : (
                     // Only show Complete button on last question when answered
@@ -558,7 +558,7 @@ export const QAWizard: React.FC<QAWizardProps> = ({
                           isCurrentQuestionAnswered ? { scale: 0.95 } : {}
                         }
                       >
-                        Complete
+                        Abschließen
                       </motion.button>
                     )
                   )}

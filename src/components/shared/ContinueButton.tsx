@@ -13,8 +13,8 @@ export function ContinueButton({
   onClick,
   disabled = false,
   isLoading: externalIsLoading = false,
-  text = 'Continue',
-  loadingText = 'Processing...',
+  text = 'Weiter',
+  loadingText = 'Wird bearbeitet...',
   children,
 }: ContinueButtonProps) {
   const [mounted, setMounted] = useState(false);
@@ -121,7 +121,7 @@ export function ContinueButton({
         ) : (
           <div className="flex items-center space-x-2">
             <span className="block sm:hidden">
-              {text === 'Submit Claim' ? text : 'Continue'}
+              {text === 'Antrag einreichen' ? text : 'Weiter'}
             </span>
             <span className="hidden sm:block">{children || text}</span>
           </div>

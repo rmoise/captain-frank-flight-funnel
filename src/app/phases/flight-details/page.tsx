@@ -143,13 +143,13 @@ export default function FlightDetailsPage() {
         <PhaseNavigation />
         <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
           <div className="space-y-6">
-            <SpeechBubble message="Please provide some additional details about your flight." />
+            <SpeechBubble message="Bitte gib uns zusätzliche Details zu deinem Flug." />
 
             <div className="space-y-4">
               <AccordionCard
-                title="Select your flight"
-                eyebrow="Step 1"
-                summary="Select your flight details"
+                title="Wähle deinen Flug"
+                eyebrow="Schritt 1"
+                summary="Ihre Flugdaten"
                 isCompleted={isStepCompleted(1)}
                 hasInteracted={interactedSteps.includes(1)}
                 className={accordionConfig.padding.wrapper}
@@ -203,9 +203,9 @@ export default function FlightDetailsPage() {
               </AccordionCard>
 
               <AccordionCard
-                title="Enter your booking number"
-                eyebrow="Step 2"
-                summary="Enter your booking reference"
+                title="Gib deine Buchungsnummer ein"
+                eyebrow="Schritt 2"
+                summary="Gib deine Buchungsreferenz ein"
                 isCompleted={isStepCompleted(2)}
                 hasInteracted={interactedSteps.includes(2)}
                 className={accordionConfig.padding.wrapper}
@@ -272,12 +272,13 @@ export default function FlightDetailsPage() {
                         ${isBookingInputFocused ? 'text-[#464646]' : ''}
                       `}
                     >
-                      Booking Number
+                      Buchungsnummer
                     </label>
                   </div>
                   <p className="mt-2 text-sm text-gray-500">
-                    Your PNR (Passenger Name Record) is a 6 or 13-character code
-                    that can be found on your booking confirmation or e-ticket.
+                    Dein PNR (Passenger Name Record) ist ein 6- oder
+                    13-stelliger Code, der auf deiner Buchungsbestätigung oder
+                    deinem E-Ticket zu finden ist.
                   </p>
                 </div>
               </AccordionCard>

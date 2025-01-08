@@ -55,13 +55,13 @@ export default function ClaimRejectedPage() {
     <div className="min-h-screen bg-[#f5f7fa]">
       <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
         <div className="mt-4 sm:mt-8 mb-8">
-          <SpeechBubble message="Unfortunately it didn't work this time!" />
+          <SpeechBubble message="Leider hat es diesmal nicht geklappt!" />
         </div>
 
         <div className="space-y-6">
           <div className="bg-white rounded-lg shadow-sm p-6">
             <h2 className="text-xl font-semibold mb-4">
-              Why Your Claim Was Rejected
+              Warum wurde dein Anspruch auf Entschädigung abgelehnt
             </h2>
             {rejectionReasons.error ? (
               <div className="text-red-600 mb-4 p-4 bg-red-50 rounded-lg">
@@ -71,18 +71,23 @@ export default function ClaimRejectedPage() {
             ) : (
               <>
                 <p className="text-gray-600 mb-4">
-                  According to the EU flight regulations (EC 261/2004),
-                  compensation is only available in specific circumstances:
+                  Gemäß der EU-Fluggastrechteverordnung (EG 261/2004) gibt es
+                  nur in bestimmten Fällen Anspruch auf Entschädigung:
                 </p>
                 <ul className="list-disc pl-5 text-gray-600 space-y-2 mb-6">
-                  <li>Flight delays of more than 3 hours</li>
-                  <li>Flight cancellations with less than 14 days notice</li>
-                  <li>Denied boarding due to overbooking</li>
-                  <li>Missed connections due to airline&apos;s fault</li>
+                  <li>Flugverspätungen von mehr als 3 Stunden</li>
+                  <li>
+                    Flugstreichungen mit weniger als 14 Tagen Vorankündigung
+                  </li>
+                  <li>Nichtbeförderung wegen Überbuchung</li>
+                  <li>
+                    Verpasste Anschlussflüge aufgrund des Verschuldens der
+                    Fluggesellschaft
+                  </li>
                 </ul>
                 <div className="mt-6 p-4 bg-red-50 rounded-lg border border-red-100">
                   <h3 className="text-lg font-medium text-red-800 mb-4">
-                    Rejection Details
+                    Ablehnungsgründe
                   </h3>
                   {Object.entries(rejectionReasons).map(([key, reason]) => (
                     <div key={key} className="text-red-700 mb-4 last:mb-0">
@@ -99,15 +104,18 @@ export default function ClaimRejectedPage() {
           </div>
 
           <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-xl font-semibold mb-4">What You Can Do Next</h2>
+            <h2 className="text-xl font-semibold mb-4">
+              Was kannst du als nächstes tun?
+            </h2>
             <div className="text-left space-y-4">
               <div className="flex items-start space-x-3">
                 <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#F54538] text-white flex items-center justify-center text-sm">
                   1
                 </div>
                 <p className="text-gray-700">
-                  Check if you have another flight within the last 3 years that
-                  might be eligible
+                  Wusstest du, dass man bis zu 3 Jahre rückwirkend Anspruch auf
+                  Entschädigung bei Flugproblemen hat? Prüfe jetzt einen anderen
+                  Flug.
                 </p>
               </div>
               <div className="flex items-start space-x-3">
@@ -115,15 +123,9 @@ export default function ClaimRejectedPage() {
                   2
                 </div>
                 <p className="text-gray-700">
-                  Contact your travel insurance provider for possible coverage
-                </p>
-              </div>
-              <div className="flex items-start space-x-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#F54538] text-white flex items-center justify-center text-sm">
-                  3
-                </div>
-                <p className="text-gray-700">
-                  Keep your travel documents for future reference
+                  Falls du eine hast, dann kontaktiere deine
+                  Reiseversicherungsunternehmen um zu prüfen, ob sie dich
+                  entschädigen können.
                 </p>
               </div>
             </div>
@@ -136,7 +138,7 @@ export default function ClaimRejectedPage() {
             <ContinueButton
               onClick={handleContinue}
               isLoading={isLoading}
-              text="Check Another Flight"
+              text="Einen anderen Flug prüfen"
             />
           </div>
         </div>

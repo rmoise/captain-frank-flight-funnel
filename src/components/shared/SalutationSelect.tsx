@@ -35,7 +35,7 @@ export const SalutationSelect: React.FC<SalutationSelectProps> = ({
 
   return (
     <AutocompleteInput
-      label="Salutation"
+      label="Anrede"
       value={{ value, label: value, description: '' }}
       onSearch={handleSearch}
       onChange={(option) => {

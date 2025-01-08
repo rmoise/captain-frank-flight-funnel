@@ -128,7 +128,7 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
               className="w-full"
-              placeholder={question.placeholder || 'Enter amount'}
+              placeholder={question.placeholder || 'Betrag eingeben'}
               required={question.required}
             />
           </div>
@@ -285,7 +285,7 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
           </div>
           <div className="text-sm text-gray-500">
             <span>
-              Question {currentStep} of {totalSteps}
+              Frage {currentStep} von {totalSteps}
             </span>
           </div>
         </div>

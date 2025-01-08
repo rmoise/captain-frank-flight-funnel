@@ -347,7 +347,7 @@ export default function InitialAssessment() {
       {
         id: 1 as ValidationStateSteps,
         name: 'FlightDetails',
-        title: 'Flight Details',
+        title: 'Erzähle uns von deinem Flug',
         subtitle: 'Please provide your flight information.',
         component: FlightSelector,
         props: {
@@ -422,7 +422,7 @@ export default function InitialAssessment() {
       {
         id: 2 as ValidationStateSteps,
         name: 'QAWizard',
-        title: 'What happened with your flight?',
+        title: 'Was ist mit deinem Flug passiert?',
         component: QAWizardWrapper,
         props: {
           questions: wizardQuestions,
@@ -447,7 +447,7 @@ export default function InitialAssessment() {
             )
           ).length;
 
-          return answeredCount ? `${answeredCount} questions answered` : '';
+          return answeredCount ? `${answeredCount} Fragen beantwortet` : '';
         },
         shouldStayOpen: false,
         isOpenByDefault: false,
@@ -455,9 +455,9 @@ export default function InitialAssessment() {
       {
         id: 3 as ValidationStateSteps,
         name: 'PersonalDetails',
-        title: 'Personal Details',
+        title: 'Persönliche Angaben',
         subtitle:
-          'Please provide your contact details so we can keep you updated about your claim.',
+          'Bitte gib uns deine Kontaktdaten, damit wir dich über deinen Anspruch auf dem Laufenden halten können.',
         component: PersonalDetailsForm,
         props: {
           onComplete: (details: PassengerDetails | null) => {
@@ -481,16 +481,17 @@ export default function InitialAssessment() {
       },
       {
         id: 4 as ValidationStateSteps,
-        name: 'TermsAndConditions',
-        title: 'Terms and Conditions',
-        subtitle: 'Please review and accept the terms to proceed.',
+        name: 'Allgemeine Geschäftsbedingungen',
+        title: 'Allgemeine Geschäftsbedingungen',
+        subtitle:
+          'Bitte überprüfe und akzeptiere die Bedingungen, um fortzufahren.',
         component: function TermsAndConditions() {
           return (
             <div className="space-y-4">
               <ConsentCheckbox
                 id="terms"
                 type="terms"
-                label="I have read and agree to the terms and conditions."
+                label="Ich habe die Allgemeinen Geschäftsbedingungen gelesen und akzeptiere sie."
                 checked={termsAccepted}
                 onChange={(checked: boolean) => {
                   setTermsAccepted(checked);
@@ -501,7 +502,7 @@ export default function InitialAssessment() {
               <ConsentCheckbox
                 id="privacy"
                 type="privacy"
-                label="I have read and agree to the privacy policy."
+                label="Ich habe die Datenschutzerklärung gelesen und akzeptiere sie."
                 checked={privacyAccepted}
                 onChange={(checked: boolean) => {
                   setPrivacyAccepted(checked);
@@ -512,13 +513,13 @@ export default function InitialAssessment() {
               <ConsentCheckbox
                 id="marketing"
                 type="marketing"
-                label="I agree that Captain Frank may send me advertising about Captain Frank's services, promotions and satisfaction surveys by email. Captain Frank will process my personal data for this purpose (see privacy policy). I can revoke this consent at any time."
+                label="Ich stimme zu, dass Captain Frank mir Werbung zu Dienstleistungen, Aktionen und Zufriedenheitsumfragen per E-Mail sendet. Captain Frank verarbeitet meine persönlichen Daten zu diesem Zweck (siehe Datenschutzerklärung). Ich kann diese Einwilligung jederzeit widerrufen."
                 checked={marketingAccepted}
                 onChange={(checked: boolean) => {
                   setMarketingAccepted(checked);
                   setInteractedSteps((prev) => [...new Set([...prev, 4])]);
                 }}
-                details="Stay updated with our latest services and travel tips. You can unsubscribe at any time."
+                details="Bleibe über unsere neuesten Dienstleistungen und Reisetipps auf dem Laufenden. Du kannst dich jederzeit abmelden."
               />
             </div>
           );
@@ -529,7 +530,7 @@ export default function InitialAssessment() {
         } as TermsAndConditionsProps,
         getSummary: (state: StoreStateValues) => {
           if (!state.termsAccepted || !state.privacyAccepted) return '';
-          return 'Terms and Privacy Policy accepted';
+          return 'Bedingungen und Datenschutzerklärung akzeptiert';
         },
         shouldStayOpen: false,
         isOpenByDefault: false,
@@ -618,7 +619,7 @@ export default function InitialAssessment() {
         <AccordionCard
           title={step.title}
           subtitle={step.subtitle}
-          eyebrow={`Step ${step.id}`}
+          eyebrow={`Schritt ${step.id}`}
           isOpen={isOpen}
           isCompleted={isCompleted}
           hasInteracted={hasInteracted}
@@ -665,7 +666,7 @@ export default function InitialAssessment() {
       <div className="relative">
         <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
           <div className="space-y-6">
-            <SpeechBubble message="Welcome to Captain Frank! Let's start by gathering some information about your flight." />
+            <SpeechBubble message="Hi, ich bin Captain Frank. Ich helfe dir herauszufinden, ob du Anspruch auf eine Entschädigung für deine Flugunterbrechung hast. Los geht's!" />
             {steps.map(renderStep)}
 
             {/* Continue Button */}
@@ -674,7 +675,7 @@ export default function InitialAssessment() {
                 onClick={handleContinue}
                 disabled={!canProceedToNextPhase()}
                 isLoading={isLoading}
-                text="Continue to Compensation Estimate"
+                text="Zur Ersteinschätzung"
               />
             </div>
           </div>

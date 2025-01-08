@@ -5,18 +5,71 @@ import { Input } from '../Input';
 import { Select } from '../shared/Select';
 import { useStore } from '@/lib/state/store';
 import type { PassengerDetails } from '@/types/store';
+import { CountryAutocomplete } from '../shared/CountryAutocomplete';
 
 const COUNTRY_OPTIONS = [
-  { value: 'DEU', label: 'Germany' },
-  { value: 'USA', label: 'United States' },
-  { value: 'GBR', label: 'United Kingdom' },
-  { value: 'FRA', label: 'France' },
-  { value: 'ESP', label: 'Spain' },
-  { value: 'ITA', label: 'Italy' },
-  { value: 'NLD', label: 'Netherlands' },
-  { value: 'BEL', label: 'Belgium' },
-  { value: 'CHE', label: 'Switzerland' },
-  { value: 'AUT', label: 'Austria' },
+  // EU Countries
+  { value: 'BEL', label: 'Belgien' },
+  { value: 'BGR', label: 'Bulgarien' },
+  { value: 'DNK', label: 'Dänemark' },
+  { value: 'DEU', label: 'Deutschland' },
+  { value: 'EST', label: 'Estland' },
+  { value: 'FIN', label: 'Finnland' },
+  { value: 'FRA', label: 'Frankreich' },
+  { value: 'GRC', label: 'Griechenland' },
+  { value: 'IRL', label: 'Irland' },
+  { value: 'ITA', label: 'Italien' },
+  { value: 'HRV', label: 'Kroatien' },
+  { value: 'LVA', label: 'Lettland' },
+  { value: 'LTU', label: 'Litauen' },
+  { value: 'LUX', label: 'Luxemburg' },
+  { value: 'MLT', label: 'Malta' },
+  { value: 'NLD', label: 'Niederlande' },
+  { value: 'AUT', label: 'Österreich' },
+  { value: 'POL', label: 'Polen' },
+  { value: 'PRT', label: 'Portugal' },
+  { value: 'ROU', label: 'Rumänien' },
+  { value: 'SWE', label: 'Schweden' },
+  { value: 'SVK', label: 'Slowakei' },
+  { value: 'SVN', label: 'Slowenien' },
+  { value: 'ESP', label: 'Spanien' },
+  { value: 'CZE', label: 'Tschechien' },
+  { value: 'HUN', label: 'Ungarn' },
+  { value: 'CYP', label: 'Zypern' },
+  // Non-EU European countries
+  { value: 'GBR', label: 'Großbritannien' },
+  { value: 'CHE', label: 'Schweiz' },
+  { value: 'NOR', label: 'Norwegen' },
+  { value: 'ISL', label: 'Island' },
+  { value: 'LIE', label: 'Liechtenstein' },
+  // Rest of the World (in German)
+  { value: 'EGY', label: 'Ägypten' },
+  { value: 'ARG', label: 'Argentinien' },
+  { value: 'AUS', label: 'Australien' },
+  { value: 'BRA', label: 'Brasilien' },
+  { value: 'CHL', label: 'Chile' },
+  { value: 'CHN', label: 'China' },
+  { value: 'IND', label: 'Indien' },
+  { value: 'IDN', label: 'Indonesien' },
+  { value: 'ISR', label: 'Israel' },
+  { value: 'JPN', label: 'Japan' },
+  { value: 'CAN', label: 'Kanada' },
+  { value: 'COL', label: 'Kolumbien' },
+  { value: 'KOR', label: 'Korea, Republik' },
+  { value: 'MYS', label: 'Malaysia' },
+  { value: 'MEX', label: 'Mexiko' },
+  { value: 'NZL', label: 'Neuseeland' },
+  { value: 'PAK', label: 'Pakistan' },
+  { value: 'PHL', label: 'Philippinen' },
+  { value: 'RUS', label: 'Russland' },
+  { value: 'SAU', label: 'Saudi-Arabien' },
+  { value: 'SGP', label: 'Singapur' },
+  { value: 'ZAF', label: 'Südafrika' },
+  { value: 'THA', label: 'Thailand' },
+  { value: 'TUR', label: 'Türkei' },
+  { value: 'ARE', label: 'Vereinigte Arabische Emirate' },
+  { value: 'USA', label: 'Vereinigte Staaten' },
+  { value: 'VNM', label: 'Vietnam' },
 ];
 
 interface PersonalDetailsFormProps {
@@ -71,7 +124,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <Select
-            label="Salutation"
+            label="Anrede"
             value={storedDetails?.salutation || ''}
             onChange={(value) => handleInputChange('salutation', value)}
             error={
@@ -86,7 +139,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
         </div>
         <div>
           <Input
-            label="First Name"
+            label="Vorname"
             value={storedDetails?.firstName || ''}
             onChange={(value) => handleInputChange('firstName', value)}
             error={
@@ -97,7 +150,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
         </div>
         <div>
           <Input
-            label="Last Name"
+            label="Nachname"
             value={storedDetails?.lastName || ''}
             onChange={(value) => handleInputChange('lastName', value)}
             error={
@@ -108,7 +161,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
         </div>
         <div>
           <Input
-            label="Email"
+            label="E-Mail-Adresse"
             type="email"
             value={storedDetails?.email || ''}
             onChange={(value) => handleInputChange('email', value)}
@@ -122,7 +175,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
           <>
             <div>
               <Input
-                label="Phone"
+                label="Telefonnummer"
                 type="tel"
                 value={storedDetails?.phone || ''}
                 onChange={(value) => handleInputChange('phone', value)}
@@ -134,7 +187,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
             </div>
             <div>
               <Input
-                label="Street Address"
+                label="Adresse"
                 value={storedDetails?.address || ''}
                 onChange={(value) => handleInputChange('address', value)}
                 error={
@@ -147,7 +200,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
             </div>
             <div>
               <Input
-                label="ZIP Code"
+                label="Postleitzahl"
                 value={storedDetails?.zipCode || ''}
                 onChange={(value) => handleInputChange('zipCode', value)}
                 error={
@@ -160,7 +213,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
             </div>
             <div>
               <Input
-                label="City"
+                label="Stadt"
                 value={storedDetails?.city || ''}
                 onChange={(value) => handleInputChange('city', value)}
                 error={
@@ -169,18 +222,18 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
                 required={isClaimSuccess}
               />
             </div>
-            <div className="col-span-1 md:col-span-2">
-              <Select
-                label="Country"
-                value={storedDetails?.country || ''}
+            <div>
+              <CountryAutocomplete
+                label="Land"
+                value={storedDetails?.country}
                 onChange={(value) => handleInputChange('country', value)}
+                options={COUNTRY_OPTIONS}
                 error={
                   hasInteracted
                     ? validationState.fieldErrors.country
                     : undefined
                 }
-                options={COUNTRY_OPTIONS}
-                required={true}
+                required={isClaimSuccess}
               />
             </div>
           </>

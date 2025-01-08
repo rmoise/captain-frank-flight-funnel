@@ -32,9 +32,9 @@ export const WelcomeSection = () => {
   }, [checkScreenSize]);
 
   const greetingMessages: GreetingMessage[] = [
-    { text: 'Hi there', emoji: '👋' },
-    { text: "I'm here to help with", highlight: true },
-    { text: 'Flight Issues' },
+    { text: 'Hallo', emoji: '👋' },
+    { text: 'ich bin hier, um dir bei', highlight: true },
+    { text: 'Flugproblemen zu helfen' },
   ];
 
   return (
@@ -91,7 +91,7 @@ export const WelcomeSection = () => {
                 </div>
                 <div className="flex flex-col ml-4 lg:ml-14 z-10">
                   <div className="text-white text-sm lg:text-lg font-normal leading-tight lg:leading-normal">
-                    Chat with
+                    Chatte mit
                   </div>
                   <div className="text-white text-[28px] sm:text-[34px] lg:text-[41.93px] font-semibold leading-[34px] sm:leading-[40.80px] lg:leading-[50.31px]">
                     Captain

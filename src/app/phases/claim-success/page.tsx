@@ -158,32 +158,34 @@ function ClaimSuccessContent() {
           ) : (
             <>
               <div className="mt-4 sm:mt-8 mb-8">
-                <SpeechBubble message="Congratulations! Now that you have completed your case, we can calculate your potential claim (minus 30% success fee)" />
+                <SpeechBubble message="Glückwunsch! Jetzt, da du deinen Fall abgeschlossen hast, können wir deinen potenziellen Anspruch berechnen (abzüglich 30 % Erfolgsprovision)." />
               </div>
 
               <div className="space-y-6">
                 <div className="bg-white rounded-lg shadow-sm p-6">
                   <h2 className="text-xl font-semibold mb-4">
-                    Estimated Compensation
+                    Geschätzte Entschädigung
                   </h2>
                   <div className="text-2xl font-bold text-[#F54538]">
                     {formatAmount(claimDetails.amount, claimDetails.currency)}
                   </div>
                   <p className="text-gray-600 mt-2">
-                    Final amount will be determined after reviewing your
-                    complete case details.
+                    Der endgültige Betrag wird nach Überprüfung deiner
+                    vollständigen Falldetails festgelegt.
                   </p>
                 </div>
 
                 <div className="bg-white rounded-lg shadow-sm p-6">
-                  <h2 className="text-xl font-semibold mb-4">Next Steps</h2>
+                  <h2 className="text-xl font-semibold mb-4">
+                    Nächste Schritte
+                  </h2>
                   <div className="text-left space-y-4">
                     <div className="flex items-start space-x-3">
                       <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#F54538] text-white flex items-center justify-center text-sm">
                         1
                       </div>
                       <p className="text-gray-700">
-                        Complete your personal details
+                        Vervollständige deine persönlichen Angaben
                       </p>
                     </div>
                     <div className="flex items-start space-x-3">
@@ -191,15 +193,16 @@ function ClaimSuccessContent() {
                         2
                       </div>
                       <p className="text-gray-700">
-                        Sign the order form (fees apply only if successful)
+                        Unterschreibe die Abtretungserklärung (Kosten erfolgen
+                        nur bei Erfolg)
                       </p>
                     </div>
                   </div>
                 </div>
 
                 <AccordionCard
-                  title="Personal Details"
-                  eyebrow="Step 1"
+                  title="Persönliche Angaben"
+                  eyebrow="Schritt 1"
                   summary="Enter your personal details"
                   isCompleted={isStepValid(1)}
                   hasInteracted={interactedSteps.includes(1)}

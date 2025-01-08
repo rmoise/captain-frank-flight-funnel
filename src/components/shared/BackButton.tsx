@@ -8,7 +8,7 @@ interface BackButtonProps {
 
 export function BackButton({
   onClick,
-  text = 'Back',
+  text = 'Zurück',
   disabled = false,
 }: BackButtonProps) {
   return (

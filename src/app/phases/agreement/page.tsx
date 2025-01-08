@@ -568,17 +568,17 @@ export default function AgreementPage() {
         <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
           <div className="mt-4 sm:mt-8 mb-8">
             <SpeechBubble
-              message={`I, ${personalDetails?.salutation ?? ''} ${
+              message={`Ich, ${personalDetails?.salutation === 'herr' ? 'Herr' : 'Frau'} ${
                 personalDetails?.firstName ?? ''
-              } ${personalDetails?.lastName ?? ''}, residing at ${
+              } ${personalDetails?.lastName ?? ''}, wohnhaft in der ${
                 personalDetails?.address ?? ''
               }, ${personalDetails?.zipCode ?? ''} ${
                 personalDetails?.city ?? ''
               }, ${
                 personalDetails?.country ?? ''
-              }, hereby assign my claims for compensation from the flight connection with PNR/booking number ${
+              }, trete hiermit meine Ansprüche auf Entschädigung aus der Flugverbindung mit PNR/Buchungsnummer ${
                 bookingNumber ?? ''
-              } from ${
+              } von ${
                 Array.isArray(flightDetails) && flightDetails.length > 0
                   ? flightDetails[0].departure ||
                     flightDetails[0].departureAirport ||
@@ -586,7 +586,7 @@ export default function AgreementPage() {
                   : flightDetails?.departure ||
                     flightDetails?.departureAirport ||
                     ''
-              } to ${
+              } nach ${
                 Array.isArray(flightDetails) && flightDetails.length > 0
                   ? flightDetails[0].arrival ||
                     flightDetails[0].arrivalAirport ||
@@ -594,12 +594,12 @@ export default function AgreementPage() {
                   : flightDetails?.arrival ||
                     flightDetails?.arrivalAirport ||
                     ''
-              } on ${
+              } am ${
                 Array.isArray(flightDetails) && flightDetails.length > 0
                   ? flightDetails[0].date
                     ? new Date(
                         flightDetails[0].date.split('T')[0]
-                      ).toLocaleDateString('en-US', {
+                      ).toLocaleDateString('de-DE', {
                         year: 'numeric',
                         month: 'long',
                         day: 'numeric',
@@ -607,7 +607,7 @@ export default function AgreementPage() {
                     : flightDetails[0].departureTime
                       ? new Date(
                           flightDetails[0].departureTime.split(' ')[0]
-                        ).toLocaleDateString('en-US', {
+                        ).toLocaleDateString('de-DE', {
                           year: 'numeric',
                           month: 'long',
                           day: 'numeric',
@@ -616,7 +616,7 @@ export default function AgreementPage() {
                   : flightDetails?.date
                     ? new Date(
                         flightDetails.date.split('T')[0]
-                      ).toLocaleDateString('en-US', {
+                      ).toLocaleDateString('de-DE', {
                         year: 'numeric',
                         month: 'long',
                         day: 'numeric',
@@ -624,23 +624,23 @@ export default function AgreementPage() {
                     : flightDetails?.departureTime
                       ? new Date(
                           flightDetails.departureTime.split(' ')[0]
-                        ).toLocaleDateString('en-US', {
+                        ).toLocaleDateString('de-DE', {
                           year: 'numeric',
                           month: 'long',
                           day: 'numeric',
                         })
                       : ''
-              } to Captain Frank GmbH.
+              } an die Captain Frank GmbH ab.
 
-Captain Frank GmbH accepts the declaration of assignment.`}
+Die Captain Frank GmbH nimmt die Abtretungserklärung an.`}
             />
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <AccordionCard
-              title="Digital Signature"
-              subtitle="Please sign to confirm your agreement"
-              eyebrow="Step 1"
+              title="Digitale Unterschrift"
+              subtitle="Bitte unterschreibe, um deine Zustimmung zu bestätigen."
+              eyebrow="Schritt 1"
               isCompleted={validationState.isSignatureValid}
               hasInteracted={hasInteractedWithSignature}
               className={accordionConfig.padding.wrapper}
@@ -679,7 +679,7 @@ Captain Frank GmbH accepts the declaration of assignment.`}
                       onClick={clearSignature}
                       className="text-sm text-[#F54538] hover:text-[#E03F33] transition-colors"
                     >
-                      Clear Signature
+                      Unterschrift löschen
                     </button>
                   </div>
                   {errors.signature && (
@@ -692,9 +692,9 @@ Captain Frank GmbH accepts the declaration of assignment.`}
             </AccordionCard>
 
             <AccordionCard
-              title="Terms and Conditions"
-              subtitle="Please review and accept the terms to proceed."
-              eyebrow="Step 2"
+              title="Allgemeine Geschäftsbedingungen"
+              subtitle="Bitte überprüfe und akzeptiere die Bedingungen, um fortzufahren."
+              eyebrow="Schritt 2"
               isCompleted={validationState[2] || false}
               hasInteracted={Object.keys(errors).length > 0}
               className={accordionConfig.padding.wrapper}
@@ -716,7 +716,7 @@ Captain Frank GmbH accepts the declaration of assignment.`}
                   <ConsentCheckbox
                     id="terms"
                     type="terms"
-                    label="I have read and agree to the terms and conditions."
+                    label="Ich habe die Allgemeinen Geschäftsbedingungen gelesen und akzeptiere sie."
                     checked={formData.hasAcceptedTerms}
                     onChange={handleTermsChange('hasAcceptedTerms')}
                     required
@@ -724,7 +724,7 @@ Captain Frank GmbH accepts the declaration of assignment.`}
                   <ConsentCheckbox
                     id="privacy"
                     type="privacy"
-                    label="I have read and agree to the privacy policy."
+                    label="Ich habe die Datenschutzerklärung gelesen und akzeptiere sie."
                     checked={formData.hasAcceptedPrivacy}
                     onChange={handleTermsChange('hasAcceptedPrivacy')}
                     required
@@ -732,10 +732,10 @@ Captain Frank GmbH accepts the declaration of assignment.`}
                   <ConsentCheckbox
                     id="marketing"
                     type="marketing"
-                    label="I agree that Captain Frank may send me advertising about Captain Frank's services, promotions and satisfaction surveys by email. Captain Frank will process my personal data for this purpose (see privacy policy). I can revoke this consent at any time."
+                    label="Ich stimme zu, dass Captain Frank mir Werbung zu Dienstleistungen, Aktionen und Zufriedenheitsumfragen per E-Mail sendet. Captain Frank verarbeitet meine persönlichen Daten zu diesem Zweck (siehe Datenschutzerklärung). Ich kann diese Einwilligung jederzeit widerrufen."
                     checked={formData.hasAcceptedMarketing}
                     onChange={handleTermsChange('hasAcceptedMarketing')}
-                    details="Stay updated with our latest services and travel tips. You can unsubscribe at any time."
+                    details="Bleibe über unsere neuesten Dienstleistungen und Reisetipps auf dem Laufenden. Du kannst dich jederzeit abmelden."
                   />
                 </div>
               </div>
@@ -748,7 +748,7 @@ Captain Frank GmbH accepts the declaration of assignment.`}
               <ContinueButton
                 onClick={handleSubmit}
                 disabled={!canSubmit()}
-                text="Submit Claim"
+                text="Jetzt Anspruch auf Entschädigung einreichen"
               />
             </div>
           </form>

@@ -24,7 +24,7 @@ export const CustomDateInput = forwardRef<
       onChange,
       placeholder = 'DD.MM.YYYY',
       onClear,
-      label = 'Flight Date',
+      label = 'Flugdatum',
     },
     ref
   ) => {

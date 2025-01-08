@@ -4,15 +4,15 @@ import type { Answer } from '@/types/wizard';
 export const wizardQuestions: Question[] = [
   {
     id: 'issue_type',
-    text: 'What type of issue did you experience?',
+    text: 'Welche Art von Problem hattest du?',
     type: 'radio',
     options: [
-      { id: 'delay', label: 'Delayed Flight', value: 'delay' },
-      { id: 'cancel', label: 'Canceled Flight', value: 'cancel' },
-      { id: 'missed', label: 'Missed Connection', value: 'missed' },
+      { id: 'delay', label: 'Verspäteter Flug', value: 'delay' },
+      { id: 'cancel', label: 'Abgesagter Flug', value: 'cancel' },
+      { id: 'missed', label: 'Anschlussflug verpasst', value: 'missed' },
       {
         id: 'other',
-        label: 'Other Issue',
+        label: 'Anderes Problem',
         value: 'other',
         externalLink: 'https://www.captain-frank.com/de/ueberuns#UeberUns_Form',
         openInNewTab: true,
@@ -21,14 +21,14 @@ export const wizardQuestions: Question[] = [
   },
   {
     id: 'delay_duration',
-    text: 'How long was your flight delayed?',
+    text: 'Wie lange war dein Flug verspätet?',
     type: 'radio',
     options: [
-      { id: 'less2', label: 'Less than 2 hours', value: '<2' },
-      { id: '2to3', label: '2-3 hours', value: '2-3' },
+      { id: 'less2', label: 'Weniger als 2 Stunden', value: '<2' },
+      { id: '2to3', label: '2-3 Stunden', value: '2-3' },
       {
         id: 'more3',
-        label: 'More than 3 hours',
+        label: 'Mehr als 3 Stunden',
         value: '>3',
         showConfetti: true,
       },
@@ -38,20 +38,20 @@ export const wizardQuestions: Question[] = [
   },
   {
     id: 'cancellation_notice',
-    text: 'When were you informed about the cancellation?',
+    text: 'Wann wurdest du über die Annullierung informiert?',
     type: 'radio',
     options: [
       {
         id: 'not_at_all',
-        label: 'Not at all',
+        label: 'Gar nicht',
         value: 'none',
         showConfetti: true,
       },
-      { id: '0_7_days', label: '0-7 days', value: '0-7', showConfetti: true },
-      { id: '8_14_days', label: '8-14 days', value: '8-14', showCheck: true },
+      { id: '0_7_days', label: '0-7 Tage', value: '0-7', showConfetti: true },
+      { id: '8_14_days', label: '8-14 Tage', value: '8-14', showCheck: true },
       {
         id: 'over_14_days',
-        label: 'Over 14 days',
+        label: 'Mehr als 14 Tage',
         value: '>14',
         showCheck: true,
       },
@@ -61,18 +61,18 @@ export const wizardQuestions: Question[] = [
   },
   {
     id: 'missed_costs',
-    text: 'Did you have annoying additional costs (e.g. hotel, taxi, food costs)?',
+    text: 'Hattest du lästige zusätzliche Kosten (z. B. Hotel, Taxi, Essen)?',
     type: 'radio',
     options: [
-      { id: 'yes', label: 'Yes', value: 'yes' },
-      { id: 'no', label: 'No', value: 'no', showCheck: true },
+      { id: 'yes', label: 'Ja', value: 'yes' },
+      { id: 'no', label: 'Nein', value: 'no', showCheck: true },
     ],
     showIf: (answers: Answer[]) =>
       answers.find((a) => a.questionId === 'issue_type')?.value === 'missed',
   },
   {
     id: 'missed_costs_amount',
-    text: "Let me know approximately how much you spent. We'll do the paperwork at the end.",
+    text: 'Sag mir ungefähr, wie viel du ausgegeben hast. Wir erledigen den Papierkram am Ende.',
     type: 'money',
     showIf: (answers: Answer[]) =>
       answers.find((a) => a.questionId === 'issue_type')?.value === 'missed' &&
@@ -83,8 +83,8 @@ export const wizardQuestions: Question[] = [
     text: 'Did the airline provide an alternative flight?',
     type: 'radio',
     options: [
-      { id: 'yes', label: 'Yes', value: 'yes' },
-      { id: 'no', label: 'No', value: 'no' },
+      { id: 'yes', label: 'Ja', value: 'yes' },
+      { id: 'no', label: 'Nein', value: 'no' },
     ],
     showIf: (answers: Answer[]) =>
       answers.find((a) => a.questionId === 'issue_type')?.value === 'cancel',
@@ -94,8 +94,8 @@ export const wizardQuestions: Question[] = [
     text: 'Did you book an alternative flight at your own expense?',
     type: 'radio',
     options: [
-      { id: 'yes', label: 'Yes', value: 'yes' },
-      { id: 'no', label: 'No', value: 'no' },
+      { id: 'yes', label: 'Ja', value: 'yes' },
+      { id: 'no', label: 'Nein', value: 'no' },
     ],
     showIf: (answers: Answer[]) =>
       answers.find((a) => a.questionId === 'issue_type')?.value === 'cancel' &&
@@ -107,8 +107,8 @@ export const wizardQuestions: Question[] = [
     text: 'Were your ticket costs refunded?',
     type: 'radio',
     options: [
-      { id: 'yes', label: 'Yes', value: 'yes' },
-      { id: 'no', label: 'No', value: 'no' },
+      { id: 'yes', label: 'Ja', value: 'yes' },
+      { id: 'no', label: 'Nein', value: 'no' },
     ],
     showIf: (answers: Answer[]) =>
       answers.find((a) => a.questionId === 'issue_type')?.value === 'cancel',

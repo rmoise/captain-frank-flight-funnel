@@ -2352,8 +2352,8 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
     <div className="space-y-4">
       <FlightTypeSelector
         types={[
-          { id: 'direct', label: 'Direct Flight' },
-          { id: 'multi', label: 'Multi City' },
+          { id: 'direct', label: 'Direktflug' },
+          { id: 'multi', label: 'Multi-Stopp' },
         ]}
         selectedType={selectedType}
         onTypeSelect={handleFlightTypeChange}
@@ -2381,7 +2381,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                             }
                             onSearch={searchAirports}
                             onFocus={handleFocus}
-                            label="From"
+                            label="Von"
                             leftIcon="departure"
                             error={errorMessages.from}
                             disabled={disabled}
@@ -2399,7 +2399,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                             }
                             onSearch={searchAirports}
                             onFocus={handleFocus}
-                            label="To"
+                            label="Nach"
                             leftIcon="arrival"
                             error={errorMessages.to}
                             disabled={disabled}
@@ -2553,7 +2553,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                         }
                         className="h-14 w-full text-white bg-[#F54538] rounded-xl hover:bg-[#F54538]/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#F54538] disabled:opacity-50 disabled:cursor-not-allowed font-sans font-medium text-base"
                       >
-                        Search Flights
+                        Flüge suchen
                       </button>
                     </div>
                   )}
@@ -2581,7 +2581,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                       clipRule="evenodd"
                     />
                   </svg>
-                  Add Another Flight
+                  Einen weiteren Flug hinzufügen
                 </button>
 
                 {showFlightSearch &&
@@ -2590,7 +2590,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                       onClick={() => {}}
                       className="w-full h-12 bg-red-50 text-[#F54538] rounded-lg font-medium hover:bg-red-100 transition-colors text-sm"
                     >
-                      Flight Not Listed?
+                      Flug nicht gefunden?
                     </button>
                   )}
               </div>
@@ -2605,7 +2605,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                   onChange={handleDirectFromLocationChange}
                   onSearch={searchAirports}
                   onFocus={handleFocus}
-                  label="From"
+                  label="Von"
                   leftIcon="departure"
                   error={errorMessages.from}
                   disabled={disabled}
@@ -2617,7 +2617,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                   onChange={handleDirectToLocationChange}
                   onSearch={searchAirports}
                   onFocus={handleFocus}
-                  label="To"
+                  label="Nach"
                   leftIcon="arrival"
                   error={errorMessages.to}
                   disabled={disabled}
@@ -2707,13 +2707,13 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                       }
                       className="w-full h-12 px-4 py-2 text-white bg-[#F54538] rounded-xl hover:bg-[#F54538]/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#F54538] disabled:opacity-50 disabled:cursor-not-allowed font-sans font-medium text-base"
                     >
-                      Search Flights
+                      Flüge suchen
                     </button>
                     <button
                       onClick={() => {}}
                       className="w-full h-12 bg-red-50 text-[#F54538] rounded-lg font-medium hover:bg-red-100 transition-colors text-sm"
                     >
-                      Flight Not Listed?
+                      Flug nicht gefunden?
                     </button>
                   </div>
                 </>
@@ -2729,7 +2729,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
             <div className="pt-8">
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                  Your flight details
+                  Ihre Flugdaten
                 </h3>
                 {selectedType === 'direct' ? (
                   directFlight.selectedFlight &&
@@ -2790,7 +2790,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                         <div className="relative w-full">
                           <input
                             type="text"
-                            placeholder="Search by flight number"
+                            placeholder="Nach Flugnummer suchen"
                             value={searchTerm}
                             onChange={(e) => handleSheetSearch(e.target.value)}
                             className="w-full h-12 px-3 pl-10 pr-10 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F54538] focus:border-transparent transition-colors"
@@ -2826,7 +2826,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                           onClick={() => setSearchModalOpen(false)}
                           className="px-8 h-12 bg-red-50 text-[#F54538] rounded-lg font-medium hover:bg-red-100 transition-colors text-sm"
                         >
-                          Flight Not Listed?
+                          Flug nicht gefunden?
                         </button>
                       </div>
                     </div>
@@ -2850,7 +2850,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                           onClick={() => setSearchModalOpen(false)}
                           className="px-8 h-12 bg-red-50 text-[#F54538] rounded-lg font-medium hover:bg-red-100 transition-colors text-sm"
                         >
-                          Flight Not Listed?
+                          Flug nicht gefunden?
                         </button>
                       </div>
                     </div>
@@ -2861,10 +2861,8 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                         <div className="flex items-center justify-between">
                           <h3 className="text-base font-medium text-gray-900">
                             {filteredFlights.length}{' '}
-                            {filteredFlights.length === 1
-                              ? 'flight'
-                              : 'flights'}{' '}
-                            found
+                            {filteredFlights.length === 1 ? 'Flug' : 'Flüge'}{' '}
+                            gefunden
                           </h3>
                           <div className="flex items-center gap-2">
                             <button

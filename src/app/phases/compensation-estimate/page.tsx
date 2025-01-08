@@ -280,13 +280,15 @@ export default function CompensationEstimatePage() {
         <PhaseNavigation />
         <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
           <div className="space-y-6">
-            <SpeechBubble message="There's a good chance that you're entitled to a claim! Let me help you. Completely risk-free: I only receive a commission fee of 30% (including VAT) if I'm successful." />
+            <SpeechBubble message="Es gibt eine gute Chance, dass du Anspruch auf eine Entschädigung hast! Lass mich dir helfen. Komplett risikofrei: Ich erhalte nur eine Erfolgsprovision von 30 % (inkl. MwSt.), wenn ich erfolgreich bin." />
             <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-xl font-semibold mb-4">Flight Summary</h2>
+              <h2 className="text-xl font-semibold mb-4">
+                Flugzusammenfassung
+              </h2>
               <div className="space-y-4">
                 {personalDetails && (
                   <div className="pb-4 border-b border-gray-100">
-                    <p className="text-gray-600">Passenger</p>
+                    <p className="text-gray-600">Passagier</p>
                     <p className="font-medium">
                       {personalDetails.firstName} {personalDetails.lastName}
                     </p>
@@ -296,7 +298,7 @@ export default function CompensationEstimatePage() {
                   {selectedType === 'direct' ? (
                     <>
                       <div>
-                        <p className="text-gray-600">From</p>
+                        <p className="text-gray-600">Von</p>
                         {(() => {
                           const fromCityData = {
                             selectedFlightCity:
@@ -333,7 +335,7 @@ export default function CompensationEstimatePage() {
                         })()}
                       </div>
                       <div>
-                        <p className="text-gray-600">To</p>
+                        <p className="text-gray-600">Nach</p>
                         {(() => {
                           const toCityData = {
                             selectedFlightCity:
@@ -432,15 +434,15 @@ export default function CompensationEstimatePage() {
                           className="pb-4 border-b border-gray-100 last:border-b-0"
                         >
                           <p className="text-gray-600 font-medium mb-2">
-                            Flight {index + 1}
+                            Flug {index + 1}
                           </p>
                           <div className="space-y-2">
                             <div>
-                              <p className="text-gray-600">From</p>
+                              <p className="text-gray-600">Von</p>
                               <p className="font-medium">{departureCity}</p>
                             </div>
                             <div>
-                              <p className="text-gray-600">To</p>
+                              <p className="text-gray-600">Nach</p>
                               <p className="font-medium">{arrivalCity}</p>
                             </div>
                           </div>
@@ -456,37 +458,35 @@ export default function CompensationEstimatePage() {
 
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-xl font-semibold mb-4">
-                Estimated Compensation
+                Geschätzte Entschädigung
               </h2>
               <div className="text-2xl font-bold text-[#F54538]">
                 {compensationLoading
-                  ? 'Calculating compensation...'
+                  ? 'Entschädigung wird berechnet...'
                   : compensationError
                     ? compensationError
                     : typeof compensationAmount === 'number'
                       ? `€${compensationAmount}`
-                      : 'Unable to calculate compensation'}
+                      : 'Entschädigung konnte nicht berechnet werden'}
               </div>
               <p className="text-gray-600 mt-2">
-                Final amount will be determined after reviewing your complete
-                case details.
+                Der endgültige Betrag wird festgelegt, nachdem wir deine
+                vollständigen Falldetails überprüft haben.
               </p>
             </div>
 
             <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-xl font-semibold mb-4">Next Steps</h2>
+              <h2 className="text-xl font-semibold mb-4">Nächste Schritte</h2>
               <div className="space-y-4">
                 <div className="flex items-start gap-4">
                   <div className="w-8 h-8 rounded-full bg-[#F54538] text-white flex items-center justify-center flex-shrink-0">
                     1
                   </div>
                   <div>
-                    <h3 className="font-semibold mb-1">
-                      Provide Flight Details
-                    </h3>
+                    <h3 className="font-semibold mb-1">Flugdetails angeben</h3>
                     <p className="text-gray-600">
-                      Help us understand what happened with your flight by
-                      providing more details about your journey.
+                      Hilf uns zu verstehen, was mit deinem Flug passiert ist,
+                      indem du uns mehr Details zu deiner Reise gibst.
                     </p>
                   </div>
                 </div>
@@ -495,10 +495,10 @@ export default function CompensationEstimatePage() {
                     2
                   </div>
                   <div>
-                    <h3 className="font-semibold mb-1">Review Your Case</h3>
+                    <h3 className="font-semibold mb-1">Fall überprüfen</h3>
                     <p className="text-gray-600">
-                      We&apos;ll review your case details and assess your
-                      eligibility for compensation.
+                      Wir überprüfen die Details deines Falls und bewerten deine
+                      Anspruchsberechtigung auf Entschädigung.
                     </p>
                   </div>
                 </div>
@@ -507,10 +507,11 @@ export default function CompensationEstimatePage() {
                     3
                   </div>
                   <div>
-                    <h3 className="font-semibold mb-1">Submit Your Claim</h3>
+                    <h3 className="font-semibold mb-1">Anspruch einreichen</h3>
                     <p className="text-gray-600">
-                      Once everything is confirmed, we&apos;ll submit your claim
-                      and handle all communication with the airline.
+                      Sobald alles bestätigt ist, reichen wir deinen Anspruch
+                      ein und übernehmen die gesamte Kommunikation mit der
+                      Fluggesellschaft.
                     </p>
                   </div>
                 </div>
@@ -519,12 +520,12 @@ export default function CompensationEstimatePage() {
           </div>
 
           <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
-            <BackButton onClick={handleBack} />
+            <BackButton onClick={handleBack} text="Zurück" />
             <ContinueButton
               onClick={handleContinue}
               disabled={false}
               isLoading={isLoading}
-              text="Continue to Flight Details"
+              text="Weiter zu den Flugdetails"
             />
           </div>
         </main>

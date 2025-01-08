@@ -20,41 +20,41 @@ import api from '@/services/api';
 const questions: Question[] = [
   {
     id: 'travel_status',
-    text: 'Please select what happened:',
+    text: 'Bitte wähle aus, was passiert ist:',
     type: 'radio',
     options: [
       {
         id: 'none',
         value: 'none',
-        label: "I didn't travel at all",
+        label: 'Ich bin überhaupt nicht gereist',
         showConfetti: true,
       },
       {
         id: 'self',
         value: 'self',
-        label: 'I took the flights I booked',
+        label: 'Ich bin die Flüge geflogen, die ich gebucht hatte',
       },
       {
         id: 'provided',
         value: 'provided',
-        label: "I traveled differently at the airline's expense",
+        label: 'Ich bin anders gereist, auf Kosten der Fluggesellschaft',
         showConfetti: true,
       },
       {
         id: 'alternative_own',
         value: 'took_alternative_own',
-        label: 'I booked a different flight at my own expense',
+        label: 'Ich bin anders gereist, auf eigene Kosten',
         showConfetti: true,
       },
     ],
   },
   {
     id: 'refund_status',
-    text: 'Were your ticket costs refunded?',
+    text: 'Wurden dir die Ticketkosten erstattet?',
     type: 'radio',
     options: [
-      { id: 'yes', value: 'yes', label: 'Yes' },
-      { id: 'no', value: 'no', label: 'No' },
+      { id: 'yes', value: 'yes', label: 'Ja' },
+      { id: 'no', value: 'no', label: 'Nein' },
     ],
     showIf: (answers: Answer[]) =>
       answers.some(
@@ -78,7 +78,7 @@ const questions: Question[] = [
   },
   {
     id: 'alternative_flight_airline_expense',
-    text: 'Please search for the alternative flight provided by the airline.',
+    text: 'Bitte suche nach dem alternativen Flug, der von der Fluggesellschaft bereitgestellt wurde.',
     label: 'Alternative Flight',
     type: 'flight_selector',
     showIf: (answers: Answer[]) =>
@@ -99,7 +99,7 @@ const questions: Question[] = [
   },
   {
     id: 'trip_costs',
-    text: 'Please enter the costs you spent on your trip',
+    text: 'Bitte gib die Kosten an, die du für deine Reise ausgegeben hast.',
     type: 'money',
     showIf: (answers: Answer[]) =>
       answers.some(
@@ -112,26 +112,26 @@ const questions: Question[] = [
 const informedDateQuestions: Question[] = [
   {
     id: 'informed_date',
-    text: 'On what date were you first informed by the airline?',
+    text: 'An welchem Datum wurdest du erstmals von der Fluggesellschaft informiert?',
     type: 'radio',
     options: [
       {
         id: 'on_departure',
         value: 'on_departure',
-        label: 'On the day of departure',
+        label: 'Am Abflugtag',
         showCheck: true,
       },
       {
         id: 'specific_date',
         value: 'specific_date',
-        label: 'On a specific date',
+        label: 'An einem bestimmten Datum',
         showCheck: true,
       },
     ],
   },
   {
     id: 'specific_informed_date',
-    text: 'Please select the date you were informed',
+    text: 'Bitte wähle das Datum aus, an dem du informiert wurdest.',
     type: 'date',
     options: [],
     showIf: (answers: Answer[]) =>
@@ -734,12 +734,12 @@ export default function TripExperiencePage() {
         <PhaseNavigation />
         <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
           <div className="space-y-6">
-            <SpeechBubble message="Let's talk about your trip experience. This will help us understand what happened and how we can help you." />
+            <SpeechBubble message="Lass uns über deine Reiseerfahrung sprechen. Das hilft uns zu verstehen, was passiert ist und wie wir dir helfen können." />
 
             {/* Trip Experience Wizard */}
             <AccordionCard
-              title="What happened with your flight?"
-              eyebrow="Step 1"
+              title="Was ist mit deinem Flug passiert?"
+              eyebrow="Schritt 1"
               isOpen={openSteps.includes(2)}
               shouldStayOpen={false}
               isCompleted={validationState.stepValidation[2]}
@@ -767,8 +767,8 @@ export default function TripExperiencePage() {
 
             {/* Informed Date Wizard */}
             <AccordionCard
-              title="When were you informed?"
-              eyebrow="Step 2"
+              title="Wann wurdest du informiert?"
+              eyebrow="Schritt 2"
               isOpen={openSteps.includes(3)}
               shouldStayOpen={false}
               isCompleted={validationState.stepValidation[3]}
@@ -795,11 +795,11 @@ export default function TripExperiencePage() {
 
             {/* Navigation */}
             <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
-              <BackButton onClick={handleBack} />
+              <BackButton onClick={handleBack} text="Zurück" />
               <ContinueButton
                 onClick={handleContinue}
                 disabled={!canContinue()}
-                text="Check Claim"
+                text="Anspruch prüfen"
               />
             </div>
           </div>
