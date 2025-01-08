@@ -405,7 +405,7 @@ class ApiClient {
         process.env.NODE_ENV === 'development' ? 'http://localhost:8888' : '';
       const functionName =
         process.env.NODE_ENV === 'development'
-          ? 'evaluateEuFlightClaim'
+          ? 'evaluateeuflightclaim'
           : 'evaluateeuflightclaim';
 
       const response = await fetch(
