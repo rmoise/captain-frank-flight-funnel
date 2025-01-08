@@ -1068,21 +1068,9 @@ export const useStore = create<StoreState & StoreActions>()(
         // Store the wizard type for the timeout
         const finalWizardType = wizardType;
 
-        // Clear success message after 3 seconds
-        if (typeof window !== 'undefined') {
-          window.__wizardSuccessTimeout &&
-            clearTimeout(window.__wizardSuccessTimeout);
-          window.__wizardSuccessTimeout = setTimeout(() => {
-            const currentState = get();
-
-            set({
-              ...currentState,
-              wizardSuccessStates: {
-                ...currentState.wizardSuccessStates,
-                [finalWizardType]: { showing: false, message: '' },
-              },
-            });
-          }, 3000);
+        // Remove auto-hiding timeout
+        if (typeof window !== 'undefined' && window.__wizardSuccessTimeout) {
+          clearTimeout(window.__wizardSuccessTimeout);
         }
 
         return true; // Return true to indicate successful completion
