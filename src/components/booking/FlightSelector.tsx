@@ -2366,96 +2366,103 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
             {flightSegments.map((segment, index) => (
               <div key={index} className="relative">
                 <div className="relative">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="relative">
-                      <AutocompleteInput
-                        value={segment.fromLocation as LocationData | null}
-                        onChange={(location) =>
-                          handleMultiLocationChange(
-                            location,
-                            'fromLocation',
-                            index
-                          )
-                        }
-                        onSearch={searchAirports}
-                        onFocus={handleFocus}
-                        label="From"
-                        leftIcon="departure"
-                        error={errorMessages.from}
-                        disabled={disabled}
-                      />
-                    </div>
-                    <div className="relative">
-                      <AutocompleteInput
-                        value={segment.toLocation as LocationData | null}
-                        onChange={(location) =>
-                          handleMultiLocationChange(
-                            location,
-                            'toLocation',
-                            index
-                          )
-                        }
-                        onSearch={searchAirports}
-                        onFocus={handleFocus}
-                        label="To"
-                        leftIcon="arrival"
-                        error={errorMessages.to}
-                        disabled={disabled}
-                      />
-                    </div>
-                  </div>
-                  {/* Add delete button in a circle for segments after the first two */}
-                  {index > 1 && (
-                    <div className="absolute right-0 top-1/2 -translate-y-1/2 -mr-12">
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-
-                          // Remove the segment if it's beyond the minimum required
-                          const newSegments = flightSegments.filter(
-                            (_, i) => i !== index
-                          );
-
-                          // Ensure we maintain connections between segments
-                          if (index > 0 && index < flightSegments.length - 1) {
-                            // When removing a middle segment, connect the segments before and after
-                            const prevSegment = newSegments[index - 1];
-                            const nextSegment = newSegments[index];
-
-                            // Clear the connection points since they need to be re-established
-                            if (prevSegment && nextSegment) {
-                              prevSegment.toLocation = null;
-                              prevSegment.selectedFlight = null;
-                              nextSegment.fromLocation = null;
-                              nextSegment.selectedFlight = null;
+                  <div className="relative flex items-start">
+                    <div className="flex-1">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="relative">
+                          <AutocompleteInput
+                            value={segment.fromLocation as LocationData | null}
+                            onChange={(location) =>
+                              handleMultiLocationChange(
+                                location,
+                                'fromLocation',
+                                index
+                              )
                             }
-                          }
-
-                          // Update the store with the new segments
-                          setFlightSegments(newSegments);
-
-                          // Update selected flights array
-                          const remainingFlights = newSegments
-                            .map((segment) => segment.selectedFlight)
-                            .filter(
-                              (flight): flight is Flight => flight !== null
-                            );
-                          setSelectedFlights(remainingFlights);
-
-                          // Reset current segment index if needed
-                          if (currentSegmentIndex >= newSegments.length) {
-                            setCurrentSegmentIndex(
-                              Math.max(0, newSegments.length - 1)
-                            );
-                          }
-                        }}
-                        className="w-10 h-10 rounded-full bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors shadow-sm"
-                      >
-                        <TrashIcon className="h-5 w-5 text-gray-500" />
-                      </button>
+                            onSearch={searchAirports}
+                            onFocus={handleFocus}
+                            label="From"
+                            leftIcon="departure"
+                            error={errorMessages.from}
+                            disabled={disabled}
+                          />
+                        </div>
+                        <div className="relative">
+                          <AutocompleteInput
+                            value={segment.toLocation as LocationData | null}
+                            onChange={(location) =>
+                              handleMultiLocationChange(
+                                location,
+                                'toLocation',
+                                index
+                              )
+                            }
+                            onSearch={searchAirports}
+                            onFocus={handleFocus}
+                            label="To"
+                            leftIcon="arrival"
+                            error={errorMessages.to}
+                            disabled={disabled}
+                          />
+                        </div>
+                      </div>
                     </div>
-                  )}
+                    {/* Add delete button in a circle for segments after the first two */}
+                    {index > 1 && (
+                      <div className="absolute left-[calc(100%-0.25rem)] top-[3.25rem]">
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+
+                            // Remove the segment if it's beyond the minimum required
+                            const newSegments = flightSegments.filter(
+                              (_, i) => i !== index
+                            );
+
+                            // Ensure we maintain connections between segments
+                            if (
+                              index > 0 &&
+                              index < flightSegments.length - 1
+                            ) {
+                              // When removing a middle segment, connect the segments before and after
+                              const prevSegment = newSegments[index - 1];
+                              const nextSegment = newSegments[index];
+
+                              // Clear the connection points since they need to be re-established
+                              if (prevSegment && nextSegment) {
+                                prevSegment.toLocation = null;
+                                prevSegment.selectedFlight = null;
+                                nextSegment.fromLocation = null;
+                                nextSegment.selectedFlight = null;
+                              }
+                            }
+
+                            // Update the store with the new segments
+                            setFlightSegments(newSegments);
+
+                            // Update selected flights array
+                            const remainingFlights = newSegments
+                              .map((segment) => segment.selectedFlight)
+                              .filter(
+                                (flight): flight is Flight => flight !== null
+                              );
+                            setSelectedFlights(remainingFlights);
+
+                            // Reset current segment index if needed
+                            if (currentSegmentIndex >= newSegments.length) {
+                              setCurrentSegmentIndex(
+                                Math.max(0, newSegments.length - 1)
+                              );
+                            }
+                          }}
+                          className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors shadow-sm"
+                        >
+                          <TrashIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-500" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 {showFlightSearch &&
                   (currentPhase === 3 || currentPhase === 4) && (
