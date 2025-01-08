@@ -21,10 +21,7 @@ const nextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination:
-          process.env.NODE_ENV === 'development'
-            ? 'http://localhost:3000/api/:path*'
-            : '/api/:path*',
+        destination: 'http://localhost:8888/api/:path*',
       },
       {
         source: '/phases/:path*',

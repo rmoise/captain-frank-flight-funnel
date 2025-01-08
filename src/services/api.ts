@@ -401,8 +401,15 @@ class ApiClient {
     try {
       console.log('Evaluating claim with data:', data);
 
+      const baseUrl =
+        process.env.NODE_ENV === 'development' ? 'http://localhost:8888' : '';
+      const functionName =
+        process.env.NODE_ENV === 'development'
+          ? 'evaluateEuFlightClaim'
+          : 'evaluateeuflightclaim';
+
       const response = await fetch(
-        '/.netlify/functions/evaluateeuflightclaim',
+        `${baseUrl}/.netlify/functions/${functionName}`,
         {
           method: 'POST',
           headers: {
@@ -437,47 +444,60 @@ class ApiClient {
     try {
       console.log('Ordering claim with data:', data);
 
-      const response = await fetch('/.netlify/functions/orderEuFlightClaim', {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          journey_booked_flightids: data.journey_booked_flightids,
-          journey_fact_flightids: data.journey_fact_flightids,
-          information_received_at: data.information_received_at,
-          journey_booked_pnr: data.journey_booked_pnr,
-          journey_fact_type: data.journey_fact_type,
-          owner_salutation: data.owner_salutation,
-          owner_firstname: data.owner_firstname,
-          owner_lastname: data.owner_lastname,
-          owner_street: data.owner_street,
-          owner_place: data.owner_place,
-          owner_city: data.owner_city,
-          owner_zip: data.owner_zip,
-          owner_country: data.owner_country,
-          owner_email: data.owner_email,
-          owner_phone: data.owner_phone || '',
-          owner_marketable_status: data.owner_marketable_status,
-          contract_signature: data.contract_signature,
-          contract_tac: data.contract_tac,
-          contract_dp: data.contract_dp,
-          guid: data.guid,
-          recommendation_guid: data.recommendation_guid,
-        }),
-      });
+      const baseUrl =
+        process.env.NODE_ENV === 'development' ? 'http://localhost:8888' : '';
+      const functionName =
+        process.env.NODE_ENV === 'development'
+          ? 'orderEuFlightClaim'
+          : 'ordereuflightclaim';
+
+      const response = await fetch(
+        `${baseUrl}/.netlify/functions/${functionName}`,
+        {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            journey_booked_flightids: data.journey_booked_flightids,
+            journey_fact_flightids: data.journey_fact_flightids,
+            information_received_at: data.information_received_at,
+            journey_booked_pnr: data.journey_booked_pnr,
+            journey_fact_type: data.journey_fact_type,
+            owner_salutation: data.owner_salutation,
+            owner_firstname: data.owner_firstname,
+            owner_lastname: data.owner_lastname,
+            owner_street: data.owner_street,
+            owner_place: data.owner_place,
+            owner_city: data.owner_city,
+            owner_zip: data.owner_zip,
+            owner_country: data.owner_country,
+            owner_email: data.owner_email,
+            owner_phone: data.owner_phone || '',
+            owner_marketable_status: data.owner_marketable_status,
+            contract_signature: data.contract_signature,
+            contract_tac: data.contract_tac,
+            contract_dp: data.contract_dp,
+          }),
+        }
+      );
 
       if (!response.ok) {
-        throw new Error(`API request failed with status ${response.status}`);
+        const errorText = await response.text();
+        try {
+          const errorData = JSON.parse(errorText);
+          throw new Error(
+            errorData.message ||
+              errorData.error ||
+              'Failed to order EU flight claim'
+          );
+        } catch (e) {
+          throw new Error('Failed to order EU flight claim');
+        }
       }
 
       const responseData = await response.json();
-
-      if (!responseData || !responseData.data) {
-        throw new Error('Invalid response format from API');
-      }
-
       return responseData;
     } catch (error) {
       console.error('Error ordering claim:', error);

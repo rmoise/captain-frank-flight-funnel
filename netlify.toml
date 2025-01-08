@@ -31,5 +31,5 @@
 
 [[redirects]]
   from = "/api/ordereuflightclaim"
-  to = "/.netlify/functions/orderEuFlightClaim"
+  to = "/.netlify/functions/ordereuflightclaim"
   status = 200
