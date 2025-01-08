@@ -108,21 +108,21 @@ export const WelcomeSection = () => {
             <div className="flex flex-col md:flex-col gap-1 md:gap-2 md:mt-2 w-full overflow-hidden">
               <div className="flex flex-col md:flex-row items-start gap-2 w-full overflow-hidden">
                 <div className="flex flex-wrap items-center shrink-0">
-                  <div className="opacity-70 text-white text-[34px] lg:text-[41.93px] font-semibold font-heebo leading-[40.80px] lg:leading-[50.31px] break-words">
+                  <div className="opacity-70 text-white text-[28px] sm:text-[34px] lg:text-[41.93px] font-semibold font-heebo leading-[34px] sm:leading-[40.80px] lg:leading-[50.31px] break-words">
                     {greetingMessages[0].text}
                   </div>
-                  <div className="text-[#f8f8f8] text-[34px] lg:text-[41.93px] font-normal font-inter leading-[40.80px] lg:leading-[50.31px] ml-2">
+                  <div className="text-[#f8f8f8] text-[28px] sm:text-[34px] lg:text-[41.93px] font-normal font-inter leading-[34px] sm:leading-[40.80px] lg:leading-[50.31px] ml-2">
                     {greetingMessages[0].emoji}
                   </div>
                 </div>
                 <div className="w-full overflow-hidden">
-                  <span className="text-[#fcc7c3] text-[34px] lg:text-[41.93px] font-semibold font-heebo leading-[40.80px] lg:leading-[50.31px] break-all">
+                  <span className="text-[#fcc7c3] text-[28px] sm:text-[34px] lg:text-[41.93px] font-semibold font-heebo leading-[34px] sm:leading-[40.80px] lg:leading-[50.31px] break-all">
                     {greetingMessages[1].text}
                   </span>
                 </div>
               </div>
               <div className="w-full">
-                <span className="text-white text-[34px] lg:text-[41.93px] font-semibold font-heebo leading-[40.80px] lg:leading-[50.31px] break-words block">
+                <span className="text-white text-[28px] sm:text-[34px] lg:text-[41.93px] font-semibold font-heebo leading-[34px] sm:leading-[40.80px] lg:leading-[50.31px] break-words block">
                   {greetingMessages[2].text}
                 </span>
               </div>
