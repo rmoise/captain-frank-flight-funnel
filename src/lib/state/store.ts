@@ -1066,7 +1066,7 @@ export const useStore = create<StoreState & StoreActions>()(
         });
 
         // Store the wizard type for the timeout
-        const finalWizardType = wizardType;
+        // const finalWizardType = wizardType;
 
         // Remove auto-hiding timeout
         if (typeof window !== 'undefined' && window.__wizardSuccessTimeout) {
