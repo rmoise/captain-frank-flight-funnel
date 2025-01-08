@@ -58,6 +58,74 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
         ? setPrivacyAccepted
         : setMarketingAccepted;
 
+  // Handle click on the link
+  const handleLinkClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (type === 'terms') {
+      window.open('https://www.captain-frank.com/de/agb', '_blank');
+    } else if (type === 'privacy' || type === 'marketing') {
+      window.open(
+        'https://www.captain-frank.com/de/datenschutz?_gl=1*1o1nam*_gcl_au*OTQ3NDQyOTgzLjE3MzI3MjIzMDY.*_ga*NTUyNzkxNDY3LjE3MzI3MjIzMDY.*_ga_XZVF0Y8PLW*MTczNjM0MDk0MS4xMTUuMS4xNzM2MzQxMTU1LjAuMC4w',
+        '_blank'
+      );
+    }
+  };
+
+  // Format the label to include the link for privacy type
+  const formattedLabel =
+    type === 'terms' ? (
+      <span>
+        Ich habe die{' '}
+        <a
+          href="https://www.captain-frank.com/de/agb"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            window.open('https://www.captain-frank.com/de/agb', '_blank');
+          }}
+          className="text-[#F54538] hover:text-[#E03F33] underline"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Allgemeinen Geschäftsbedingungen
+        </a>{' '}
+        gelesen und akzeptiere sie.
+      </span>
+    ) : type === 'privacy' ? (
+      <span>
+        Ich habe die{' '}
+        <a
+          href="https://www.captain-frank.com/de/datenschutz?_gl=1*12wr7bl*_gcl_au*OTQ3NDQyOTgzLjE3MzI3MjIzMDY.*_ga*NTUyNzkxNDY3LjE3MzI3MjIzMDY.*_ga_XZVF0Y8PLW*MTczNjM0MDk0MS4xMTUuMS4xNzM2MzQwOTU0LjAuMC4w"
+          onClick={handleLinkClick}
+          className="text-[#F54538] hover:text-[#E03F33] underline"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Datenschutzerklärung
+        </a>{' '}
+        gelesen und akzeptiere sie.
+      </span>
+    ) : type === 'marketing' ? (
+      <span>
+        Ich stimme zu, dass Captain Frank mir Werbung zu Dienstleistungen,
+        Aktionen und Zufriedenheitsumfragen per E-Mail sendet. Captain Frank
+        verarbeitet meine persönlichen Daten zu diesem Zweck (siehe{' '}
+        <a
+          href="https://www.captain-frank.com/de/datenschutz?_gl=1*1o1nam*_gcl_au*OTQ3NDQyOTgzLjE3MzI3MjIzMDY.*_ga*NTUyNzkxNDY3LjE3MzI3MjIzMDY.*_ga_XZVF0Y8PLW*MTczNjM0MDk0MS4xMTUuMS4xNzM2MzQxMTU1LjAuMC4w"
+          onClick={handleLinkClick}
+          className="text-[#F54538] hover:text-[#E03F33] underline"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Datenschutzbestimmungen
+        </a>
+        ). Ich kann diese Einwilligung jederzeit widerrufen.
+      </span>
+    ) : (
+      label
+    );
+
   // Use useLayoutEffect to check truncation before paint
   useLayoutEffect(() => {
     const checkTruncation = () => {
@@ -83,7 +151,7 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
       clearTimeout(timeoutId);
       window.removeEventListener('resize', checkTruncation);
     };
-  }, [label]);
+  }, [formattedLabel]);
 
   const handleChange = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -154,7 +222,7 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
               ref={textRef}
               className={`flex-1 pr-4 ${!isExpanded ? 'line-clamp-2' : ''}`}
             >
-              {label}
+              {formattedLabel}
               {required && <span className="text-[#F54538] ml-0.5">*</span>}
             </div>
             {(isTextTruncated || details) && (
