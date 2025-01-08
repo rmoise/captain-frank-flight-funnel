@@ -90,6 +90,16 @@ export default function FlightDetailsPage() {
   const handleBookingNumberChange = (value: string) => {
     setLocalBookingNumber(value);
     setStoreBookingNumber(value);
+
+    // Validate the booking number
+    const isValid =
+      value.trim().length >= 6 && /^[A-Z0-9]+$/i.test(value.trim());
+
+    // Update validation state
+    setValidationState((prev) => ({
+      ...prev,
+      2: isValid,
+    }));
   };
 
   const canContinue = useMemo(() => {

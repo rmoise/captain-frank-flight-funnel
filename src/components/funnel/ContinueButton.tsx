@@ -13,9 +13,10 @@ export const ContinueButton = () => {
           disabled={!state.isCurrentPhaseComplete}
           className={`
             w-full md:w-auto px-8 py-3 rounded-lg transition-colors
-            ${state.isCurrentPhaseComplete
-              ? 'bg-red-500 hover:bg-red-600 text-white'
-              : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+            ${
+              state.isCurrentPhaseComplete
+                ? 'bg-red-500 hover:bg-red-600 text-white'
+                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
             }
           `}
         >

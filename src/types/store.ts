@@ -26,6 +26,7 @@ export interface Flight {
   class: string;
   price: number;
   bookingReference?: string;
+  connectionInfo?: string;
 }
 
 export interface Answer {

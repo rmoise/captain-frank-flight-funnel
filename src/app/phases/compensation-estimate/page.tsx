@@ -297,32 +297,77 @@ export default function CompensationEstimatePage() {
                     <>
                       <div>
                         <p className="text-gray-600">From</p>
-                        <p className="font-medium">
-                          {directFlight?.selectedFlight?.departureCity ||
-                            (directFlight?.fromLocation as LocationData)
-                              ?.city ||
-                            (
+                        {(() => {
+                          const fromCityData = {
+                            selectedFlightCity:
+                              directFlight?.selectedFlight?.departureCity,
+                            locationDesc: (
                               directFlight?.fromLocation as LocationData
-                            )?.dropdownLabel
-                              ?.split('(')[0]
-                              ?.trim() ||
-                            directFlight?.selectedFlight?.departure ||
-                            'No departure city available'}
-                        </p>
+                            )?.description,
+                            dropdownLabel: (
+                              directFlight?.fromLocation as LocationData
+                            )?.dropdownLabel,
+                            locationCity: (
+                              directFlight?.fromLocation as LocationData
+                            )?.city,
+                            departure: directFlight?.selectedFlight?.departure,
+                          };
+
+                          // Extract city name from dropdown label (e.g. "Berlin Brandenburg Airport (BER)" -> "Berlin")
+                          const fullCityFromLabel = fromCityData.dropdownLabel
+                            ? fromCityData.dropdownLabel
+                                .split('(')[0]
+                                .trim()
+                                .split(' ')[0]
+                            : null;
+
+                          const cityName =
+                            fullCityFromLabel ||
+                            fromCityData.locationDesc ||
+                            fromCityData.selectedFlightCity ||
+                            fromCityData.locationCity ||
+                            fromCityData.departure ||
+                            'No departure city available';
+
+                          return <p className="font-medium">{cityName}</p>;
+                        })()}
                       </div>
                       <div>
                         <p className="text-gray-600">To</p>
-                        <p className="font-medium">
-                          {directFlight?.selectedFlight?.arrivalCity ||
-                            (directFlight?.toLocation as LocationData)?.city ||
-                            (
+                        {(() => {
+                          const toCityData = {
+                            selectedFlightCity:
+                              directFlight?.selectedFlight?.arrivalCity,
+                            locationDesc: (
                               directFlight?.toLocation as LocationData
-                            )?.dropdownLabel
-                              ?.split('(')[0]
-                              ?.trim() ||
-                            directFlight?.selectedFlight?.arrival ||
-                            'No arrival city available'}
-                        </p>
+                            )?.description,
+                            dropdownLabel: (
+                              directFlight?.toLocation as LocationData
+                            )?.dropdownLabel,
+                            locationCity: (
+                              directFlight?.toLocation as LocationData
+                            )?.city,
+                            arrival: directFlight?.selectedFlight?.arrival,
+                          };
+
+                          // Extract city name from dropdown label (e.g. "Munich International Airport (MUC)" -> "Munich")
+                          const fullCityFromLabel = toCityData.dropdownLabel
+                            ? toCityData.dropdownLabel
+                                .split('(')[0]
+                                .trim()
+                                .split(' ')[0]
+                            : null;
+
+                          const cityName =
+                            fullCityFromLabel ||
+                            toCityData.locationDesc ||
+                            toCityData.selectedFlightCity ||
+                            toCityData.locationCity ||
+                            toCityData.arrival ||
+                            'No arrival city available';
+
+                          return <p className="font-medium">{cityName}</p>;
+                        })()}
                       </div>
                     </>
                   ) : selectedType === 'multi' ? (
@@ -331,17 +376,54 @@ export default function CompensationEstimatePage() {
                       const fromLocation = segment.fromLocation as LocationData;
                       const toLocation = segment.toLocation as LocationData;
                       const selectedFlight = segment.selectedFlight;
+
+                      // Extract full city names with detailed logging
+                      const departureCityData = {
+                        selectedFlightCity: selectedFlight?.departureCity,
+                        locationDesc: fromLocation?.description,
+                        dropdownLabel: fromLocation?.dropdownLabel,
+                        locationCity: fromLocation?.city,
+                        departure: selectedFlight?.departure,
+                      };
+
+                      const arrivalCityData = {
+                        selectedFlightCity: selectedFlight?.arrivalCity,
+                        locationDesc: toLocation?.description,
+                        dropdownLabel: toLocation?.dropdownLabel,
+                        locationCity: toLocation?.city,
+                        arrival: selectedFlight?.arrival,
+                      };
+
+                      // Extract city name from dropdown label (e.g. "Berlin Brandenburg Airport (BER)" -> "Berlin")
+                      const departureCityFromLabel =
+                        departureCityData.dropdownLabel
+                          ? departureCityData.dropdownLabel
+                              .split('(')[0]
+                              .trim()
+                              .split(' ')[0]
+                          : null;
+
+                      const arrivalCityFromLabel = arrivalCityData.dropdownLabel
+                        ? arrivalCityData.dropdownLabel
+                            .split('(')[0]
+                            .trim()
+                            .split(' ')[0]
+                        : null;
+
                       const departureCity =
-                        selectedFlight?.departureCity ||
-                        fromLocation?.city ||
-                        fromLocation?.dropdownLabel?.split('(')[0]?.trim() ||
-                        selectedFlight?.departure ||
+                        departureCityFromLabel ||
+                        departureCityData.locationDesc ||
+                        departureCityData.selectedFlightCity ||
+                        departureCityData.locationCity ||
+                        departureCityData.departure ||
                         'No departure city available';
+
                       const arrivalCity =
-                        selectedFlight?.arrivalCity ||
-                        toLocation?.city ||
-                        toLocation?.dropdownLabel?.split('(')[0]?.trim() ||
-                        selectedFlight?.arrival ||
+                        arrivalCityFromLabel ||
+                        arrivalCityData.locationDesc ||
+                        arrivalCityData.selectedFlightCity ||
+                        arrivalCityData.locationCity ||
+                        arrivalCityData.arrival ||
                         'No arrival city available';
 
                       return (
