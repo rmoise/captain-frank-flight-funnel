@@ -402,7 +402,7 @@ class ApiClient {
       console.log('Evaluating claim with data:', data);
 
       const response = await fetch(
-        '/.netlify/functions/evaluateEuFlightClaim',
+        '/.netlify/functions/evaluateeuflightclaim',
         {
           method: 'POST',
           headers: {
