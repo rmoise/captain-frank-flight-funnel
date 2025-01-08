@@ -278,8 +278,8 @@ export const QAWizard: React.FC<QAWizardProps> = ({
     // If we're on the last question, show success
     if (wizardCurrentStep === visibleQuestions.length - 1) {
       const successMessage = selectedOption?.showConfetti
-        ? 'Yay, you have a good chance of claiming it.'
-        : 'Your responses have been recorded.';
+        ? 'Super! Du hast gute Chancen auf eine Entschädigung.'
+        : 'Deine Antworten wurden gespeichert.';
 
       // For informed date wizard, use the proper ID
       const completeWizardId =
@@ -375,6 +375,20 @@ export const QAWizard: React.FC<QAWizardProps> = ({
     [wizardCurrentStep, wizardType, wizardCurrentSteps, batchUpdateWizardState]
   );
 
+  const handleBackToQuestions = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      e.preventDefault();
+      // Reset success state for this wizard type
+      batchUpdateWizardState({
+        wizardSuccessStates: {
+          ...wizardSuccessStates,
+          [wizardType]: { showing: false, message: '' },
+        },
+      });
+    },
+    [batchUpdateWizardState, wizardSuccessStates, wizardType]
+  );
+
   // Simplify initialization effect to only run once
   useEffect(() => {
     if (wizardAnswers.length > 0 && !lastAnsweredQuestion) {
@@ -455,7 +469,7 @@ export const QAWizard: React.FC<QAWizardProps> = ({
                 className="w-16 h-16 flex items-center justify-center text-[64px]"
               >
                 {successState.message ===
-                'Yay, you have a good chance of claiming it.' ? (
+                'Super! Du hast gute Chancen auf eine Entschädigung.' ? (
                   <span>🎉</span>
                 ) : (
                   <CheckCircleIcon
@@ -474,15 +488,15 @@ export const QAWizard: React.FC<QAWizardProps> = ({
                   {successState.message}
                 </h2>
                 <p className="text-sm text-gray-500">
-                  We&apos;re processing your information...
+                  Wir verarbeiten deine Informationen...
                 </p>
                 <motion.button
-                  onClick={goToPrevious}
+                  onClick={handleBackToQuestions}
                   className="mt-6 px-6 py-2 text-[#F54538] border border-[#F54538] rounded-md hover:bg-red-50"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                 >
-                  Back to Questions
+                  Zurück zu den Fragen
                 </motion.button>
               </motion.div>
             </div>

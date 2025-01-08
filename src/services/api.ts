@@ -373,7 +373,9 @@ class ApiClient {
       );
 
       if (!response.ok) {
-        throw new Error(`API request failed with status ${response.status}`);
+        throw new Error(
+          `API-Anfrage fehlgeschlagen mit Status ${response.status}`
+        );
       }
 
       const data = await response.json();
@@ -424,13 +426,15 @@ class ApiClient {
       );
 
       if (!response.ok) {
-        throw new Error(`API request failed with status ${response.status}`);
+        throw new Error(
+          `API-Anfrage fehlgeschlagen mit Status ${response.status}`
+        );
       }
 
       const responseData = await response.json();
 
       if (!responseData || !responseData.status) {
-        throw new Error('Invalid response format from API');
+        throw new Error('Ungültiges Antwortformat von der API');
       }
 
       return responseData;
@@ -490,10 +494,12 @@ class ApiClient {
           throw new Error(
             errorData.message ||
               errorData.error ||
-              'Failed to order EU flight claim'
+              'EU-Flugentschädigungsantrag konnte nicht eingereicht werden'
           );
         } catch (e) {
-          throw new Error('Failed to order EU flight claim');
+          throw new Error(
+            'EU-Flugentschädigungsantrag konnte nicht eingereicht werden'
+          );
         }
       }
 

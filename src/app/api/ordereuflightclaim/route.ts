@@ -31,7 +31,7 @@ export async function POST(request: Request) {
       console.error('Missing required fields:', missingFields);
       return NextResponse.json(
         {
-          error: `Missing required fields: ${missingFields.join(', ')}`,
+          error: `Fehlende Pflichtfelder: ${missingFields.join(', ')}`,
           status: 'error',
         },
         { status: 400 }

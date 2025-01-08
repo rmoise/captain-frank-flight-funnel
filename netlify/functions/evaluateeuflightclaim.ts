@@ -99,7 +99,7 @@ const handler: Handler = async (event: HandlerEvent) => {
       return {
         statusCode: 500,
         body: JSON.stringify({
-          error: 'Invalid JSON response from API',
+          error: 'Ungültige JSON-Antwort von der API',
           details: responseText
         })
       };
@@ -114,7 +114,7 @@ const handler: Handler = async (event: HandlerEvent) => {
       return {
         statusCode: 500,
         body: JSON.stringify({
-          error: 'Invalid response format from API',
+          error: 'Ungültiges Antwortformat von der API',
           expected: { status: "'accept' | 'reject'", contract: "optional" },
           received: evaluationResult
         })
@@ -147,8 +147,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     return {
       statusCode: 500,
       body: JSON.stringify({
-        error: 'Internal Server Error',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Interner Serverfehler',
+        message: error instanceof Error ? error.message : 'Unbekannter Fehler'
       }),
     };
   }

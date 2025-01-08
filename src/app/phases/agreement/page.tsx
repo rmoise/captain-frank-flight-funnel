@@ -417,7 +417,7 @@ export default function AgreementPage() {
         const rejectionReasons = evaluationResult.rejection_reasons;
         const errorMessages = rejectionReasons
           ? Object.values(rejectionReasons)
-          : ['Claim evaluation was rejected'];
+          : ['Antragsüberprüfung wurde abgelehnt'];
 
         setErrors(
           (prev: FormErrors): FormErrors => ({
@@ -488,13 +488,15 @@ export default function AgreementPage() {
       if (response.data?.guid && response.data?.recommendation_guid) {
         router.push('/claim-submitted');
       } else {
-        throw new Error(response.message || 'Failed to submit claim');
+        throw new Error('Antrag konnte nicht eingereicht werden');
       }
     } catch (error) {
       setErrors(
         (prev: FormErrors): FormErrors => ({
           ...prev,
-          submit: ['An unexpected error occurred. Please try again.'],
+          submit: [
+            'Ein unerwarteter Fehler ist aufgetreten. Bitte versuche es erneut.',
+          ],
         })
       );
       hideLoading(); // Hide loading on error
