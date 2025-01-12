@@ -190,12 +190,12 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
       }`}
     >
       <div
-        className="flex items-start gap-4 p-4 cursor-pointer"
+        className="flex items-start gap-3 p-4 cursor-pointer"
         onClick={toggleAccordion}
       >
         <div
           className={`
-            mt-1 w-4 h-4 rounded border transition-colors cursor-pointer
+            flex-shrink-0 mt-0.5 w-4 h-4 rounded border transition-colors cursor-pointer
             ${
               isChecked
                 ? 'bg-[#F54538] border-[#F54538]'
@@ -218,22 +218,26 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
             </svg>
           )}
         </div>
-        <div className="flex-1 text-sm text-[#4b616d] font-heebo">
-          <div className="flex items-start justify-between">
+        <div className="flex-1 min-w-0 text-sm text-[#4b616d] font-heebo">
+          <div className="flex items-start gap-2 w-full">
             <div
               ref={textRef}
-              className={`flex-1 pr-4 ${!isExpanded ? 'line-clamp-2' : ''}`}
+              className={`flex-1 min-w-0 break-words ${
+                !isExpanded ? 'line-clamp-2' : ''
+              }`}
             >
-              {formattedLabel}
-              {required && <span className="text-[#F54538] ml-0.5">*</span>}
+              <div className="inline-block max-w-full">
+                {formattedLabel}
+                {required && <span className="text-[#F54538] ml-0.5">*</span>}
+              </div>
             </div>
             {(isTextTruncated || details) && (
               <motion.div
                 animate={{ rotate: isExpanded ? 180 : 0 }}
                 transition={{ duration: 0.2 }}
-                className="ml-2 flex-shrink-0"
+                className="flex-shrink-0 mt-0.5"
               >
-                <ChevronUpIcon className="w-5 h-5 text-gray-400" />
+                <ChevronUpIcon className="w-4 h-4 text-gray-400" />
               </motion.div>
             )}
           </div>
@@ -256,7 +260,7 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
               className="overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="mt-2 text-sm text-[#4b616d] font-heebo">
+              <div className="mt-2 text-sm text-[#4b616d] font-heebo break-words">
                 {details}
               </div>
             </motion.div>

@@ -23,6 +23,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${heebo.variable}`}>
       <head>
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+        />
         <Script id="google-tag-manager" strategy="afterInteractive">
           {`
             (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
@@ -34,7 +38,7 @@ export default function RootLayout({
         </Script>
         <HotjarScript />
       </head>
-      <body suppressHydrationWarning>
+      <body suppressHydrationWarning className="overflow-x-hidden">
         <noscript>
           <iframe
             src="https://www.googletagmanager.com/ns.html?id=GTM-MBBVJT3C"
@@ -44,7 +48,9 @@ export default function RootLayout({
           />
         </noscript>
         <NavigationProvider>
-          <LoadingProvider>{children}</LoadingProvider>
+          <LoadingProvider>
+            <div className="relative w-full overflow-x-hidden">{children}</div>
+          </LoadingProvider>
         </NavigationProvider>
       </body>
     </html>
