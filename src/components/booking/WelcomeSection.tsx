@@ -96,11 +96,14 @@ export const WelcomeSection = () => {
                   <div className="text-white text-[28px] sm:text-[34px] lg:text-[41.93px] font-semibold leading-[34px] sm:leading-[40.80px] lg:leading-[50.31px]">
                     Captain
                     {screenSize === 'mobile' ? (
-                      ' '
+                      '\u2009'
                     ) : (
-                      <br className="lg:hidden" />
+                      <>
+                        <br className="lg:hidden" />
+                        &nbsp;
+                      </>
                     )}
-                    &nbsp;Frank
+                    Frank
                   </div>
                 </div>
               </div>

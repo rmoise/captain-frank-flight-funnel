@@ -2741,10 +2741,10 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                     e.stopPropagation();
                     addFlightSegment();
                   }}
-                  className="w-full h-12 border-2 border-dashed border-gray-300 rounded-lg hover:border-[#F54538] hover:text-[#F54538] transition-colors flex items-center justify-center px-4"
+                  className="w-full min-h-[3rem] border-2 border-dashed border-gray-300 rounded-lg hover:border-[#F54538] hover:text-[#F54538] transition-colors flex items-center justify-center px-4 py-2 text-sm sm:text-base"
                 >
                   <svg
-                    className="w-5 h-5 mr-2"
+                    className="w-5 h-5 mr-2 flex-shrink-0"
                     viewBox="0 0 20 20"
                     fill="currentColor"
                   >
@@ -2754,7 +2754,9 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                       clipRule="evenodd"
                     />
                   </svg>
-                  Einen weiteren Flug hinzufügen
+                  <span className="whitespace-normal text-center">
+                    Einen weiteren Flug hinzufügen
+                  </span>
                 </button>
 
                 {showFlightSearch &&
