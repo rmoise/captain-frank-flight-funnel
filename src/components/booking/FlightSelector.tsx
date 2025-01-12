@@ -770,7 +770,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
       if (timeDiff < 30) {
         return {
           isValid: false,
-          message: 'Connection time must be at least 30 minutes',
+          message: 'Umsteigezeit muss mindestens 30 Minuten betragen',
           timeDiff,
         };
       }
@@ -778,14 +778,14 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
       if (timeDiff > 24 * 60) {
         return {
           isValid: false,
-          message: 'Connection time cannot exceed 24 hours',
+          message: 'Umsteigezeit darf 24 Stunden nicht überschreiten',
           timeDiff,
         };
       }
 
       return {
         isValid: true,
-        message: `Connection time: ${Math.floor(timeDiff / 60)}h ${Math.floor(timeDiff % 60)}m`,
+        message: `Umsteigezeit: ${Math.floor(timeDiff / 60)}h ${Math.floor(timeDiff % 60)}m`,
         timeDiff,
       };
     } catch (error) {
@@ -845,9 +845,39 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
         selectedFlights: [storeFormatFlight],
         directFlight: {
           ...directFlight,
+          fromLocation: {
+            value: storeFormatFlight.departureCity,
+            label: storeFormatFlight.departureCity,
+            description: storeFormatFlight.departureAirport,
+            dropdownLabel: `${storeFormatFlight.departureAirport} (${storeFormatFlight.departureCity})`,
+          },
+          toLocation: {
+            value: storeFormatFlight.arrivalCity,
+            label: storeFormatFlight.arrivalCity,
+            description: storeFormatFlight.arrivalAirport,
+            dropdownLabel: `${storeFormatFlight.arrivalAirport} (${storeFormatFlight.arrivalCity})`,
+          },
           selectedFlight: storeFormatFlight,
         },
       });
+
+      // Update store locations
+      setFromLocation(
+        JSON.stringify({
+          value: storeFormatFlight.departureCity,
+          label: storeFormatFlight.departureCity,
+          description: storeFormatFlight.departureAirport,
+          dropdownLabel: `${storeFormatFlight.departureAirport} (${storeFormatFlight.departureCity})`,
+        })
+      );
+      setToLocation(
+        JSON.stringify({
+          value: storeFormatFlight.arrivalCity,
+          label: storeFormatFlight.arrivalCity,
+          description: storeFormatFlight.arrivalAirport,
+          dropdownLabel: `${storeFormatFlight.arrivalAirport} (${storeFormatFlight.arrivalCity})`,
+        })
+      );
     } else {
       // For multi-segment flights
       // Check if this flight is already selected in another segment
@@ -1383,16 +1413,19 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
       setSelectedType('multi');
     }
 
-    // Update validation state to false for the new segment
+    // Clear any selected flights array since we have a new incomplete segment
+    setSelectedFlights([]);
+
+    // Update validation state to false since we have a new incomplete segment
     if (setValidationState && stepNumber) {
       setValidationState((prev: Record<number, boolean>) => ({
         ...prev,
         [stepNumber]: false,
       }));
-    }
 
-    // Clear any selected flights array since we have a new incomplete segment
-    setSelectedFlights([]);
+      // Also update store validation state
+      validateFlightSelection();
+    }
   };
 
   // Update the cleanup effect to not remove empty segments that were just added
@@ -1727,32 +1760,90 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
       // Update validation state based on current phase
       if (setValidationState && stepNumber) {
         if (currentPhase === 3) {
-          // For phase 3, all segments must have selected flights
-          const allSegmentsHaveFlights = newSegments.every(
-            (segment) => segment.selectedFlight !== null
-          );
+          // For phase 3, validate that all segments have flights and are properly connected
+          const allSegmentsValid = newSegments.every((segment, segIndex) => {
+            // Check if segment has a selected flight
+            const hasSelectedFlight = !!segment.selectedFlight;
+
+            // For segments after first, check if cities connect properly
+            if (segIndex > 0) {
+              const prevSegment = newSegments[segIndex - 1];
+              if (!prevSegment.selectedFlight || !segment.selectedFlight)
+                return false;
+
+              const prevCity = prevSegment.selectedFlight.arrivalCity;
+              const currentCity = segment.selectedFlight.departureCity;
+
+              if (
+                !prevCity ||
+                !currentCity ||
+                prevCity.toLowerCase() !== currentCity.toLowerCase()
+              ) {
+                return false;
+              }
+
+              // Validate flight times
+              return validateFlightTimes(
+                prevSegment.selectedFlight,
+                segment.selectedFlight
+              );
+            }
+
+            return hasSelectedFlight;
+          });
+
           setValidationState((prev: Record<number, boolean>) => ({
             ...prev,
-            [stepNumber]: allSegmentsHaveFlights,
+            [stepNumber]: allSegmentsValid,
           }));
         } else {
-          // For phase 1, all segments must have both locations
-          const allSegmentsHaveLocations = newSegments.every(
-            (segment) => segment.fromLocation && segment.toLocation
-          );
+          // For phase 1, validate all segments have locations and are properly connected
+          const allSegmentsValid = newSegments.every((segment, segIndex) => {
+            // Check if segment has both locations
+            const hasLocations = segment.fromLocation && segment.toLocation;
+
+            // For segments after first, check if cities connect properly
+            if (segIndex > 0) {
+              const prevSegment = newSegments[segIndex - 1];
+              if (!prevSegment.toLocation || !segment.fromLocation)
+                return false;
+
+              const prevCity =
+                prevSegment.toLocation.city ||
+                prevSegment.toLocation.description ||
+                prevSegment.toLocation.label;
+              const currentCity =
+                segment.fromLocation.city ||
+                segment.fromLocation.description ||
+                segment.fromLocation.label;
+
+              if (
+                !prevCity ||
+                !currentCity ||
+                prevCity.toLowerCase() !== currentCity.toLowerCase()
+              ) {
+                return false;
+              }
+            }
+
+            return hasLocations;
+          });
+
           setValidationState((prev: Record<number, boolean>) => ({
             ...prev,
-            [stepNumber]: allSegmentsHaveLocations,
+            [stepNumber]: allSegmentsValid,
           }));
         }
+
+        // Also trigger store validation
+        validateFlightSelection();
       }
 
-      // Notify parent of changes
-      onSelect(null);
+      // Trigger onInteract callback
       onInteract();
     } catch (error) {
-      console.error('Error updating flight locations:', error);
-      setFlightErrorMessage('Error updating flight locations');
+      console.error('Error in handleMultiLocationChange:', error);
+      setFlightErrorMessage('An error occurred while updating flight segments');
     }
   };
 
@@ -2670,7 +2761,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                   (currentPhase === 3 || currentPhase === 4) && (
                     <button
                       onClick={() => {}}
-                      className="w-full h-12 bg-red-50 text-[#F54538] rounded-lg font-medium hover:bg-red-100 transition-colors text-sm"
+                      className="hidden w-full h-12 bg-red-50 text-[#F54538] rounded-lg font-medium hover:bg-red-100 transition-colors text-sm"
                     >
                       Flug nicht gefunden?
                     </button>
@@ -2793,7 +2884,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                     </button>
                     <button
                       onClick={() => {}}
-                      className="w-full h-12 bg-red-50 text-[#F54538] rounded-lg font-medium hover:bg-red-100 transition-colors text-sm"
+                      className="hidden w-full h-12 bg-red-50 text-[#F54538] rounded-lg font-medium hover:bg-red-100 transition-colors text-sm"
                     >
                       Flug nicht gefunden?
                     </button>
@@ -2907,7 +2998,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                       <div className="mt-8 flex justify-center w-full">
                         <button
                           onClick={() => setSearchModalOpen(false)}
-                          className="px-8 h-12 bg-red-50 text-[#F54538] rounded-lg font-medium hover:bg-red-100 transition-colors text-sm"
+                          className="hidden px-8 h-12 bg-red-50 text-[#F54538] rounded-lg font-medium hover:bg-red-100 transition-colors text-sm"
                         >
                           Flug nicht gefunden?
                         </button>
@@ -2931,7 +3022,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                       <div className="mt-8 flex justify-center w-full">
                         <button
                           onClick={() => setSearchModalOpen(false)}
-                          className="px-8 h-12 bg-red-50 text-[#F54538] rounded-lg font-medium hover:bg-red-100 transition-colors text-sm"
+                          className="hidden px-8 h-12 bg-red-50 text-[#F54538] rounded-lg font-medium hover:bg-red-100 transition-colors text-sm"
                         >
                           Flug nicht gefunden?
                         </button>

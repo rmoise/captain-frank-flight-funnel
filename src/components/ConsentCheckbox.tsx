@@ -1,6 +1,12 @@
 'use client';
 
-import React, { useState, useRef, useLayoutEffect } from 'react';
+import React, {
+  useState,
+  useRef,
+  useLayoutEffect,
+  useMemo,
+  useCallback,
+} from 'react';
 import { ChevronUpIcon } from '@heroicons/react/24/outline';
 import { motion } from 'framer-motion';
 import { useStore } from '@/lib/state/store';
@@ -59,22 +65,17 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
         : setMarketingAccepted;
 
   // Handle click on the link
-  const handleLinkClick = (e: React.MouseEvent) => {
+  const handleLinkClick = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (type === 'terms') {
-      window.open('https://www.captain-frank.com/de/agb', '_blank');
-    } else if (type === 'privacy' || type === 'marketing') {
-      window.open(
-        'https://www.captain-frank.com/de/datenschutz?_gl=1*1o1nam*_gcl_au*OTQ3NDQyOTgzLjE3MzI3MjIzMDY.*_ga*NTUyNzkxNDY3LjE3MzI3MjIzMDY.*_ga_XZVF0Y8PLW*MTczNjM0MDk0MS4xMTUuMS4xNzM2MzQxMTU1LjAuMC4w',
-        '_blank'
-      );
+    if (e.currentTarget instanceof HTMLAnchorElement) {
+      window.open(e.currentTarget.href, '_blank');
     }
-  };
+  }, []);
 
   // Format the label to include the link for privacy type
-  const formattedLabel =
-    type === 'terms' ? (
+  const formattedLabel = useMemo(() => {
+    return type === 'terms' ? (
       <span>
         Ich habe die{' '}
         <a
@@ -125,6 +126,7 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
     ) : (
       label
     );
+  }, [type, label, handleLinkClick]);
 
   // Use useLayoutEffect to check truncation before paint
   useLayoutEffect(() => {

@@ -16,6 +16,7 @@ import { accordionConfig } from '@/config/accordion';
 import { PHASE_TO_URL } from '@/lib/state/store';
 import { isValidYYYYMMDD } from '@/utils/dateUtils';
 import api from '@/services/api';
+import { AccordionProvider } from '@/components/shared/AccordionContext';
 
 const questions: Question[] = [
   {
@@ -145,6 +146,10 @@ const informedDateQuestions: Question[] = [
 export default function TripExperiencePage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [interactedSteps, setInteractedSteps] = useState<number[]>([]);
+  const [initialAccordion, setInitialAccordion] = useState<string | null>(null);
+
   const {
     wizardAnswers,
     selectedFlights,
@@ -155,85 +160,49 @@ export default function TripExperiencePage() {
     setCurrentPhase,
     setEvaluationResult,
     currentPhase,
-    setWizardAnswers,
-    openSteps,
-    setOpenSteps,
   } = useStore();
 
-  const initRef = useRef(false);
   const step2OpenedRef = useRef(false);
 
   // Filter answers for each wizard
   const tripExperienceAnswers = useMemo(() => {
-    const answers =
-      wizardAnswers?.filter((a) => a.questionId.startsWith('travel_status')) ??
-      [];
+    const relevantQuestionIds = [
+      'travel_status',
+      'refund_status',
+      'ticket_cost',
+      'alternative_flight_airline_expense',
+      'alternative_flight_own_expense',
+      'trip_costs',
+    ];
+
+    // Ensure we have wizardAnswers and filter out any undefined/null values
+    const answers = (wizardAnswers || []).filter(
+      (a): a is Answer =>
+        !!a &&
+        relevantQuestionIds.includes(a.questionId) &&
+        a.value !== undefined &&
+        a.value !== null
+    );
+
     console.log('Filtered trip experience answers:', answers);
     return answers;
   }, [wizardAnswers]);
 
   const informedDateAnswers = useMemo(() => {
-    const answers =
-      wizardAnswers?.filter((a) => a.questionId.startsWith('informed_date')) ??
-      [];
+    const relevantQuestionIds = ['informed_date', 'specific_informed_date'];
+
+    // Ensure we have wizardAnswers and filter out any undefined/null values
+    const answers = (wizardAnswers || []).filter(
+      (a): a is Answer =>
+        !!a &&
+        relevantQuestionIds.includes(a.questionId) &&
+        a.value !== undefined &&
+        a.value !== null
+    );
+
     console.log('Filtered informed date answers:', answers);
     return answers;
   }, [wizardAnswers]);
-
-  // Handler functions for completing steps
-  const handleTripExperienceComplete = useCallback((answers: Answer[]) => {
-    console.log('Trip experience completed with answers:', answers);
-    // Get the last answer
-    const lastAnswer = answers[answers.length - 1];
-
-    // Batch all state updates together
-    const store = useStore.getState();
-    store.setWizardAnswers(answers);
-
-    if (lastAnswer) {
-      store.setLastAnsweredQuestion(lastAnswer.questionId);
-    }
-
-    store.updateValidationState({
-      stepValidation: {
-        ...store.validationState.stepValidation,
-        2: true,
-      },
-      stepInteraction: {
-        ...store.validationState.stepInteraction,
-        2: true,
-      },
-      2: true,
-      _timestamp: Date.now(),
-    });
-  }, []);
-
-  const handleInformedDateComplete = useCallback((answers: Answer[]) => {
-    console.log('Informed date completed with answers:', answers);
-    // Get the last answer
-    const lastAnswer = answers[answers.length - 1];
-
-    // Batch all state updates together
-    const store = useStore.getState();
-    store.setWizardAnswers(answers);
-
-    if (lastAnswer) {
-      store.setLastAnsweredQuestion(lastAnswer.questionId);
-    }
-
-    store.updateValidationState({
-      stepValidation: {
-        ...store.validationState.stepValidation,
-        3: true,
-      },
-      stepInteraction: {
-        ...store.validationState.stepInteraction,
-        3: true,
-      },
-      3: true,
-      _timestamp: Date.now(),
-    });
-  }, []);
 
   // Initialize state
   useEffect(() => {
@@ -241,124 +210,83 @@ export default function TripExperiencePage() {
       const initializeState = async () => {
         try {
           console.log('Initializing state...');
-          // Set current phase
           setCurrentPhase(4);
 
-          // Get all saved data at once
-          const savedData = {
-            tripExperience: localStorage.getItem('tripExperienceAnswers'),
-            informedDate: localStorage.getItem('informedDateAnswers'),
-            selectedFlights: localStorage.getItem('selectedFlights'),
-          };
-          console.log('Retrieved saved data:', savedData);
+          // Get saved validation state from localStorage
+          const savedValidationState = localStorage.getItem(
+            'tripExperienceValidationState'
+          );
+          let initialValidationState;
 
-          // Get current answers from store
-          const currentAnswers = useStore.getState().wizardAnswers || [];
-          console.log('Current answers in store:', currentAnswers);
-          let newAnswers = [...currentAnswers];
-
-          // Process trip experience answers
-          if (savedData.tripExperience) {
+          if (savedValidationState) {
             try {
-              const parsedAnswers = JSON.parse(savedData.tripExperience);
-              console.log('Parsed trip experience answers:', parsedAnswers);
-              if (Array.isArray(parsedAnswers) && parsedAnswers.length > 0) {
-                // Remove any existing travel status answers
-                newAnswers = newAnswers.filter(
-                  (a) => !a.questionId.startsWith('travel_status')
-                );
-                // Add saved travel status answers
-                newAnswers.push(...parsedAnswers);
-              }
+              const parsed = JSON.parse(savedValidationState);
+              initialValidationState = {
+                ...validationState,
+                ...parsed,
+                stepValidation: {
+                  ...validationState.stepValidation,
+                  ...parsed.stepValidation,
+                },
+                stepInteraction: {
+                  ...validationState.stepInteraction,
+                  ...parsed.stepInteraction,
+                },
+              };
             } catch (error) {
-              console.error(
-                'Error parsing saved trip experience answers:',
-                error
-              );
+              console.error('Error parsing saved validation state:', error);
+              // Fall back to default initialization
+              initialValidationState = {
+                ...validationState,
+                2: false,
+                3: false,
+                stepValidation: {
+                  ...validationState.stepValidation,
+                  2: false,
+                  3: false,
+                },
+                stepInteraction: {
+                  ...validationState.stepInteraction,
+                  2: false,
+                  3: false,
+                },
+              };
             }
-          }
-
-          // Process informed date answers
-          if (savedData.informedDate) {
-            try {
-              const parsedAnswers = JSON.parse(savedData.informedDate);
-              console.log('Parsed informed date answers:', parsedAnswers);
-              if (Array.isArray(parsedAnswers) && parsedAnswers.length > 0) {
-                // Remove any existing informed date answers
-                newAnswers = newAnswers.filter(
-                  (a) => !a.questionId.startsWith('informed_date')
-                );
-                // Add saved informed date answers
-                newAnswers.push(...parsedAnswers);
-              }
-            } catch (error) {
-              console.error(
-                'Error parsing saved informed date answers:',
-                error
-              );
-            }
-          }
-
-          // Set the answers in the store
-          if (newAnswers.length > 0) {
-            setWizardAnswers(newAnswers);
-          }
-
-          // Process selected flights
-          if (savedData.selectedFlights) {
-            try {
-              const parsedFlights = JSON.parse(savedData.selectedFlights);
-              console.log('Parsed selected flights:', parsedFlights);
-              if (Array.isArray(parsedFlights) && parsedFlights.length > 0) {
-                useStore.getState().setSelectedFlights(parsedFlights);
-                console.log('Set selected flights in store');
-              }
-            } catch (error) {
-              console.error('Error parsing saved selected flights:', error);
-            }
-          }
-
-          // Update validation state based on restored answers
-          const store = useStore.getState();
-          console.log('Current validation state:', store.validationState);
-
-          if (
-            newAnswers.some((a) => a.questionId.startsWith('travel_status'))
-          ) {
-            console.log('Updating validation state for travel status');
-            store.updateValidationState({
+          } else {
+            // No saved state, use default initialization
+            initialValidationState = {
+              ...validationState,
+              2: false,
+              3: false,
               stepValidation: {
-                ...store.validationState.stepValidation,
-                2: true,
+                ...validationState.stepValidation,
+                2: false,
+                3: false,
               },
               stepInteraction: {
-                ...store.validationState.stepInteraction,
-                2: true,
+                ...validationState.stepInteraction,
+                2: false,
+                3: false,
               },
-              2: true,
-              _timestamp: Date.now(),
-            });
+            };
           }
 
+          updateValidationState(initialValidationState);
+
+          // Set initial accordion based on validation state
           if (
-            newAnswers.some((a) => a.questionId.startsWith('informed_date'))
+            initialValidationState.stepValidation[2] &&
+            !initialValidationState.stepValidation[3]
           ) {
-            console.log('Updating validation state for informed date');
-            store.updateValidationState({
-              stepValidation: {
-                ...store.validationState.stepValidation,
-                3: true,
-              },
-              stepInteraction: {
-                ...store.validationState.stepInteraction,
-                3: true,
-              },
-              3: true,
-              _timestamp: Date.now(),
-            });
+            setInitialAccordion('3');
+            step2OpenedRef.current = true;
+          } else {
+            setInitialAccordion('2');
           }
 
-          console.log('Final validation state:', store.validationState);
+          // Clear any existing session storage
+          sessionStorage.removeItem('activeAccordion');
+
           setMounted(true);
           console.log('State initialization complete');
         } catch (error) {
@@ -368,99 +296,234 @@ export default function TripExperiencePage() {
 
       initializeState();
     }
-  }, [mounted, setCurrentPhase, setWizardAnswers]);
+  }, [mounted, setCurrentPhase, validationState, updateValidationState]);
 
-  // Initialize with step 2 open only
+  // Add effect to persist validation state changes
   useEffect(() => {
-    if (!mounted && !initRef.current) {
-      initRef.current = true;
-      setOpenSteps([2]);
+    if (mounted) {
+      localStorage.setItem(
+        'tripExperienceValidationState',
+        JSON.stringify(validationState)
+      );
     }
-  }, [mounted, setOpenSteps]);
+  }, [mounted, validationState]);
 
-  // Add effect to handle automatic opening of step 2 when step 1 is completed
+  // Add effect for step 3 auto-opening
   useEffect(() => {
     if (
       validationState.stepValidation[2] &&
       !validationState.stepValidation[3] &&
       !step2OpenedRef.current
     ) {
-      // Only open step 2 if it's not already in the openSteps array and hasn't been opened before
-      if (!openSteps.includes(3)) {
-        setOpenSteps([...openSteps, 3]);
-        step2OpenedRef.current = true;
-      }
+      setInitialAccordion('3');
+      step2OpenedRef.current = true;
     }
-  }, [validationState.stepValidation, openSteps]);
+  }, [validationState.stepValidation]);
 
-  // Save answers to localStorage when they change
-  useEffect(() => {
-    if (tripExperienceAnswers.length > 0) {
-      console.log('Saving trip experience answers:', tripExperienceAnswers);
-      localStorage.setItem(
-        'tripExperienceAnswers',
-        JSON.stringify(tripExperienceAnswers)
-      );
+  const isTripExperienceValid = useMemo(() => {
+    // Check if all required questions are answered first
+    const travelStatus = tripExperienceAnswers.find(
+      (a) => a.questionId === 'travel_status'
+    )?.value;
+
+    if (!travelStatus) return false;
+
+    // Additional validation based on travel status
+    let isValid = false;
+    switch (travelStatus) {
+      case 'none':
+        // Need refund status
+        const hasRefundStatus = tripExperienceAnswers.some(
+          (a) => a.questionId === 'refund_status'
+        );
+        if (!hasRefundStatus) return false;
+
+        // If no refund, need ticket cost
+        const refundStatus = tripExperienceAnswers.find(
+          (a) => a.questionId === 'refund_status'
+        )?.value;
+        if (refundStatus === 'no') {
+          isValid = tripExperienceAnswers.some(
+            (a) => a.questionId === 'ticket_cost'
+          );
+        } else {
+          isValid = true;
+        }
+        break;
+
+      case 'provided':
+        // Need alternative flight
+        isValid = tripExperienceAnswers.some(
+          (a) => a.questionId === 'alternative_flight_airline_expense'
+        );
+        break;
+
+      case 'took_alternative_own':
+        // Need alternative flight and trip costs
+        isValid =
+          tripExperienceAnswers.some(
+            (a) => a.questionId === 'alternative_flight_own_expense'
+          ) && tripExperienceAnswers.some((a) => a.questionId === 'trip_costs');
+        break;
+
+      case 'self':
+        // No additional questions needed
+        isValid = true;
+        break;
+
+      default:
+        isValid = false;
     }
+
+    return isValid;
   }, [tripExperienceAnswers]);
 
-  useEffect(() => {
-    if (informedDateAnswers.length > 0) {
-      console.log('Saving informed date answers:', informedDateAnswers);
-      localStorage.setItem(
-        'informedDateAnswers',
-        JSON.stringify(informedDateAnswers)
+  const isInformedDateValid = useMemo(() => {
+    if (!validationState.stepValidation[2]) return false;
+
+    // Check if all required questions are answered
+    const informedDate = informedDateAnswers.find(
+      (a) => a.questionId === 'informed_date'
+    )?.value;
+
+    if (!informedDate) return false;
+
+    // If specific date is selected, need the date value
+    if (informedDate === 'specific_date') {
+      return informedDateAnswers.some(
+        (a) => a.questionId === 'specific_informed_date'
       );
     }
-  }, [informedDateAnswers]);
 
-  useEffect(() => {
-    if (selectedFlights.length > 0) {
-      console.log('Saving selected flights:', selectedFlights);
-      localStorage.setItem('selectedFlights', JSON.stringify(selectedFlights));
+    return true;
+  }, [validationState.stepValidation, informedDateAnswers]);
+
+  const handleAutoTransition = useCallback(
+    (currentStepId: string) => {
+      const store = useStore.getState();
+      console.log('TripExperience - handleAutoTransition:', {
+        currentStepId,
+        step1Valid: isTripExperienceValid,
+        step2Valid: isInformedDateValid,
+        validationState: store.validationState,
+        interactedSteps,
+      });
+
+      const hasInteracted = interactedSteps.includes(Number(currentStepId));
+      if (!hasInteracted) {
+        console.log('No interaction yet for step:', currentStepId);
+        return null;
+      }
+
+      if (currentStepId === '2') {
+        const step1Complete = store.validationState[2];
+        const step1Interacted = store.validationState.stepInteraction?.[2];
+        console.log('Step 1 transition check:', {
+          step1Complete,
+          step1Interacted,
+          isTripExperienceValid,
+          shouldTransition:
+            isTripExperienceValid && step1Complete && step1Interacted,
+        });
+        if (isTripExperienceValid && step1Complete && step1Interacted) {
+          return '3';
+        }
+      }
+
+      if (currentStepId === '3') {
+        const step2Complete = store.validationState[3];
+        const step2Interacted = store.validationState.stepInteraction?.[3];
+        console.log('Step 2 transition check:', {
+          step2Complete,
+          step2Interacted,
+          isInformedDateValid,
+          shouldTransition:
+            isInformedDateValid && step2Complete && step2Interacted,
+        });
+        if (isInformedDateValid && step2Complete && step2Interacted) {
+          return null;
+        }
+      }
+
+      return null;
+    },
+    [isTripExperienceValid, isInformedDateValid, interactedSteps]
+  );
+
+  // Handler functions for completing steps
+  const handleTripExperienceComplete = useCallback((answers: Answer[]) => {
+    console.log('Trip experience completed with answers:', answers);
+    const lastAnswer = answers[answers.length - 1];
+    const store = useStore.getState();
+
+    console.log(
+      'Current validation state before update:',
+      store.validationState
+    );
+    store.setWizardAnswers(answers);
+
+    if (lastAnswer) {
+      store.setLastAnsweredQuestion(lastAnswer.questionId);
     }
-  }, [selectedFlights]);
 
-  // Handle component unmount
-  useEffect(() => {
-    return () => {
-      // Save current state before unmounting
-      const currentAnswers = useStore.getState().wizardAnswers || [];
-      const tripAnswers = currentAnswers.filter((a) =>
-        a.questionId.startsWith('travel_status')
-      );
-      const dateAnswers = currentAnswers.filter((a) =>
-        a.questionId.startsWith('informed_date')
-      );
-
-      if (tripAnswers.length > 0) {
-        localStorage.setItem(
-          'tripExperienceAnswers',
-          JSON.stringify(tripAnswers)
-        );
-      }
-      if (dateAnswers.length > 0) {
-        localStorage.setItem(
-          'informedDateAnswers',
-          JSON.stringify(dateAnswers)
-        );
-      }
-      if (selectedFlights.length > 0) {
-        localStorage.setItem(
-          'selectedFlights',
-          JSON.stringify(selectedFlights)
-        );
-      }
+    const newValidationState = {
+      ...store.validationState,
+      2: true,
+      stepValidation: {
+        ...store.validationState.stepValidation,
+        2: true,
+      },
+      stepInteraction: {
+        ...store.validationState.stepInteraction,
+        2: true,
+      },
     };
-  }, [selectedFlights]);
+
+    console.log('New validation state for step 1:', newValidationState);
+    store.updateValidationState(newValidationState);
+    setInteractedSteps((prev) => [...new Set([...prev, 2])]);
+  }, []);
+
+  const handleInformedDateComplete = useCallback((answers: Answer[]) => {
+    console.log('Informed date completed with answers:', answers);
+    const lastAnswer = answers[answers.length - 1];
+    const store = useStore.getState();
+
+    console.log(
+      'Current validation state before update:',
+      store.validationState
+    );
+    store.setWizardAnswers(answers);
+
+    if (lastAnswer) {
+      store.setLastAnsweredQuestion(lastAnswer.questionId);
+    }
+
+    const newValidationState = {
+      ...store.validationState,
+      2: store.validationState[2] || false,
+      3: true,
+      stepValidation: {
+        ...store.validationState.stepValidation,
+        2: store.validationState.stepValidation[2] || false,
+        3: true,
+      },
+      stepInteraction: {
+        ...store.validationState.stepInteraction,
+        3: true,
+      },
+    };
+
+    console.log('New validation state for step 2:', newValidationState);
+    store.updateValidationState(newValidationState);
+    setInteractedSteps((prev) => [...new Set([...prev, 3])]);
+  }, []);
 
   // Check if we can continue
   const canContinue = useCallback(() => {
-    // Check if both wizards are marked as completed in the validation state
-    const travelStatusCompleted = validationState.stepValidation[2];
-    const informedDateCompleted = validationState.stepValidation[3];
-
-    return travelStatusCompleted && informedDateCompleted;
+    return (
+      validationState.stepValidation[2] && validationState.stepValidation[3]
+    );
   }, [validationState.stepValidation]);
 
   const handleBack = () => {
@@ -472,6 +535,8 @@ export default function TripExperiencePage() {
 
   const handleContinue = async () => {
     if (!canContinue()) return;
+
+    setIsLoading(true);
 
     try {
       // Get the travel status from step 1 answers
@@ -673,108 +738,162 @@ export default function TripExperiencePage() {
       }
     } catch (error) {
       console.error('Error in handleContinue:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleTripExperienceInteract = useCallback(() => {
-    // Only update interaction state, not validation
-    updateValidationState({
+    // Update interaction state while preserving validation
+    const newValidationState = {
+      ...validationState,
+      stepValidation: {
+        ...validationState.stepValidation,
+        1: validationState.stepValidation[1] || false,
+        2: validationState.stepValidation[2] || false,
+      },
       stepInteraction: {
         ...validationState.stepInteraction,
-        2: true,
+        1: true,
+        2: validationState.stepInteraction[2] || false,
       },
-      _timestamp: Date.now(),
-    });
+    };
+    updateValidationState(newValidationState);
+    setInteractedSteps((prev) => [...new Set([...prev, 1])]);
   }, [validationState, updateValidationState]);
 
   const handleInformedDateInteract = useCallback(() => {
-    // Only update interaction state, not validation
-    updateValidationState({
+    // Update interaction state while preserving validation
+    const newValidationState = {
+      ...validationState,
+      stepValidation: {
+        ...validationState.stepValidation,
+        1: validationState.stepValidation[1] || false,
+        2: validationState.stepValidation[2] || false,
+      },
       stepInteraction: {
         ...validationState.stepInteraction,
-        3: true,
+        1: validationState.stepInteraction[1] || false,
+        2: true,
       },
-      _timestamp: Date.now(),
-    });
+    };
+    updateValidationState(newValidationState);
+    setInteractedSteps((prev) => [...new Set([...prev, 2])]);
   }, [validationState, updateValidationState]);
+
+  const getTripExperienceSummary = useMemo(() => {
+    if (tripExperienceAnswers.length === 0) return '';
+
+    const travelStatus = tripExperienceAnswers.find(
+      (a) => a.questionId === 'travel_status'
+    )?.value;
+
+    switch (travelStatus) {
+      case 'none':
+        return 'Nicht gereist';
+      case 'self':
+        return 'Gebuchte Flüge geflogen';
+      case 'provided':
+        return 'Alternative Flüge von der Airline';
+      case 'took_alternative_own':
+        return 'Alternative Flüge auf eigene Kosten';
+      default:
+        return '';
+    }
+  }, [tripExperienceAnswers]);
+
+  const getInformedDateSummary = useMemo(() => {
+    if (informedDateAnswers.length === 0) return '';
+
+    const informedDate = informedDateAnswers.find(
+      (a) => a.questionId === 'informed_date'
+    )?.value;
+
+    if (informedDate === 'on_departure') {
+      return 'Am Abflugtag informiert';
+    }
+
+    const specificDate = informedDateAnswers.find(
+      (a) => a.questionId === 'specific_informed_date'
+    )?.value;
+
+    if (specificDate && typeof specificDate === 'string') {
+      const date = new Date(specificDate);
+      return `Informiert am ${date.toLocaleDateString('de-DE')}`;
+    }
+
+    return '';
+  }, [informedDateAnswers]);
 
   return (
     <PhaseGuard phase={4}>
-      <div className="min-h-screen bg-[#f5f7fa]">
-        <PhaseNavigation />
-        <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
-          <div className="space-y-6">
-            <SpeechBubble message="Lass uns über deine Reiseerfahrung sprechen. Das hilft uns zu verstehen, was passiert ist und wie wir dir helfen können." />
+      <AccordionProvider
+        onAutoTransition={handleAutoTransition}
+        initialActiveAccordion={initialAccordion}
+      >
+        <div className="min-h-screen bg-[#f5f7fa]">
+          <PhaseNavigation />
+          <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
+            <div className="space-y-6">
+              <SpeechBubble message="Lass uns über deine Reiseerfahrung sprechen. Das hilft uns zu verstehen, was passiert ist und wie wir dir helfen können." />
 
-            {/* Trip Experience Wizard */}
-            <AccordionCard
-              title="Was ist mit deinem Flug passiert?"
-              eyebrow="Schritt 1"
-              isOpen={openSteps.includes(2)}
-              shouldStayOpen={false}
-              isCompleted={validationState.stepValidation[2]}
-              hasInteracted={validationState.stepInteraction[2]}
-              stepId="trip-experience"
-              className={accordionConfig.padding.wrapper}
-              onToggle={() => {
-                const isCurrentlyOpen = openSteps.includes(2);
-                const newOpenSteps = isCurrentlyOpen
-                  ? openSteps.filter((id) => id !== 2)
-                  : [...openSteps, 2];
-                setOpenSteps(newOpenSteps);
-              }}
-            >
-              <div className={accordionConfig.padding.content}>
-                <QAWizard
-                  questions={questions}
-                  onComplete={handleTripExperienceComplete}
-                  onInteract={handleTripExperienceInteract}
-                  initialAnswers={tripExperienceAnswers}
-                  selectedFlight={selectedFlights[0] || null}
+              {/* Trip Experience Wizard */}
+              <AccordionCard
+                title="Was ist mit deinem Flug passiert?"
+                stepId="2"
+                isCompleted={validationState.stepValidation[2]}
+                hasInteracted={validationState.stepInteraction[2]}
+                isValid={isTripExperienceValid}
+                summary={getTripExperienceSummary}
+                eyebrow="Schritt 1"
+                isQA={false}
+              >
+                <div className={accordionConfig.padding.content}>
+                  <QAWizard
+                    questions={questions}
+                    onComplete={handleTripExperienceComplete}
+                    onInteract={handleTripExperienceInteract}
+                    initialAnswers={tripExperienceAnswers}
+                    selectedFlight={selectedFlights[0] || null}
+                  />
+                </div>
+              </AccordionCard>
+
+              {/* Informed Date Wizard */}
+              <AccordionCard
+                title="Wann wurdest du informiert?"
+                stepId="3"
+                isCompleted={validationState.stepValidation[3]}
+                hasInteracted={validationState.stepInteraction[3]}
+                isValid={isInformedDateValid}
+                summary={getInformedDateSummary}
+                eyebrow="Schritt 2"
+                isQA={true}
+              >
+                <div className={accordionConfig.padding.content}>
+                  <QAWizard
+                    questions={informedDateQuestions}
+                    onComplete={handleInformedDateComplete}
+                    onInteract={handleInformedDateInteract}
+                    initialAnswers={informedDateAnswers}
+                  />
+                </div>
+              </AccordionCard>
+
+              {/* Navigation */}
+              <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
+                <BackButton onClick={handleBack} text="Zurück" />
+                <ContinueButton
+                  onClick={handleContinue}
+                  disabled={!canContinue() || isLoading}
+                  isLoading={isLoading}
+                  text="Anspruch prüfen"
                 />
               </div>
-            </AccordionCard>
-
-            {/* Informed Date Wizard */}
-            <AccordionCard
-              title="Wann wurdest du informiert?"
-              eyebrow="Schritt 2"
-              isOpen={openSteps.includes(3)}
-              shouldStayOpen={false}
-              isCompleted={validationState.stepValidation[3]}
-              hasInteracted={validationState.stepInteraction[3]}
-              stepId="informed-date"
-              className={accordionConfig.padding.wrapper}
-              onToggle={() => {
-                const isCurrentlyOpen = openSteps.includes(3);
-                const newOpenSteps = isCurrentlyOpen
-                  ? openSteps.filter((id) => id !== 3)
-                  : [...openSteps, 3];
-                setOpenSteps(newOpenSteps);
-              }}
-            >
-              <div className={accordionConfig.padding.content}>
-                <QAWizard
-                  questions={informedDateQuestions}
-                  onComplete={handleInformedDateComplete}
-                  onInteract={handleInformedDateInteract}
-                  initialAnswers={informedDateAnswers}
-                />
-              </div>
-            </AccordionCard>
-
-            {/* Navigation */}
-            <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
-              <BackButton onClick={handleBack} text="Zurück" />
-              <ContinueButton
-                onClick={handleContinue}
-                disabled={!canContinue()}
-                text="Anspruch prüfen"
-              />
             </div>
-          </div>
-        </main>
-      </div>
+          </main>
+        </div>
+      </AccordionProvider>
     </PhaseGuard>
   );
 }

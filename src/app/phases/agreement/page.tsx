@@ -431,6 +431,23 @@ export default function AgreementPage() {
 
       // Get personal details from store
       const personalDetails = useStore.getState().personalDetails;
+      const bookingNumber = useStore.getState().bookingNumber;
+
+      // Validate booking number before proceeding
+      if (
+        !bookingNumber ||
+        bookingNumber.trim().length < 6 ||
+        !/^[A-Z0-9]+$/i.test(bookingNumber.trim())
+      ) {
+        setErrors(
+          (prev: FormErrors): FormErrors => ({
+            ...prev,
+            submit: ['Bitte geben Sie eine gültige Buchungsnummer ein.'],
+          })
+        );
+        hideLoading();
+        return;
+      }
 
       // Create the order request data
       const formDataEntries =
@@ -458,7 +475,7 @@ export default function AgreementPage() {
         journey_fact_type,
         information_received_at:
           formattedDate || new Date().toISOString().split('T')[0],
-        journey_booked_pnr: bookingNumber || '',
+        journey_booked_pnr: bookingNumber.trim(),
         owner_salutation: formDataValues.salutation === 'Mr' ? 'herr' : 'frau',
         owner_firstname:
           personalDetails?.firstName || formDataValues.firstName || '',
@@ -581,57 +598,42 @@ export default function AgreementPage() {
               }, trete hiermit meine Ansprüche auf Entschädigung aus der Flugverbindung mit PNR/Buchungsnummer ${
                 bookingNumber ?? ''
               } von ${
-                Array.isArray(flightDetails) && flightDetails.length > 0
-                  ? flightDetails[0].departure ||
-                    flightDetails[0].departureAirport ||
-                    ''
-                  : flightDetails?.departure ||
-                    flightDetails?.departureAirport ||
-                    ''
+                selectedFlights[0]?.departure ||
+                selectedFlights[0]?.departureAirport ||
+                selectedFlights[0]?.departureCity ||
+                ''
+              }${
+                selectedFlights.length > 1
+                  ? ` über ${
+                      selectedFlights[1]?.departure ||
+                      selectedFlights[1]?.departureAirport ||
+                      selectedFlights[1]?.departureCity ||
+                      ''
+                    }`
+                  : ''
               } nach ${
-                Array.isArray(flightDetails) && flightDetails.length > 0
-                  ? flightDetails[0].arrival ||
-                    flightDetails[0].arrivalAirport ||
-                    ''
-                  : flightDetails?.arrival ||
-                    flightDetails?.arrivalAirport ||
-                    ''
+                selectedFlights[selectedFlights.length - 1]?.arrival ||
+                selectedFlights[selectedFlights.length - 1]?.arrivalAirport ||
+                selectedFlights[selectedFlights.length - 1]?.arrivalCity ||
+                ''
               } am ${
-                Array.isArray(flightDetails) && flightDetails.length > 0
-                  ? flightDetails[0].date
+                selectedFlights[0]?.date
+                  ? new Date(
+                      selectedFlights[0].date.split('T')[0]
+                    ).toLocaleDateString('de-DE', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    })
+                  : selectedFlights[0]?.departureTime
                     ? new Date(
-                        flightDetails[0].date.split('T')[0]
+                        selectedFlights[0].departureTime.split(' ')[0]
                       ).toLocaleDateString('de-DE', {
                         year: 'numeric',
                         month: 'long',
                         day: 'numeric',
                       })
-                    : flightDetails[0].departureTime
-                      ? new Date(
-                          flightDetails[0].departureTime.split(' ')[0]
-                        ).toLocaleDateString('de-DE', {
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric',
-                        })
-                      : ''
-                  : flightDetails?.date
-                    ? new Date(
-                        flightDetails.date.split('T')[0]
-                      ).toLocaleDateString('de-DE', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                      })
-                    : flightDetails?.departureTime
-                      ? new Date(
-                          flightDetails.departureTime.split(' ')[0]
-                        ).toLocaleDateString('de-DE', {
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric',
-                        })
-                      : ''
+                    : ''
               } an die Captain Frank GmbH ab.
 
 Die Captain Frank GmbH nimmt die Abtretungserklärung an.`}

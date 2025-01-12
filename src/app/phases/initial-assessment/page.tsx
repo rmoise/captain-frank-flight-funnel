@@ -1,12 +1,6 @@
 'use client';
 
-import React, {
-  useEffect,
-  useState,
-  useCallback,
-  useMemo,
-  useRef,
-} from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { AccordionCard } from '@/components/shared/AccordionCard';
 import type { Flight, Answer, PassengerDetails } from '@/types/store';
 import FlightSelector from '@/components/booking/FlightSelector';
@@ -16,13 +10,14 @@ import { PersonalDetailsForm } from '@/components/forms/PersonalDetailsForm';
 import { ConsentCheckbox } from '@/components/ConsentCheckbox';
 import { SpeechBubble } from '@/components/SpeechBubble';
 import type { Question } from '@/types/experience';
-import { accordionConfig } from '@/config/accordion';
 import { useRouter } from 'next/navigation';
 import { pushToDataLayer } from '@/utils/gtm';
 import { useStore, PHASE_TO_URL } from '@/lib/state/store';
 import type { StoreStateValues, ValidationStateSteps } from '@/lib/state/store';
 import { PhaseNavigation } from '@/components/PhaseNavigation';
 import { ContinueButton } from '@/components/shared/ContinueButton';
+import { AccordionProvider } from '@/components/shared/AccordionContext';
+import { accordionConfig } from '@/config/accordion';
 
 interface LocationData {
   value: string;
@@ -87,121 +82,13 @@ interface Step {
   isOpenByDefault: boolean;
 }
 
-// Add summaryInitialState
-const summaryInitialState: StoreStateValues = {
-  selectedType: 'direct',
-  directFlight: {
-    fromLocation: null,
-    toLocation: null,
-    date: new Date(),
-    selectedFlight: null,
-  },
-  flightSegments: [
-    {
-      fromLocation: null,
-      toLocation: null,
-      date: new Date(),
-      selectedFlight: null,
-    },
-  ],
-  currentPhase: 1,
-  isSearchModalOpen: false,
-  searchTerm: '',
-  displayedFlights: [],
-  allFlights: [],
-  loading: false,
-  errorMessage: null,
-  errorMessages: {},
-  selectedFlights: [],
-  selectedFlight: null,
-  fromLocation: null,
-  toLocation: null,
-  selectedDate: null,
-  currentSegmentIndex: 0,
-  isTransitioningPhases: false,
-  isInitializing: false,
-  validationState: {
-    isFlightValid: false,
-    isWizardValid: false,
-    isPersonalValid: false,
-    isTermsValid: false,
-    isSignatureValid: false,
-    isBookingValid: false,
-    stepValidation: {
-      1: false,
-      2: false,
-      3: false,
-      4: false,
-    },
-    stepInteraction: {
-      1: false,
-      2: false,
-      3: false,
-      4: false,
-    },
-    fieldErrors: {},
-    1: false,
-    2: false,
-    3: false,
-    4: false,
-  },
-  completedSteps: [],
-  bookingNumber: '',
-  phasesCompletedViaContinue: [],
-  locationError: null,
-  completedWizards: {},
-  signature: '',
-  hasSignature: false,
-  wizardCurrentSteps: {},
-  wizardAnswers: [],
-  wizardIsCompleted: false,
-  wizardSuccessMessage: '',
-  wizardIsEditingMoney: false,
-  wizardLastActiveStep: null,
-  wizardShowingSuccess: false,
-  wizardValidationState: {},
-  wizardIsValidating: false,
-  personalDetails: null,
-  termsAccepted: false,
-  privacyAccepted: false,
-  marketingAccepted: false,
-  completedPhases: [],
-  currentStep: 1,
-  openSteps: [1],
-  tripExperienceAnswers: [],
-  lastValidAnswers: [],
-  lastValidStep: 0,
-  wizardSuccessStates: {
-    travel_status: { showing: false, message: '' },
-    informed_date: { showing: false, message: '' },
-    issue: { showing: false, message: '' },
-    phase1: { showing: false, message: '' },
-    default: { showing: false, message: '' },
-  },
-  evaluationResult: {
-    status: null,
-  },
-  isLoading: false,
-  flightDetails: null,
-  delayDuration: null,
-  wizardIsValid: false,
-  lastAnsweredQuestion: null,
-  compensationAmount: null,
-  compensationLoading: false,
-  compensationError: null,
-  compensationCache: {
-    amount: null,
-    flightData: null,
-  },
-  isValidating: false,
-};
-
 export default function InitialAssessment() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [interactedSteps, setInteractedSteps] = useState<number[]>([]);
-  const initRef = useRef(false);
+  const [isFirstVisit, setIsFirstVisit] = useState(true);
+  const [initialAccordion, setInitialAccordion] = useState<string | null>(null);
 
   const {
     wizardAnswers,
@@ -213,7 +100,6 @@ export default function InitialAssessment() {
     fromLocation,
     toLocation,
     currentStep,
-    openSteps,
     validationState,
     setWizardAnswers,
     setPersonalDetails,
@@ -221,7 +107,6 @@ export default function InitialAssessment() {
     setPrivacyAccepted,
     setMarketingAccepted,
     setSelectedFlights,
-    setOpenSteps,
     setCurrentPhase,
     completePhase,
     initializeStore,
@@ -240,69 +125,188 @@ export default function InitialAssessment() {
         if (!mounted) {
           await initializeStore();
           setCurrentPhase(1);
+
+          // Check if this is actually first visit by looking at store state
+          const hasExistingData =
+            selectedFlights.length > 0 ||
+            wizardAnswers.length > 0 ||
+            personalDetails !== null ||
+            termsAccepted;
+          setIsFirstVisit(!hasExistingData);
+
+          // If we have existing wizard answers, revalidate them
+          if (wizardAnswers.length > 0) {
+            markWizardComplete('initial_assessment');
+            validateQAWizard();
+          }
+
+          // Get the last active accordion from session storage
+          if (typeof window !== 'undefined') {
+            const lastActiveAccordion =
+              sessionStorage.getItem('activeAccordion');
+            setInitialAccordion(
+              lastActiveAccordion || (hasExistingData ? null : '1')
+            );
+          }
+
           setMounted(true);
         }
       } catch (error) {}
     };
 
     initialize();
-  }, [mounted, initializeStore, setCurrentPhase]);
+  }, [
+    mounted,
+    initializeStore,
+    setCurrentPhase,
+    selectedFlights,
+    wizardAnswers,
+    personalDetails,
+    termsAccepted,
+    markWizardComplete,
+    validateQAWizard,
+  ]);
 
-  // Initialize with step 1 open
-  useEffect(() => {
-    if (!mounted && !initRef.current) {
-      initRef.current = true;
-      setOpenSteps([1]);
-    }
-  }, [mounted, setOpenSteps]);
+  const handleAutoTransition = useCallback(
+    (currentStepId: string) => {
+      const currentStepNumber = parseInt(currentStepId) as ValidationStateSteps;
+      const nextStepNumber = (currentStepNumber + 1) as ValidationStateSteps;
 
-  // Keep steps open when completed and handle transitions
-  useEffect(() => {
-    console.log('Validation state changed:', validationState.stepValidation);
-    console.log('Current open steps:', openSteps);
-
-    const completedStepIds = Object.entries(validationState.stepValidation)
-      .filter(([, isValid]) => isValid)
-      .map(([id]) => parseInt(id));
-
-    console.log('Completed step IDs:', completedStepIds);
-
-    if (completedStepIds.length > 0) {
-      const newOpenSteps = [...openSteps];
-      let hasChanges = false;
-
-      completedStepIds.forEach((id) => {
-        // Keep completed steps open
-        if (!openSteps.includes(id)) {
-          console.log(`Step ${id} is validated, adding to open steps`);
-          newOpenSteps.push(id);
-          hasChanges = true;
-        }
-
-        // Open next step when current step is completed
-        const nextStep = id + 1;
-        if (nextStep <= 4 && !openSteps.includes(nextStep)) {
-          console.log(`Opening next step ${nextStep}`);
-          newOpenSteps.push(nextStep);
-          hasChanges = true;
-        }
+      console.log('InitialAssessment - handleAutoTransition:', {
+        currentStepId,
+        currentStepNumber,
+        nextStepNumber,
+        isCurrentStepValid: isStepValid(currentStepNumber),
+        willTransition: nextStepNumber <= 4 && isStepValid(currentStepNumber),
+        validationState: validationState.stepValidation,
+        currentStep,
+        completedSteps,
       });
 
-      if (hasChanges) {
-        const uniqueSteps = Array.from(new Set(newOpenSteps)).sort(
-          (a, b) => a - b
-        );
-        console.log('Setting new open steps:', uniqueSteps);
-        setOpenSteps(uniqueSteps);
+      // Only return next step if it exists and current step is valid
+      if (nextStepNumber <= 4 && isStepValid(currentStepNumber)) {
+        console.log('InitialAssessment - Transitioning to next step:', {
+          from: currentStepNumber,
+          to: nextStepNumber,
+          validationState: validationState.stepValidation,
+        });
+        return nextStepNumber.toString();
       }
+      return null;
+    },
+    [isStepValid, validationState.stepValidation, currentStep, completedSteps]
+  );
+
+  // Remove any validation effects that might be interfering with toggling
+  useEffect(() => {
+    if (!mounted) return;
+  }, [mounted]);
+
+  const isQAWizardValid = useMemo(() => {
+    if (!validationState.stepValidation[2]) return false;
+
+    // Check if all required questions are answered
+    const issueType = wizardAnswers.find(
+      (a) => a.questionId === 'issue_type'
+    )?.value;
+
+    if (!issueType) return false;
+
+    // Additional validation based on issue type
+    switch (issueType) {
+      case 'delay':
+        // Need delay duration
+        return wizardAnswers.some((a) => a.questionId === 'delay_duration');
+
+      case 'cancel':
+        // Need cancellation notice and alternative flight info
+        const hasCancellationNotice = wizardAnswers.some(
+          (a) => a.questionId === 'cancellation_notice'
+        );
+        const hasAirlineAlternative = wizardAnswers.some(
+          (a) => a.questionId === 'alternative_flight_airline_expense'
+        );
+        const hasRefundStatus = wizardAnswers.some(
+          (a) => a.questionId === 'refund_status'
+        );
+
+        if (
+          !hasCancellationNotice ||
+          !hasAirlineAlternative ||
+          !hasRefundStatus
+        )
+          return false;
+
+        // If airline didn't provide alternative, need own alternative info
+        const airlineProvidedAlternative =
+          wizardAnswers.find(
+            (a) => a.questionId === 'alternative_flight_airline_expense'
+          )?.value === 'yes';
+
+        if (!airlineProvidedAlternative) {
+          return wizardAnswers.some(
+            (a) => a.questionId === 'alternative_flight_own_expense'
+          );
+        }
+        return true;
+
+      case 'missed':
+        // Need missed costs info
+        const hasMissedCosts = wizardAnswers.some(
+          (a) => a.questionId === 'missed_costs'
+        );
+        if (!hasMissedCosts) return false;
+
+        // If they had costs, need amount
+        const hadCosts =
+          wizardAnswers.find((a) => a.questionId === 'missed_costs')?.value ===
+          'yes';
+
+        if (hadCosts) {
+          return wizardAnswers.some(
+            (a) => a.questionId === 'missed_costs_amount'
+          );
+        }
+        return true;
+
+      case 'other':
+        // No additional questions needed for 'other'
+        return true;
+
+      default:
+        return false;
     }
-  }, [validationState.stepValidation, openSteps, setOpenSteps]);
+  }, [validationState.stepValidation, wizardAnswers]);
+
+  const renderStep = (step: Step) => {
+    const currentState = useStore.getState();
+
+    return (
+      <AccordionCard
+        key={step.id}
+        title={step.title}
+        subtitle={step.subtitle}
+        stepId={step.id.toString()}
+        isCompleted={completedSteps.includes(step.id)}
+        hasInteracted={interactedSteps.includes(step.id)}
+        isValid={step.id === 2 ? isQAWizardValid : isStepValid(step.id)}
+        summary={step.getSummary(currentState)}
+        shouldStayOpen={false}
+        isOpenByDefault={isFirstVisit && step.id === 1}
+        className={accordionConfig.padding.wrapper}
+        eyebrow={`Schritt ${step.id}`}
+        isQA={step.id === 2}
+      >
+        <div className={accordionConfig.padding.content}>
+          {renderStepContent(step)}
+        </div>
+      </AccordionCard>
+    );
+  };
 
   // State logging effect
   useEffect(() => {
     if (!mounted) return;
-
-    // Log overall state
   }, [
     mounted,
     validationState,
@@ -322,13 +326,33 @@ export default function InitialAssessment() {
   // QA Wizard completion handler
   const handleComplete = useCallback(
     (answers: Answer[]) => {
+      console.log('QA Wizard completed:', {
+        answers,
+        currentValidation: validationState.stepValidation,
+      });
+
       // Store the answers and let the store handle validation
       setWizardAnswers(answers);
       markWizardComplete('initial_assessment');
       validateQAWizard();
       setInteractedSteps((prev) => [...new Set([...prev, 2])]);
+
+      // Update validation state to trigger auto-transition
+      updateValidationState({
+        stepValidation: {
+          ...validationState.stepValidation,
+          2: true,
+        },
+        2: true,
+      });
     },
-    [setWizardAnswers, markWizardComplete, validateQAWizard]
+    [
+      setWizardAnswers,
+      markWizardComplete,
+      validateQAWizard,
+      validationState.stepValidation,
+      updateValidationState,
+    ]
   );
 
   // Update flight selection handler
@@ -366,14 +390,15 @@ export default function InitialAssessment() {
               | ((prev: Record<number, boolean>) => Record<number, boolean>)
           ) => {
             // Update validation state for step 1
+            const currentValidation = validationState.stepValidation;
             if (typeof state === 'function') {
               const newState = state({} as Record<number, boolean>);
               updateValidationState({
                 stepValidation: {
                   1: newState[1] || false,
-                  2: false,
-                  3: false,
-                  4: false,
+                  2: currentValidation[2] || false,
+                  3: currentValidation[3] || false,
+                  4: currentValidation[4] || false,
                 },
                 1: newState[1] || false,
               });
@@ -381,9 +406,9 @@ export default function InitialAssessment() {
               updateValidationState({
                 stepValidation: {
                   1: state[1] || false,
-                  2: false,
-                  3: false,
-                  4: false,
+                  2: currentValidation[2] || false,
+                  3: currentValidation[3] || false,
+                  4: currentValidation[4] || false,
                 },
                 1: state[1] || false,
               });
@@ -391,30 +416,66 @@ export default function InitialAssessment() {
           },
         },
         getSummary: (state: StoreStateValues) => {
-          const from = state.fromLocation;
-          const to = state.toLocation;
-          if (!from || !to) return '';
+          // For direct flights
+          if (state.selectedType === 'direct' && state.directFlight) {
+            const { fromLocation, toLocation } = state.directFlight;
+            if (!fromLocation || !toLocation) return '';
 
-          const parseLocation = (loc: string | null) => {
-            if (!loc) return null;
-            try {
-              return JSON.parse(loc);
-            } catch {
-              return loc;
-            }
-          };
+            const parseLocation = (
+              loc: LocationData | null | undefined
+            ): LocationData | null => {
+              if (!loc) return null;
+              return {
+                value: loc.value,
+                label: loc.label,
+              };
+            };
 
-          const fromData = parseLocation(from);
-          const toData = parseLocation(to);
+            const fromData = parseLocation(fromLocation);
+            const toData = parseLocation(toLocation);
 
-          if (!fromData || !toData) return '';
+            if (!fromData || !toData) return '';
 
-          const getLocationLabel = (loc: LocationData | string): string => {
-            if (typeof loc === 'string') return loc;
-            return loc.label || loc.value || '';
-          };
+            const getLocationLabel = (loc: LocationData): string => {
+              return loc.label || loc.value || '';
+            };
 
-          return `Flight from ${getLocationLabel(fromData)} to ${getLocationLabel(toData)}`;
+            return `Direktflug von ${getLocationLabel(fromData)} nach ${getLocationLabel(toData)}`;
+          }
+
+          // For multi-segment flights
+          if (state.selectedType === 'multi' && state.flightSegments) {
+            const segments = state.flightSegments.filter(
+              (segment) => segment.fromLocation && segment.toLocation
+            );
+
+            if (segments.length === 0) return '';
+
+            const parseLocation = (
+              loc: LocationData | null | undefined
+            ): LocationData | null => {
+              if (!loc) return null;
+              return {
+                value: loc.value,
+                label: loc.label,
+              };
+            };
+
+            const getLocationLabel = (loc: LocationData): string => {
+              return loc.label || loc.value || '';
+            };
+
+            const segmentSummaries = segments.map((segment) => {
+              const fromData = parseLocation(segment.fromLocation);
+              const toData = parseLocation(segment.toLocation);
+              if (!fromData || !toData) return '';
+              return `${getLocationLabel(fromData)} → ${getLocationLabel(toData)}`;
+            });
+
+            return `Flug mit ${segments.length} Segment${segments.length > 1 ? 'en' : ''}: ${segmentSummaries.join(' | ')}`;
+          }
+
+          return '';
         },
         shouldStayOpen: false,
         isOpenByDefault: true,
@@ -461,7 +522,22 @@ export default function InitialAssessment() {
         component: PersonalDetailsForm,
         props: {
           onComplete: (details: PassengerDetails | null) => {
+            console.log('PersonalDetails completed:', {
+              details,
+              currentValidation: validationState.stepValidation,
+            });
             setPersonalDetails(details);
+            setInteractedSteps((prev) => [...new Set([...prev, 3])]);
+            if (details) {
+              // Update validation state to trigger auto-transition
+              updateValidationState({
+                stepValidation: {
+                  ...validationState.stepValidation,
+                  3: true,
+                },
+                3: true,
+              });
+            }
           },
           onInteract: () =>
             setInteractedSteps((prev) => [...new Set([...prev, 3])]),
@@ -472,9 +548,24 @@ export default function InitialAssessment() {
           const details = state.personalDetails;
           if (!details) return '';
 
-          return details.firstName && details.lastName
-            ? `${details.firstName} ${details.lastName}`
-            : '';
+          const parts = [];
+
+          // Add name
+          if (details.firstName && details.lastName) {
+            parts.push(`${details.firstName} ${details.lastName}`);
+          }
+
+          // Add email
+          if (details.email) {
+            parts.push(details.email);
+          }
+
+          // Add phone if provided
+          if (details.phone) {
+            parts.push(details.phone);
+          }
+
+          return parts.join(' • ');
         },
         shouldStayOpen: false,
         isOpenByDefault: false,
@@ -550,6 +641,7 @@ export default function InitialAssessment() {
     setInteractedSteps,
     handleComplete,
     updateValidationState,
+    validationState.stepValidation,
   ]);
 
   // Define steps with memoization
@@ -568,88 +660,20 @@ export default function InitialAssessment() {
     }
   }, [completePhase, router]);
 
-  // Update the renderStep function
-  const renderStep = (step: Step) => {
-    const isCompleted = isStepValid(step.id as ValidationStateSteps);
-    const hasInteracted = interactedSteps.includes(step.id);
-    const summary = step.getSummary({
-      ...summaryInitialState,
-      wizardAnswers,
-      personalDetails,
-      selectedFlights,
-      termsAccepted,
-      privacyAccepted,
-      marketingAccepted,
-      fromLocation,
-      toLocation,
-      validationState,
-      currentPhase: 1,
-    });
-
-    const isOpen = openSteps.includes(step.id);
-
-    const renderStepContent = () => {
-      if (step.component === FlightSelector) {
-        return <FlightSelector {...(step.props as FlightSelectorProps)} />;
-      }
-      if (step.component === QAWizardWrapper) {
-        return <QAWizardWrapper {...(step.props as QAWizardProps)} />;
-      }
-      if (step.component === PersonalDetailsForm) {
-        return (
-          <PersonalDetailsForm {...(step.props as PersonalDetailsFormProps)} />
-        );
-      }
-      const TermsComponent =
-        step.component as React.FC<TermsAndConditionsProps>;
-      return <TermsComponent {...(step.props as TermsAndConditionsProps)} />;
-    };
-
-    return (
-      <div
-        key={step.id}
-        className="mb-0"
-        data-step={step.id}
-        style={{
-          scrollMarginTop: '1rem',
-          scrollSnapAlign: 'start',
-          scrollSnapStop: 'always',
-        }}
-      >
-        <AccordionCard
-          title={step.title}
-          subtitle={step.subtitle}
-          eyebrow={`Schritt ${step.id}`}
-          isOpen={isOpen}
-          isCompleted={isCompleted}
-          hasInteracted={hasInteracted}
-          summary={summary}
-          shouldStayOpen={false}
-          isOpenByDefault={step.id === 1}
-          className={accordionConfig.padding.wrapper}
-          stepId={
-            step.id === 1
-              ? 'flight-selection'
-              : step.id === 2
-                ? 'qa-wizard'
-                : step.id === 3
-                  ? 'passenger-info'
-                  : `step-${step.id}`
-          }
-          onToggle={() => {
-            const isCurrentlyOpen = openSteps.includes(step.id);
-            const newOpenSteps = isCurrentlyOpen
-              ? openSteps.filter((id) => id !== step.id)
-              : [...openSteps, step.id];
-            setOpenSteps(newOpenSteps);
-          }}
-        >
-          <div className={accordionConfig.padding.content}>
-            {renderStepContent()}
-          </div>
-        </AccordionCard>
-      </div>
-    );
+  const renderStepContent = (step: Step) => {
+    if (step.component === FlightSelector) {
+      return <FlightSelector {...(step.props as FlightSelectorProps)} />;
+    }
+    if (step.component === QAWizardWrapper) {
+      return <QAWizardWrapper {...(step.props as QAWizardProps)} />;
+    }
+    if (step.component === PersonalDetailsForm) {
+      return (
+        <PersonalDetailsForm {...(step.props as PersonalDetailsFormProps)} />
+      );
+    }
+    const TermsComponent = step.component as React.FC<TermsAndConditionsProps>;
+    return <TermsComponent {...(step.props as TermsAndConditionsProps)} />;
   };
 
   useEffect(() => {
@@ -661,26 +685,29 @@ export default function InitialAssessment() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f7fa]">
-      <PhaseNavigation />
-      <div className="relative">
-        <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
-          <div className="space-y-6">
-            <SpeechBubble message="Hi, ich bin Captain Frank. Ich helfe dir herauszufinden, ob du Anspruch auf eine Entschädigung für deine Flugunterbrechung hast. Los geht's!" />
-            {steps.map(renderStep)}
-
-            {/* Continue Button */}
-            <div className="mt-8 flex justify-end">
-              <ContinueButton
-                onClick={handleContinue}
-                disabled={!canProceedToNextPhase()}
-                isLoading={isLoading}
-                text="Zur Ersteinschätzung"
-              />
+    <AccordionProvider
+      onAutoTransition={handleAutoTransition}
+      initialActiveAccordion={initialAccordion}
+    >
+      <div className="max-w-5xl mx-auto px-4 py-8">
+        <PhaseNavigation />
+        <div className="relative">
+          <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
+            <div className="space-y-6">
+              <SpeechBubble message="Hi, ich bin Captain Frank. Ich helfe dir herauszufinden, ob du Anspruch auf eine Entschädigung für deine Flugunterbrechung hast. Los geht's!" />
+              {steps.map(renderStep)}
+              <div className="mt-8 flex justify-end">
+                <ContinueButton
+                  onClick={handleContinue}
+                  disabled={!canProceedToNextPhase()}
+                  isLoading={isLoading}
+                  text="Zur Ersteinschätzung"
+                />
+              </div>
             </div>
-          </div>
-        </main>
+          </main>
+        </div>
       </div>
-    </div>
+    </AccordionProvider>
   );
 }

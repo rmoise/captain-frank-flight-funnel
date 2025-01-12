@@ -38,6 +38,7 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
   });
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const lastValidValueRef = useRef<string | null>(null);
 
   const selectedOption = options.find((opt) => opt.value === value);
   const filteredOptions = searchTerm
@@ -48,6 +49,15 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
       )
     : options;
 
+  // Update searchTerm when selectedOption changes
+  useEffect(() => {
+    if (selectedOption) {
+      setSearchTerm(selectedOption.label);
+      lastValidValueRef.current = selectedOption.label;
+    }
+  }, [selectedOption]);
+
+  // Update dropdown position when open
   useEffect(() => {
     if (!isOpen) return;
 
@@ -55,12 +65,9 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
       const rect = containerRef.current?.getBoundingClientRect();
       if (!rect) return;
 
-      const scrollY = window.scrollY;
-      const scrollX = window.scrollX;
-
       setDropdownPosition({
-        top: rect.bottom + scrollY + 4,
-        left: rect.left + scrollX,
+        top: rect.bottom + window.scrollY + 4,
+        left: rect.left + window.scrollX,
         width: rect.width,
       });
     };
@@ -75,6 +82,48 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
     };
   }, [isOpen]);
 
+  // Handle browser autofill
+  useEffect(() => {
+    const checkAutofill = () => {
+      if (inputRef.current?.value && !selectedOption) {
+        const autofillValue = inputRef.current.value;
+
+        // Try to match by label first (case insensitive)
+        let matchingOption = options.find(
+          (opt) => opt.label.toLowerCase() === autofillValue.toLowerCase()
+        );
+
+        // If no match found, try country codes
+        if (!matchingOption) {
+          const countryMappings: Record<string, string> = {
+            germany: 'DEU',
+            deutschland: 'DEU',
+            austria: 'AUT',
+            österreich: 'AUT',
+          };
+
+          const countryCode = countryMappings[autofillValue.toLowerCase()];
+          if (countryCode) {
+            matchingOption = options.find((opt) => opt.value === countryCode);
+          }
+        }
+
+        if (matchingOption && onChange) {
+          onChange(matchingOption.value);
+        }
+      }
+    };
+
+    // Check a few times to catch the autofill
+    const timeoutIds = [
+      setTimeout(checkAutofill, 100),
+      setTimeout(checkAutofill, 500),
+    ];
+
+    return () => timeoutIds.forEach((id) => clearTimeout(id));
+  }, [options, onChange, selectedOption]);
+
+  // Handle click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (!isOpen) return;
@@ -85,26 +134,124 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
 
       if (!isClickingDropdown && !isClickingInput) {
         setIsOpen(false);
-        setSearchTerm('');
+
+        // If we have a value in the input, try to preserve it
+        const currentValue = inputRef.current?.value;
+        if (currentValue) {
+          // Try to find a match for the current value
+          const matchingOption = options.find(
+            (opt) => opt.label.toLowerCase() === currentValue.toLowerCase()
+          );
+
+          if (matchingOption) {
+            // If we found a match, use it
+            setSearchTerm(matchingOption.label);
+            lastValidValueRef.current = matchingOption.label;
+            if (onChange) onChange(matchingOption.value);
+          } else if (selectedOption) {
+            // If no match but we have a selected option, restore it
+            setSearchTerm(selectedOption.label);
+            lastValidValueRef.current = selectedOption.label;
+          } else if (lastValidValueRef.current) {
+            // If we have a last valid value, restore it
+            setSearchTerm(lastValidValueRef.current);
+            const lastValidOption = options.find(
+              (opt) => opt.label === lastValidValueRef.current
+            );
+            if (lastValidOption && onChange) {
+              onChange(lastValidOption.value);
+            }
+          }
+        }
       }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen]);
+  }, [isOpen, options, onChange, selectedOption]);
 
   const handleSelect = (optionValue: string) => {
-    if (onChange) {
-      onChange(optionValue);
+    const selected = options.find((opt) => opt.value === optionValue);
+    if (selected) {
+      // Update the input value and state
+      if (inputRef.current) {
+        inputRef.current.value = selected.label;
+      }
+      setSearchTerm(selected.label);
+      lastValidValueRef.current = selected.label;
+      if (onChange) {
+        onChange(selected.value);
+      }
     }
     setIsOpen(false);
-    setSearchTerm('');
     setIsTouched(true);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(e.target.value);
+    const newValue = e.target.value;
+    setSearchTerm(newValue);
     setIsOpen(true);
+    setIsTouched(true);
+
+    // English to German name mappings for validation
+    const countryMappings: Record<string, string> = {
+      germany: 'deutschland',
+      austria: 'österreich',
+      switzerland: 'schweiz',
+      france: 'frankreich',
+      italy: 'italien',
+      spain: 'spanien',
+      netherlands: 'niederlande',
+      belgium: 'belgien',
+      denmark: 'dänemark',
+      poland: 'polen',
+      sweden: 'schweden',
+      norway: 'norwegen',
+      finland: 'finnland',
+      greece: 'griechenland',
+      portugal: 'portugal',
+      ireland: 'irland',
+      'united kingdom': 'großbritannien',
+      'czech republic': 'tschechien',
+      hungary: 'ungarn',
+      croatia: 'kroatien',
+      slovakia: 'slowakei',
+      slovenia: 'slowenien',
+      romania: 'rumänien',
+      bulgaria: 'bulgarien',
+      'united states': 'vereinigte staaten',
+      canada: 'kanada',
+      japan: 'japan',
+      china: 'china',
+      australia: 'australien',
+      russia: 'russland',
+      brazil: 'brasilien',
+      india: 'indien',
+      mexico: 'mexiko',
+      'south africa': 'südafrika',
+      egypt: 'ägypten',
+    };
+
+    const normalizedInput = newValue.toLowerCase().trim();
+    const germanName = countryMappings[normalizedInput] || normalizedInput;
+
+    // Try to find an exact match in either language
+    const exactMatch = options.find(
+      (opt) =>
+        opt.label.toLowerCase() === normalizedInput ||
+        opt.label.toLowerCase() === germanName
+    );
+
+    if (exactMatch && onChange) {
+      onChange(exactMatch.value);
+      lastValidValueRef.current = exactMatch.label;
+    } else if (onChange && value) {
+      // Only clear if we have a value and the input is empty
+      if (!newValue.trim()) {
+        onChange('');
+        lastValidValueRef.current = null;
+      }
+    }
   };
 
   const handleClear = () => {
@@ -112,6 +259,7 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
       onChange('');
     }
     setSearchTerm('');
+    lastValidValueRef.current = null;
     setIsOpen(false);
     if (inputRef.current) {
       inputRef.current.focus();
@@ -119,8 +267,8 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
   };
 
   const containerClassName = `
-    relative w-full h-14
-    bg-white rounded-xl outline-none
+    relative w-full
+    bg-white rounded-xl
     transition-all duration-[250ms] ease-in-out
     ${
       isOpen
@@ -129,6 +277,7 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
           ? 'border border-[#F54538]'
           : 'border border-[#e0e1e4] hover:border-blue-500'
     }
+    focus-within:outline-none
   `;
 
   const labelClassName = `
@@ -167,6 +316,7 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
             <li
               key={option.value}
               role="option"
+              data-value={option.value}
               aria-selected={option.value === value}
               onClick={() => handleSelect(option.value)}
               className="px-4 py-2 cursor-pointer hover:bg-gray-100"
@@ -188,7 +338,7 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
   };
 
   return (
-    <div className="relative" ref={containerRef}>
+    <div className="relative w-full" ref={containerRef}>
       <div
         className={containerClassName}
         onClick={() => !disabled && setIsOpen(true)}
@@ -196,15 +346,20 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
         <input
           ref={inputRef}
           type="text"
-          value={searchTerm || selectedOption?.label || ''}
+          value={searchTerm}
           onChange={handleInputChange}
           onFocus={() => setIsOpen(true)}
-          className="w-full h-full px-4 text-left
-    text-[#4B616D] text-base font-medium
-    focus:outline-none
-    ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
-  "
-          style={{ outline: 'none', boxShadow: 'none' }}
+          className="w-full h-14 px-4 text-left
+            text-[#4B616D] text-base font-medium
+            focus:outline-none rounded-xl
+            ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
+          "
+          style={{
+            outline: 'none',
+            boxShadow: 'none',
+            border: 'none',
+            background: 'transparent',
+          }}
           placeholder=""
           disabled={disabled}
           role="combobox"
@@ -224,14 +379,14 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
             )}
           </label>
         )}
-        <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none">
+        <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
           {value && !disabled && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 handleClear();
               }}
-              className="p-1 pointer-events-auto"
+              className="p-1 pointer-events-auto hover:bg-gray-100 rounded-full transition-colors"
               type="button"
               aria-label="Clear selection"
             >

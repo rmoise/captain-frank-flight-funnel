@@ -7,6 +7,35 @@ import { useStore } from '@/lib/state/store';
 import type { PassengerDetails } from '@/types/store';
 import { CountryAutocomplete } from '../shared/CountryAutocomplete';
 
+// Add debounce utility
+const useDebounce = <T extends unknown[]>(
+  callback: (...args: T) => void,
+  delay: number
+) => {
+  const timeoutRef = React.useRef<NodeJS.Timeout>();
+
+  React.useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  return useCallback(
+    (...args: T) => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+
+      timeoutRef.current = setTimeout(() => {
+        callback(...args);
+      }, delay);
+    },
+    [callback, delay]
+  );
+};
+
 const COUNTRY_OPTIONS = [
   // EU Countries
   { value: 'BEL', label: 'Belgien' },
@@ -94,33 +123,103 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
 
   const stepId = currentPhase === 5 || currentPhase === 6 ? 1 : 3;
   const hasInteracted = validationState.stepInteraction[stepId];
+  const interactionRef = React.useRef(false);
 
+  // Debounce the validation update
+  const debouncedUpdateValidation = useDebounce((isValid: boolean) => {
+    useStore.getState().updateValidationState({
+      stepValidation: {
+        ...validationState.stepValidation,
+        [stepId]: isValid,
+      },
+      [stepId]: isValid,
+    });
+  }, 500);
+
+  // Handle initial interaction
+  useEffect(() => {
+    if (!interactionRef.current && hasInteracted && onInteract) {
+      interactionRef.current = true;
+      onInteract();
+    }
+  }, [hasInteracted, onInteract]);
+
+  // Validate on mount for claim success page
+  useEffect(() => {
+    if (isClaimSuccess && storedDetails) {
+      setPersonalDetails(storedDetails);
+    }
+  }, [isClaimSuccess, storedDetails, setPersonalDetails]);
+
+  // Memoize the input change handler
   const handleInputChange = useCallback(
     (field: keyof PassengerDetails, value: string) => {
-      if (onInteract) onInteract();
+      if (!interactionRef.current && onInteract) {
+        onInteract();
+        interactionRef.current = true;
+      }
 
-      // Create new details object and let store handle validation
       const newDetails = {
         ...storedDetails,
         [field]: value,
       } as PassengerDetails;
 
-      setPersonalDetails(newDetails);
+      const isValid = Boolean(
+        isClaimSuccess
+          ? newDetails.salutation &&
+              newDetails.firstName &&
+              newDetails.lastName &&
+              newDetails.email &&
+              (!showAdditionalFields ||
+                (newDetails.phone &&
+                  newDetails.address &&
+                  newDetails.zipCode &&
+                  newDetails.city &&
+                  newDetails.country))
+          : newDetails.firstName && newDetails.lastName && newDetails.email
+      );
+
+      if (isClaimSuccess || storedDetails?.[field] !== value) {
+        setPersonalDetails(newDetails);
+        debouncedUpdateValidation(isValid);
+      }
     },
-    [storedDetails, setPersonalDetails, onInteract]
+    [
+      storedDetails,
+      setPersonalDetails,
+      onInteract,
+      isClaimSuccess,
+      showAdditionalFields,
+      debouncedUpdateValidation,
+    ]
   );
 
-  // Call onComplete whenever details change
+  // Call onComplete when details change
+  const lastDetailsRef = React.useRef(storedDetails);
   useEffect(() => {
-    // Don't call onComplete with null on initial mount
-    if (storedDetails === null && !hasInteracted) {
+    // Skip if details haven't changed (deep comparison)
+    if (
+      JSON.stringify(storedDetails) === JSON.stringify(lastDetailsRef.current)
+    )
       return;
-    }
+
+    // Skip if both are null
+    if (!storedDetails && !lastDetailsRef.current) return;
+
+    // Update ref and call onComplete
+    lastDetailsRef.current = storedDetails;
     onComplete(storedDetails);
-  }, [storedDetails, onComplete, hasInteracted]);
+  }, [storedDetails, onComplete]);
 
   return (
-    <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
+    <form
+      className="space-y-6"
+      onSubmit={(e) => e.preventDefault()}
+      onClick={(e) => {
+        // Stop propagation for all form clicks
+        e.stopPropagation();
+      }}
+    >
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <Select

@@ -31,7 +31,9 @@ export default function BookingDetails() {
           {selectedFlights.map((flight, index) => (
             <div key={index}>
               <h3 className="text-lg font-medium text-gray-900 mb-4">
-                {selectedFlights.length > 1 ? `Flight ${index + 1} Details` : 'Flight Details'}
+                {selectedFlights.length > 1
+                  ? `Flight ${index + 1} Details`
+                  : 'Flight Details'}
               </h3>
               <div className="bg-gray-50 rounded-lg p-4 grid grid-cols-2 gap-4">
                 <div>
@@ -45,7 +47,9 @@ export default function BookingDetails() {
                 <div>
                   <label className="text-gray-600">From</label>
                   <p className="font-medium">{flight.departureCity}</p>
-                  <p className="text-sm text-gray-500">{flight.departureTime}</p>
+                  <p className="text-sm text-gray-500">
+                    {flight.departureTime}
+                  </p>
                 </div>
                 <div>
                   <label className="text-gray-600">To</label>

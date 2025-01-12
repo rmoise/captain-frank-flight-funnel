@@ -39,27 +39,51 @@ export const validateFlightSelection = (state: StoreStateValues): boolean => {
           segments.length >= 2 &&
           segments.every(
             (segment) => segment.fromLocation && segment.toLocation
-          )
+          ) &&
+          // Validate city connections
+          segments.every((segment, index) => {
+            if (index === 0) return true;
+            const prevSegment = segments[index - 1];
+            if (!prevSegment.toLocation || !segment.fromLocation) return false;
+
+            const prevCity =
+              prevSegment.toLocation.city ||
+              prevSegment.toLocation.description ||
+              prevSegment.toLocation.label;
+            const currentCity =
+              segment.fromLocation.city ||
+              segment.fromLocation.description ||
+              segment.fromLocation.label;
+
+            return prevCity?.toLowerCase() === currentCity?.toLowerCase();
+          })
         );
-      } else {
-        // For other phases, check if we have all segments and flights
+      } else if (state.currentPhase === 3) {
+        // For phase 3, check if we have all segments and flights
         const hasAllSegments = segments.length >= 2;
         const hasAllFlights = segments.every(
           (segment) => !!segment.selectedFlight
         );
+        const hasValidConnections = segments.every((segment, index) => {
+          if (index === 0) return true;
+          const prevSegment = segments[index - 1];
+          if (!prevSegment.selectedFlight || !segment.selectedFlight)
+            return false;
 
-        if (!hasAllSegments || !hasAllFlights) {
-          isValid = false;
-        } else {
-          // Validate flight times between consecutive segments
-          isValid = segments.every((segment, index) => {
-            if (index === segments.length - 1) return true;
-            return validateFlightTimes(
-              segment.selectedFlight!,
-              segments[index + 1].selectedFlight!
-            );
-          });
-        }
+          // Check city connections
+          const prevCity = prevSegment.selectedFlight.arrivalCity;
+          const currentCity = segment.selectedFlight.departureCity;
+          if (prevCity?.toLowerCase() !== currentCity?.toLowerCase())
+            return false;
+
+          // Check flight times
+          return validateFlightTimes(
+            prevSegment.selectedFlight,
+            segment.selectedFlight
+          );
+        });
+
+        isValid = hasAllSegments && hasAllFlights && hasValidConnections;
       }
     }
 
@@ -69,24 +93,23 @@ export const validateFlightSelection = (state: StoreStateValues): boolean => {
       isFlightValid: isValid,
       stepValidation: {
         ...state.validationState.stepValidation,
-        1: isValid,
+        [state.currentPhase === 3 ? 3 : 1]: isValid,
       },
-      1: isValid,
+      [state.currentPhase === 3 ? 3 : 1]: isValid,
       _timestamp: Date.now(),
     };
 
     // Create a new completed steps array
+    const stepToValidate = state.currentPhase === 3 ? 3 : 1;
     const newCompletedSteps = isValid
-      ? Array.from(new Set([...state.completedSteps, 1])).sort((a, b) => a - b)
-      : state.completedSteps.filter((step) => step !== 1);
-
-    // Create a new open steps array
-    const newOpenSteps = Array.from(new Set([...state.openSteps, 1]));
+      ? Array.from(new Set([...state.completedSteps, stepToValidate])).sort(
+          (a, b) => a - b
+        )
+      : state.completedSteps;
 
     // Update the state immutably
     state.validationState = newValidationState;
     state.completedSteps = newCompletedSteps;
-    state.openSteps = newOpenSteps;
     state._lastUpdate = Date.now();
 
     return isValid;
@@ -236,10 +259,6 @@ export const validatePersonalDetails = (state: StoreStateValues): boolean => {
     state.completedSteps = Array.from(
       new Set([...state.completedSteps, stepId])
     ).sort((a, b) => a - b);
-  } else if (!isValid || !hasInteracted) {
-    state.completedSteps = state.completedSteps.filter(
-      (step) => step !== stepId
-    );
   }
 
   return isValid;
@@ -269,7 +288,7 @@ export const validateTerms = (
     },
     completedSteps: isValid
       ? Array.from(new Set([...state.completedSteps, 2])).sort((a, b) => a - b)
-      : state.completedSteps.filter((step) => step !== 2),
+      : state.completedSteps,
   }));
 
   return isValid;
@@ -295,9 +314,16 @@ export const checkStepValidity =
       return state.validationState?.isFlightValid || false;
     }
 
-    // For other steps, check both step validation, numeric index, and interaction state
+    // For step 3, check personal details validation
+    if (step === 3) {
+      return !!(
+        state.validationState?.isPersonalValid &&
+        state.validationState?.stepInteraction?.[step]
+      );
+    }
+
+    // For other steps, check both validation and interaction
     return !!(
-      state.validationState?.[step] &&
       state.validationState?.stepValidation?.[step] &&
       state.validationState?.stepInteraction?.[step]
     );
@@ -452,8 +478,8 @@ interface NavigationSlice {
   completedPhases: number[];
   completedSteps: number[];
   currentStep: number;
-  openSteps: number[];
   phasesCompletedViaContinue: number[]; // Track phases completed via continue button
+  openSteps: number[]; // Add openSteps property
 }
 
 interface ValidationSlice {
@@ -501,6 +527,7 @@ export interface StoreActions {
   completeStep: (step: number) => void;
   goToPreviousPhase: () => string | null;
   setBookingNumber: (bookingNumber: string) => void;
+  setOpenSteps: (steps: number[]) => void; // Add setOpenSteps action
   setSelectedFlights: (flights: Flight[]) => void;
   initializeNavigationFromUrl: () => void;
   setCurrentSegmentIndex: (index: number) => void;
@@ -549,7 +576,6 @@ export interface StoreActions {
   setCompensationLoading: (loading: boolean) => void;
   setCompensationError: (error: string | null) => void;
   setPersonalDetails: (details: PassengerDetails | null) => void;
-  setOpenSteps: (steps: number[]) => void;
   setTermsAccepted: (accepted: boolean) => void;
   setPrivacyAccepted: (accepted: boolean) => void;
   setMarketingAccepted: (accepted: boolean) => void;
@@ -714,10 +740,10 @@ const initialState: StoreState = {
   // Navigation related
   currentPhase: 1,
   completedPhases: [],
-  currentStep: 1,
   completedSteps: [],
-  openSteps: [1],
+  currentStep: 1,
   phasesCompletedViaContinue: [],
+  openSteps: [], // Add initial state for openSteps
 
   // Validation related
   validationState: {
@@ -838,20 +864,10 @@ export const useStore = create<StoreState & StoreActions>()(
       // Actions
       batchUpdateWizardState: (updates: Partial<StoreState>) => {
         const state = get();
+        const isValid = validateFlightSelection(state);
 
-        // Create new state with all updates
-        const newState = {
-          ...state,
-          ...updates,
-          _lastUpdate: Date.now(),
-        };
-
-        // Run validation with new state
-        const isValid = validateFlightSelection(newState);
-
-        // Apply all updates with validation in a single operation
         set({
-          ...newState,
+          ...updates,
           validationState: {
             ...state.validationState,
             isFlightValid: isValid,
@@ -867,7 +883,7 @@ export const useStore = create<StoreState & StoreActions>()(
                 (a, b) => a - b
               )
             : state.completedSteps.filter((step) => step !== 1),
-          openSteps: Array.from(new Set([...state.openSteps, 1])),
+          _lastUpdate: Date.now(),
         });
       },
 
@@ -901,7 +917,6 @@ export const useStore = create<StoreState & StoreActions>()(
                 (a, b) => a - b
               )
             : state.completedSteps.filter((step) => step !== 1),
-          openSteps: Array.from(new Set([...state.openSteps, 1])),
           _lastUpdate: Date.now(),
         });
       },
@@ -945,7 +960,23 @@ export const useStore = create<StoreState & StoreActions>()(
             return prefix !== currentPrefix;
           });
 
-          const newAnswers = [...existingAnswers, ...formattedAnswers];
+          // Remove duplicates from the new answers
+          const uniqueNewAnswers = formattedAnswers.reduce(
+            (acc: Answer[], curr) => {
+              const existingIndex = acc.findIndex(
+                (a) => a.questionId === curr.questionId
+              );
+              if (existingIndex >= 0) {
+                acc[existingIndex] = curr; // Replace with latest answer
+              } else {
+                acc.push(curr);
+              }
+              return acc;
+            },
+            []
+          );
+
+          const newAnswers = [...existingAnswers, ...uniqueNewAnswers];
 
           // Return updated state
           return {
@@ -1444,7 +1475,6 @@ export const useStore = create<StoreState & StoreActions>()(
         // Preserve existing validation state
         const existingValidationState = { ...state.validationState };
         const existingCompletedSteps = [...state.completedSteps];
-        const existingOpenSteps = [...state.openSteps];
 
         // Create new state with updated booking number
         const newState = {
@@ -1478,18 +1508,11 @@ export const useStore = create<StoreState & StoreActions>()(
             )
           : existingCompletedSteps.filter((step) => step !== 2);
 
-        // Calculate new open steps
-        const newOpenSteps = isValid
-          ? Array.from(new Set([...existingOpenSteps, 2]))
-          : existingOpenSteps;
-
         // Update state atomically with all changes
         set({
           ...newState,
           validationState: newValidationState,
           completedSteps: newCompletedSteps,
-          openSteps: newOpenSteps,
-          // Force immediate UI update
           _lastUpdate: Date.now(),
         });
       },
@@ -1670,7 +1693,6 @@ export const useStore = create<StoreState & StoreActions>()(
             ...updatedState,
             validationState: finalValidationState,
             completedSteps: finalCompletedSteps,
-            openSteps: Array.from(new Set([...state.openSteps, 1])),
             _lastUpdate: Date.now(),
           };
         }),
@@ -1858,7 +1880,6 @@ export const useStore = create<StoreState & StoreActions>()(
                     (a, b) => a - b
                   )
                 : state.completedSteps.filter((step) => step !== 1),
-              openSteps: Array.from(new Set([...state.openSteps, 1])),
               _lastUpdate: Date.now(),
             };
 
@@ -2078,7 +2099,6 @@ export const useStore = create<StoreState & StoreActions>()(
                   (a, b) => a - b
                 )
               : state.completedSteps.filter((step) => step !== 1),
-            openSteps: Array.from(new Set([...state.openSteps, 1])),
             _lastUpdate: Date.now(),
           };
         }),
@@ -2129,7 +2149,6 @@ export const useStore = create<StoreState & StoreActions>()(
         // Preserve existing validation state
         const existingValidationState = { ...state.validationState };
         const existingCompletedSteps = [...state.completedSteps];
-        const existingOpenSteps = [...state.openSteps];
 
         // Create new validation state while preserving other validations
         const newValidationState = {
@@ -2151,17 +2170,10 @@ export const useStore = create<StoreState & StoreActions>()(
             )
           : existingCompletedSteps.filter((step) => step !== 2);
 
-        // Calculate new open steps
-        const newOpenSteps = isValid
-          ? Array.from(new Set([...existingOpenSteps, 2]))
-          : existingOpenSteps;
-
         // Update state atomically
         set({
           validationState: newValidationState,
           completedSteps: newCompletedSteps,
-          openSteps: newOpenSteps,
-          // Force immediate UI update
           _lastUpdate: Date.now(),
         });
       },
@@ -2333,8 +2345,6 @@ export const useStore = create<StoreState & StoreActions>()(
           _lastUpdate: Date.now(),
         });
       },
-
-      setOpenSteps: (steps: number[]) => set({ openSteps: steps }),
 
       setTermsAccepted: (accepted: boolean) => {
         set((state) => {
@@ -2869,203 +2879,11 @@ export const useStore = create<StoreState & StoreActions>()(
           errorMessage: null,
           errorMessages: {},
         }),
+      setOpenSteps: (steps: number[]) => set({ openSteps: steps }),
     }),
     {
       name: 'captain-frank-store',
-      storage: createJSONStorage(() => localStorage),
-      partialize: (
-        state: StoreState & StoreActions
-      ): Partial<StoreState & StoreActions> | null => {
-        // Debounce logging and state persistence
-        const now = Date.now();
-        if (!state._lastPersist || now - state._lastPersist > 5000) {
-          // Increased debounce time to 5 seconds
-          // Only persist if state has actually changed
-          const currentState = {
-            directFlight: state.directFlight,
-            flightSegments: state.flightSegments,
-            selectedDate: state.selectedDate,
-            personalDetails: state.personalDetails,
-          };
-
-          const stateKey = JSON.stringify(currentState);
-          if (state._lastPersistedState !== stateKey) {
-            console.log('Persisting state:', currentState);
-            state._lastPersist = now;
-            state._lastPersistedState = stateKey;
-
-            return {
-              // Flight related
-              selectedType: state.selectedType,
-              directFlight: state.directFlight,
-              flightSegments: state.flightSegments,
-              currentSegmentIndex: state.currentSegmentIndex,
-              fromLocation: state.fromLocation,
-              toLocation: state.toLocation,
-              selectedDate: state.selectedDate,
-              selectedFlights: state.selectedFlights,
-              selectedFlight: state.selectedFlight,
-              flightDetails: state.flightDetails,
-              delayDuration: state.delayDuration,
-
-              // User related
-              personalDetails: state.personalDetails,
-              termsAccepted: state.termsAccepted,
-              privacyAccepted: state.privacyAccepted,
-              marketingAccepted: state.marketingAccepted,
-              signature: state.signature,
-              hasSignature: state.hasSignature,
-
-              // Navigation related
-              currentPhase: state.currentPhase,
-              completedPhases: state.completedPhases,
-              completedSteps: state.completedSteps,
-              openSteps: state.openSteps,
-              phasesCompletedViaContinue: state.phasesCompletedViaContinue,
-
-              // Validation related
-              validationState: state.validationState,
-
-              // Wizard related
-              wizardAnswers: state.wizardAnswers,
-              wizardCurrentSteps: state.wizardCurrentSteps,
-              wizardIsCompleted: state.wizardIsCompleted,
-              wizardIsValid: state.wizardIsValid,
-              completedWizards: state.completedWizards,
-              lastAnsweredQuestion: state.lastAnsweredQuestion,
-              tripExperienceAnswers: state.tripExperienceAnswers,
-            };
-          }
-        }
-
-        // Return null to skip persistence if within debounce period or no changes
-        return null;
-      },
-      onRehydrateStorage: () => {
-        return (state: (StoreState & StoreActions) | undefined) => {
-          if (state) {
-            console.log('Before rehydration:', {
-              directFlight: state.directFlight,
-              flightSegments: state.flightSegments,
-              selectedDate: state.selectedDate,
-            });
-
-            // Transform dates in the rehydrated state using separate functions
-            if (state.directFlight) {
-              state.directFlight = transformDatesSingle(state.directFlight);
-            }
-            if (state.flightSegments) {
-              state.flightSegments = transformDatesArray(state.flightSegments);
-            }
-
-            console.log('After rehydration:', {
-              directFlight: state.directFlight,
-              flightSegments: state.flightSegments,
-              selectedDate: state.selectedDate,
-            });
-
-            // Reset wizard success states
-            state.wizardSuccessStates = {
-              travel_status: { showing: false, message: '' },
-              informed_date: { showing: false, message: '' },
-              issue: { showing: false, message: '' },
-              phase1: { showing: false, message: '' },
-              default: { showing: false, message: '' },
-            };
-            state.wizardShowingSuccess = false;
-            state.wizardSuccessMessage = '';
-
-            // For phase 4 (trip experience), handle wizard state
-            if (state.currentPhase === 4) {
-              // Get existing wizard answers
-              const tripExperienceAnswers = state.wizardAnswers.filter((a) =>
-                a.questionId.startsWith('travel_status_')
-              );
-              const informedDateAnswers = state.wizardAnswers.filter((a) =>
-                a.questionId.startsWith('informed_date_')
-              );
-
-              // Check if we have valid answers
-              const hasTravelStatus = tripExperienceAnswers.some(
-                (a) => a.questionId === 'travel_status' && a.value
-              );
-              const hasInformedDate = informedDateAnswers.some(
-                (a) => a.questionId === 'informed_date' && a.value
-              );
-
-              // Get last answered question
-              const lastTravelStatusQuestion =
-                tripExperienceAnswers.length > 0
-                  ? tripExperienceAnswers[tripExperienceAnswers.length - 1]
-                      .questionId
-                  : null;
-              const lastInformedDateQuestion =
-                informedDateAnswers.length > 0
-                  ? informedDateAnswers[informedDateAnswers.length - 1]
-                      .questionId
-                  : null;
-              state.lastAnsweredQuestion =
-                lastInformedDateQuestion ||
-                lastTravelStatusQuestion ||
-                state.lastAnsweredQuestion;
-
-              // Validate travel status and informed date
-              const travelStatusValid = validateTripExperience(state);
-              const informedDateValid = validateInformedDate(state);
-
-              // Update validation state while preserving existing state
-              state.validationState = {
-                ...state.validationState,
-                stepValidation: {
-                  ...state.validationState.stepValidation,
-                  2: travelStatusValid,
-                  3: informedDateValid,
-                },
-                stepInteraction: {
-                  ...state.validationState.stepInteraction,
-                  2: hasTravelStatus,
-                  3: hasInformedDate,
-                },
-                2: travelStatusValid,
-                3: informedDateValid,
-                isWizardValid: travelStatusValid && informedDateValid,
-                _timestamp: Date.now(),
-              };
-
-              // Update completed wizards
-              state.completedWizards = {
-                ...state.completedWizards,
-                travel_status: travelStatusValid,
-                informed_date: informedDateValid,
-              };
-
-              // Update completed steps
-              state.completedSteps = [
-                ...state.completedSteps.filter(
-                  (stepNum: number) => stepNum !== 2 && stepNum !== 3
-                ),
-                ...(travelStatusValid ? [2] : []),
-                ...(informedDateValid ? [3] : []),
-              ].sort((a, b) => a - b);
-
-              // Update wizard state
-              state.wizardIsCompleted = travelStatusValid && informedDateValid;
-              state.wizardIsValid = travelStatusValid && informedDateValid;
-              state.tripExperienceAnswers = tripExperienceAnswers;
-              state.wizardCurrentSteps = {
-                ...state.wizardCurrentSteps,
-                travel_status: hasTravelStatus
-                  ? tripExperienceAnswers.length
-                  : 0,
-                informed_date: hasInformedDate ? informedDateAnswers.length : 0,
-              };
-            }
-
-            // Add timestamp to force re-render
-            state._lastUpdate = Date.now();
-          }
-        };
-      },
+      storage: createJSONStorage(() => sessionStorage),
     }
   )
 );
@@ -3153,7 +2971,6 @@ export const validateBookingNumber = (state: StoreStateValues): boolean => {
   // Preserve existing validation state
   const existingValidationState = { ...state.validationState };
   const existingCompletedSteps = [...state.completedSteps];
-  const existingOpenSteps = [...state.openSteps];
 
   // Create new validation state while preserving other validations
   const newValidationState = {
@@ -3168,24 +2985,9 @@ export const validateBookingNumber = (state: StoreStateValues): boolean => {
     _timestamp: Date.now(),
   };
 
-  // Update validation state
+  // Update state without openSteps
   state.validationState = newValidationState;
-
-  // Update completed steps while preserving existing ones
-  if (isValid && !existingCompletedSteps.includes(2)) {
-    state.completedSteps = Array.from(
-      new Set([...existingCompletedSteps, 2])
-    ).sort((a, b) => a - b);
-  } else if (!isValid) {
-    state.completedSteps = existingCompletedSteps.filter((step) => step !== 2);
-  }
-
-  // Always ensure step 2 is in openSteps when valid
-  if (isValid) {
-    state.openSteps = Array.from(new Set([...existingOpenSteps, 2]));
-  }
-
-  // Force immediate UI update
+  state.completedSteps = existingCompletedSteps;
   state._lastUpdate = Date.now();
 
   return isValid;

@@ -59,10 +59,11 @@ export const handleOptionClick = (
     currentAnswers.push(newAnswer);
   }
 
-  // Only update answers, no validation
+  // Only update answers and lastAnsweredQuestion, no validation
   batchUpdateWizardState({
     wizardAnswers: currentAnswers,
     lastAnsweredQuestion: questionId,
+    wizardCurrentSteps: {}, // Keep current steps unchanged
   });
 };
 
@@ -179,23 +180,29 @@ export const QAWizard: React.FC<QAWizardProps> = ({
 
     // Ensure step is within bounds
     if (wizardCurrentStep < 0 || wizardCurrentStep >= visibleQuestions.length) {
+      return visibleQuestions[0];
+    }
+
+    const question = visibleQuestions[wizardCurrentStep];
+    return question;
+  }, [visibleQuestions, wizardCurrentStep]);
+
+  // Effect to handle step bounds
+  useEffect(() => {
+    if (wizardCurrentStep < 0 || wizardCurrentStep >= visibleQuestions.length) {
       batchUpdateWizardState({
         wizardCurrentSteps: {
           ...wizardCurrentSteps,
           [wizardType]: 0,
         },
       });
-      return visibleQuestions[0];
     }
-
-    const question = visibleQuestions[wizardCurrentStep];
-    return question;
   }, [
-    visibleQuestions,
     wizardCurrentStep,
-    batchUpdateWizardState,
+    visibleQuestions.length,
     wizardCurrentSteps,
     wizardType,
+    batchUpdateWizardState,
   ]);
 
   // Check if current question is answered
@@ -247,12 +254,13 @@ export const QAWizard: React.FC<QAWizardProps> = ({
         updatedAnswers = [...travelStatusAnswers, ...updatedAnswers];
       }
 
+      // Only update answers and last answered question
       batchUpdateWizardState({
         wizardAnswers: updatedAnswers,
         lastAnsweredQuestion: questionId,
       });
     },
-    [wizardAnswers, batchUpdateWizardState, onInteract, wizardType]
+    [wizardAnswers, wizardType, onInteract, batchUpdateWizardState]
   );
 
   const goToNext = useCallback(() => {
@@ -275,7 +283,7 @@ export const QAWizard: React.FC<QAWizardProps> = ({
       (opt) => opt.value.toString() === currentAnswer.value?.toString()
     );
 
-    // If we're on the last question, show success
+    // If we're on the last question and user clicked Complete
     if (wizardCurrentStep === visibleQuestions.length - 1) {
       const successMessage = selectedOption?.showConfetti
         ? 'Super! Du hast gute Chancen auf eine Entschädigung.'
@@ -323,6 +331,15 @@ export const QAWizard: React.FC<QAWizardProps> = ({
 
         const combinedAnswers = [...otherWizardAnswers, ...relevantAnswers];
 
+        // First validate the wizard to ensure proper state update
+        batchUpdateWizardState({
+          wizardAnswers: combinedAnswers,
+          lastAnsweredQuestion: completeWizardId,
+          wizardIsValid: true,
+          wizardIsCompleted: true,
+        });
+
+        // Then handle completion which will trigger the transition
         handleWizardComplete(completeWizardId, combinedAnswers, successMessage);
 
         // Call onComplete callback if provided

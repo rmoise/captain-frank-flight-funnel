@@ -19,28 +19,16 @@ interface QAWizardWrapperProps {
 
 export const QAWizardWrapper: React.FC<QAWizardWrapperProps> = (props) => {
   const [isInitializing, setIsInitializing] = useState(true);
+  // Error state is kept for error handling pattern across the application
+  /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
   const [error, setError] = useState<string | null>(null);
 
-  const { wizardAnswers: answers, initializeStore } = useStore();
+  const { wizardAnswers: answers } = useStore();
 
-  // Initialize store when component mounts
+  // Initialize component state
   useEffect(() => {
-    const initialize = async () => {
-      try {
-        setIsInitializing(true);
-        setError(null);
-        await initializeStore();
-        // Wait for next tick to ensure store is ready
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        setIsInitializing(false);
-      } catch (err) {
-        setError('Failed to initialize questionnaire');
-        setIsInitializing(false);
-      }
-    };
-
-    initialize();
-  }, [initializeStore]);
+    setIsInitializing(false);
+  }, []);
 
   // Show loading state
   if (isInitializing) {

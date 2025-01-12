@@ -77,14 +77,35 @@ function ClaimSuccessContent() {
 
   const handlePersonalDetailsComplete = useCallback(
     (details: PassengerDetails | null) => {
-      // Always update personal details to maintain form state
-      // The store will handle validation
+      // Update personal details in store
       setPersonalDetails(details);
 
       // Mark step as interacted with
-      setInteractedSteps((prev) => [...new Set([...prev, 1])]);
+      setInteractedSteps((prev) => {
+        if (!prev.includes(1)) {
+          return [...prev, 1];
+        }
+        return prev;
+      });
+
+      // Validate the step
+      if (details) {
+        const isValid = Object.values(details).every((value) => {
+          // Check for required string fields
+          if (typeof value === 'string') {
+            return value.trim().length > 0;
+          }
+          // Check for other required fields
+          return value !== null && value !== undefined;
+        });
+
+        // Update validation state
+        if (isValid) {
+          completePhase(1);
+        }
+      }
     },
-    [setPersonalDetails]
+    [setPersonalDetails, completePhase]
   );
 
   const formatAmount = (amount: number, currency: string) => {
