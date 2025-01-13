@@ -24,12 +24,15 @@ const handler: Handler = async (event: HandlerEvent) => {
     console.log('Parsed request body:', JSON.stringify(requestBody, null, 2));
 
     // Validate required fields according to API documentation
-    if (!requestBody.journey_booked_flightids || !requestBody.information_received_at) {
+    if (
+      !requestBody.journey_booked_flightids ||
+      !requestBody.information_received_at
+    ) {
       return {
         statusCode: 400,
         body: JSON.stringify({
           error: 'Missing required fields',
-          required: ['journey_booked_flightids', 'information_received_at']
+          required: ['journey_booked_flightids', 'information_received_at'],
         }),
       };
     }
@@ -41,7 +44,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         statusCode: 400,
         body: JSON.stringify({
           error: 'Invalid date format',
-          message: 'information_received_at must be in YYYY-MM-DD format'
+          message: 'information_received_at must be in YYYY-MM-DD format',
         }),
       };
     }
@@ -54,22 +57,28 @@ const handler: Handler = async (event: HandlerEvent) => {
       journey_booked_flightids: requestBody.journey_booked_flightids,
       journey_fact_flightids: requestBody.journey_fact_flightids || [], // Optional field
       information_received_at: requestBody.information_received_at,
-      lang: 'en'
+      lang: 'en',
     };
 
-    console.log('Sending request body:', JSON.stringify(apiRequestBody, null, 2));
+    console.log(
+      'Sending request body:',
+      JSON.stringify(apiRequestBody, null, 2)
+    );
 
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json',
+        Accept: 'application/json',
       },
       body: JSON.stringify(apiRequestBody),
     });
 
     console.log('Response status:', response.status);
-    console.log('Response headers:', JSON.stringify(Object.fromEntries(response.headers.entries()), null, 2));
+    console.log(
+      'Response headers:',
+      JSON.stringify(Object.fromEntries(response.headers.entries()), null, 2)
+    );
 
     const responseText = await response.text();
     console.log('Raw API response:', responseText);
@@ -85,8 +94,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         statusCode: response.status,
         body: JSON.stringify({
           error: `API Error: ${response.status} ${response.statusText}`,
-          details: responseText
-        })
+          details: responseText,
+        }),
       };
     }
 
@@ -99,25 +108,28 @@ const handler: Handler = async (event: HandlerEvent) => {
       return {
         statusCode: 500,
         body: JSON.stringify({
-          error: 'Invalid JSON response from API',
-          details: responseText
-        })
+          error: 'Ungültige JSON-Antwort von der API',
+          details: responseText,
+        }),
       };
     }
 
     // Extract the actual data from the response
-    const evaluationResult = result.data;
+    const evaluationResult: EvaluationResult = result.data;
 
     // Validate response format according to API documentation
-    if (!evaluationResult.status || !['accept', 'reject'].includes(evaluationResult.status)) {
+    if (
+      !evaluationResult.status ||
+      !['accept', 'reject'].includes(evaluationResult.status)
+    ) {
       console.error('Invalid response format:', evaluationResult);
       return {
         statusCode: 500,
         body: JSON.stringify({
-          error: 'Invalid response format from API',
-          expected: { status: "'accept' | 'reject'", contract: "optional" },
-          received: evaluationResult
-        })
+          error: 'Ungültiges Antwortformat von der API',
+          expected: { status: "'accept' | 'reject'", contract: 'optional' },
+          received: evaluationResult,
+        }),
       };
     }
 
@@ -127,12 +139,12 @@ const handler: Handler = async (event: HandlerEvent) => {
       ...(evaluationResult.contract && {
         contract: {
           amount: evaluationResult.contract.amount,
-          provision: evaluationResult.contract.provision
-        }
+          provision: evaluationResult.contract.provision,
+        },
       }),
       ...(evaluationResult.rejection_reasons && {
-        rejection_reasons: evaluationResult.rejection_reasons
-      })
+        rejection_reasons: evaluationResult.rejection_reasons,
+      }),
     };
 
     return {
@@ -147,8 +159,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     return {
       statusCode: 500,
       body: JSON.stringify({
-        error: 'Internal Server Error',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Interner Serverfehler',
+        message: error instanceof Error ? error.message : 'Unbekannter Fehler',
       }),
     };
   }

@@ -35,12 +35,19 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
   const { updateValidationState } = useStore();
   const [isFocused, setIsFocused] = useState(false);
   const [localValue, setLocalValue] = useState(selectedOption);
+  const [showProgress, setShowProgress] = useState(false);
 
   useEffect(() => {
     if (selectedOption !== localValue) {
       setLocalValue(selectedOption);
     }
   }, [selectedOption, localValue]);
+
+  useEffect(() => {
+    if (selectedOption) {
+      setShowProgress(true);
+    }
+  }, [selectedOption]);
 
   const handleMoneyInputChange = (value: string) => {
     // Pass through the value directly to onSelect
@@ -282,15 +289,26 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
             <motion.div
               className="h-full bg-[#F54538] rounded-full"
               initial={{ width: 0 }}
-              animate={{ width: `${(currentStep / totalSteps) * 100}%` }}
+              animate={{
+                width: selectedOption
+                  ? `${(currentStep / totalSteps) * 100}%`
+                  : '0%',
+              }}
               transition={{ duration: 0.3, ease: 'easeOut' }}
             />
           </div>
-          <div className="text-sm text-gray-500">
-            <span>
-              Frage {currentStep} von {totalSteps}
-            </span>
-          </div>
+          {showProgress && (
+            <motion.div
+              className="text-sm text-gray-500"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
+            >
+              <span>
+                Frage {currentStep} von {totalSteps}
+              </span>
+            </motion.div>
+          )}
         </div>
       )}
 
