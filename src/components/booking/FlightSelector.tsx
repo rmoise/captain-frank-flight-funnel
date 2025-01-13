@@ -775,10 +775,10 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
         };
       }
 
-      if (timeDiff > 24 * 60) {
+      if (timeDiff > 48 * 60) {
         return {
           isValid: false,
-          message: 'Umsteigezeit darf 24 Stunden nicht überschreiten',
+          message: 'Umsteigezeit darf 48 Stunden nicht überschreiten',
           timeDiff,
         };
       }
