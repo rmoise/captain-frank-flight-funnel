@@ -81,6 +81,9 @@ export const QAWizard: React.FC<QAWizardProps> = ({
     batchUpdateWizardState,
     handleWizardComplete,
     lastAnsweredQuestion,
+    completedWizards,
+    validationState,
+    validateAndUpdateStep,
   } = useStore();
 
   // Get wizard ID and type
@@ -337,6 +340,20 @@ export const QAWizard: React.FC<QAWizardProps> = ({
           lastAnsweredQuestion: completeWizardId,
           wizardIsValid: true,
           wizardIsCompleted: true,
+          validationState: {
+            ...validationState,
+            isWizardValid: true,
+            stepValidation: {
+              ...validationState.stepValidation,
+              2: true,
+            },
+            stepInteraction: {
+              ...validationState.stepInteraction,
+              2: true,
+            },
+            2: true,
+            _timestamp: Date.now(),
+          },
         });
 
         // Then handle completion which will trigger the transition
@@ -375,6 +392,7 @@ export const QAWizard: React.FC<QAWizardProps> = ({
     onComplete,
     wizardCurrentSteps,
     batchUpdateWizardState,
+    validationState,
   ]);
 
   const goToPrevious = useCallback(
@@ -395,15 +413,76 @@ export const QAWizard: React.FC<QAWizardProps> = ({
   const handleBackToQuestions = useCallback(
     (e: React.MouseEvent<HTMLButtonElement>) => {
       e.preventDefault();
-      // Reset success state for this wizard type
+
+      // Get the step number based on wizard type
+      const stepNumber =
+        wizardType === 'travel_status'
+          ? 2
+          : wizardType === 'informed_date'
+            ? 3
+            : null;
+
+      if (stepNumber) {
+        // Only reset validation for the current step
+        validateAndUpdateStep(stepNumber, false);
+      }
+
+      // Get answers from other wizards
+      const otherWizardAnswers =
+        wizardType === 'informed_date'
+          ? wizardAnswers.filter(
+              (a) =>
+                a.questionId === 'travel_status' ||
+                a.questionId === 'refund_status' ||
+                a.questionId === 'ticket_cost'
+            )
+          : wizardType === 'travel_status'
+            ? wizardAnswers.filter(
+                (a) =>
+                  a.questionId === 'informed_date' ||
+                  a.questionId === 'specific_informed_date'
+              )
+            : [];
+
+      // Reset only this wizard's state while preserving others
       batchUpdateWizardState({
         wizardSuccessStates: {
           ...wizardSuccessStates,
           [wizardType]: { showing: false, message: '' },
         },
+        wizardCurrentSteps: {
+          ...wizardCurrentSteps,
+          [wizardType]: 0,
+        },
+        wizardAnswers: otherWizardAnswers,
+        completedWizards: {
+          ...completedWizards,
+          [wizardType]: false,
+        },
+        validationState: {
+          ...validationState,
+          stepValidation: {
+            ...validationState.stepValidation,
+            [stepNumber || 2]: false,
+          },
+          stepInteraction: {
+            ...validationState.stepInteraction,
+            [stepNumber || 2]: false,
+          },
+          _timestamp: Date.now(),
+        },
       });
     },
-    [batchUpdateWizardState, wizardSuccessStates, wizardType]
+    [
+      batchUpdateWizardState,
+      validateAndUpdateStep,
+      wizardSuccessStates,
+      wizardType,
+      wizardCurrentSteps,
+      completedWizards,
+      wizardAnswers,
+      validationState,
+    ]
   );
 
   // Simplify initialization effect to only run once

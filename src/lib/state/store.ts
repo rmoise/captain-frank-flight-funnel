@@ -141,6 +141,10 @@ export const validateQAWizard = (state: StoreStateValues) => {
     };
   }
 
+  // Determine which QA we're validating
+  const isQA1 = answers.some((a) => a.questionId.startsWith('travel_status'));
+  const isQA2 = answers.some((a) => a.questionId.startsWith('informed_date'));
+
   // Check if all visible questions have valid answers
   const hasValidAnswers = answers.every((answer: Answer) => {
     // Skip validation for questions that shouldn't be shown
@@ -160,32 +164,45 @@ export const validateQAWizard = (state: StoreStateValues) => {
   // Return valid only if we have answers and they're all valid
   const isValid = answers.length > 0 && hasValidAnswers;
 
-  // Update validation state - only check signature in agreement phase
-  state.validationState = {
+  // Update validation state while preserving the other QA's state
+  const newValidationState = {
     ...state.validationState,
     isWizardValid: isValid,
     stepValidation: {
       ...state.validationState.stepValidation,
-      2: isValid,
+      1: state.validationState.stepValidation[1] || false,
+      2: isQA1 ? isValid : state.validationState.stepValidation[2] || false,
+      3: isQA2 ? isValid : state.validationState.stepValidation[3] || false,
+      4: state.validationState.stepValidation[4] || false,
     },
     stepInteraction: {
       ...state.validationState.stepInteraction,
-      2: true, // Set interaction state to true since we have answers
+      1: state.validationState.stepInteraction[1] || false,
+      2: isQA1 ? true : state.validationState.stepInteraction[2] || false,
+      3: isQA2 ? true : state.validationState.stepInteraction[3] || false,
+      4: state.validationState.stepInteraction[4] || false,
     },
-    2: isValid,
-    // Only consider signature validation in agreement phase
-    isSignatureValid:
-      state.currentPhase === URL_TO_PHASE['/phases/agreement']
-        ? !!(state.signature && state.hasSignature)
-        : true,
+    1: state.validationState[1] || false,
+    2: isQA1 ? isValid : state.validationState[2] || false,
+    3: isQA2 ? isValid : state.validationState[3] || false,
+    4: state.validationState[4] || false,
+    _timestamp: Date.now(),
   };
 
+  // Update validation state
+  state.validationState = newValidationState;
+
   // Update completed steps
-  if (isValid && !state.completedSteps.includes(2)) {
-    state.completedSteps.push(2);
-    state.completedSteps.sort((a, b) => a - b);
-  } else if (!isValid) {
-    state.completedSteps = state.completedSteps.filter((step) => step !== 2);
+  const stepToValidate = isQA1 ? 2 : isQA2 ? 3 : null;
+  if (stepToValidate) {
+    if (isValid && !state.completedSteps.includes(stepToValidate)) {
+      state.completedSteps.push(stepToValidate);
+      state.completedSteps.sort((a, b) => a - b);
+    } else if (!isValid) {
+      state.completedSteps = state.completedSteps.filter(
+        (step) => step !== stepToValidate
+      );
+    }
   }
 
   return {
@@ -863,28 +880,11 @@ export const useStore = create<StoreState & StoreActions>()(
 
       // Actions
       batchUpdateWizardState: (updates: Partial<StoreState>) => {
-        const state = get();
-        const isValid = validateFlightSelection(state);
-
-        set({
+        set((state) => ({
+          ...state,
           ...updates,
-          validationState: {
-            ...state.validationState,
-            isFlightValid: isValid,
-            stepValidation: {
-              ...state.validationState.stepValidation,
-              1: isValid,
-            },
-            1: isValid,
-            _timestamp: Date.now(),
-          },
-          completedSteps: isValid
-            ? Array.from(new Set([...state.completedSteps, 1])).sort(
-                (a, b) => a - b
-              )
-            : state.completedSteps.filter((step) => step !== 1),
-          _lastUpdate: Date.now(),
-        });
+          _lastUpdate: Date.now(), // Force re-render by updating timestamp
+        }));
       },
 
       setFlightState: (updates: Partial<FlightSlice>) => {
@@ -1080,11 +1080,21 @@ export const useStore = create<StoreState & StoreActions>()(
           wizardType === 'informed_date' ? 'informed_date' : wizardId;
 
         // Update the state
-        set({
+        set((state) => ({
           ...state,
           validationState: {
             ...state.validationState,
             isWizardValid: true,
+            stepValidation: {
+              ...state.validationState.stepValidation,
+              2: true,
+            },
+            stepInteraction: {
+              ...state.validationState.stepInteraction,
+              2: true,
+            },
+            2: true,
+            _timestamp: Date.now(),
           },
           lastAnsweredQuestion: wizardId,
           wizardAnswers: answers,
@@ -1095,7 +1105,11 @@ export const useStore = create<StoreState & StoreActions>()(
             ...state.completedWizards,
             [completeWizardId]: true,
           },
-        });
+          completedSteps: Array.from(
+            new Set([...state.completedSteps, 2])
+          ).sort((a, b) => a - b),
+          _lastUpdate: Date.now(),
+        }));
 
         // Store the wizard type for the timeout
         // const finalWizardType = wizardType;

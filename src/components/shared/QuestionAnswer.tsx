@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import type { Question } from '@/types/experience';
 import { MoneyInput } from '@/components/MoneyInput';
@@ -35,19 +35,13 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
   const { updateValidationState } = useStore();
   const [isFocused, setIsFocused] = useState(false);
   const [localValue, setLocalValue] = useState(selectedOption);
-  const [showProgress, setShowProgress] = useState(false);
+  const isFirstRender = useRef(true);
 
   useEffect(() => {
-    if (selectedOption !== localValue) {
-      setLocalValue(selectedOption);
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
     }
-  }, [selectedOption, localValue]);
-
-  useEffect(() => {
-    if (selectedOption) {
-      setShowProgress(true);
-    }
-  }, [selectedOption]);
+  }, []);
 
   const handleMoneyInputChange = (value: string) => {
     // Pass through the value directly to onSelect
@@ -288,16 +282,17 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
           <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
             <motion.div
               className="h-full bg-[#F54538] rounded-full"
-              initial={{ width: 0 }}
+              initial={{ width: '0%' }}
               animate={{
-                width: selectedOption
-                  ? `${(currentStep / totalSteps) * 100}%`
-                  : '0%',
+                width:
+                  currentStep === 1 && !selectedOption
+                    ? '0%'
+                    : `${(currentStep / totalSteps) * 100}%`,
               }}
               transition={{ duration: 0.3, ease: 'easeOut' }}
             />
           </div>
-          {showProgress && (
+          {(currentStep > 1 || selectedOption) && (
             <motion.div
               className="text-sm text-gray-500"
               initial={{ opacity: 0 }}

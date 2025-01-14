@@ -181,7 +181,23 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
 
       if (isClaimSuccess || storedDetails?.[field] !== value) {
         setPersonalDetails(newDetails);
+        // Always use debounced validation to prevent unwanted transitions
         debouncedUpdateValidation(isValid);
+
+        // Only call onComplete if the form is valid
+        if (isValid) {
+          onComplete(newDetails);
+        } else {
+          // Explicitly set validation to false when form becomes invalid
+          useStore.getState().updateValidationState({
+            stepValidation: {
+              ...validationState.stepValidation,
+              [stepId]: false,
+            },
+            [stepId]: false,
+            _timestamp: Date.now(),
+          });
+        }
       }
     },
     [
@@ -191,25 +207,11 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
       isClaimSuccess,
       showAdditionalFields,
       debouncedUpdateValidation,
+      onComplete,
+      stepId,
+      validationState.stepValidation,
     ]
   );
-
-  // Call onComplete when details change
-  const lastDetailsRef = React.useRef(storedDetails);
-  useEffect(() => {
-    // Skip if details haven't changed (deep comparison)
-    if (
-      JSON.stringify(storedDetails) === JSON.stringify(lastDetailsRef.current)
-    )
-      return;
-
-    // Skip if both are null
-    if (!storedDetails && !lastDetailsRef.current) return;
-
-    // Update ref and call onComplete
-    lastDetailsRef.current = storedDetails;
-    onComplete(storedDetails);
-  }, [storedDetails, onComplete]);
 
   return (
     <form

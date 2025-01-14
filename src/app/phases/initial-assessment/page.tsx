@@ -18,6 +18,7 @@ import { PhaseNavigation } from '@/components/PhaseNavigation';
 import { ContinueButton } from '@/components/shared/ContinueButton';
 import { AccordionProvider } from '@/components/shared/AccordionContext';
 import { accordionConfig } from '@/config/accordion';
+import { useAccordion } from '@/components/shared/AccordionContext';
 
 interface LocationData {
   value: string;
@@ -118,6 +119,8 @@ export default function InitialAssessment() {
     updateValidationState,
   } = useStore();
 
+  const { autoTransition } = useAccordion();
+
   // Single initialization effect
   useEffect(() => {
     const initialize = async () => {
@@ -134,19 +137,62 @@ export default function InitialAssessment() {
             termsAccepted;
           setIsFirstVisit(!hasExistingData);
 
+          // Restore validation state from localStorage
+          const savedValidationState = localStorage.getItem(
+            'initialAssessmentValidation'
+          );
+          const savedCompletedSteps = localStorage.getItem(
+            'initialAssessmentCompletedSteps'
+          );
+          const lastActiveAccordion = sessionStorage.getItem('activeAccordion');
+
+          if (savedValidationState) {
+            try {
+              const parsedValidation = JSON.parse(savedValidationState);
+              updateValidationState(parsedValidation);
+            } catch (error) {
+              console.error('Error parsing saved validation state:', error);
+            }
+          }
+
+          if (savedCompletedSteps) {
+            try {
+              const parsedSteps = JSON.parse(savedCompletedSteps);
+              useStore.setState((state) => ({
+                ...state,
+                completedSteps: parsedSteps,
+              }));
+            } catch (error) {
+              console.error('Error parsing saved completed steps:', error);
+            }
+          }
+
           // If we have existing wizard answers, revalidate them
           if (wizardAnswers.length > 0) {
             markWizardComplete('initial_assessment');
             validateQAWizard();
           }
 
-          // Get the last active accordion from session storage
+          // Set initial accordion and scroll to it after a brief delay
           if (typeof window !== 'undefined') {
-            const lastActiveAccordion =
-              sessionStorage.getItem('activeAccordion');
             setInitialAccordion(
               lastActiveAccordion || (hasExistingData ? null : '1')
             );
+
+            // Wait for component to mount and render
+            setTimeout(() => {
+              if (lastActiveAccordion) {
+                const activeStep = document.querySelector(
+                  `[data-step="${lastActiveAccordion}"]`
+                );
+                if (activeStep) {
+                  activeStep.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start',
+                  });
+                }
+              }
+            }, 500);
           }
 
           setMounted(true);
@@ -165,36 +211,83 @@ export default function InitialAssessment() {
     termsAccepted,
     markWizardComplete,
     validateQAWizard,
+    updateValidationState,
   ]);
+
+  // Save validation state and completed steps when they change
+  useEffect(() => {
+    if (mounted) {
+      localStorage.setItem(
+        'initialAssessmentValidation',
+        JSON.stringify(validationState)
+      );
+      localStorage.setItem(
+        'initialAssessmentCompletedSteps',
+        JSON.stringify(completedSteps)
+      );
+    }
+  }, [mounted, validationState, completedSteps]);
 
   const handleAutoTransition = useCallback(
     (currentStepId: string) => {
       const currentStepNumber = parseInt(currentStepId) as ValidationStateSteps;
-      const nextStepNumber = (currentStepNumber + 1) as ValidationStateSteps;
 
       console.log('InitialAssessment - handleAutoTransition:', {
         currentStepId,
         currentStepNumber,
-        nextStepNumber,
         isCurrentStepValid: isStepValid(currentStepNumber),
-        willTransition: nextStepNumber <= 4 && isStepValid(currentStepNumber),
-        validationState: validationState.stepValidation,
+        isStep3Valid: isStepValid(3),
+        validationState: {
+          stepValidation: validationState.stepValidation,
+          stepInteraction: validationState.stepInteraction,
+          isPersonalValid: validationState.isPersonalValid,
+        },
         currentStep,
         completedSteps,
+        personalDetails,
       });
 
-      // Only return next step if it exists and current step is valid
-      if (nextStepNumber <= 4 && isStepValid(currentStepNumber)) {
-        console.log('InitialAssessment - Transitioning to next step:', {
-          from: currentStepNumber,
-          to: nextStepNumber,
-          validationState: validationState.stepValidation,
-        });
-        return nextStepNumber.toString();
+      // Only proceed if current step is valid
+      if (!isStepValid(currentStepNumber)) {
+        console.log('Current step not valid, stopping transition');
+        return null;
       }
+
+      // Special case: if we're on step 3 and it's valid, always try to go to step 4
+      if (currentStepNumber === 3) {
+        console.log('On step 3, checking validity:', {
+          isStep3Valid: isStepValid(3),
+          validationState: validationState.stepValidation[3],
+          personalDetails,
+          completedSteps,
+        });
+        if (isStepValid(3)) {
+          console.log('Step 3 is valid, transitioning to step 4');
+          return '4';
+        }
+      }
+
+      // Find the next uncompleted step
+      for (let nextStep = 1; nextStep <= 4; nextStep++) {
+        // Skip the current step
+        if (nextStep === currentStepNumber) {
+          console.log(`Skipping current step ${nextStep}`);
+          continue;
+        }
+        // Skip completed steps unless it's step 4 (we always want to transition to terms)
+        if (nextStep !== 4 && completedSteps.includes(nextStep)) {
+          console.log(`Skipping completed step ${nextStep}`);
+          continue;
+        }
+        // Found the next uncompleted step
+        console.log(`Found next step: ${nextStep}`);
+        return nextStep.toString();
+      }
+
+      console.log('No next step found');
       return null;
     },
-    [isStepValid, validationState.stepValidation, currentStep, completedSteps]
+    [isStepValid, validationState, currentStep, completedSteps, personalDetails]
   );
 
   // Remove any validation effects that might be interfering with toggling
@@ -338,20 +431,37 @@ export default function InitialAssessment() {
       setInteractedSteps((prev) => [...new Set([...prev, 2])]);
 
       // Update validation state to trigger auto-transition
-      updateValidationState({
+      const newValidationState = {
+        ...validationState,
+        isWizardValid: true,
         stepValidation: {
           ...validationState.stepValidation,
           2: true,
         },
+        stepInteraction: {
+          ...validationState.stepInteraction,
+          2: true,
+        },
         2: true,
-      });
+        _timestamp: Date.now(),
+      };
+
+      // Update validation state and completed steps atomically
+      updateValidationState(newValidationState);
+
+      // Force a transition after validation is updated
+      setTimeout(() => {
+        autoTransition('2', true, true);
+      }, 100);
     },
     [
       setWizardAnswers,
       markWizardComplete,
       validateQAWizard,
-      validationState.stepValidation,
       updateValidationState,
+      autoTransition,
+      setInteractedSteps,
+      validationState,
     ]
   );
 
@@ -530,18 +640,33 @@ export default function InitialAssessment() {
             setInteractedSteps((prev) => [...new Set([...prev, 3])]);
             if (details) {
               // Update validation state to trigger auto-transition
-              updateValidationState({
+              const newValidationState = {
+                ...validationState,
+                isPersonalValid: true,
                 stepValidation: {
                   ...validationState.stepValidation,
                   3: true,
                 },
+                stepInteraction: {
+                  ...validationState.stepInteraction,
+                  3: true,
+                },
                 3: true,
-              });
+                _timestamp: Date.now(),
+              };
+
+              // Update validation state and completed steps atomically
+              updateValidationState(newValidationState);
+
+              // Force a transition to step 4 after validation is updated
+              setTimeout(() => {
+                autoTransition('3', true);
+              }, 100);
             }
           },
           onInteract: () =>
             setInteractedSteps((prev) => [...new Set([...prev, 3])]),
-          isClaimSuccess: true,
+          isClaimSuccess: false,
           showAdditionalFields: false,
         } as PersonalDetailsFormProps,
         getSummary: (state: StoreStateValues) => {
@@ -641,7 +766,8 @@ export default function InitialAssessment() {
     setInteractedSteps,
     handleComplete,
     updateValidationState,
-    validationState.stepValidation,
+    autoTransition,
+    validationState,
   ]);
 
   // Define steps with memoization

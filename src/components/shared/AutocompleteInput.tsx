@@ -132,13 +132,29 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
       setIsOpen(false);
       setIsTyping(false);
       setHighlightedIndex(null);
-      setIsFocused(true);
+      setIsFocused(false);
       setIsTouched(true);
 
-      // Keep focus in the current field
-      if (inputRef.current) {
-        inputRef.current.focus();
-      }
+      // Find and focus the next input field within the same step
+      setTimeout(() => {
+        const currentInput = inputRef.current;
+        if (currentInput) {
+          // Find the closest parent step container
+          const stepContainer = currentInput.closest('[data-step]');
+          if (stepContainer) {
+            // Only search for inputs within the same step container
+            const allInputs = Array.from(
+              stepContainer.querySelectorAll('input')
+            );
+            const currentIndex = allInputs.indexOf(currentInput);
+            const nextInput = allInputs[currentIndex + 1];
+            if (nextInput) {
+              nextInput.focus();
+              nextInput.click(); // Also trigger click to open dropdown
+            }
+          }
+        }
+      }, 100);
     },
     [onChange]
   );

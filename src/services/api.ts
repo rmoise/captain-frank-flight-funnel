@@ -400,185 +400,30 @@ class ApiClient {
     journey_fact_flightids?: string[];
     information_received_at: string;
   }): Promise<EvaluationResponse> {
-    try {
-      console.log('Evaluating claim with data:', data);
-
-      const baseUrl =
-        process.env.NODE_ENV === 'development' ? 'http://localhost:8888' : '';
-      const functionName =
-        process.env.NODE_ENV === 'development'
-          ? 'evaluateeuflightclaim'
-          : 'evaluateeuflightclaim';
-
-      const response = await fetch(
-        `${baseUrl}/.netlify/functions/${functionName}`,
-        {
-          method: 'POST',
-          headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            ...data,
-            lang: 'de',
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(
-          `API-Anfrage fehlgeschlagen mit Status ${response.status}`
-        );
+    const baseUrl =
+      process.env.NODE_ENV === 'development' ? 'http://localhost:8888' : '';
+    return this.makeRequest<EvaluationResponse>(
+      `${baseUrl}/.netlify/functions/evaluateeuflightclaim`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          ...data,
+          lang: 'de',
+        }),
       }
-
-      const responseData = await response.json();
-
-      if (!responseData || !responseData.status) {
-        throw new Error('Ungültiges Antwortformat von der API');
-      }
-
-      return responseData;
-    } catch (error) {
-      console.error('Error evaluating claim:', error);
-      throw error;
-    }
+    );
   }
 
   async orderClaim(data: OrderClaimRequest): Promise<OrderClaimResponse> {
-    try {
-      console.log('Ordering claim with data:', data);
-
-      const baseUrl =
-        process.env.NODE_ENV === 'development' ? 'http://localhost:8888' : '';
-      const functionName =
-        process.env.NEXT_PUBLIC_USE_NETLIFY_FUNCTIONS === 'true'
-          ? 'ordereuflightclaim'
-          : 'ordereuflightclaim';
-
-      const response = await fetch(
-        `${baseUrl}/.netlify/functions/${functionName}`,
-        {
-          method: 'POST',
-          headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            journey_booked_flightids: data.journey_booked_flightids,
-            journey_fact_flightids: data.journey_fact_flightids,
-            information_received_at: data.information_received_at,
-            journey_booked_pnr: data.journey_booked_pnr,
-            journey_fact_type: data.journey_fact_type,
-            owner_salutation: data.owner_salutation,
-            owner_firstname: data.owner_firstname,
-            owner_lastname: data.owner_lastname,
-            owner_street: data.owner_street,
-            owner_place: data.owner_place,
-            owner_city: data.owner_city,
-            owner_zip: data.owner_zip,
-            owner_country: data.owner_country,
-            owner_email: data.owner_email,
-            owner_phone: data.owner_phone || '',
-            owner_marketable_status: data.owner_marketable_status,
-            contract_signature: data.contract_signature,
-            contract_tac: data.contract_tac,
-            contract_dp: data.contract_dp,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        try {
-          const errorData = JSON.parse(errorText);
-          throw new Error(
-            errorData.message ||
-              errorData.error ||
-              'EU-Flugentschädigungsantrag konnte nicht eingereicht werden'
-          );
-        } catch (e) {
-          throw new Error(
-            'EU-Flugentschädigungsantrag konnte nicht eingereicht werden'
-          );
-        }
+    const baseUrl =
+      process.env.NODE_ENV === 'development' ? 'http://localhost:8888' : '';
+    return this.makeRequest<OrderClaimResponse>(
+      `${baseUrl}/.netlify/functions/ordereuflightclaim`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
       }
-
-      const responseData = await response.json();
-      return responseData;
-    } catch (error) {
-      console.error('Error ordering claim:', error);
-      throw error;
-    }
-  }
-
-  async evaluateEuflightClaim(params: {
-    journey_booked_flightids: string[];
-    information_received_at: string;
-    delay_duration?: string;
-    travel_status?: string;
-  }): Promise<EvaluationResponse> {
-    try {
-      console.log('Evaluating claim with params:', params);
-
-      // Get the actual flight IDs from the booked flights
-      const journey_fact_flightids = params.journey_booked_flightids;
-
-      const response = await this.makeRequest<EvaluationResponse>(
-        `${BASE_URL}/evaluateeuflightclaim`,
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            ...params,
-            journey_fact_flightids,
-            lang: 'de',
-          }),
-        }
-      );
-
-      if (
-        !response ||
-        !response.status ||
-        !['accept', 'reject'].includes(response.status)
-      ) {
-        throw new Error('Invalid response format from API');
-      }
-
-      return response;
-    } catch (error) {
-      console.error('Error evaluating claim:', error);
-      throw error;
-    }
-  }
-
-  async orderEuflightClaim(params: OrderClaimRequest): Promise<{
-    status: string;
-    message?: string;
-  }> {
-    const response = await fetch('/.netlify/functions/ordereuflightclaim', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify(params),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      try {
-        const errorData = JSON.parse(errorText);
-        throw new Error(
-          errorData.message ||
-            errorData.error ||
-            'Failed to order EU flight claim'
-        );
-      } catch (e) {
-        throw new Error('Failed to order EU flight claim');
-      }
-    }
-
-    const result = await response.json();
-    return result.data;
+    );
   }
 }
 
