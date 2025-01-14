@@ -23,6 +23,13 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${heebo.variable}`}>
       <head>
+        <Script
+          id="Cookiebot"
+          src="https://consent.cookiebot.com/uc.js"
+          data-cbid="4812d2c5-a615-4c7f-80ba-ed2014b5a07c"
+          data-blockingmode="auto"
+          strategy="beforeInteractive"
+        />
         <meta
           name="viewport"
           content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
