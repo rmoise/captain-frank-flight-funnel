@@ -91,6 +91,12 @@ export const QAWizard: React.FC<QAWizardProps> = ({
   const wizardType = useMemo((): WizardStepKey => {
     const firstQuestionId = questions[0]?.id;
     if (!firstQuestionId) return 'default';
+
+    // Check if this is the initial assessment wizard
+    if (firstQuestionId.startsWith('issue_')) {
+      return 'issue';
+    }
+
     const type = firstQuestionId.split('_')[0];
     // Map 'informed' to 'informed_date'
     if (type === 'informed') return 'informed_date';
@@ -128,6 +134,9 @@ export const QAWizard: React.FC<QAWizardProps> = ({
             a.questionId === 'informed_date' ||
             a.questionId === 'specific_informed_date'
         ) || [];
+    } else if (wizardType === 'issue') {
+      // For initial assessment, get all issue-related answers
+      answers = wizardAnswers.filter((a) => a.questionId.startsWith('issue_'));
     } else {
       answers = wizardAnswers || [];
     }
@@ -420,10 +429,12 @@ export const QAWizard: React.FC<QAWizardProps> = ({
           ? 2
           : wizardType === 'informed_date'
             ? 3
-            : null;
+            : wizardType === 'issue'
+              ? 2
+              : null;
 
       if (stepNumber) {
-        // Only reset validation for the current step
+        // Reset validation for the current step
         validateAndUpdateStep(stepNumber, false);
       }
 
@@ -442,7 +453,9 @@ export const QAWizard: React.FC<QAWizardProps> = ({
                   a.questionId === 'informed_date' ||
                   a.questionId === 'specific_informed_date'
               )
-            : [];
+            : wizardType === 'issue'
+              ? [] // Clear all answers for initial assessment
+              : [];
 
       // Reset only this wizard's state while preserving others
       batchUpdateWizardState({
@@ -469,8 +482,11 @@ export const QAWizard: React.FC<QAWizardProps> = ({
             ...validationState.stepInteraction,
             [stepNumber || 2]: false,
           },
+          isWizardValid: false,
+          [stepNumber || 2]: false,
           _timestamp: Date.now(),
         },
+        lastAnsweredQuestion: null, // Reset last answered question
       });
     },
     [
