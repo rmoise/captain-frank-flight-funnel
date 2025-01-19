@@ -23,17 +23,18 @@ export async function GET(request: Request) {
       );
     }
 
-    const apiUrl = `${API_BASE_URL}/calculatecompensationbyfromiatatoiata?from_iata=${from_iata}&to_iata=${to_iata}`;
-    console.log('Making request to:', apiUrl);
-
-    const response = await fetch(apiUrl, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      cache: 'no-store',
-    });
+    // Use the Netlify function instead of calling the external API directly
+    const response = await fetch(
+      `/.netlify/functions/calculateCompensation?from_iata=${from_iata}&to_iata=${to_iata}`,
+      {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        cache: 'no-store',
+      }
+    );
 
     const responseText = await response.text();
     console.log('Raw API response:', responseText);
