@@ -261,6 +261,25 @@ export const QAWizard: React.FC<QAWizardProps> = ({
       const answer =
         instanceAnswers.find((a) => a.questionId === questionId) ||
         wizardAnswers.find((a) => a.questionId === questionId);
+
+      // Special handling for date values
+      if (answer?.value && questionId === 'specific_informed_date') {
+        try {
+          // Ensure date is in YYYY-MM-DD format
+          const [year, month, day] = answer.value.toString().split('-');
+          if (year && month && day) {
+            const date = new Date(Number(year), Number(month) - 1, Number(day));
+            if (!isNaN(date.getTime())) {
+              return answer.value.toString();
+            }
+          }
+          return '';
+        } catch (error) {
+          console.error('Error formatting date:', error);
+          return '';
+        }
+      }
+
       return answer?.value?.toString() || '';
     },
     [instanceAnswers, wizardAnswers]

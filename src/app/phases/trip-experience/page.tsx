@@ -1089,8 +1089,18 @@ export default function TripExperiencePage() {
     )?.value;
 
     if (specificDate && typeof specificDate === 'string') {
-      const date = new Date(specificDate);
-      return `Informiert am ${date.toLocaleDateString('de-DE')}`;
+      try {
+        // Ensure date is in YYYY-MM-DD format
+        const [year, month, day] = specificDate.split('-');
+        if (year && month && day) {
+          const date = new Date(Number(year), Number(month) - 1, Number(day));
+          if (!isNaN(date.getTime())) {
+            return `Informiert am ${date.toLocaleDateString('de-DE')}`;
+          }
+        }
+      } catch (error) {
+        console.error('Error formatting date:', error);
+      }
     }
 
     return '';
