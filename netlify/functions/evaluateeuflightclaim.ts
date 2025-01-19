@@ -59,7 +59,10 @@ const handler: Handler = async (event: HandlerEvent) => {
     // Prepare request body according to API documentation
     const apiRequestBody = {
       journey_booked_flightids: requestBody.journey_booked_flightids,
-      journey_fact_flightids: requestBody.journey_fact_flightids || [], // Optional field
+      journey_fact_flightids:
+        requestBody.travel_status === 'took_booked'
+          ? []
+          : requestBody.journey_fact_flightids || [], // Empty array if took booked flights
       information_received_at: requestBody.information_received_at,
       lang: 'en',
     };

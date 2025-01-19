@@ -62,7 +62,7 @@ export async function POST(request: Request) {
     let journey_fact_flightids = [];
     switch (journey_fact_type) {
       case 'self':
-        journey_fact_flightids = journey_booked_flightids;
+        journey_fact_flightids = [];
         break;
       case 'provided':
         journey_fact_flightids = data.journey_fact_flightids || [];

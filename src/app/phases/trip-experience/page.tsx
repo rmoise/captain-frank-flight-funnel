@@ -693,9 +693,11 @@ export default function TripExperiencePage() {
       // Get alternative flight IDs based on travel status
       const getAlternativeFlightIds = () => {
         if (travelStatus === 'provided') {
-          // For provided alternative flights, use all selected flights as alternatives
-          // since they represent the airline-provided alternatives
-          return selectedFlights.map((flight) => String(flight.id));
+          return selectedFlights
+            .filter(
+              (flight) => !originalFlights.some((orig) => orig.id === flight.id)
+            )
+            .map((flight) => String(flight.id));
         } else if (travelStatus === 'took_alternative_own') {
           const ownAlternativeFlightAnswer = tripExperienceAnswers.find(
             (a) => a.questionId === 'alternative_flight_own_expense'
@@ -707,7 +709,11 @@ export default function TripExperiencePage() {
           return ownAlternativeFlightAnswer?.value
             ? [String(ownAlternativeFlightAnswer.value)]
             : [];
+        } else if (travelStatus === 'self') {
+          // When user took their booked flights, journey_fact_flightids should equal journey_booked_flightids
+          return bookedFlightIds;
         }
+        // For 'none', return empty array to indicate they didn't travel
         return [];
       };
 
@@ -754,6 +760,25 @@ export default function TripExperiencePage() {
             }
           }
         }
+
+        // Handle on_departure case
+        if (informedDate === 'on_departure' && originalFlights.length > 0) {
+          const flightDate = originalFlights[0].date;
+          if (flightDate) {
+            // Ensure the date is in YYYY-MM-DD format without timezone conversion
+            const [year, month, day] = flightDate.split('-');
+            if (year && month && day) {
+              const formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+              console.log('5c. Date Formatting (On Departure):', {
+                originalDate: flightDate,
+                formattedDate,
+                noTimezoneConversion: true,
+              });
+              return formattedDate;
+            }
+          }
+        }
+
         return '';
       })();
 
@@ -767,13 +792,9 @@ export default function TripExperiencePage() {
       }
 
       const currentEvalData = {
-        journey_booked_flightids: originalFlights.map((flight) =>
-          String(flight.id)
-        ),
+        journey_booked_flightids: bookedFlightIds,
         journey_fact_flightids: (() => {
           if (travelStatus === 'provided') {
-            // For provided alternative flights, we should use only the selected flights
-            // that are different from the original booking
             return selectedFlights
               .filter(
                 (flight) =>
@@ -787,7 +808,11 @@ export default function TripExperiencePage() {
             return ownAlternativeFlightAnswer?.value
               ? [String(ownAlternativeFlightAnswer.value)]
               : [];
+          } else if (travelStatus === 'self') {
+            // When user took their booked flights, journey_fact_flightids should equal journey_booked_flightids
+            return bookedFlightIds;
           }
+          // For 'none', return empty array to indicate they didn't travel
           return [];
         })(),
         information_received_at: formattedDate,

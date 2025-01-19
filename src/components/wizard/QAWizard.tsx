@@ -276,6 +276,15 @@ export const QAWizard: React.FC<QAWizardProps> = ({
       selectedFlight,
     });
 
+    // If this is a flight selector question and we already have this flight selected, don't update
+    if (
+      currentQuestion?.type === 'flight_selector' &&
+      selectedFlight?.id === value
+    ) {
+      console.log('Flight already selected, skipping update');
+      return;
+    }
+
     // Create new answer
     const newAnswer = {
       questionId,

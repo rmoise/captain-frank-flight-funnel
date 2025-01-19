@@ -3147,7 +3147,14 @@ export const validateInformedDate = (state: StoreStateValues): boolean => {
     ?.value?.toString();
 
   let informedDateValid = hasInformedDate;
-  if (informedDate === 'specific_date') {
+
+  // Handle different date cases
+  if (informedDate === 'on_departure') {
+    // For on_departure, we just need to have a booked flight with a date
+    informedDateValid =
+      state.originalFlights.length > 0 &&
+      state.originalFlights[0]?.date != null;
+  } else if (informedDate === 'specific_date') {
     const specificDate = answers
       .find((a) => a.questionId === 'specific_informed_date')
       ?.value?.toString();

@@ -406,10 +406,7 @@ class ApiClient {
       `${baseUrl}/.netlify/functions/evaluateeuflightclaim`,
       {
         method: 'POST',
-        body: JSON.stringify({
-          ...data,
-          lang: 'de',
-        }),
+        body: JSON.stringify(data),
       }
     );
   }
