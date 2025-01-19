@@ -327,7 +327,12 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
               <CountryAutocomplete
                 label="Land"
                 value={storedDetails?.country}
-                onChange={(value) => handleInputChange('country', value)}
+                onChange={(value) => {
+                  const selectedOption = COUNTRY_OPTIONS.find(
+                    (opt) => opt.value === value
+                  );
+                  handleInputChange('country', selectedOption?.label || value);
+                }}
                 options={COUNTRY_OPTIONS}
                 error={
                   hasInteracted

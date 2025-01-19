@@ -38,6 +38,30 @@ export async function POST(request: Request) {
       );
     }
 
+    // Map frontend salutation to backend format
+    const owner_salutation = (() => {
+      switch (data.owner_salutation?.toLowerCase()) {
+        case 'herr':
+          return 'herr';
+        case 'frau':
+          return 'frau';
+        default:
+          return data.owner_salutation;
+      }
+    })();
+
+    // Ensure signature is properly formatted
+    const formatSignature = (signature: string) => {
+      if (!signature) return '';
+
+      // If signature doesn't start with data:image/, add it
+      if (!signature.startsWith('data:image/')) {
+        return `data:image/png;base64,${signature}`;
+      }
+
+      return signature;
+    };
+
     const response = await fetch(
       'https://secure.captain-frank.net/api/services/euflightclaim/ordereuflightclaim',
       {
@@ -52,7 +76,7 @@ export async function POST(request: Request) {
           information_received_at: data.information_received_at,
           journey_booked_pnr: data.journey_booked_pnr,
           journey_fact_type: data.journey_fact_type,
-          owner_salutation: data.owner_salutation,
+          owner_salutation: owner_salutation,
           owner_firstname: data.owner_firstname,
           owner_lastname: data.owner_lastname,
           owner_street: data.owner_street,
@@ -62,7 +86,7 @@ export async function POST(request: Request) {
           owner_email: data.owner_email,
           owner_phone: data.owner_phone || '',
           owner_marketable_status: data.owner_marketable_status,
-          contract_signature: data.contract_signature,
+          contract_signature: formatSignature(data.contract_signature),
           contract_tac: data.contract_tac,
           contract_dp: data.contract_dp,
           lang: 'en',

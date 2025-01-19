@@ -38,6 +38,7 @@ export default function CompensationEstimatePage() {
     compensationCache,
     directFlight,
     flightSegments,
+    currentPhase,
   } = useStore();
 
   const [mounted, setMounted] = useState(false);
@@ -263,9 +264,14 @@ export default function CompensationEstimatePage() {
     }
   };
 
-  const handleBack = () => {
+  const handleBack = async () => {
     const previousUrl = goToPreviousPhase();
     if (previousUrl !== null) {
+      // First update the current phase to the previous phase
+      const prevPhase = currentPhase - 1;
+      await setCurrentPhase(prevPhase);
+
+      // Then navigate to the previous URL
       router.push(previousUrl);
     }
   };

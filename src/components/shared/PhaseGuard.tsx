@@ -61,9 +61,13 @@ export function PhaseGuard({ phase, children }: PhaseGuardProps) {
     const isPreviousPhaseCompletedViaContinue =
       phase >= 2 ? store.phasesCompletedViaContinue.includes(phase - 1) : true;
 
+    // Allow back navigation to previous phases
+    const isBackNavigation = phase < currentPhase;
+
     const accessible =
       isPhase5Accessible ||
       isCurrentPhase ||
+      isBackNavigation ||
       (isWithinCompletedPhases && isPreviousPhaseCompletedViaContinue);
 
     console.log('Phase accessibility check:', {

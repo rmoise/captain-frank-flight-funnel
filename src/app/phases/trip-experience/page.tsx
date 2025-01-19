@@ -1,7 +1,7 @@
 'use client';
 
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useMemo, useEffect, useState, useRef } from 'react';
 import { useStore } from '@/lib/state/store';
 import { Answer } from '@/types/wizard';
 import { Question } from '@/types/experience';
@@ -17,6 +17,7 @@ import { PHASE_TO_URL } from '@/lib/state/store';
 import { isValidYYYYMMDD } from '@/utils/dateUtils';
 import api from '@/services/api';
 import { AccordionProvider } from '@/components/shared/AccordionContext';
+import { validateTripExperience } from '@/lib/state/store';
 
 const questions: Question[] = [
   {
@@ -153,6 +154,7 @@ export default function TripExperiencePage() {
   const {
     wizardAnswers,
     selectedFlights,
+    originalFlights,
     validationState,
     updateValidationState,
     goToPreviousPhase,
@@ -160,6 +162,7 @@ export default function TripExperiencePage() {
     setCurrentPhase,
     setEvaluationResult,
     currentPhase,
+    setOriginalFlights,
   } = useStore();
 
   const step2OpenedRef = useRef(false);
@@ -187,6 +190,15 @@ export default function TripExperiencePage() {
     console.log('Filtered trip experience answers:', answers);
     return answers;
   }, [wizardAnswers]);
+
+  // Add effect to track selected flights changes
+  useEffect(() => {
+    console.log('Selected Flights Changed:', {
+      selectedFlights,
+      originalFlights,
+      tripExperienceAnswers,
+    });
+  }, [selectedFlights, originalFlights, tripExperienceAnswers]);
 
   const informedDateAnswers = useMemo(() => {
     const relevantQuestionIds = ['informed_date', 'specific_informed_date'];
@@ -320,13 +332,64 @@ export default function TripExperiencePage() {
     }
   }, [validationState.stepValidation]);
 
+  // Store original flights when component mounts
+  useEffect(() => {
+    if (
+      selectedFlights &&
+      selectedFlights.length > 0 &&
+      originalFlights.length === 0
+    ) {
+      // Store a deep copy of the initial flights as original flights
+      const initialFlights = selectedFlights.map((flight) => ({
+        ...flight,
+        id: flight.id,
+        flightNumber: flight.flightNumber,
+        date: flight.date,
+        departureCity: flight.departureCity,
+        arrivalCity: flight.arrivalCity,
+      }));
+      console.log('Setting original flights:', {
+        initialFlights: initialFlights.map((f) => ({
+          id: f.id,
+          flightNumber: f.flightNumber,
+          date: f.date,
+          from: f.departureCity,
+          to: f.arrivalCity,
+        })),
+      });
+      setOriginalFlights(initialFlights);
+    }
+  }, [selectedFlights, originalFlights.length, setOriginalFlights]);
+
+  // Add effect to track when original flights are set
+  useEffect(() => {
+    if (originalFlights.length > 0) {
+      console.log('Original flights updated:', {
+        flights: originalFlights.map((f) => ({
+          id: f.id,
+          flightNumber: f.flightNumber,
+          date: f.date,
+          from: f.departureCity,
+          to: f.arrivalCity,
+        })),
+      });
+    }
+  }, [originalFlights]);
+
   const isTripExperienceValid = useMemo(() => {
     // Check if all required questions are answered first
     const travelStatus = tripExperienceAnswers.find(
       (a) => a.questionId === 'travel_status'
     )?.value;
 
-    if (!travelStatus) return false;
+    console.log('Trip Experience Validation - Travel Status:', travelStatus);
+    console.log('Current Trip Experience Answers:', tripExperienceAnswers);
+    console.log('Selected Flights:', selectedFlights);
+
+    if (!travelStatus) {
+      console.log('Trip Experience Validation Failed: No travel status');
+      return false;
+    }
 
     // Additional validation based on travel status
     let isValid = false;
@@ -336,7 +399,16 @@ export default function TripExperiencePage() {
         const hasRefundStatus = tripExperienceAnswers.some(
           (a) => a.questionId === 'refund_status'
         );
-        if (!hasRefundStatus) return false;
+        console.log(
+          'Travel Status "none" - Has Refund Status:',
+          hasRefundStatus
+        );
+        if (!hasRefundStatus) {
+          console.log(
+            'Trip Experience Validation Failed: Missing refund status'
+          );
+          return false;
+        }
 
         // If no refund, need ticket cost
         const refundStatus = tripExperienceAnswers.find(
@@ -346,37 +418,66 @@ export default function TripExperiencePage() {
           isValid = tripExperienceAnswers.some(
             (a) => a.questionId === 'ticket_cost'
           );
+          console.log('No Refund - Has Ticket Cost:', isValid);
         } else {
           isValid = true;
         }
         break;
 
       case 'provided':
-        // Need alternative flight
-        isValid = tripExperienceAnswers.some(
-          (a) => a.questionId === 'alternative_flight_airline_expense'
-        );
+        // For provided alternative flights, check if alternative flights are selected
+        isValid = selectedFlights && selectedFlights.length > 0;
+        console.log('Travel Status "provided" - Selected Flights:', {
+          hasSelectedFlights: selectedFlights && selectedFlights.length > 0,
+          selectedFlights: selectedFlights?.map((f) => ({
+            id: f.id,
+            flightNumber: f.flightNumber,
+            date: f.date,
+          })),
+          isValid,
+        });
         break;
 
       case 'took_alternative_own':
         // Need alternative flight and trip costs
-        isValid =
-          tripExperienceAnswers.some(
-            (a) => a.questionId === 'alternative_flight_own_expense'
-          ) && tripExperienceAnswers.some((a) => a.questionId === 'trip_costs');
+        const hasAlternativeFlight = tripExperienceAnswers.some(
+          (a) => a.questionId === 'alternative_flight_own_expense'
+        );
+        const hasTripCosts = tripExperienceAnswers.some(
+          (a) => a.questionId === 'trip_costs'
+        );
+        console.log('Travel Status "took_alternative_own":', {
+          hasAlternativeFlight,
+          hasTripCosts,
+          answers: tripExperienceAnswers.filter((a) =>
+            ['alternative_flight_own_expense', 'trip_costs'].includes(
+              a.questionId
+            )
+          ),
+        });
+        isValid = hasAlternativeFlight && hasTripCosts;
         break;
 
       case 'self':
         // No additional questions needed
         isValid = true;
+        console.log('Travel Status "self" - Always valid');
         break;
 
       default:
         isValid = false;
+        console.log('Trip Experience Validation Failed: Invalid travel status');
     }
 
+    console.log('Trip Experience Final Validation Result:', {
+      isValid,
+      travelStatus,
+      validationState: validationState,
+      selectedFlights,
+    });
+
     return isValid;
-  }, [tripExperienceAnswers]);
+  }, [tripExperienceAnswers, selectedFlights, validationState]);
 
   const isInformedDateValid = useMemo(() => {
     if (!validationState.stepValidation[2]) return false;
@@ -409,38 +510,38 @@ export default function TripExperiencePage() {
         interactedSteps,
       });
 
-      const hasInteracted = interactedSteps.includes(Number(currentStepId));
+      // Only allow auto-transition if the step has been interacted with
+      const stepId = Number(currentStepId) as 2 | 3;
+      const hasInteracted = store.validationState.stepInteraction?.[stepId];
       if (!hasInteracted) {
         console.log('No interaction yet for step:', currentStepId);
         return null;
       }
 
       if (currentStepId === '2') {
-        const step1Complete = store.validationState[2];
-        const step1Interacted = store.validationState.stepInteraction?.[2];
+        const step1Complete = store.validationState.stepValidation[2];
         console.log('Step 1 transition check:', {
           step1Complete,
-          step1Interacted,
+          hasInteracted,
           isTripExperienceValid,
           shouldTransition:
-            isTripExperienceValid && step1Complete && step1Interacted,
+            isTripExperienceValid && step1Complete && hasInteracted,
         });
-        if (isTripExperienceValid && step1Complete && step1Interacted) {
+        if (isTripExperienceValid && step1Complete && hasInteracted) {
           return '3';
         }
       }
 
       if (currentStepId === '3') {
-        const step2Complete = store.validationState[3];
-        const step2Interacted = store.validationState.stepInteraction?.[3];
+        const step2Complete = store.validationState.stepValidation[3];
         console.log('Step 2 transition check:', {
           step2Complete,
-          step2Interacted,
+          hasInteracted,
           isInformedDateValid,
           shouldTransition:
-            isInformedDateValid && step2Complete && step2Interacted,
+            isInformedDateValid && step2Complete && hasInteracted,
         });
-        if (isInformedDateValid && step2Complete && step2Interacted) {
+        if (isInformedDateValid && step2Complete && hasInteracted) {
           return null;
         }
       }
@@ -451,38 +552,49 @@ export default function TripExperiencePage() {
   );
 
   // Handler functions for completing steps
-  const handleTripExperienceComplete = useCallback((answers: Answer[]) => {
-    console.log('Trip experience completed with answers:', answers);
-    const lastAnswer = answers[answers.length - 1];
-    const store = useStore.getState();
+  const handleTripExperienceComplete = useCallback(
+    (answers: Answer[]) => {
+      console.log('Trip Experience Complete Handler Called:', {
+        answers,
+        currentValidationState: validationState,
+      });
 
-    console.log(
-      'Current validation state before update:',
-      store.validationState
-    );
-    store.setWizardAnswers(answers);
+      const lastAnswer = answers[answers.length - 1];
+      const store = useStore.getState();
 
-    if (lastAnswer) {
-      store.setLastAnsweredQuestion(lastAnswer.questionId);
-    }
+      console.log('Current store state:', {
+        wizardAnswers: store.wizardAnswers,
+        selectedFlights: store.selectedFlights,
+        validationState: store.validationState,
+      });
 
-    const newValidationState = {
-      ...store.validationState,
-      2: true,
-      stepValidation: {
-        ...store.validationState.stepValidation,
-        2: true,
-      },
-      stepInteraction: {
-        ...store.validationState.stepInteraction,
-        2: true,
-      },
-    };
+      store.setWizardAnswers(answers);
 
-    console.log('New validation state for step 1:', newValidationState);
-    store.updateValidationState(newValidationState);
-    setInteractedSteps((prev) => [...new Set([...prev, 2])]);
-  }, []);
+      if (lastAnswer) {
+        store.setLastAnsweredQuestion(lastAnswer.questionId);
+      }
+
+      // Only validate when Complete is clicked
+      const isValid = validateTripExperience(store);
+
+      const newValidationState = {
+        ...store.validationState,
+        2: isValid,
+        stepValidation: {
+          ...store.validationState.stepValidation,
+          2: isValid,
+        },
+        stepInteraction: {
+          ...store.validationState.stepInteraction,
+          2: true,
+        },
+      };
+
+      console.log('New validation state to be applied:', newValidationState);
+      store.updateValidationState(newValidationState);
+    },
+    [validationState]
+  );
 
   const handleInformedDateComplete = useCallback((answers: Answer[]) => {
     console.log('Informed date completed with answers:', answers);
@@ -499,6 +611,7 @@ export default function TripExperiencePage() {
       store.setLastAnsweredQuestion(lastAnswer.questionId);
     }
 
+    // Only update validation state when Complete is clicked
     const newValidationState = {
       ...store.validationState,
       2: store.validationState[2] || false,
@@ -516,7 +629,6 @@ export default function TripExperiencePage() {
 
     console.log('New validation state for step 2:', newValidationState);
     store.updateValidationState(newValidationState);
-    setInteractedSteps((prev) => [...new Set([...prev, 3])]);
   }, []);
 
   // Check if we can continue
@@ -543,70 +655,156 @@ export default function TripExperiencePage() {
       const travelStatus = tripExperienceAnswers.find(
         (a: Answer) => a.questionId === 'travel_status'
       )?.value;
+      console.log('=== TRIP EXPERIENCE DEBUG LOGS ===');
+      console.log('1. Raw Travel Status:', {
+        travelStatus,
+        allAnswers: tripExperienceAnswers,
+      });
 
-      // Get the booked flight IDs based on travel status
-      const bookedFlightIds: string[] = [];
-      if (selectedFlights[0]) {
-        bookedFlightIds.push(selectedFlights[0].id);
-      }
+      // Get the originally booked flights
+      const bookedFlightIds = originalFlights
+        .filter((flight) => flight && flight.id)
+        .map((flight) => String(flight.id));
+
+      console.log('2. Selected Flights Data:', {
+        selectedFlights: selectedFlights.map((f) => ({
+          id: f.id,
+          flightNumber: f.flightNumber,
+          date: f.date,
+          from: f.departureCity,
+          to: f.arrivalCity,
+        })),
+        originalFlights: originalFlights.map((f) => ({
+          id: f.id,
+          flightNumber: f.flightNumber,
+          date: f.date,
+          from: f.departureCity,
+          to: f.arrivalCity,
+        })),
+        bookedFlightIds,
+      });
 
       // Validate flight IDs
       if (bookedFlightIds.length === 0) {
+        console.error('No booked flight IDs available');
         return;
       }
 
-      // Get the informed date
+      // Get alternative flight IDs based on travel status
+      const getAlternativeFlightIds = () => {
+        if (travelStatus === 'provided') {
+          // For provided alternative flights, use all selected flights as alternatives
+          // since they represent the airline-provided alternatives
+          return selectedFlights.map((flight) => String(flight.id));
+        } else if (travelStatus === 'took_alternative_own') {
+          const ownAlternativeFlightAnswer = tripExperienceAnswers.find(
+            (a) => a.questionId === 'alternative_flight_own_expense'
+          );
+          console.log('3b. Alternative Flight (Own):', {
+            answer: ownAlternativeFlightAnswer,
+            value: ownAlternativeFlightAnswer?.value,
+          });
+          return ownAlternativeFlightAnswer?.value
+            ? [String(ownAlternativeFlightAnswer.value)]
+            : [];
+        }
+        return [];
+      };
+
+      const alternativeIds = getAlternativeFlightIds();
+      console.log('7. Flight IDs Summary:', {
+        bookedFlightIds,
+        alternativeIds,
+        travelStatus,
+      });
+
+      // Get the informed date and handle timezone consistently
       const informedDate = informedDateAnswers
         .find((a) => a.questionId === 'informed_date')
         ?.value?.toString();
 
-      // Format the date for the API
-      let formattedDate: string | undefined;
+      console.log('4. Informed Date Raw:', {
+        informedDate,
+        allDateAnswers: informedDateAnswers,
+      });
 
-      if (informedDate === 'on_departure' && selectedFlights[0]?.date) {
-        // Use flight date for "on departure"
-        const flightDate = selectedFlights[0].date;
-        // Handle both ISO string and date-only formats
-        formattedDate = flightDate.includes('T')
-          ? flightDate.split('T')[0]
-          : flightDate;
-      } else if (informedDate === 'specific_date') {
-        // Get the specific date from the answers
-        const specificDateAnswer = useStore
-          .getState()
-          .wizardAnswers.find(
-            (answer) => answer.questionId === 'specific_informed_date'
+      // Format the date without timezone conversion
+      const formattedDate = (() => {
+        if (!informedDate || informedDate === 'none') return '';
+
+        // For specific dates, use the date as is without timezone conversion
+        if (
+          informedDate === 'specific_date' &&
+          informedDateAnswers.length > 0
+        ) {
+          const dateAnswer = informedDateAnswers.find(
+            (a) => a.questionId === 'specific_informed_date'
           );
-
-        if (specificDateAnswer?.value) {
-          formattedDate = specificDateAnswer.value.toString();
+          if (dateAnswer?.value && typeof dateAnswer.value === 'string') {
+            // Ensure the date is in YYYY-MM-DD format without timezone conversion
+            const [year, month, day] = dateAnswer.value.split('-');
+            if (year && month && day) {
+              const formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+              console.log('5b. Date Formatting (Specific Date):', {
+                originalDate: dateAnswer.value,
+                formattedDate,
+                noTimezoneConversion: true,
+              });
+              return formattedDate;
+            }
+          }
         }
-      }
+        return '';
+      })();
 
       // Validate formatted date
       if (!formattedDate || !isValidYYYYMMDD(formattedDate)) {
+        console.error('6. Date Validation Failed:', {
+          formattedDate,
+          isValid: formattedDate ? isValidYYYYMMDD(formattedDate) : false,
+        });
         throw new Error('No valid date available');
       }
 
-      // Verify the date format matches YYYY-MM-DD
-      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-      if (!dateRegex.test(formattedDate)) {
-        throw new Error('Invalid date format. Expected YYYY-MM-DD');
-      }
-
-      // Validate that the date is a valid date
-      const dateObj = new Date(formattedDate);
-      if (isNaN(dateObj.getTime())) {
-        throw new Error('Invalid date value. Please select a valid date.');
-      }
-
-      // Create the current evaluation data
-      console.log('Travel status from answers:', travelStatus);
-
       const currentEvalData = {
-        journey_booked_flightids: bookedFlightIds,
-        journey_fact_flightids: travelStatus === 'self' ? bookedFlightIds : [], // Use booked flights if they took them
+        journey_booked_flightids: originalFlights.map((flight) =>
+          String(flight.id)
+        ),
+        journey_fact_flightids: (() => {
+          if (travelStatus === 'provided') {
+            // For provided alternative flights, we should use only the selected flights
+            // that are different from the original booking
+            return selectedFlights
+              .filter(
+                (flight) =>
+                  !originalFlights.some((orig) => orig.id === flight.id)
+              )
+              .map((flight) => String(flight.id));
+          } else if (travelStatus === 'took_alternative_own') {
+            const ownAlternativeFlightAnswer = tripExperienceAnswers.find(
+              (a) => a.questionId === 'alternative_flight_own_expense'
+            );
+            return ownAlternativeFlightAnswer?.value
+              ? [String(ownAlternativeFlightAnswer.value)]
+              : [];
+          }
+          return [];
+        })(),
         information_received_at: formattedDate,
+        journey_fact_type: (() => {
+          switch (travelStatus) {
+            case 'none':
+              return 'none';
+            case 'self':
+              return 'self';
+            case 'provided':
+              return 'provided';
+            case 'took_alternative_own':
+              return 'none';
+            default:
+              return 'none';
+          }
+        })(),
         travel_status:
           travelStatus === 'none'
             ? 'no_travel'
@@ -614,12 +812,60 @@ export default function TripExperiencePage() {
               ? 'took_booked'
               : travelStatus === 'provided'
                 ? 'took_alternative_airline'
-                : travelStatus?.toString(),
-        ...(travelStatus === 'none' && { delay_duration: '240' }), // Only set delay_duration for no-travel claims
+                : travelStatus === 'took_alternative_own'
+                  ? 'took_alternative_own'
+                  : travelStatus?.toString(),
         lang: 'en',
       };
 
-      console.log('Current evaluation data:', currentEvalData);
+      // Add debug logging for flight IDs
+      console.log('Flight ID Debug:', {
+        originalFlights: originalFlights.map((f) => ({
+          id: f.id,
+          flightNumber: f.flightNumber,
+          date: f.date,
+          from: f.departureCity,
+          to: f.arrivalCity,
+        })),
+        selectedFlights: selectedFlights.map((f) => ({
+          id: f.id,
+          flightNumber: f.flightNumber,
+          date: f.date,
+          from: f.departureCity,
+          to: f.arrivalCity,
+        })),
+        bookedFlightIds: currentEvalData.journey_booked_flightids,
+        alternativeFlightIds: currentEvalData.journey_fact_flightids,
+        travelStatus,
+      });
+
+      console.log('=== Evaluation Data ===');
+      console.log('Current Eval Data:', currentEvalData);
+
+      console.log('8. Final Evaluation Data:', {
+        raw: currentEvalData,
+        cleaned: Object.fromEntries(
+          Object.entries(currentEvalData).filter(([, v]) => v !== undefined)
+        ),
+        flightIdExplanation: `journey_fact_flightids is ${currentEvalData.journey_fact_flightids.length === 0 ? 'empty' : 'populated'} because travel_status is ${travelStatus}`,
+      });
+      console.log('=== END DEBUG LOGS ===');
+
+      // Add new logging for actual travel data
+      console.log('=== ACTUAL TRAVEL DATA ===');
+      console.log(
+        'Selected Flights:',
+        selectedFlights.map((flight) => ({
+          flightNumber: flight.flightNumber,
+          date: flight.date,
+          from: flight.departureCity,
+          to: flight.arrivalCity,
+          id: flight.id,
+        }))
+      );
+      console.log('=== END ACTUAL TRAVEL DATA ===');
+
+      console.log('Evaluation data being sent:', currentEvalData);
 
       // Remove undefined values from the request
       const cleanedEvalData = Object.fromEntries(
@@ -824,6 +1070,37 @@ export default function TripExperiencePage() {
 
     return '';
   }, [informedDateAnswers]);
+
+  // Add logging to track when validation is checked
+  useEffect(() => {
+    console.log('Trip Experience Validation Check:', {
+      tripExperienceAnswers,
+      selectedFlights,
+      isValid: isTripExperienceValid,
+    });
+  }, [tripExperienceAnswers, selectedFlights, isTripExperienceValid]);
+
+  // Add logging for when selected flights change
+  useEffect(() => {
+    if (selectedFlights && selectedFlights.length > 0) {
+      console.log('Selected Flights Updated:', {
+        selectedFlights: selectedFlights.map((f) => ({
+          id: f.id,
+          flightNumber: f.flightNumber,
+          date: f.date,
+        })),
+      });
+    }
+  }, [selectedFlights]);
+
+  // Add logging for validation state changes
+  useEffect(() => {
+    console.log('Validation State Updated:', {
+      validationState,
+      tripExperienceValid: validationState.stepValidation[2],
+      informedDateValid: validationState.stepValidation[3],
+    });
+  }, [validationState]);
 
   return (
     <PhaseGuard phase={4}>

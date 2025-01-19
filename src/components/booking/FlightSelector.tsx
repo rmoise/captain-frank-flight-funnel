@@ -1334,6 +1334,19 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
           if (formattedDate) {
             setSelectedDate(formattedDate);
           }
+
+          // Update validation state based on current phase
+          if (setValidationState && stepNumber) {
+            const isValid =
+              currentPhase === 1
+                ? !!(firstSegment.fromLocation && firstSegment.toLocation)
+                : !!firstSegment.selectedFlight;
+
+            setValidationState((prev: Record<number, boolean>) => ({
+              ...prev,
+              [stepNumber]: isValid,
+            }));
+          }
         }
       } else {
         // When switching to multi-city, create completely fresh segments
@@ -1373,7 +1386,19 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
         setFromLocation(null);
         setToLocation(null);
         setSelectedDate(null);
+
+        // Reset validation state since we're starting fresh
+        if (setValidationState && stepNumber) {
+          setValidationState((prev: Record<number, boolean>) => ({
+            ...prev,
+            [stepNumber]: false,
+          }));
+        }
       }
+
+      // Clear any error messages
+      setFlightErrorMessage(null);
+      setFlightErrorMessages({});
 
       console.log('=== handleFlightTypeChange END ===');
     },
@@ -1385,6 +1410,11 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
       setToLocation,
       setSelectedDate,
       batchUpdateWizardState,
+      currentPhase,
+      setValidationState,
+      stepNumber,
+      setFlightErrorMessage,
+      setFlightErrorMessages,
     ]
   );
 

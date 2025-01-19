@@ -122,8 +122,11 @@ export const validateFlightSelection = (state: StoreStateValues): boolean => {
 export const validateQAWizard = (state: StoreStateValues) => {
   const answers = state.wizardAnswers || [];
 
+  console.log('Starting validateQAWizard with answers:', answers);
+
   // Check if we have any answers at all
   if (answers.length === 0) {
+    console.log('No answers found, returning invalid state');
     return {
       isValid: false,
       answers: [],
@@ -134,6 +137,7 @@ export const validateQAWizard = (state: StoreStateValues) => {
   // Get the first answer's questionId to identify the wizard
   const wizardId = answers[0]?.questionId;
   if (!wizardId) {
+    console.log('No wizardId found, returning invalid state');
     return {
       isValid: false,
       answers: [],
@@ -145,8 +149,31 @@ export const validateQAWizard = (state: StoreStateValues) => {
   const isQA1 = answers.some((a) => a.questionId.startsWith('travel_status'));
   const isQA2 = answers.some((a) => a.questionId.startsWith('informed_date'));
 
+  console.log('Wizard type:', { isQA1, isQA2 });
+
+  // Get only the answers relevant to the current wizard
+  const relevantAnswers = isQA1
+    ? answers.filter(
+        (a) =>
+          a.questionId.startsWith('travel_status') ||
+          a.questionId === 'refund_status' ||
+          a.questionId === 'ticket_cost' ||
+          a.questionId === 'alternative_flight_airline_expense' ||
+          a.questionId === 'alternative_flight_own_expense' ||
+          a.questionId === 'trip_costs'
+      )
+    : isQA2
+      ? answers.filter(
+          (a) =>
+            a.questionId === 'informed_date' ||
+            a.questionId === 'specific_informed_date'
+        )
+      : answers;
+
+  console.log('Relevant answers:', relevantAnswers);
+
   // Check if all visible questions have valid answers
-  const hasValidAnswers = answers.every((answer: Answer) => {
+  const hasValidAnswers = relevantAnswers.every((answer: Answer) => {
     // Skip validation for questions that shouldn't be shown
     if (answer.shouldShow === false) return true;
 
@@ -161,8 +188,50 @@ export const validateQAWizard = (state: StoreStateValues) => {
     return true;
   });
 
-  // Return valid only if we have answers and they're all valid
-  const isValid = answers.length > 0 && hasValidAnswers;
+  console.log('Has valid answers:', hasValidAnswers);
+
+  // For travel status wizard, check if we need alternative flight validation
+  let isValid = relevantAnswers.length > 0 && hasValidAnswers;
+  if (isQA1) {
+    const travelStatus = relevantAnswers.find(
+      (a) => a.questionId === 'travel_status'
+    )?.value;
+
+    console.log('Travel status:', travelStatus);
+
+    // Additional validation for alternative flights
+    if (
+      travelStatus === 'provided' ||
+      travelStatus === 'took_alternative_own'
+    ) {
+      const hasAlternativeFlight = relevantAnswers.some(
+        (a) =>
+          (a.questionId === 'alternative_flight_airline_expense' &&
+            travelStatus === 'provided') ||
+          (a.questionId === 'alternative_flight_own_expense' &&
+            travelStatus === 'took_alternative_own')
+      );
+
+      console.log('Has alternative flight:', hasAlternativeFlight);
+
+      // For own expense, also need trip costs
+      if (travelStatus === 'took_alternative_own') {
+        const hasTripCosts = relevantAnswers.some(
+          (a) => a.questionId === 'trip_costs'
+        );
+        console.log('Has trip costs:', hasTripCosts);
+        isValid = isValid && hasAlternativeFlight && hasTripCosts;
+      } else {
+        isValid = isValid && hasAlternativeFlight;
+      }
+    }
+  }
+
+  console.log('Final validation state:', {
+    isValid,
+    relevantAnswers,
+    validationState: state.validationState,
+  });
 
   // Update validation state while preserving the other QA's state
   const newValidationState = {
@@ -171,23 +240,25 @@ export const validateQAWizard = (state: StoreStateValues) => {
     stepValidation: {
       ...state.validationState.stepValidation,
       1: state.validationState.stepValidation[1] || false,
-      2: isQA1 ? isValid : state.validationState.stepValidation[2] || false,
-      3: isQA2 ? isValid : state.validationState.stepValidation[3] || false,
+      2: isQA1 ? isValid : state.validationState.stepValidation[2],
+      3: isQA2 ? isValid : state.validationState.stepValidation[3],
       4: state.validationState.stepValidation[4] || false,
     },
     stepInteraction: {
       ...state.validationState.stepInteraction,
       1: state.validationState.stepInteraction[1] || false,
-      2: isQA1 ? true : state.validationState.stepInteraction[2] || false,
-      3: isQA2 ? true : state.validationState.stepInteraction[3] || false,
+      2: isQA1 ? true : state.validationState.stepInteraction[2],
+      3: isQA2 ? true : state.validationState.stepInteraction[3],
       4: state.validationState.stepInteraction[4] || false,
     },
     1: state.validationState[1] || false,
-    2: isQA1 ? isValid : state.validationState[2] || false,
-    3: isQA2 ? isValid : state.validationState[3] || false,
+    2: isQA1 ? isValid : state.validationState[2],
+    3: isQA2 ? isValid : state.validationState[3],
     4: state.validationState[4] || false,
     _timestamp: Date.now(),
   };
+
+  console.log('New validation state:', newValidationState);
 
   // Update validation state
   state.validationState = newValidationState;
@@ -205,9 +276,15 @@ export const validateQAWizard = (state: StoreStateValues) => {
     }
   }
 
+  console.log('Final state:', {
+    isValid,
+    completedSteps: state.completedSteps,
+    validationState: state.validationState,
+  });
+
   return {
     isValid,
-    answers,
+    answers: relevantAnswers,
     bookingNumber: state.bookingNumber || '',
   };
 };
@@ -446,6 +523,7 @@ export interface FlightSlice {
   toLocation: string | null;
   selectedDate: string | null;
   selectedFlights: Flight[];
+  originalFlights: Flight[];
   selectedFlight: Flight | null;
   flightDetails: Flight | null;
   delayDuration: number | null;
@@ -629,6 +707,7 @@ export interface StoreActions {
     date?: string;
   }) => void;
   clearFlightErrors: () => void;
+  setOriginalFlights: (flights: Flight[]) => void;
 }
 
 // Define CompensationCache type
@@ -713,6 +792,7 @@ const initialState: StoreState = {
   toLocation: null,
   selectedDate: null,
   selectedFlights: [],
+  originalFlights: [],
   selectedFlight: null,
   flightDetails: null,
   delayDuration: null,
@@ -1480,6 +1560,12 @@ export const useStore = create<StoreState & StoreActions>()(
         const state = get();
         const prevPhase = state.currentPhase - 1;
         if (prevPhase < 1) return null;
+
+        // When going back, we want to preserve the validation state of the previous phase
+        const store = get();
+        store.setCurrentPhase(prevPhase);
+
+        // Return the URL for the previous phase
         return PHASE_TO_URL[prevPhase] || null;
       },
 
@@ -2894,6 +2980,21 @@ export const useStore = create<StoreState & StoreActions>()(
           errorMessages: {},
         }),
       setOpenSteps: (steps: number[]) => set({ openSteps: steps }),
+      setOriginalFlights: (flights: Flight[]) =>
+        set((state) => {
+          // Skip update if nothing has changed
+          if (
+            JSON.stringify(state.originalFlights) === JSON.stringify(flights)
+          ) {
+            return state;
+          }
+
+          return {
+            ...state,
+            originalFlights: flights,
+            _lastUpdate: Date.now(),
+          };
+        }),
     }),
     {
       name: 'captain-frank-store',
@@ -3015,11 +3116,18 @@ export const validateTripExperience = (state: StoreStateValues): boolean => {
 
   // Check if we have the main travel status answer with a valid value
   const validTravelStatuses = ['none', 'self', 'provided'];
-  const hasTravelStatus = answers.some(
-    (a) =>
-      a.questionId === 'travel_status' &&
-      validTravelStatuses.includes(String(a.value))
+  const travelStatus = answers.find(
+    (a) => a.questionId === 'travel_status'
+  )?.value;
+
+  const hasTravelStatus = Boolean(
+    travelStatus && validTravelStatuses.includes(String(travelStatus))
   );
+
+  // For 'provided' status, also check if flights are selected
+  if (hasTravelStatus && travelStatus === 'provided') {
+    return Boolean(state.selectedFlights && state.selectedFlights.length > 0);
+  }
 
   return hasTravelStatus;
 };

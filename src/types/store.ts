@@ -1,5 +1,6 @@
 import type { LocationLike } from './location';
 import type { Question } from './experience';
+import { Answer as WizardAnswer } from './wizard';
 
 export interface Flight {
   id: string;
@@ -128,3 +129,5 @@ export interface StoreState {
   // Error handling
   locationError: string | null;
 }
+
+export type TripExperienceAnswers = WizardAnswer[];

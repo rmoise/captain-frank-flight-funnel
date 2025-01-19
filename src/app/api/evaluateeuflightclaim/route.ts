@@ -11,6 +11,7 @@ export async function POST(request: Request) {
       information_received_at,
       delay_duration,
       travel_status,
+      journey_fact_type,
     } = data;
 
     console.log('Received evaluation request:', {
@@ -18,6 +19,7 @@ export async function POST(request: Request) {
       information_received_at,
       delay_duration,
       travel_status,
+      journey_fact_type,
     });
 
     if (
@@ -43,30 +45,43 @@ export async function POST(request: Request) {
     // Convert delay duration to minutes for the API
     let delay_minutes = 0;
     if (delay_duration === '>3' || delay_duration === 'gt3') {
-      delay_minutes = 181; // More than 3 hours
+      delay_minutes = 240; // Set to 4 hours for alternative flights
     } else if (delay_duration === '2-3' || delay_duration === '2to3') {
       delay_minutes = 120; // 2-3 hours
     } else if (delay_duration === '<2' || delay_duration === 'lt2') {
       delay_minutes = 90; // Less than 2 hours
+    } else if (typeof delay_duration === 'string') {
+      // Try to parse numeric value
+      const minutes = parseInt(delay_duration, 10);
+      if (!isNaN(minutes)) {
+        delay_minutes = minutes;
+      }
     }
 
-    // Set journey_fact_flightids based on travel status
+    // Set journey_fact_flightids based on journey_fact_type
     let journey_fact_flightids = [];
-    switch (travel_status) {
-      case 'took_booked':
-        // If passenger took the booked flight, use the same flight IDs
+    switch (journey_fact_type) {
+      case 'self':
         journey_fact_flightids = journey_booked_flightids;
         break;
-      case 'took_alternative_airline':
-      case 'took_alternative_own':
-      case 'no_travel':
-        // For alternative flights or no travel, leave journey_fact_flightids empty
+      case 'provided':
+        journey_fact_flightids = data.journey_fact_flightids || [];
+        break;
+      case 'none':
         journey_fact_flightids = [];
         break;
       default:
-        console.warn('Unexpected travel status:', travel_status);
-        journey_fact_flightids = journey_booked_flightids;
+        console.warn('Unexpected journey fact type:', journey_fact_type);
+        journey_fact_flightids = [];
     }
+
+    // Log the final flight IDs for debugging
+    console.log('Final flight IDs:', {
+      booked: journey_booked_flightids,
+      fact: journey_fact_flightids,
+      status: travel_status,
+      fact_type: journey_fact_type,
+    });
 
     const apiUrl = `${API_BASE_URL}/evaluateeuflightclaim`;
     console.log('Making request to external API:', apiUrl);

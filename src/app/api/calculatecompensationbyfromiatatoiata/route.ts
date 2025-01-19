@@ -57,40 +57,7 @@ export async function GET(request: Request) {
     const data = JSON.parse(responseText);
     console.log('Parsed API response:', data);
 
-    // Extract amount from response
-    let amount = 0;
-    if (typeof data.data === 'number') {
-      amount = data.data;
-    } else if (data.amount) {
-      amount = data.amount;
-    } else if (data.compensation) {
-      amount = data.compensation;
-    }
-
-    console.log('Extracted amount:', amount);
-
-    if (!amount || amount === 0) {
-      return NextResponse.json(
-        {
-          amount: 0,
-          status: 'error',
-          message: 'No compensation amount available for this route',
-          debug: {
-            originalResponse: data,
-          },
-        },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json({
-      amount,
-      status: 'success',
-      currency: 'EUR',
-      debug: {
-        originalResponse: data,
-      },
-    });
+    return NextResponse.json(data);
   } catch (error) {
     console.error('Error calculating compensation:', error);
     return NextResponse.json(
@@ -101,9 +68,6 @@ export async function GET(request: Request) {
           error instanceof Error
             ? error.message
             : 'Failed to calculate compensation',
-        debug: {
-          error: error instanceof Error ? error.message : 'Unknown error',
-        },
       },
       { status: 500 }
     );

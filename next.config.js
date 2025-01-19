@@ -17,6 +17,11 @@ const nextConfig = {
       },
     ],
   },
+  optimizeFonts: true,
+  experimental: {
+    optimizeCss: true,
+    optimizeServerReact: true,
+  },
   async rewrites() {
     return [
       {
@@ -34,6 +39,15 @@ const nextConfig = {
       {
         source: '/studio/:path*',
         headers: [{ key: 'Access-Control-Allow-Origin', value: '*' }],
+      },
+      {
+        source: '/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
       },
     ];
   },

@@ -775,16 +775,17 @@ export default function InitialAssessment() {
 
   // Handle continue button click
   const handleContinue = useCallback(async () => {
+    if (isLoading) return;
     setIsLoading(true);
     try {
-      completePhase(1);
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await completePhase(1);
       router.push(PHASE_TO_URL[2]);
     } catch (error) {
+      console.error('Error in handleContinue:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [completePhase, router]);
+  }, [completePhase, router, isLoading]);
 
   const renderStepContent = (step: Step) => {
     if (step.component === FlightSelector) {

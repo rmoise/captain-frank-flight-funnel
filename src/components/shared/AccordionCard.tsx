@@ -96,9 +96,22 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
       return;
     }
 
-    // Only start validation if the step is valid
-    if (isValid) {
-      console.log('AccordionCard - Step is valid:', {
+    // Only start validation if the step is valid and completed
+    if (isValid && isCompleted) {
+      // Skip validation for flight selector during type changes
+      const isFlightSelector =
+        stepId === '2' && title.toLowerCase().includes('flug');
+      const isCompletedStep = isValid && isCompleted;
+
+      // Skip auto-transition for flight selector unless completed
+      if (isFlightSelector && !isCompletedStep) {
+        console.log(
+          'AccordionCard - Skipping validation for flight selector during type change'
+        );
+        return;
+      }
+
+      console.log('AccordionCard - Step is valid and completed:', {
         stepId,
         wasManual: wasManualRef.current,
         isInitialLoad: isInitialLoad.current,
@@ -116,6 +129,8 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
           stepId,
           delay: isQA ? 2000 : 1000,
           isValidating: isValidatingRef.current,
+          isFlightSelector,
+          isCompletedStep,
         });
 
         // Set validation state
@@ -128,9 +143,11 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
           // Double check conditions before transitioning
           if (
             isValid &&
+            isCompleted &&
             activeAccordion === stepId &&
             !shouldStayOpen &&
-            !wasManualRef.current
+            !wasManualRef.current &&
+            (!isFlightSelector || isCompletedStep)
           ) {
             console.log('AccordionCard - Auto-transitioning:', {
               stepId,
@@ -142,6 +159,7 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
             console.log('AccordionCard - Conditions no longer met:', {
               stepId,
               isValid,
+              isCompleted,
               activeAccordion,
               shouldStayOpen,
               wasManual: wasManualRef.current,
@@ -170,7 +188,16 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
       // Reset validation state when becoming invalid
       wasValidRef.current = false;
     }
-  }, [isValid, stepId, activeAccordion, shouldStayOpen, isQA, autoTransition]);
+  }, [
+    isValid,
+    isCompleted,
+    stepId,
+    activeAccordion,
+    shouldStayOpen,
+    isQA,
+    autoTransition,
+    title,
+  ]);
 
   // Cleanup validation timer on unmount
   useEffect(() => {

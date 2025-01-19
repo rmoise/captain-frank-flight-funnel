@@ -15,6 +15,20 @@ const heebo = Heebo({
   variable: '--font-heebo',
 });
 
+// Create a client component for Cookiebot
+const CookiebotScript = () => {
+  return (
+    <Script
+      id="Cookiebot"
+      src="https://consent.cookiebot.com/uc.js"
+      data-cbid="4812d2c5-a615-4c7f-80ba-ed2014b5a07c"
+      data-blockingmode="auto"
+      data-culture="de"
+      strategy="afterInteractive"
+    />
+  );
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -23,14 +37,7 @@ export default function RootLayout({
   return (
     <html lang="de" className={`${heebo.variable}`}>
       <head>
-        <Script
-          id="Cookiebot"
-          src="https://consent.cookiebot.com/uc.js"
-          data-cbid="4812d2c5-a615-4c7f-80ba-ed2014b5a07c"
-          data-blockingmode="auto"
-          data-culture="de"
-          strategy="beforeInteractive"
-        />
+        <CookiebotScript />
         <meta
           name="viewport"
           content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"

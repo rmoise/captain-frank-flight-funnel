@@ -70,7 +70,6 @@ export const handleOptionClick = (
 export const QAWizard: React.FC<QAWizardProps> = ({
   questions = [],
   onComplete,
-  onInteract,
   selectedFlight,
   initialAnswers = [],
 }) => {
@@ -220,11 +219,41 @@ export const QAWizard: React.FC<QAWizardProps> = ({
   // Check if current question is answered
   const isCurrentQuestionAnswered = useMemo(() => {
     if (!currentQuestion) return false;
+
+    // For flight selector questions, only show Complete button when flights are selected
+    if (currentQuestion.type === 'flight_selector') {
+      return Boolean(selectedFlight && selectedFlight.id);
+    }
+
     return (
       instanceAnswers.some((a) => a.questionId === currentQuestion.id) ||
       wizardAnswers.some((a) => a.questionId === currentQuestion.id)
     );
-  }, [currentQuestion, instanceAnswers, wizardAnswers]);
+  }, [currentQuestion, instanceAnswers, wizardAnswers, selectedFlight]);
+
+  // Add new function to check if the current step can be completed
+  const canCompleteCurrentStep = useMemo(() => {
+    console.log('=== canCompleteCurrentStep Debug ===');
+    console.log('Current Question:', currentQuestion);
+    console.log('Selected Flight:', selectedFlight);
+
+    if (!currentQuestion) return false;
+
+    // For flight selector questions, require a selected flight
+    if (currentQuestion?.type === 'flight_selector') {
+      const hasSelectedFlight = Boolean(selectedFlight && selectedFlight.id);
+      console.log('Flight selector check:', { hasSelectedFlight });
+      return hasSelectedFlight;
+    }
+
+    // For other questions, check if they're answered
+    const isAnswered =
+      instanceAnswers.some((a) => a.questionId === currentQuestion?.id) ||
+      wizardAnswers.some((a) => a.questionId === currentQuestion?.id);
+
+    console.log('Regular question check:', { isAnswered });
+    return isAnswered;
+  }, [currentQuestion, instanceAnswers, wizardAnswers, selectedFlight]);
 
   // Get current answer for a question
   const getCurrentAnswer = useCallback(
@@ -238,46 +267,59 @@ export const QAWizard: React.FC<QAWizardProps> = ({
   );
 
   // Handle answer selection
-  const handleSelect = useCallback(
-    (questionId: string, value: string) => {
-      if (onInteract) {
-        onInteract();
-      }
+  const handleSelect = (questionId: string, value: string) => {
+    console.log('QA Wizard handleSelect called:', {
+      questionId,
+      value,
+      currentAnswers: wizardAnswers,
+      wizardType,
+      selectedFlight,
+    });
 
-      const newAnswer: Answer = {
-        questionId,
-        value,
-        shouldShow: true,
-      };
+    // Create new answer
+    const newAnswer = {
+      questionId,
+      value,
+      shouldShow: true,
+    };
 
-      const otherAnswers = wizardAnswers.filter(
-        (a) => a.questionId !== questionId
-      );
+    // Keep other answers
+    const otherAnswers = wizardAnswers.filter(
+      (answer) => answer.questionId !== questionId
+    );
+    console.log('Other answers being preserved:', otherAnswers);
 
-      let updatedAnswers = [...otherAnswers, newAnswer];
+    // Update answers without validation
+    const updatedAnswers = [...otherAnswers, newAnswer];
+    batchUpdateWizardState({
+      wizardAnswers: updatedAnswers,
+      lastAnsweredQuestion: questionId,
+    });
 
-      if (wizardType === 'informed_date') {
-        const travelStatusAnswers = wizardAnswers.filter(
-          (a) =>
-            a.questionId === 'travel_status' ||
-            a.questionId === 'refund_status' ||
-            a.questionId === 'ticket_cost'
-        );
-        updatedAnswers = [...travelStatusAnswers, ...updatedAnswers];
-      }
-
-      // Only update answers and last answered question
-      batchUpdateWizardState({
-        wizardAnswers: updatedAnswers,
-        lastAnsweredQuestion: questionId,
-      });
-    },
-    [wizardAnswers, wizardType, onInteract, batchUpdateWizardState]
-  );
+    console.log('Final updated answers:', {
+      updatedAnswers,
+      wizardType,
+      isCurrentQuestionAnswered: false,
+    });
+  };
 
   const goToNext = useCallback(() => {
-    // Don't proceed if current question isn't answered or null
-    if (!isCurrentQuestionAnswered || !currentQuestion) {
+    console.log('=== QA Wizard goToNext Debug ===');
+    console.log('1. Initial state:', {
+      isCurrentQuestionAnswered,
+      canCompleteCurrentStep,
+      currentQuestion,
+      wizardType,
+      wizardAnswers,
+      selectedFlight,
+      validationState,
+    });
+
+    // Don't proceed if current step can't be completed or no current question
+    if (!canCompleteCurrentStep || !currentQuestion) {
+      console.log(
+        'Cannot proceed: step cannot be completed or no current question'
+      );
       return;
     }
 
@@ -286,17 +328,27 @@ export const QAWizard: React.FC<QAWizardProps> = ({
       instanceAnswers.find((a) => a.questionId === currentQuestion.id) ||
       wizardAnswers.find((a) => a.questionId === currentQuestion.id);
 
-    if (!currentAnswer) {
+    // For flight selector questions, we don't require an answer object
+    if (!currentAnswer && currentQuestion.type !== 'flight_selector') {
+      console.log(
+        'Cannot proceed: no current answer found and not a flight selector'
+      );
       return;
     }
 
-    // Get the selected option
-    const selectedOption = currentQuestion.options?.find(
-      (opt) => opt.value.toString() === currentAnswer.value?.toString()
-    );
+    // Get the selected option if we have an answer
+    const selectedOption =
+      currentAnswer &&
+      currentQuestion.options?.find(
+        (opt) => opt.value.toString() === currentAnswer.value?.toString()
+      );
+
+    console.log('2. Current answer:', currentAnswer);
+    console.log('3. Selected option:', selectedOption);
 
     // If we're on the last question and user clicked Complete
     if (wizardCurrentStep === visibleQuestions.length - 1) {
+      console.log('4. On last question, preparing to complete wizard');
       const successMessage = selectedOption?.showConfetti
         ? 'Super! Du hast gute Chancen auf eine Entschädigung.'
         : 'Deine Antworten wurden gespeichert.';
@@ -320,9 +372,17 @@ export const QAWizard: React.FC<QAWizardProps> = ({
                   (a) =>
                     a.questionId === 'travel_status' ||
                     a.questionId === 'refund_status' ||
-                    a.questionId === 'ticket_cost'
+                    a.questionId === 'ticket_cost' ||
+                    a.questionId === 'alternative_flight_airline_expense' ||
+                    a.questionId === 'alternative_flight_own_expense' ||
+                    a.questionId === 'trip_costs'
                 )
               : wizardAnswers;
+
+        console.log('5. Relevant answers for completion:', {
+          wizardType,
+          relevantAnswers,
+        });
 
         // Keep answers from other wizards
         const otherWizardAnswers =
@@ -343,26 +403,64 @@ export const QAWizard: React.FC<QAWizardProps> = ({
 
         const combinedAnswers = [...otherWizardAnswers, ...relevantAnswers];
 
-        // First validate the wizard to ensure proper state update
+        console.log('6. Combined answers:', combinedAnswers);
+
+        // Check if we have alternative flights selected
+        const hasAlternativeFlights = selectedFlight && selectedFlight.id;
+        const travelStatus = relevantAnswers.find(
+          (a) => a.questionId === 'travel_status'
+        )?.value;
+
+        console.log('7. Alternative flight check:', {
+          hasAlternativeFlights,
+          travelStatus,
+          selectedFlight,
+        });
+
+        // Only validate when completing the wizard
+        const newValidationState = {
+          ...validationState,
+          isWizardValid: true,
+          stepValidation: {
+            ...validationState.stepValidation,
+            2:
+              wizardType === 'travel_status'
+                ? travelStatus === 'provided'
+                  ? Boolean(hasAlternativeFlights)
+                  : true
+                : Boolean(validationState.stepValidation[2]),
+            3:
+              wizardType === 'informed_date'
+                ? true
+                : Boolean(validationState.stepValidation[3]),
+          },
+          stepInteraction: {
+            ...validationState.stepInteraction,
+            2:
+              wizardType === 'travel_status'
+                ? true
+                : Boolean(validationState.stepInteraction[2]),
+            3:
+              wizardType === 'informed_date'
+                ? true
+                : Boolean(validationState.stepInteraction[3]),
+          },
+          2:
+            wizardType === 'travel_status' ? true : Boolean(validationState[2]),
+          3:
+            wizardType === 'informed_date' ? true : Boolean(validationState[3]),
+          _timestamp: Date.now(),
+        };
+
+        console.log('8. New validation state:', newValidationState);
+
+        // Update state with validation only on completion
         batchUpdateWizardState({
           wizardAnswers: combinedAnswers,
           lastAnsweredQuestion: completeWizardId,
           wizardIsValid: true,
           wizardIsCompleted: true,
-          validationState: {
-            ...validationState,
-            isWizardValid: true,
-            stepValidation: {
-              ...validationState.stepValidation,
-              2: true,
-            },
-            stepInteraction: {
-              ...validationState.stepInteraction,
-              2: true,
-            },
-            2: true,
-            _timestamp: Date.now(),
-          },
+          validationState: newValidationState,
         });
 
         // Then handle completion which will trigger the transition
@@ -379,6 +477,7 @@ export const QAWizard: React.FC<QAWizardProps> = ({
     // Move to the next step while preserving the current answer
     const nextStep = wizardCurrentStep + 1;
     if (nextStep < visibleQuestions.length) {
+      console.log('9. Moving to next step:', nextStep);
       batchUpdateWizardState({
         wizardCurrentSteps: {
           ...wizardCurrentSteps,
@@ -402,6 +501,8 @@ export const QAWizard: React.FC<QAWizardProps> = ({
     wizardCurrentSteps,
     batchUpdateWizardState,
     validationState,
+    selectedFlight,
+    canCompleteCurrentStep,
   ]);
 
   const goToPrevious = useCallback(

@@ -21,18 +21,22 @@ const handler: Handler = async (event: HandlerEvent) => {
 
   try {
     const requestBody = JSON.parse(event.body);
-    console.log('Parsed request body:', JSON.stringify(requestBody, null, 2));
+    console.log('Raw request received:', JSON.stringify(requestBody, null, 2));
 
-    // Validate required fields according to API documentation
-    if (
-      !requestBody.journey_booked_flightids ||
-      !requestBody.information_received_at
-    ) {
+    // Validate required fields
+    const requiredFields = [
+      'journey_booked_flightids',
+      'information_received_at',
+    ];
+
+    const missingFields = requiredFields.filter((field) => !requestBody[field]);
+    if (missingFields.length > 0) {
+      console.error('Missing required fields:', missingFields);
       return {
         statusCode: 400,
         body: JSON.stringify({
-          error: 'Missing required fields',
-          required: ['journey_booked_flightids', 'information_received_at'],
+          error: `Missing required fields: ${missingFields.join(', ')}`,
+          status: 'error',
         }),
       };
     }
@@ -61,9 +65,14 @@ const handler: Handler = async (event: HandlerEvent) => {
     };
 
     console.log(
-      'Sending request body:',
+      'Transformed request body:',
       JSON.stringify(apiRequestBody, null, 2)
     );
+    console.log('Journey comparison:', {
+      booked: requestBody.journey_booked_flightids,
+      fact: requestBody.journey_fact_flightids,
+      travel_status: requestBody.travel_status,
+    });
 
     const response = await fetch(apiUrl, {
       method: 'POST',
