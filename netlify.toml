@@ -5,6 +5,8 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  NEXT_USE_NETLIFY_EDGE = "true"
+  NEXT_FORCE_EDGE_IMAGES = "true"
 
 [functions]
   node_bundler = "esbuild"
@@ -33,3 +35,14 @@
   from = "/api/ordereuflightclaim"
   to = "/.netlify/functions/ordereuflightclaim"
   status = 200
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

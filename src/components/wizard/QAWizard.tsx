@@ -16,6 +16,7 @@ import { useStore } from '../../lib/state/store';
 import type { StoreState } from '../../lib/state/store';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
 import { qaWizardConfig } from '@/config/qaWizard';
+import { useTranslation } from '@/hooks/useTranslation';
 
 // Add type for wizard step keys
 type WizardStepKey =
@@ -73,6 +74,7 @@ export const QAWizard: React.FC<QAWizardProps> = ({
   selectedFlight,
   initialAnswers = [],
 }) => {
+  const { t } = useTranslation();
   const {
     wizardAnswers,
     wizardCurrentSteps,
@@ -378,8 +380,8 @@ export const QAWizard: React.FC<QAWizardProps> = ({
     if (wizardCurrentStep === visibleQuestions.length - 1) {
       console.log('4. On last question, preparing to complete wizard');
       const successMessage = selectedOption?.showConfetti
-        ? 'Super! Du hast gute Chancen auf eine Entschädigung.'
-        : 'Deine Antworten wurden gespeichert.';
+        ? t.wizard.success.goodChance
+        : t.wizard.success.answersSaved;
 
       // For informed date wizard, use the proper ID
       const completeWizardId =
@@ -531,6 +533,7 @@ export const QAWizard: React.FC<QAWizardProps> = ({
     validationState,
     selectedFlight,
     canCompleteCurrentStep,
+    t,
   ]);
 
   const goToPrevious = useCallback(
@@ -680,6 +683,39 @@ export const QAWizard: React.FC<QAWizardProps> = ({
     }
   }, [wizardAnswers, wizardType, lastAnsweredQuestion, batchUpdateWizardState]);
 
+  // Add effect to update success message when language changes
+  useEffect(() => {
+    if (successState.showing) {
+      const successMessages =
+        t.wizard.success[wizardType as keyof typeof t.wizard.success] || {};
+      const newMessage =
+        'message' in successMessages
+          ? successMessages.message
+          : successState.message;
+
+      if (newMessage !== successState.message) {
+        batchUpdateWizardState({
+          wizardSuccessStates: {
+            ...wizardSuccessStates,
+            [wizardType]: { ...successState, message: newMessage },
+          },
+        });
+      }
+    }
+  }, [
+    t,
+    successState,
+    wizardType,
+    wizardSuccessStates,
+    batchUpdateWizardState,
+  ]);
+
+  // Update button text to use translations
+  const backButtonText = t.wizard.navigation.back;
+  const nextButtonText = t.wizard.navigation.next;
+  const backToQuestionsText = t.wizard.success.backToQuestions;
+  const processingText = t.wizard.success.processing;
+
   // Early returns for error states
   if (!questions || !Array.isArray(questions) || questions.length === 0) {
     return (
@@ -709,8 +745,8 @@ export const QAWizard: React.FC<QAWizardProps> = ({
                 transition={{ delay: 0.1, duration: 0.2 }}
                 className="w-16 h-16 flex items-center justify-center text-[64px]"
               >
-                {successState.message ===
-                'Super! Du hast gute Chancen auf eine Entschädigung.' ? (
+                {successState.message.includes('Yay!') ||
+                successState.message.includes('Super!') ? (
                   <span>🎉</span>
                 ) : (
                   <CheckCircleIcon
@@ -728,16 +764,14 @@ export const QAWizard: React.FC<QAWizardProps> = ({
                 <h2 className="text-2xl font-bold text-gray-900">
                   {successState.message}
                 </h2>
-                <p className="text-sm text-gray-500">
-                  Wir verarbeiten deine Informationen...
-                </p>
+                <p className="text-sm text-gray-500">{processingText}</p>
                 <motion.button
                   onClick={handleBackToQuestions}
                   className="mt-6 px-6 py-2 text-[#F54538] border border-[#F54538] rounded-md hover:bg-red-50"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                 >
-                  Zurück zu den Fragen
+                  {backToQuestionsText}
                 </motion.button>
               </motion.div>
             </div>
@@ -771,7 +805,7 @@ export const QAWizard: React.FC<QAWizardProps> = ({
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                     >
-                      Zurück
+                      {backButtonText}
                     </motion.button>
                   )}
                 </div>
@@ -792,30 +826,26 @@ export const QAWizard: React.FC<QAWizardProps> = ({
                         isCurrentQuestionAnswered ? { scale: 0.95 } : {}
                       }
                     >
-                      Weiter
+                      {nextButtonText}
                     </motion.button>
                   ) : (
-                    // Only show Complete button on last question when answered
-                    wizardCurrentStep === visibleQuestions.length - 1 &&
-                    isCurrentQuestionAnswered && (
-                      <motion.button
-                        onClick={goToNext}
-                        disabled={!isCurrentQuestionAnswered}
-                        className={`px-4 py-2 bg-[#F54538] text-white rounded-md ${
-                          !isCurrentQuestionAnswered
-                            ? 'opacity-50 cursor-not-allowed'
-                            : 'hover:bg-[#E03F33]'
-                        }`}
-                        whileHover={
-                          isCurrentQuestionAnswered ? { scale: 1.05 } : {}
-                        }
-                        whileTap={
-                          isCurrentQuestionAnswered ? { scale: 0.95 } : {}
-                        }
-                      >
-                        Abschließen
-                      </motion.button>
-                    )
+                    <motion.button
+                      onClick={goToNext}
+                      disabled={!isCurrentQuestionAnswered}
+                      className={`px-4 py-2 bg-[#F54538] text-white rounded-md ${
+                        !isCurrentQuestionAnswered
+                          ? 'opacity-50 cursor-not-allowed'
+                          : 'hover:bg-[#E03F33]'
+                      }`}
+                      whileHover={
+                        isCurrentQuestionAnswered ? { scale: 1.05 } : {}
+                      }
+                      whileTap={
+                        isCurrentQuestionAnswered ? { scale: 0.95 } : {}
+                      }
+                    >
+                      {t.common.submit}
+                    </motion.button>
                   )}
                 </div>
               </div>

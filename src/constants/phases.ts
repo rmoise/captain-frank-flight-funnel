@@ -1,39 +1,37 @@
-interface Phase {
+import type { Translations } from '@/translations/types';
+
+export interface Phase {
   id: number;
   name: string;
   steps: number[];
 }
 
-export const PHASES: Phase[] = [
+export const PHASES = (t: Translations): Phase[] => [
   {
     id: 1,
-    name: 'Erste Einschätzung',
+    name: t.phases.names.initialAssessment,
     steps: [1, 2, 3],
   },
   {
     id: 2,
-    name: 'Zusammenfassung',
+    name: t.phases.names.summary,
     steps: [4],
   },
   {
     id: 3,
-    name: 'Flugdetails',
+    name: t.phases.names.flightDetails,
     steps: [5, 6],
   },
   {
     id: 4,
-    name: 'Reiseerlebnis',
-    steps: [7, 8, 9, 10],
+    name: t.phases.names.tripExperience,
+    steps: [7, 8],
   },
   {
     id: 5,
-    name: 'Antragsstatus',
-    steps: [11],
-  },
-  {
-    id: 6,
-    name: 'Vereinbarung',
-    steps: [12],
+    name: t.phases.names.agreement,
+    steps: [9],
   },
 ];
-export const TOTAL_PHASES = PHASES.length;
+
+export const TOTAL_PHASES = 6;

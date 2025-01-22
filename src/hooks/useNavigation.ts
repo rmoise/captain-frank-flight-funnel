@@ -35,7 +35,11 @@ export function useNavigation() {
   // Sync URL with phase
   useEffect(() => {
     if (!pathname) return;
-    const phase = PATH_TO_PHASE[pathname];
+
+    // Extract the base path without language prefix
+    const basePath = pathname.replace(/^\/de/, '');
+    const phase = PATH_TO_PHASE[basePath] || PATH_TO_PHASE[pathname];
+
     if (phase && typeof phase === 'number' && phase !== currentPhase) {
       setCurrentPhase(phase);
     }
@@ -44,7 +48,11 @@ export function useNavigation() {
   // Prevent accessing future phases without completing previous ones
   useEffect(() => {
     if (!pathname) return;
-    const phase = PATH_TO_PHASE[pathname];
+
+    // Extract the base path without language prefix
+    const basePath = pathname.replace(/^\/de/, '');
+    const phase = PATH_TO_PHASE[basePath] || PATH_TO_PHASE[pathname];
+
     if (phase && typeof phase === 'number') {
       // Check if all previous phases are completed
       const previousPhases = Array.from({ length: phase - 1 }, (_, i) => i + 1);
@@ -56,7 +64,10 @@ export function useNavigation() {
         // Redirect to the last completed phase or phase 1
         const lastCompletedPhase = Math.max(0, ...completedPhases);
         const redirectPhase = lastCompletedPhase || 1;
-        router.replace(PHASE_PATHS[redirectPhase as keyof typeof PHASE_PATHS]);
+        const isGermanRoute = pathname.startsWith('/de/');
+        const langPrefix = isGermanRoute ? '/de' : '';
+        const baseUrl = PHASE_PATHS[redirectPhase as keyof typeof PHASE_PATHS];
+        router.replace(`${langPrefix}${baseUrl}`);
       }
     }
   }, [pathname, completedPhases, router]);

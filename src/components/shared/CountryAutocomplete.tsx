@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDownIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { useTranslation } from '@/hooks/useTranslation';
 
 export interface CountryOption {
   value: string;
@@ -39,6 +40,7 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const lastValidValueRef = useRef<string | null>(null);
+  const { t } = useTranslation();
 
   const selectedOption = options.find((opt) => opt.value === value);
   const filteredOptions = searchTerm
@@ -51,11 +53,55 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
 
   // Update searchTerm when selectedOption changes
   useEffect(() => {
+    console.log('=== CountryAutocomplete State Update ===');
+    console.log('selectedOption:', selectedOption);
+    console.log('value:', value);
+    console.log('searchTerm:', searchTerm);
+    console.log('lastValidValue:', lastValidValueRef.current);
+
+    // Try to find the option by value if no selectedOption
+    if (!selectedOption && value) {
+      // First try to find by value
+      const optionByValue = options.find(
+        (opt) =>
+          opt.value.toLowerCase() === value.toLowerCase() ||
+          opt.label.toLowerCase() === value.toLowerCase()
+      );
+
+      if (optionByValue) {
+        console.log('Found option by value:', optionByValue);
+        setSearchTerm(optionByValue.label);
+        lastValidValueRef.current = optionByValue.label;
+        return;
+      }
+
+      // If we have a string value but no matching option, keep the value as is
+      console.log('Using value as searchTerm:', value);
+      setSearchTerm(value);
+      lastValidValueRef.current = value;
+      return;
+    }
+
     if (selectedOption) {
+      console.log('Setting searchTerm to:', selectedOption.label);
       setSearchTerm(selectedOption.label);
       lastValidValueRef.current = selectedOption.label;
+    } else if (!value) {
+      console.log('Clearing searchTerm (no value)');
+      setSearchTerm('');
+      lastValidValueRef.current = null;
     }
-  }, [selectedOption]);
+  }, [selectedOption, value, options, searchTerm]);
+
+  // Reset state when value is cleared
+  useEffect(() => {
+    if (!value) {
+      console.log('=== Value Cleared ===');
+      console.log('Clearing searchTerm and lastValidValue');
+      setSearchTerm('');
+      lastValidValueRef.current = null;
+    }
+  }, [value]);
 
   // Update dropdown position when open
   useEffect(() => {
@@ -85,13 +131,22 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
   // Handle browser autofill
   useEffect(() => {
     const checkAutofill = () => {
+      console.log('=== Checking Autofill ===');
+      console.log('Input value:', inputRef.current?.value);
+      console.log('Selected option:', selectedOption);
+
       if (inputRef.current?.value && !selectedOption) {
         const autofillValue = inputRef.current.value;
+        console.log('Found autofill value:', autofillValue);
 
         // Try to match by label first (case insensitive)
         let matchingOption = options.find(
           (opt) => opt.label.toLowerCase() === autofillValue.toLowerCase()
         );
+
+        if (matchingOption) {
+          console.log('Found matching option:', matchingOption);
+        }
 
         // If no match found, try country codes
         if (!matchingOption) {
@@ -105,11 +160,18 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
           const countryCode = countryMappings[autofillValue.toLowerCase()];
           if (countryCode) {
             matchingOption = options.find((opt) => opt.value === countryCode);
+            console.log(
+              'Found matching option by country code:',
+              matchingOption
+            );
           }
         }
 
         if (matchingOption && onChange) {
+          console.log('Updating with matching option:', matchingOption);
           onChange(matchingOption.value);
+          setSearchTerm(matchingOption.label);
+          lastValidValueRef.current = matchingOption.label;
         }
       }
     };
@@ -118,10 +180,11 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
     const timeoutIds = [
       setTimeout(checkAutofill, 100),
       setTimeout(checkAutofill, 500),
+      setTimeout(checkAutofill, 1000),
     ];
 
     return () => timeoutIds.forEach((id) => clearTimeout(id));
-  }, [options, onChange, selectedOption]);
+  }, [options, onChange, selectedOption, searchTerm]);
 
   // Handle click outside
   useEffect(() => {
@@ -171,9 +234,11 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
   }, [isOpen, options, onChange, selectedOption]);
 
   const handleSelect = (optionValue: string) => {
+    console.log('=== Option Selected ===');
+    console.log('Selected value:', optionValue);
     const selected = options.find((opt) => opt.value === optionValue);
     if (selected) {
-      // Update the input value and state
+      console.log('Found selected option:', selected);
       if (inputRef.current) {
         inputRef.current.value = selected.label;
       }
@@ -189,6 +254,8 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
+    console.log('=== Input Change ===');
+    console.log('New value:', newValue);
     setSearchTerm(newValue);
     setIsOpen(true);
     setIsTouched(true);
@@ -255,6 +322,7 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
   };
 
   const handleClear = () => {
+    console.log('=== Clearing Input ===');
     if (onChange) {
       onChange('');
     }
@@ -285,8 +353,9 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
     transition-all duration-[200ms] cubic-bezier(0.4, 0, 0.2, 1)
     pointer-events-none select-none
     text-[#9BA3AF] font-heebo bg-white px-1
+    ${required ? "after:content-['*'] after:text-[#F54538] after:ml-[1px] after:align-super after:text-[10px]" : ''}
     ${
-      value || isOpen || searchTerm
+      value || isOpen || searchTerm || inputRef.current?.value
         ? '-translate-y-[8px] text-[10px] z-10'
         : 'translate-y-[14px] text-base'
     }
@@ -327,9 +396,7 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
             </li>
           ))}
           {filteredOptions.length === 0 && (
-            <li className="px-4 py-2 text-gray-500">
-              Keine Ergebnisse gefunden
-            </li>
+            <li className="px-4 py-2 text-gray-500">{t.common.noResults}</li>
           )}
         </ul>
       </div>,
@@ -339,66 +406,66 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
 
   return (
     <div className="relative w-full" ref={containerRef}>
-      <div
-        className={containerClassName}
-        onClick={() => !disabled && setIsOpen(true)}
-      >
-        <input
-          ref={inputRef}
-          type="text"
-          value={searchTerm}
-          onChange={handleInputChange}
-          onFocus={() => setIsOpen(true)}
-          className="w-full h-14 px-4 text-left
-            text-[#4B616D] text-base font-medium
-            focus:outline-none rounded-xl
-            ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
-          "
-          style={{
-            outline: 'none',
-            boxShadow: 'none',
-            border: 'none',
-            background: 'transparent',
-          }}
-          placeholder=""
-          disabled={disabled}
-          role="combobox"
-          aria-expanded={isOpen}
-          aria-controls="country-dropdown"
-          aria-haspopup="listbox"
-          aria-describedby={error && isTouched ? `${label}-error` : undefined}
-          onClick={(e) => e.stopPropagation()}
-        />
-        {label && (
-          <label className={labelClassName}>
-            {label}
-            {required && (
-              <span className="text-[#F54538] ml-0.5 text-[10px] align-super">
-                *
-              </span>
-            )}
-          </label>
-        )}
-        <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
-          {value && !disabled && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleClear();
-              }}
-              className="p-1 pointer-events-auto hover:bg-gray-100 rounded-full transition-colors"
-              type="button"
-              aria-label="Clear selection"
-            >
-              <XMarkIcon className="w-5 h-5 text-gray-400 hover:text-[#F54538] transition-colors" />
-            </button>
-          )}
-          <ChevronDownIcon
-            className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${
-              isOpen ? 'rotate-180' : ''
-            }`}
-            aria-hidden="true"
+      <div className={containerClassName}>
+        <div className="relative p-[2px]">
+          <input
+            ref={inputRef}
+            type="text"
+            value={searchTerm}
+            onChange={handleInputChange}
+            onFocus={() => setIsOpen(true)}
+            className="w-full h-14 px-4 text-left
+              text-[#4B616D] text-base font-medium
+              focus:outline-none rounded-xl bg-white
+              placeholder:text-[#9BA3AF] placeholder:font-normal
+              ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
+              [&:-webkit-autofill]:pt-5
+              [&:-webkit-autofill]:pb-2
+              [&:-webkit-autofill]:[transition:background-color_9999s_ease-in-out_0s]
+              [&:-webkit-autofill+label]:opacity-0
+            "
+            style={{
+              outline: 'none',
+              boxShadow: 'none',
+              border: 'none',
+            }}
+            placeholder={!isOpen && !value ? label || '' : ''}
+            disabled={disabled}
+            role="combobox"
+            aria-expanded={isOpen}
+            aria-controls="country-dropdown"
+            aria-haspopup="listbox"
+            aria-describedby={error && isTouched ? `${label}-error` : undefined}
+            onClick={(e) => e.stopPropagation()}
           />
+          {label && (
+            <label
+              className={`${labelClassName} [input:-webkit-autofill+&]:opacity-0`}
+            >
+              {label}
+            </label>
+          )}
+          <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2 z-[2]">
+            {value && !disabled && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleClear();
+                }}
+                className="pointer-events-auto"
+                type="button"
+                aria-label="Clear selection"
+              >
+                <XMarkIcon className="w-5 h-5 text-gray-400 hover:text-[#F54538] transition-colors" />
+              </button>
+            )}
+            <ChevronDownIcon
+              className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${
+                isOpen ? 'rotate-180' : ''
+              }`}
+              aria-hidden="true"
+            />
+          </div>
         </div>
       </div>
       {renderDropdown()}

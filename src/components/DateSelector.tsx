@@ -53,7 +53,11 @@ export const DateSelector: React.FC<DateSelectorProps> = ({
           selected={parseDate(selectedDate)}
           onChange={handleDateChange}
           customInput={
-            <CustomDateInput value={selectedDate || ''} onClear={handleClear} />
+            <CustomDateInput
+              value={selectedDate || ''}
+              onClear={handleClear}
+              label="Select Date"
+            />
           }
           disabled={disabled}
           minDate={new Date()}

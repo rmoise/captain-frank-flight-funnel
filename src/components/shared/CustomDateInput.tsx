@@ -2,7 +2,7 @@
 
 import React, { forwardRef, useState, useEffect, useRef } from 'react';
 import { CalendarIcon, XMarkIcon } from '@heroicons/react/24/outline';
-import { format, isValid } from 'date-fns';
+import { format, isValid, parseISO } from 'date-fns';
 
 export interface CustomDateInputProps {
   value?: string | Date;
@@ -10,8 +10,38 @@ export interface CustomDateInputProps {
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   placeholder?: string;
   onClear?: () => void;
-  label?: string;
+  label: string;
 }
+
+// Helper function to safely parse and format dates
+const safeParseDateString = (value: string | Date | undefined): string => {
+  if (!value) return '';
+
+  try {
+    // If it's already in DD.MM.YYYY format, return as is
+    if (typeof value === 'string' && value.match(/^\d{2}\.\d{2}\.\d{4}$/)) {
+      return value;
+    }
+
+    // If it's a Date object
+    if (value instanceof Date) {
+      if (!isValid(value)) return '';
+      return format(value, 'dd.MM.yyyy');
+    }
+
+    // If it's a string in YYYY-MM-DD format
+    if (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const parsedDate = parseISO(value);
+      if (!isValid(parsedDate)) return '';
+      return format(parsedDate, 'dd.MM.yyyy');
+    }
+
+    return '';
+  } catch (error) {
+    console.error('Error parsing date:', error);
+    return '';
+  }
+};
 
 export const CustomDateInput = forwardRef<
   HTMLInputElement,
@@ -24,7 +54,7 @@ export const CustomDateInput = forwardRef<
       onChange,
       placeholder = 'DD.MM.YYYY',
       onClear,
-      label = 'Flugdatum',
+      label = 'Departure Date',
     },
     ref
   ) => {
@@ -45,36 +75,13 @@ export const CustomDateInput = forwardRef<
         isManualInput: isManualInput.current,
       });
 
-      // Skip if this is a manual input
       if (isManualInput.current) {
         return;
       }
 
-      // Only update on calendar selection or initial mount with a value
-      if (value && (isCalendarSelection.current || isInitialMount.current)) {
-        let formattedValue = '';
-        if (value instanceof Date && isValid(value)) {
-          formattedValue = format(value, 'dd.MM.yyyy');
-        } else if (typeof value === 'string') {
-          if (value.match(/^\d{4}-\d{2}-\d{2}$/)) {
-            const [year, month, day] = value.split('-');
-            formattedValue = `${day}.${month}.${year}`;
-          } else if (value.match(/^\d{2}\.\d{2}\.\d{4}$/)) {
-            formattedValue = value;
-          }
-        }
-
-        if (formattedValue) {
-          setInputValue(formattedValue);
-          lastManualInput.current = formattedValue;
-        }
-      } else if (
-        !value &&
-        (isCalendarSelection.current || isInitialMount.current)
-      ) {
-        setInputValue('');
-        lastManualInput.current = '';
-      }
+      const formattedValue = safeParseDateString(value);
+      setInputValue(formattedValue);
+      lastManualInput.current = formattedValue;
 
       isCalendarSelection.current = false;
       isInitialMount.current = false;

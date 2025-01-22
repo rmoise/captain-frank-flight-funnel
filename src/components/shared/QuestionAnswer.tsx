@@ -6,12 +6,14 @@ import type { Question } from '@/types/experience';
 import { MoneyInput } from '@/components/MoneyInput';
 import { FlightSelector } from '@/components/booking/FlightSelector';
 import type { Flight } from '@/types/store';
-import DatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
 import { CustomDateInput } from '@/components/shared/CustomDateInput';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
-import { formatDateToYYYYMMDD, isValidYYYYMMDD } from '@/utils/dateUtils';
 import { useStore } from '@/lib/state/store';
+import { useTranslation } from '@/hooks/useTranslation';
+import type { ValidationStep } from '@/lib/state/types';
+import { format, parseISO, isValid } from 'date-fns';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
 
 export interface QuestionAnswerProps {
   question: Question;
@@ -32,6 +34,7 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
   initialSelectedFlight = null,
   hideProgress = false,
 }) => {
+  const { t } = useTranslation();
   const { updateValidationState } = useStore();
   const [isFocused, setIsFocused] = useState(false);
   const [localValue, setLocalValue] = useState(selectedOption);
@@ -46,6 +49,71 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
   const handleMoneyInputChange = (value: string) => {
     // Pass through the value directly to onSelect
     onSelect(question.id, value);
+  };
+
+  // Helper function to safely parse dates
+  const safeParseDateToUTC = (date: Date | string | null): Date | null => {
+    if (!date) return null;
+    try {
+      // If it's already a Date object, normalize it
+      if (date instanceof Date) {
+        if (!isValid(date)) return null;
+        return new Date(
+          Date.UTC(
+            date.getFullYear(),
+            date.getMonth(),
+            date.getDate(),
+            12,
+            0,
+            0,
+            0
+          )
+        );
+      }
+
+      // If it's a string, try to parse it
+      const parsed = parseISO(date);
+      if (!isValid(parsed)) return null;
+      return new Date(
+        Date.UTC(
+          parsed.getFullYear(),
+          parsed.getMonth(),
+          parsed.getDate(),
+          12,
+          0,
+          0,
+          0
+        )
+      );
+    } catch (error) {
+      console.error('Error parsing date:', error);
+      return null;
+    }
+  };
+
+  // Update the handleDateChange function
+  const handleDateChange = (newDate: Date | null) => {
+    try {
+      if (!newDate) {
+        setLocalValue('');
+        onSelect(question.id, '');
+        return;
+      }
+
+      // Normalize the date to noon UTC
+      const safeDate = safeParseDateToUTC(newDate);
+      if (!safeDate) {
+        console.error('Invalid date provided to handleDateChange');
+        return;
+      }
+
+      // Format the date for display and storage
+      const formattedDate = format(safeDate, 'yyyy-MM-dd');
+      setLocalValue(formattedDate);
+      onSelect(question.id, formattedDate);
+    } catch (error) {
+      console.error('Error in handleDateChange:', error);
+    }
   };
 
   const renderQuestionInput = () => {
@@ -132,64 +200,61 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
               className="w-full"
-              placeholder={question.placeholder || 'Betrag eingeben'}
+              placeholder={question.placeholder || t.common.enterAmount}
               required={question.required}
             />
           </div>
         );
 
       case 'date':
-        const parsedDate = localValue ? new Date(localValue) : null;
-        const isValidDate = parsedDate && !isNaN(parsedDate.getTime());
-
         return (
           <div className="mt-4">
             <DatePicker
-              selected={isValidDate ? parsedDate : null}
-              onChange={(date) => {
-                if (date) {
-                  const formattedDate = formatDateToYYYYMMDD(date);
-                  if (formattedDate) {
-                    // Validate the formatted date
-                    if (isValidYYYYMMDD(formattedDate)) {
-                      setLocalValue(formattedDate);
-                      onSelect(question.id, formattedDate);
-                    }
-                  }
-                } else {
-                  setLocalValue('');
-                  onSelect(question.id, '');
-                }
-              }}
+              selected={
+                localValue
+                  ? safeParseDateToUTC(localValue) || undefined
+                  : undefined
+              }
+              onChange={handleDateChange}
               customInput={
                 <CustomDateInput
                   value={
-                    isValidDate
-                      ? parsedDate.toLocaleDateString('de-DE', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          year: 'numeric',
-                        })
+                    localValue
+                      ? format(
+                          safeParseDateToUTC(localValue) || new Date(),
+                          'dd.MM.yyyy'
+                        )
                       : ''
                   }
-                  onClear={() => {
-                    setLocalValue('');
-                    onSelect(question.id, '');
-                  }}
+                  onClear={() => handleDateChange(null)}
+                  onClick={() => {}}
+                  label={question.label || question.text}
                 />
               }
               dateFormat="dd.MM.yyyy"
-              maxDate={new Date()}
               showMonthDropdown
               showYearDropdown
               dropdownMode="select"
               isClearable={false}
               placeholderText="DD.MM.YYYY"
               shouldCloseOnSelect={true}
+              maxDate={new Date()}
+              minDate={
+                new Date(new Date().setFullYear(new Date().getFullYear() - 3))
+              }
               popperProps={{
                 strategy: 'fixed',
                 placement: 'top-start',
               }}
+              className="react-datepicker-popper"
+              calendarClassName="custom-calendar"
+              openToDate={
+                localValue
+                  ? safeParseDateToUTC(localValue) || new Date()
+                  : new Date()
+              }
+              disabledKeyboardNavigation
+              preventOpenOnFocus
             />
           </div>
         );
@@ -231,8 +296,8 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
                       2: false,
                       3: false,
                       4: false,
-                    },
-                    1: newState[1] || false,
+                      5: false,
+                    } as Record<ValidationStep, boolean>,
                   });
                 } else {
                   updateValidationState({
@@ -241,8 +306,8 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
                       2: false,
                       3: false,
                       4: false,
-                    },
-                    1: state[1] || false,
+                      5: false,
+                    } as Record<ValidationStep, boolean>,
                   });
                 }
               }}
@@ -300,7 +365,12 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
               transition={{ duration: 0.3 }}
             >
               <span>
-                Frage {currentStep} von {totalSteps}
+                {t.phases?.initialAssessment?.counter?.[
+                  totalSteps === 1 ? 'single' : 'multiple'
+                ]
+                  ?.replace('{current}', currentStep.toString())
+                  .replace('{total}', totalSteps.toString()) ||
+                  `Question ${currentStep} of ${totalSteps}`}
               </span>
             </motion.div>
           )}

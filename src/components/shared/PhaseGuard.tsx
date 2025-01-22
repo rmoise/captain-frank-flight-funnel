@@ -84,8 +84,12 @@ export function PhaseGuard({ phase, children }: PhaseGuardProps) {
     if (!accessible && isInitialized && currentPhase > 1) {
       const redirectUrl = PHASE_TO_URL[currentPhase];
       if (redirectUrl) {
-        console.log('Redirecting to:', redirectUrl);
-        router.push(redirectUrl);
+        const currentPath = window.location.pathname;
+        const isGermanRoute = currentPath.startsWith('/de/');
+        const langPrefix = isGermanRoute ? '/de' : '';
+        const fullUrl = `${langPrefix}${redirectUrl}`;
+        console.log('Redirecting to:', fullUrl);
+        router.replace(fullUrl);
       }
     }
 

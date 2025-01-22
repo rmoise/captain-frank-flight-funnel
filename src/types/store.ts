@@ -7,11 +7,15 @@ export interface Flight {
   flightNumber: string;
   departure: string;
   arrival: string;
+  date: string;
+  distance?: number;
+  issueType?: 'delay' | 'cancel' | 'missed' | 'other';
+  issueDescription?: string;
+  issueSeverity?: 'low' | 'medium' | 'high';
   departureCity: string;
   arrivalCity: string;
   departureTime: string;
   arrivalTime: string;
-  date: string;
   airline: string;
   status: string;
   departureAirport: string;
@@ -32,7 +36,7 @@ export interface Flight {
 
 export interface Answer {
   questionId: string;
-  value: string | number | boolean;
+  value: string | boolean | number;
   shouldShow?: boolean;
 }
 
@@ -43,7 +47,7 @@ export interface PassengerDetails {
   salutation: string;
   phone: string;
   address?: string;
-  zipCode?: string;
+  postalCode?: string;
   city?: string;
   country?: string;
 }

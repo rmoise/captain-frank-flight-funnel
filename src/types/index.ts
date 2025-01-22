@@ -23,7 +23,7 @@ export interface PassengerDetails {
   address: string;
   city: string;
   country: string;
-  zipCode: string;
+  postalCode: string;
 }
 
 export interface PersonalDetailsFormProps {

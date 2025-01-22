@@ -5,20 +5,21 @@ import { AccordionCard } from '@/components/shared/AccordionCard';
 import type { Flight, Answer, PassengerDetails } from '@/types/store';
 import FlightSelector from '@/components/booking/FlightSelector';
 import { QAWizardWrapper } from '@/components/wizard/QAWizardWrapper';
-import { wizardQuestions } from '@/constants/wizardQuestions';
+import { getWizardQuestions } from '@/constants/wizardQuestions';
 import { PersonalDetailsForm } from '@/components/forms/PersonalDetailsForm';
 import { ConsentCheckbox } from '@/components/ConsentCheckbox';
 import { SpeechBubble } from '@/components/SpeechBubble';
 import type { Question } from '@/types/experience';
 import { useRouter } from 'next/navigation';
 import { pushToDataLayer } from '@/utils/gtm';
-import { useStore, PHASE_TO_URL } from '@/lib/state/store';
+import { useStore, PHASE_TO_URL, getLanguageAwareUrl } from '@/lib/state/store';
 import type { StoreStateValues, ValidationStateSteps } from '@/lib/state/store';
 import { PhaseNavigation } from '@/components/PhaseNavigation';
 import { ContinueButton } from '@/components/shared/ContinueButton';
 import { AccordionProvider } from '@/components/shared/AccordionContext';
 import { accordionConfig } from '@/config/accordion';
 import { useAccordion } from '@/components/shared/AccordionContext';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface LocationData {
   value: string;
@@ -84,12 +85,14 @@ interface Step {
 }
 
 export default function InitialAssessment() {
+  const { t, lang } = useTranslation();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [interactedSteps, setInteractedSteps] = useState<number[]>([]);
   const [isFirstVisit, setIsFirstVisit] = useState(true);
   const [initialAccordion, setInitialAccordion] = useState<string | null>(null);
+  const wizardQuestions = getWizardQuestions(t);
 
   const {
     wizardAnswers,
@@ -117,15 +120,23 @@ export default function InitialAssessment() {
     canProceedToNextPhase,
     completedSteps,
     updateValidationState,
+    currentPhase,
+    completedPhases,
   } = useStore();
 
-  const { autoTransition } = useAccordion();
+  const { autoTransition, activeAccordion } = useAccordion();
 
   // Single initialization effect
   useEffect(() => {
     const initialize = async () => {
       try {
         if (!mounted) {
+          console.log('Initializing store - before:', {
+            wizardAnswers,
+            validationState,
+            completedSteps,
+          });
+
           await initializeStore();
           setCurrentPhase(1);
 
@@ -137,67 +148,73 @@ export default function InitialAssessment() {
             termsAccepted;
           setIsFirstVisit(!hasExistingData);
 
-          // Restore validation state from localStorage
+          // Get last active accordion from session storage
+          const lastActiveAccordion = sessionStorage.getItem('activeAccordion');
+
+          // Get saved validation state from localStorage
           const savedValidationState = localStorage.getItem(
             'initialAssessmentValidation'
           );
           const savedCompletedSteps = localStorage.getItem(
             'initialAssessmentCompletedSteps'
           );
-          const lastActiveAccordion = sessionStorage.getItem('activeAccordion');
 
+          // If we have saved state, restore it
           if (savedValidationState) {
             try {
-              const parsedValidation = JSON.parse(savedValidationState);
-              updateValidationState(parsedValidation);
+              const parsedValidationState = JSON.parse(savedValidationState);
+              updateValidationState(parsedValidationState);
             } catch (error) {
               console.error('Error parsing saved validation state:', error);
             }
           }
 
+          // If we have saved completed steps, restore them
           if (savedCompletedSteps) {
             try {
-              const parsedSteps = JSON.parse(savedCompletedSteps);
-              useStore.setState((state) => ({
-                ...state,
-                completedSteps: parsedSteps,
-              }));
+              const parsedCompletedSteps = JSON.parse(savedCompletedSteps);
+              parsedCompletedSteps.forEach((step: number) =>
+                completePhase(step)
+              );
             } catch (error) {
               console.error('Error parsing saved completed steps:', error);
             }
           }
 
-          // If we have existing wizard answers, revalidate them
-          if (wizardAnswers.length > 0) {
+          // Only validate wizard if it was previously submitted
+          if (wizardAnswers.length > 0 && validationState.isWizardSubmitted) {
+            console.log(
+              'Validating wizard answers after reload - answers were previously submitted'
+            );
             markWizardComplete('initial_assessment');
             validateQAWizard();
+          } else {
+            console.log('Skipping validation - answers not yet submitted');
           }
 
-          // Set initial accordion and scroll to it after a brief delay
-          if (typeof window !== 'undefined') {
-            setInitialAccordion(
-              lastActiveAccordion || (hasExistingData ? null : '1')
-            );
+          console.log('Initialization complete - after:', {
+            wizardAnswers,
+            validationState,
+            completedSteps,
+          });
 
-            // Wait for component to mount and render
-            setTimeout(() => {
-              if (lastActiveAccordion) {
-                const activeStep = document.querySelector(
-                  `[data-step="${lastActiveAccordion}"]`
-                );
-                if (activeStep) {
-                  activeStep.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'start',
-                  });
-                }
-              }
-            }, 500);
-          }
+          // Don't set an initial accordion if we have existing data
+          setInitialAccordion(hasExistingData ? null : '1');
 
+          // Update interacted steps based on validation state
+          const interactedStepsFromValidation = Object.entries(
+            validationState.stepInteraction
+          )
+            .filter(([, hasInteracted]) => hasInteracted)
+            .map(([step]) => parseInt(step))
+            .filter((step) => !isNaN(step));
+
+          setInteractedSteps(interactedStepsFromValidation);
           setMounted(true);
         }
-      } catch (error) {}
+      } catch (error) {
+        console.error('Error during initialization:', error);
+      }
     };
 
     initialize();
@@ -211,8 +228,23 @@ export default function InitialAssessment() {
     termsAccepted,
     markWizardComplete,
     validateQAWizard,
+    validationState,
+    completedSteps,
+    wizardQuestions,
+    completePhase,
     updateValidationState,
   ]);
+
+  // Save active accordion when it changes
+  useEffect(() => {
+    if (mounted && typeof window !== 'undefined') {
+      if (activeAccordion) {
+        sessionStorage.setItem('activeAccordion', activeAccordion);
+      } else {
+        sessionStorage.removeItem('activeAccordion');
+      }
+    }
+  }, [mounted, activeAccordion, wizardQuestions]);
 
   // Save validation state and completed steps when they change
   useEffect(() => {
@@ -226,7 +258,7 @@ export default function InitialAssessment() {
         JSON.stringify(completedSteps)
       );
     }
-  }, [mounted, validationState, completedSteps]);
+  }, [mounted, validationState, completedSteps, wizardQuestions]);
 
   const handleAutoTransition = useCallback(
     (currentStepId: string) => {
@@ -297,6 +329,7 @@ export default function InitialAssessment() {
 
   const isQAWizardValid = useMemo(() => {
     if (!validationState.stepValidation[2]) return false;
+    if (!validationState.isWizardSubmitted) return false;
 
     // Check if all required questions are answered
     const issueType = wizardAnswers.find(
@@ -369,10 +402,30 @@ export default function InitialAssessment() {
       default:
         return false;
     }
-  }, [validationState.stepValidation, wizardAnswers]);
+  }, [
+    validationState.stepValidation,
+    validationState.isWizardSubmitted,
+    wizardAnswers,
+  ]);
 
   const renderStep = (step: Step) => {
     const currentState = useStore.getState();
+    const isStepCompleted =
+      step.id === 2
+        ? validationState.stepValidation[2] &&
+          validationState.stepInteraction[2]
+        : step.id === 3
+          ? validationState.stepValidation[3] &&
+            validationState.stepInteraction[3]
+          : completedSteps.includes(step.id);
+
+    const isCurrentStepValid =
+      step.id === 2
+        ? isQAWizardValid
+        : step.id === 3
+          ? validationState.isPersonalValid &&
+            validationState.stepInteraction[3]
+          : isStepValid(step.id);
 
     return (
       <AccordionCard
@@ -380,14 +433,17 @@ export default function InitialAssessment() {
         title={step.title}
         subtitle={step.subtitle}
         stepId={step.id.toString()}
-        isCompleted={completedSteps.includes(step.id)}
+        isCompleted={isStepCompleted}
         hasInteracted={interactedSteps.includes(step.id)}
-        isValid={step.id === 2 ? isQAWizardValid : isStepValid(step.id)}
+        isValid={isCurrentStepValid}
         summary={step.getSummary(currentState)}
         shouldStayOpen={false}
         isOpenByDefault={isFirstVisit && step.id === 1}
         className={accordionConfig.padding.wrapper}
-        eyebrow={`Schritt ${step.id}`}
+        eyebrow={t.phases.initialAssessment.step.replace(
+          '{number}',
+          step.id.toString()
+        )}
         isQA={step.id === 2}
       >
         <div className={accordionConfig.padding.content}>
@@ -424,7 +480,7 @@ export default function InitialAssessment() {
         currentValidation: validationState.stepValidation,
       });
 
-      // Store the answers and let the store handle validation
+      // Store the answers and mark as submitted
       setWizardAnswers(answers);
       markWizardComplete('initial_assessment');
       validateQAWizard();
@@ -434,6 +490,7 @@ export default function InitialAssessment() {
       const newValidationState = {
         ...validationState,
         isWizardValid: true,
+        isWizardSubmitted: true, // Add flag to track explicit submission
         stepValidation: {
           ...validationState.stepValidation,
           2: true,
@@ -480,9 +537,9 @@ export default function InitialAssessment() {
     const allSteps = [
       {
         id: 1 as ValidationStateSteps,
-        name: 'FlightDetails',
-        title: 'Erzähle uns von deinem Flug',
-        subtitle: 'Please provide your flight information.',
+        name: t.phases.initialAssessment.flightDetails,
+        title: t.phases.initialAssessment.title,
+        subtitle: t.phases.initialAssessment.description,
         component: FlightSelector,
         props: {
           onSelect: handleFlightSelect,
@@ -509,6 +566,7 @@ export default function InitialAssessment() {
                   2: currentValidation[2] || false,
                   3: currentValidation[3] || false,
                   4: currentValidation[4] || false,
+                  5: currentValidation[5] || false,
                 },
                 1: newState[1] || false,
               });
@@ -519,6 +577,7 @@ export default function InitialAssessment() {
                   2: currentValidation[2] || false,
                   3: currentValidation[3] || false,
                   4: currentValidation[4] || false,
+                  5: currentValidation[5] || false,
                 },
                 1: state[1] || false,
               });
@@ -550,7 +609,9 @@ export default function InitialAssessment() {
               return loc.label || loc.value || '';
             };
 
-            return `Direktflug von ${getLocationLabel(fromData)} nach ${getLocationLabel(toData)}`;
+            return t.phases.initialAssessment.summary.directFlight
+              .replace('{from}', getLocationLabel(fromData))
+              .replace('{to}', getLocationLabel(toData));
           }
 
           // For multi-segment flights
@@ -582,7 +643,10 @@ export default function InitialAssessment() {
               return `${getLocationLabel(fromData)} → ${getLocationLabel(toData)}`;
             });
 
-            return `Flug mit ${segments.length} Segment${segments.length > 1 ? 'en' : ''}: ${segmentSummaries.join(' | ')}`;
+            return t.phases.initialAssessment.summary.multiSegment
+              .replace('{count}', segments.length.toString())
+              .replace('{s}', segments.length > 1 ? 'en' : '')
+              .replace('{segments}', segmentSummaries.join(' | '));
           }
 
           return '';
@@ -593,7 +657,7 @@ export default function InitialAssessment() {
       {
         id: 2 as ValidationStateSteps,
         name: 'QAWizard',
-        title: 'Was ist mit deinem Flug passiert?',
+        title: t.phases.initialAssessment.whatHappened,
         component: QAWizardWrapper,
         props: {
           questions: wizardQuestions,
@@ -618,7 +682,12 @@ export default function InitialAssessment() {
             )
           ).length;
 
-          return answeredCount ? `${answeredCount} Fragen beantwortet` : '';
+          return answeredCount
+            ? t.phases.initialAssessment.summary.questionsAnswered.replace(
+                '{count}',
+                answeredCount.toString()
+              )
+            : '';
         },
         shouldStayOpen: false,
         isOpenByDefault: false,
@@ -626,9 +695,8 @@ export default function InitialAssessment() {
       {
         id: 3 as ValidationStateSteps,
         name: 'PersonalDetails',
-        title: 'Persönliche Angaben',
-        subtitle:
-          'Bitte gib uns deine Kontaktdaten, damit wir dich über deinen Anspruch auf dem Laufenden halten können.',
+        title: t.phases.initialAssessment.personalDetails.title,
+        subtitle: t.phases.initialAssessment.personalDetails.subtitle,
         component: PersonalDetailsForm,
         props: {
           onComplete: (details: PassengerDetails | null) => {
@@ -697,17 +765,16 @@ export default function InitialAssessment() {
       },
       {
         id: 4 as ValidationStateSteps,
-        name: 'Allgemeine Geschäftsbedingungen',
-        title: 'Allgemeine Geschäftsbedingungen',
-        subtitle:
-          'Bitte überprüfe und akzeptiere die Bedingungen, um fortzufahren.',
+        name: t.phases.initialAssessment.termsAndConditions.title,
+        title: t.phases.initialAssessment.termsAndConditions.title,
+        subtitle: t.phases.initialAssessment.termsAndConditions.subtitle,
         component: function TermsAndConditions() {
           return (
             <div className="space-y-4">
               <ConsentCheckbox
                 id="terms"
                 type="terms"
-                label="Ich habe die Allgemeinen Geschäftsbedingungen gelesen und akzeptiere sie."
+                label={t.phases.initialAssessment.termsAndConditions.terms}
                 checked={termsAccepted}
                 onChange={(checked: boolean) => {
                   setTermsAccepted(checked);
@@ -718,7 +785,7 @@ export default function InitialAssessment() {
               <ConsentCheckbox
                 id="privacy"
                 type="privacy"
-                label="Ich habe die Datenschutzerklärung gelesen und akzeptiere sie."
+                label={t.phases.initialAssessment.termsAndConditions.privacy}
                 checked={privacyAccepted}
                 onChange={(checked: boolean) => {
                   setPrivacyAccepted(checked);
@@ -729,13 +796,15 @@ export default function InitialAssessment() {
               <ConsentCheckbox
                 id="marketing"
                 type="marketing"
-                label="Ich stimme zu, dass Captain Frank mir Werbung zu Dienstleistungen, Aktionen und Zufriedenheitsumfragen per E-Mail sendet. Captain Frank verarbeitet meine persönlichen Daten zu diesem Zweck (siehe Datenschutzerklärung). Ich kann diese Einwilligung jederzeit widerrufen."
+                label={t.phases.initialAssessment.termsAndConditions.marketing}
                 checked={marketingAccepted}
                 onChange={(checked: boolean) => {
                   setMarketingAccepted(checked);
                   setInteractedSteps((prev) => [...new Set([...prev, 4])]);
                 }}
-                details="Bleibe über unsere neuesten Dienstleistungen und Reisetipps auf dem Laufenden. Du kannst dich jederzeit abmelden."
+                details={
+                  t.phases.initialAssessment.termsAndConditions.marketingDetails
+                }
               />
             </div>
           );
@@ -746,7 +815,7 @@ export default function InitialAssessment() {
         } as TermsAndConditionsProps,
         getSummary: (state: StoreStateValues) => {
           if (!state.termsAccepted || !state.privacyAccepted) return '';
-          return 'Bedingungen und Datenschutzerklärung akzeptiert';
+          return t.phases.initialAssessment.summary.termsAccepted;
         },
         shouldStayOpen: false,
         isOpenByDefault: false,
@@ -768,6 +837,8 @@ export default function InitialAssessment() {
     updateValidationState,
     autoTransition,
     validationState,
+    t,
+    wizardQuestions,
   ]);
 
   // Define steps with memoization
@@ -779,13 +850,13 @@ export default function InitialAssessment() {
     setIsLoading(true);
     try {
       await completePhase(1);
-      router.push(PHASE_TO_URL[2]);
+      router.push(getLanguageAwareUrl(PHASE_TO_URL[2], lang));
     } catch (error) {
       console.error('Error in handleContinue:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [completePhase, router, isLoading]);
+  }, [completePhase, router, isLoading, lang]);
 
   const renderStepContent = (step: Step) => {
     if (step.component === FlightSelector) {
@@ -817,18 +888,23 @@ export default function InitialAssessment() {
       initialActiveAccordion={initialAccordion}
     >
       <div className="max-w-5xl mx-auto px-4 py-8">
-        <PhaseNavigation />
+        <PhaseNavigation
+          currentPhase={currentPhase}
+          completedPhases={completedPhases}
+        />
         <div className="relative">
           <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
             <div className="space-y-6">
-              <SpeechBubble message="Hi, ich bin Captain Frank. Ich helfe dir herauszufinden, ob du Anspruch auf eine Entschädigung für deine Flugunterbrechung hast. Los geht's!" />
+              <SpeechBubble
+                message={t.phases.initialAssessment.welcomeMessage}
+              />
               {steps.map(renderStep)}
               <div className="mt-8 flex justify-end">
                 <ContinueButton
                   onClick={handleContinue}
                   disabled={!canProceedToNextPhase()}
                   isLoading={isLoading}
-                  text="Zur Ersteinschätzung"
+                  text={t.phases.initialAssessment.continueButton}
                 />
               </div>
             </div>

@@ -10,6 +10,7 @@ import React, {
 import { ChevronUpIcon } from '@heroicons/react/24/outline';
 import { motion } from 'framer-motion';
 import { useStore } from '@/lib/state/store';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface ConsentCheckboxProps {
   id?: string;
@@ -30,6 +31,7 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
   checked = false,
   onChange,
 }) => {
+  const { t, lang } = useTranslation();
   const {
     termsAccepted,
     privacyAccepted,
@@ -75,58 +77,71 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
 
   // Format the label to include the link for privacy type
   const formattedLabel = useMemo(() => {
+    const termsUrl =
+      lang === 'en'
+        ? 'https://www.captain-frank.com/en/terms'
+        : 'https://www.captain-frank.com/de/agb';
+    const privacyUrl =
+      lang === 'en'
+        ? 'https://www.captain-frank.com/en/privacy'
+        : 'https://www.captain-frank.com/de/datenschutz';
+
     return type === 'terms' ? (
       <span>
-        Ich habe die{' '}
+        {lang === 'en' ? 'I have read and accept the ' : 'Ich habe die '}
         <a
-          href="https://www.captain-frank.com/de/agb"
+          href={termsUrl}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            window.open('https://www.captain-frank.com/de/agb', '_blank');
+            window.open(termsUrl, '_blank');
           }}
           className="text-[#F54538] hover:text-[#E03F33] underline"
           target="_blank"
           rel="noopener noreferrer"
         >
-          Allgemeinen Geschäftsbedingungen
-        </a>{' '}
-        gelesen und akzeptiere sie.
+          {lang === 'en'
+            ? 'Terms and Conditions'
+            : 'Allgemeinen Geschäftsbedingungen'}
+        </a>
+        {lang === 'en' ? '.' : ' gelesen und akzeptiere sie.'}
       </span>
     ) : type === 'privacy' ? (
       <span>
-        Ich habe die{' '}
+        {lang === 'en' ? 'I have read and accept the ' : 'Ich habe die '}
         <a
-          href="https://www.captain-frank.com/de/datenschutz?_gl=1*12wr7bl*_gcl_au*OTQ3NDQyOTgzLjE3MzI3MjIzMDY.*_ga*NTUyNzkxNDY3LjE3MzI3MjIzMDY.*_ga_XZVF0Y8PLW*MTczNjM0MDk0MS4xMTUuMS4xNzM2MzQwOTU0LjAuMC4w"
+          href={privacyUrl}
           onClick={handleLinkClick}
           className="text-[#F54538] hover:text-[#E03F33] underline"
           target="_blank"
           rel="noopener noreferrer"
         >
-          Datenschutzerklärung
-        </a>{' '}
-        gelesen und akzeptiere sie.
+          {lang === 'en' ? 'Privacy Policy' : 'Datenschutzerklärung'}
+        </a>
+        {lang === 'en' ? '.' : ' gelesen und akzeptiere sie.'}
       </span>
     ) : type === 'marketing' ? (
       <span>
-        Ich stimme zu, dass Captain Frank mir Werbung zu Dienstleistungen,
-        Aktionen und Zufriedenheitsumfragen per E-Mail sendet. Captain Frank
-        verarbeitet meine persönlichen Daten zu diesem Zweck (siehe{' '}
+        {lang === 'en'
+          ? 'I agree that Captain Frank can send me advertisements about services, promotions, and satisfaction surveys via email. Captain Frank processes my personal data for this purpose (see '
+          : 'Ich stimme zu, dass Captain Frank mir Werbung zu Dienstleistungen, Aktionen und Zufriedenheitsumfragen per E-Mail sendet. Captain Frank verarbeitet meine persönlichen Daten zu diesem Zweck (siehe '}
         <a
-          href="https://www.captain-frank.com/de/datenschutz?_gl=1*1o1nam*_gcl_au*OTQ3NDQyOTgzLjE3MzI3MjIzMDY.*_ga*NTUyNzkxNDY3LjE3MzI3MjIzMDY.*_ga_XZVF0Y8PLW*MTczNjM0MDk0MS4xMTUuMS4xNzM2MzQxMTU1LjAuMC4w"
+          href={privacyUrl}
           onClick={handleLinkClick}
           className="text-[#F54538] hover:text-[#E03F33] underline"
           target="_blank"
           rel="noopener noreferrer"
         >
-          Datenschutzbestimmungen
+          {lang === 'en' ? 'Privacy Policy' : 'Datenschutzbestimmungen'}
         </a>
-        ). Ich kann diese Einwilligung jederzeit widerrufen.
+        {lang === 'en'
+          ? '). I can revoke this consent at any time.'
+          : '). Ich kann diese Einwilligung jederzeit widerrufen.'}
       </span>
     ) : (
       label
     );
-  }, [type, label, handleLinkClick]);
+  }, [type, label, handleLinkClick, lang]);
 
   // Use useLayoutEffect to check truncation before paint
   useLayoutEffect(() => {
@@ -266,9 +281,7 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
             </motion.div>
           )}
           {showError && (
-            <div className="text-[#F54538] text-xs mt-1">
-              This checkbox is required
-            </div>
+            <div className="text-red-600 text-sm">{t.common.required}</div>
           )}
         </div>
       </div>

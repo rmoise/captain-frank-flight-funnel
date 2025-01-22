@@ -1,11 +1,9 @@
 'use client';
 
-import { ReactNode } from 'react';
-
-interface ProvidersProps {
-  children: ReactNode;
-}
-
-export function Providers({ children }: ProvidersProps) {
-  return <>{children}</>;
+export function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen">
+      <main>{children}</main>
+    </div>
+  );
 }

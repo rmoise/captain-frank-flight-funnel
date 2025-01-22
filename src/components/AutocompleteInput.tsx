@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ChevronDownIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { PiAirplaneTakeoff, PiAirplaneLanding } from 'react-icons/pi';
 import debounce from 'lodash/debounce';
+import { useTranslation } from '@/hooks/useTranslation';
 
 export interface Option {
   value: string;
@@ -43,6 +44,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   disabled = false,
   iconType,
 }) => {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [localInputValue, setLocalInputValue] = useState(() => {
     if (!value) return '';
@@ -272,8 +274,8 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
           ) : options.length === 0 ? (
             <li className="px-4 py-3 text-gray-500">
               {localInputValue.length < 3
-                ? 'Enter at least 3 characters'
-                : 'No options found'}
+                ? t.common.enterMinChars
+                : t.common.noResults}
             </li>
           ) : (
             options.map((option, index) => (

@@ -1,10 +1,20 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { PHASES } from '@/constants/phases';
+import { PHASES, Phase } from '@/constants/phases';
 import styles from './PhaseNavigation.module.css';
-import { useStore, PHASE_TO_URL } from '@/lib/state/store';
-import { useRouter } from 'next/navigation';
+import {
+  useStore,
+  PHASE_TO_URL,
+  getLanguageAwareUrl,
+  getPhaseFromUrl,
+} from '@/lib/state/store';
+import { useRouter, usePathname } from 'next/navigation';
+import { useTranslation } from '@/hooks/useTranslation';
+
+interface PhaseState extends Phase {
+  accessible: boolean;
+}
 
 export interface PhaseNavigationProps {
   currentPhase?: number;
@@ -14,14 +24,35 @@ export interface PhaseNavigationProps {
 export const PhaseNavigation: React.FC<PhaseNavigationProps> = () => {
   const [isClient, setIsClient] = useState(false);
   const [hoveredPhase, setHoveredPhase] = useState<number | null>(null);
+  const pathname = usePathname();
+
+  // Get translations at the top level
+  const { t, lang } = useTranslation();
 
   // Split store subscriptions to minimize re-renders
-  const { currentPhase, completedPhases, completedSteps } = useStore();
+  const {
+    completedPhases,
+    completedSteps,
+    validationState,
+    phasesCompletedViaContinue,
+    setCurrentPhase,
+  } = useStore();
+
   const router = useRouter();
 
   useEffect(() => {
     setIsClient(true);
   }, []);
+
+  // Update current phase based on URL
+  useEffect(() => {
+    if (pathname && typeof pathname === 'string') {
+      const phase = getPhaseFromUrl(pathname);
+      setCurrentPhase(phase);
+    }
+  }, [pathname, setCurrentPhase]);
+
+  const currentPhase = pathname ? getPhaseFromUrl(pathname) : 1;
 
   const isPhaseAccessible = React.useCallback(
     (phaseNumber: number) => {
@@ -31,10 +62,8 @@ export const PhaseNavigation: React.FC<PhaseNavigationProps> = () => {
         const phase4Completed = completedPhases.includes(4);
         const phase4StepsCompleted =
           completedSteps.includes(2) && completedSteps.includes(3);
-        const validationState = useStore.getState().validationState;
-        const phase4CompletedViaContinue = useStore
-          .getState()
-          .phasesCompletedViaContinue.includes(4);
+        const phase4CompletedViaContinue =
+          phasesCompletedViaContinue.includes(4);
         return (
           phase4Completed &&
           phase4StepsCompleted &&
@@ -56,17 +85,20 @@ export const PhaseNavigation: React.FC<PhaseNavigationProps> = () => {
       if (phaseNumber <= highestCompletedPhase) {
         // For phase 2 and above, check if previous phase was completed via continue
         if (phaseNumber >= 2) {
-          const prevPhaseCompletedViaContinue = useStore
-            .getState()
-            .phasesCompletedViaContinue.includes(phaseNumber - 1);
-          return prevPhaseCompletedViaContinue;
+          return phasesCompletedViaContinue.includes(phaseNumber - 1);
         }
         return true;
       }
 
       return false;
     },
-    [currentPhase, completedSteps, completedPhases]
+    [
+      currentPhase,
+      completedSteps,
+      completedPhases,
+      validationState,
+      phasesCompletedViaContinue,
+    ]
   );
 
   const getBarClassName = React.useCallback(
@@ -99,31 +131,37 @@ export const PhaseNavigation: React.FC<PhaseNavigationProps> = () => {
     [isClient, currentPhase, hoveredPhase]
   );
 
-  const getPhaseLabel = React.useCallback((phase: number) => {
-    const phaseConfig = PHASES.find((p) => p.id === phase);
-    return phaseConfig ? phaseConfig.name : `Phase ${phase}`;
-  }, []);
+  const getPhaseLabel = React.useCallback(
+    (phase: number) => {
+      const phases = PHASES(t);
+      const phaseConfig = phases.find((p: Phase) => p.id === phase);
+      return phaseConfig ? phaseConfig.name : `Phase ${phase}`;
+    },
+    [t]
+  );
 
   const handlePhaseClick = React.useCallback(
     (phaseNumber: number, accessible: boolean) => {
       if (accessible) {
         const url = PHASE_TO_URL[phaseNumber];
         if (url) {
-          router.push(url);
+          router.push(getLanguageAwareUrl(url, lang));
         }
       }
     },
-    [router]
+    [router, lang]
   );
 
   // Pre-calculate phase accessibility to avoid recalculation in render
-  const phaseStates = React.useMemo(
+  const phaseStates: PhaseState[] = React.useMemo(
     () =>
-      PHASES.map((phase) => ({
-        ...phase,
+      PHASES(t).map((phase) => ({
+        id: phase.id,
+        name: phase.name,
+        steps: phase.steps,
         accessible: isPhaseAccessible(phase.id),
       })),
-    [isPhaseAccessible]
+    [isPhaseAccessible, t]
   );
 
   const handleMouseEnter = React.useCallback(

@@ -2,6 +2,7 @@ import { useRouter } from 'next/navigation';
 
 interface NavigateToPhaseOptions {
   force?: boolean;
+  lang?: string;
 }
 
 export const navigateToPhase = (
@@ -9,7 +10,7 @@ export const navigateToPhase = (
   router: ReturnType<typeof useRouter>,
   options: NavigateToPhaseOptions = {}
 ) => {
-  const { force = false } = options;
+  const { force = false, lang } = options;
 
   // Map phase numbers to their corresponding routes
   const phaseRoutes: Record<number, string> = {
@@ -27,9 +28,16 @@ export const navigateToPhase = (
     return;
   }
 
+  // Get the current URL path to determine language if not provided
+  const currentPath = window.location.pathname;
+  const isGermanRoute =
+    lang === 'de' || (!lang && currentPath.startsWith('/de/'));
+  const langPrefix = isGermanRoute ? '/de' : '';
+  const fullRoute = `${langPrefix}${route}`;
+
   if (force) {
-    router.push(route);
+    router.push(fullRoute);
   } else {
-    router.replace(route);
+    router.replace(fullRoute);
   }
 };

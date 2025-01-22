@@ -1,18 +1,12 @@
 'use client';
 
-import { ReactNode, useEffect } from 'react';
-import { useStore } from '@/lib/state/store';
+import { Navbar } from '@/components/Navbar';
 
-interface ClientLayoutProps {
-  children: ReactNode;
-}
-
-export default function ClientLayout({ children }: ClientLayoutProps) {
-  const { resetStore } = useStore();
-
-  useEffect(() => {
-    resetStore();
-  }, [resetStore]);
-
-  return <>{children}</>;
+export function ClientLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Navbar />
+      <main className="flex-1">{children}</main>
+    </div>
+  );
 }

@@ -16,12 +16,25 @@ const nextConfig = {
         hostname: 'cdn.sanity.io',
       },
     ],
+    unoptimized: true,
   },
-  optimizeFonts: true,
-  experimental: {
-    optimizeCss: true,
-    optimizeServerReact: true,
-  },
+  // Development settings
+  ...(process.env.NODE_ENV === 'development' ? {
+    optimizeFonts: false,
+    swcMinify: false,
+    experimental: {
+      optimizeCss: false,
+      optimizeServerReact: false,
+      webpackBuildWorker: false,
+    },
+  } : {
+    // Production settings
+    optimizeFonts: true,
+    experimental: {
+      optimizeCss: true,
+      optimizeServerReact: true,
+    },
+  }),
   async rewrites() {
     return [
       {
@@ -35,6 +48,27 @@ const nextConfig = {
     ];
   },
   async headers() {
+    if (process.env.NODE_ENV === 'development') {
+      return [
+        {
+          source: '/:path*',
+          headers: [
+            {
+              key: 'Cache-Control',
+              value: 'no-cache, no-store, max-age=0, must-revalidate',
+            },
+            {
+              key: 'Pragma',
+              value: 'no-cache',
+            },
+            {
+              key: 'Expires',
+              value: '0',
+            },
+          ],
+        },
+      ];
+    }
     return [
       {
         source: '/studio/:path*',

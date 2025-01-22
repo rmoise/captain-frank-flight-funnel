@@ -54,7 +54,11 @@ export interface EvaluationResponse {
     amount: number;
     provision: number;
   };
-  rejection_reasons?: Record<string, string>;
+  rejection_reasons?: string[];
+  journey_booked_flightids?: string[];
+  journey_fact_flightids?: string[];
+  information_received_at?: string;
+  travel_status?: string;
 }
 
 export interface OrderClaimRequest {
@@ -399,6 +403,7 @@ class ApiClient {
     journey_booked_flightids: string[];
     journey_fact_flightids?: string[];
     information_received_at: string;
+    travel_status?: string;
   }): Promise<EvaluationResponse> {
     const baseUrl =
       process.env.NODE_ENV === 'development' ? 'http://localhost:8888' : '';

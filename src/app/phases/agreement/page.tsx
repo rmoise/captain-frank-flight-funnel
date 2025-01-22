@@ -19,6 +19,7 @@ import { AccordionCard } from '@/components/shared/AccordionCard';
 import { accordionConfig } from '@/config/accordion';
 import { BackButton } from '@/components/shared/BackButton';
 import { ContinueButton } from '@/components/shared/ContinueButton';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface FormData {
   hasAcceptedTerms: boolean;
@@ -49,7 +50,7 @@ type SetStateFunction<T> = (action: SetStateAction<T>) => void;
 
 export default function AgreementPage() {
   const router = useRouter();
-  const { showLoading, hideLoading } = useLoading();
+  const { hideLoading } = useLoading();
   const {
     selectedFlight: flightDetails,
     selectedFlights,
@@ -69,11 +70,13 @@ export default function AgreementPage() {
     setSignature,
     setHasSignature,
     validateSignature,
+    originalFlights,
   } = useStore();
+  const { t, lang } = useTranslation();
 
   const signatureRef = useRef<SignaturePadRef>(null);
   const [mounted, setMounted] = useState(false);
-  const [errors, setErrors] = useState<FormErrors>({});
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [openSteps, setOpenSteps] = React.useState<Array<number | string>>([
     'digital-signature',
   ]);
@@ -88,6 +91,7 @@ export default function AgreementPage() {
   const [hasInteractedWithSignature, setHasInteractedWithSignature] =
     useState(false);
   const [isNavigatingBack, setIsNavigatingBack] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const validationRules = {
     hasAcceptedTerms: [
@@ -204,6 +208,7 @@ export default function AgreementPage() {
             2: true,
             3: true,
             4: true,
+            5: true,
           },
         });
       }
@@ -225,6 +230,7 @@ export default function AgreementPage() {
             2: true,
             3: true,
             4: true,
+            5: true,
           },
         });
       }
@@ -264,14 +270,14 @@ export default function AgreementPage() {
         setSignature(signatureData);
         setHasSignature(true);
         validateSignature();
-        setErrors(
+        setFormErrors(
           (prev: FormErrors): FormErrors => ({ ...prev, signature: [] })
         );
       } else {
         setSignature('');
         setHasSignature(false);
         if (hasInteractedWithSignature) {
-          setErrors(
+          setFormErrors(
             (prev: FormErrors): FormErrors => ({
               ...prev,
               signature: ['Please provide your signature'],
@@ -288,7 +294,7 @@ export default function AgreementPage() {
       setSignature('');
       setHasSignature(false);
       setHasInteractedWithSignature(false);
-      setErrors(
+      setFormErrors(
         (prev: FormErrors): FormErrors => ({
           ...prev,
           signature: [],
@@ -305,7 +311,9 @@ export default function AgreementPage() {
         [field]: checked,
       };
       setFormData(updatedFormData);
-      setErrors((prev: FormErrors): FormErrors => ({ ...prev, [field]: [] }));
+      setFormErrors(
+        (prev: FormErrors): FormErrors => ({ ...prev, [field]: [] })
+      );
 
       // Update store state based on field
       if (field === 'hasAcceptedTerms') {
@@ -334,8 +342,7 @@ export default function AgreementPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    showLoading();
-
+    setIsSubmitting(true);
     try {
       // Validate form data with rules
       const validationErrors = validateForm(
@@ -343,7 +350,7 @@ export default function AgreementPage() {
         validationRules as ValidationRules
       );
       if (Object.keys(validationErrors).length > 0) {
-        setErrors(
+        setFormErrors(
           (prev: FormErrors): FormErrors => ({
             ...prev,
             ...validationErrors,
@@ -354,15 +361,15 @@ export default function AgreementPage() {
       }
 
       // Clear any previous errors
-      setErrors(
+      setFormErrors(
         (prev: FormErrors): FormErrors => ({
           ...prev,
           submit: [],
         })
       );
 
-      // Get flight IDs from selectedFlights
-      const flightIdsAsStrings = selectedFlights.map((flight) =>
+      // Get flight IDs from originalFlights for booked flights
+      const flightIdsAsStrings = originalFlights.map((flight) =>
         String(flight.id)
       );
 
@@ -375,11 +382,36 @@ export default function AgreementPage() {
         | 'provided';
 
       // Set journey_fact_flightids based on travel status
-      const journey_fact_flightids_strings =
-        travelStatus === 'none' ? [] : flightIdsAsStrings.slice(0, 1); // Just use first flight if traveled
+      const journey_fact_flightids_strings = (() => {
+        if (travelStatus === 'none') {
+          return [];
+        } else if (travelStatus === 'self') {
+          return flightIdsAsStrings; // Use original flights if they took those
+        } else if (travelStatus === 'provided') {
+          return selectedFlights
+            .filter(
+              (flight) => !originalFlights.some((orig) => orig.id === flight.id)
+            )
+            .map((flight) => String(flight.id));
+        }
+        return flightIdsAsStrings.slice(0, 1); // Default to first flight
+      })();
 
       // Map travel status to journey_fact_type
-      const journey_fact_type = travelStatus;
+      const journey_fact_type = (() => {
+        switch (travelStatus as string) {
+          case 'none':
+            return 'none';
+          case 'self':
+            return 'self';
+          case 'provided':
+            return 'provided';
+          case 'took_alternative_own':
+            return 'self'; // Treat own alternative as self-travel
+          default:
+            return 'none';
+        }
+      })();
 
       const informedDate = useStore
         .getState()
@@ -399,15 +431,12 @@ export default function AgreementPage() {
             ? specificDate.split('T')[0]
             : undefined;
 
-      // Create the evaluation data
+      // Create the evaluation data - only include required fields from API documentation
       const evaluationData = {
         journey_booked_flightids: flightIdsAsStrings,
         journey_fact_flightids: journey_fact_flightids_strings,
         information_received_at:
           formattedDate || new Date().toISOString().split('T')[0],
-        travel_status: journey_fact_type,
-        delay_duration: '240',
-        lang: 'en',
       };
 
       const evaluationResult = await api.evaluateClaim(evaluationData);
@@ -419,7 +448,7 @@ export default function AgreementPage() {
           ? Object.values(rejectionReasons)
           : ['Antragsüberprüfung wurde abgelehnt'];
 
-        setErrors(
+        setFormErrors(
           (prev: FormErrors): FormErrors => ({
             ...prev,
             submit: errorMessages,
@@ -439,7 +468,7 @@ export default function AgreementPage() {
         bookingNumber.trim().length < 6 ||
         !/^[A-Z0-9]+$/i.test(bookingNumber.trim())
       ) {
-        setErrors(
+        setFormErrors(
           (prev: FormErrors): FormErrors => ({
             ...prev,
             submit: ['Bitte geben Sie eine gültige Buchungsnummer ein.'],
@@ -483,9 +512,10 @@ export default function AgreementPage() {
           personalDetails?.lastName || formDataValues.lastName || '',
         owner_street: personalDetails?.address || formDataValues.street || '',
         owner_place:
-          personalDetails?.zipCode || formDataValues.postalCode || '',
+          personalDetails?.postalCode || formDataValues.postalCode || '',
         owner_city: personalDetails?.city || formDataValues.city || '',
-        owner_zip: personalDetails?.zipCode || formDataValues.postalCode || '',
+        owner_zip:
+          personalDetails?.postalCode || formDataValues.postalCode || '',
         owner_country: personalDetails?.country || formDataValues.country || '',
         owner_email: personalDetails?.email || formDataValues.email || '',
         owner_phone: personalDetails?.phone || formDataValues.phone || '',
@@ -503,12 +533,15 @@ export default function AgreementPage() {
       hideLoading(); // Hide loading before redirect
 
       if (response.data?.guid && response.data?.recommendation_guid) {
-        router.push('/claim-submitted');
+        const currentPath = window.location.pathname;
+        const isGermanRoute = currentPath.startsWith('/de/');
+        const langPrefix = isGermanRoute ? '/de' : '';
+        router.push(`${langPrefix}/phases/claim-submitted`);
       } else {
         throw new Error('Antrag konnte nicht eingereicht werden');
       }
     } catch (error) {
-      setErrors(
+      setFormErrors(
         (prev: FormErrors): FormErrors => ({
           ...prev,
           submit: [
@@ -517,15 +550,25 @@ export default function AgreementPage() {
         })
       );
       hideLoading(); // Hide loading on error
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   // Add back navigation handler
   const handleBack = () => {
-    if (!isNavigatingBack) {
-      setIsNavigatingBack(true);
-      router.push('/phases/claim-success');
+    if (isSubmitting) return;
+
+    // Get the current URL
+    const currentUrl = window.location.pathname;
+    // If we're already being redirected to claim-submitted, go to claim-success
+    if (currentUrl.includes('claim-submitted')) {
+      router.replace(`/${lang}/phases/claim-success`);
+      return;
     }
+
+    // Normal back navigation
+    router.replace(`/${lang}/phases/claim-success`);
   };
 
   const handleSignatureChange = (dataUrl: string) => {
@@ -587,71 +630,80 @@ export default function AgreementPage() {
         <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
           <div className="mt-4 sm:mt-8 mb-8">
             <SpeechBubble
-              message={`Ich, ${personalDetails?.salutation === 'herr' ? 'Herr' : 'Frau'} ${
-                personalDetails?.firstName ?? ''
-              } ${personalDetails?.lastName ?? ''}, wohnhaft in der ${
-                personalDetails?.address ?? ''
-              }, ${personalDetails?.zipCode ?? ''} ${
-                personalDetails?.city ?? ''
-              }, ${
-                personalDetails?.country ?? ''
-              }, trete hiermit meine Ansprüche auf Entschädigung aus der Flugverbindung mit PNR/Buchungsnummer ${
-                bookingNumber ?? ''
-              } von ${
-                selectedFlights[0]?.departure ||
-                selectedFlights[0]?.departureAirport ||
-                selectedFlights[0]?.departureCity ||
-                ''
-              }${
-                selectedFlights.length > 1
-                  ? ` über ${
-                      selectedFlights[1]?.departure ||
-                      selectedFlights[1]?.departureAirport ||
-                      selectedFlights[1]?.departureCity ||
-                      ''
-                    }`
-                  : ''
-              } nach ${
-                selectedFlights[selectedFlights.length - 1]?.arrival ||
-                selectedFlights[selectedFlights.length - 1]?.arrivalAirport ||
-                selectedFlights[selectedFlights.length - 1]?.arrivalCity ||
-                ''
-              } am ${
-                selectedFlights[0]?.date
-                  ? new Date(
-                      selectedFlights[0].date.split('T')[0]
-                    ).toLocaleDateString('de-DE', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    })
-                  : selectedFlights[0]?.departureTime
-                    ? new Date(
-                        selectedFlights[0].departureTime.split(' ')[0]
-                      ).toLocaleDateString('de-DE', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                      })
+              message={t.phases.agreement.message
+                .replace(
+                  '{salutation}',
+                  personalDetails?.salutation === 'herr' ? 'Mr.' : 'Mrs./Ms.'
+                )
+                .replace('{firstName}', personalDetails?.firstName ?? '')
+                .replace('{lastName}', personalDetails?.lastName ?? '')
+                .replace('{address}', personalDetails?.address ?? '')
+                .replace('{postalCode}', personalDetails?.postalCode ?? '')
+                .replace('{city}', personalDetails?.city ?? '')
+                .replace('{country}', personalDetails?.country ?? '')
+                .replace('{bookingNumber}', bookingNumber ?? '')
+                .replace(
+                  '{departure}',
+                  selectedFlights[0]?.departure ||
+                    selectedFlights[0]?.departureAirport ||
+                    selectedFlights[0]?.departureCity ||
+                    ''
+                )
+                .replace(
+                  '{connection}',
+                  selectedFlights.length > 1
+                    ? ` via ${selectedFlights[1]?.departure || selectedFlights[1]?.departureAirport || selectedFlights[1]?.departureCity || ''}`
                     : ''
-              } an die Captain Frank GmbH ab.
-
-Die Captain Frank GmbH nimmt die Abtretungserklärung an.`}
+                )
+                .replace(
+                  '{arrival}',
+                  selectedFlights[selectedFlights.length - 1]?.arrival ||
+                    selectedFlights[selectedFlights.length - 1]
+                      ?.arrivalAirport ||
+                    selectedFlights[selectedFlights.length - 1]?.arrivalCity ||
+                    ''
+                )
+                .replace(
+                  '{date}',
+                  selectedFlights[0]?.date
+                    ? new Date(
+                        selectedFlights[0].date.split('T')[0]
+                      ).toLocaleDateString(
+                        t.lang === 'en' ? 'en-US' : 'de-DE',
+                        {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                        }
+                      )
+                    : selectedFlights[0]?.departureTime
+                      ? new Date(
+                          selectedFlights[0].departureTime.split(' ')[0]
+                        ).toLocaleDateString(
+                          t.lang === 'en' ? 'en-US' : 'de-DE',
+                          {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                          }
+                        )
+                      : ''
+                )}
             />
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <AccordionCard
-              title="Digitale Unterschrift"
-              subtitle="Bitte unterschreibe, um deine Zustimmung zu bestätigen."
-              eyebrow="Schritt 1"
+              title={t.phases.agreement.digitalSignature.title}
+              subtitle={t.phases.agreement.digitalSignature.subtitle}
+              eyebrow={t.phases.agreement.step.replace('{number}', '1')}
               isCompleted={validationState.isSignatureValid}
               hasInteracted={hasInteractedWithSignature}
               className={accordionConfig.padding.wrapper}
               stepId="digital-signature"
               isOpenByDefault={!validationState.isSignatureValid}
               shouldStayOpen={false}
-              summary="Sign the agreement to proceed"
+              summary={t.phases.agreement.digitalSignature.summary}
               isOpen={openSteps.includes('digital-signature')}
               onToggle={() => {
                 setOpenSteps((prev) =>
@@ -668,7 +720,7 @@ Die Captain Frank GmbH nimmt die Abtretungserklärung an.`}
                     onBegin={handleSignatureStart}
                     onChange={(data: string): void => {
                       handleSignatureChange(data);
-                      setErrors(
+                      setFormErrors(
                         (prev: FormErrors): FormErrors => ({
                           ...prev,
                           signature: [],
@@ -683,12 +735,12 @@ Die Captain Frank GmbH nimmt die Abtretungserklärung an.`}
                       onClick={clearSignature}
                       className="text-sm text-[#F54538] hover:text-[#E03F33] transition-colors"
                     >
-                      Unterschrift löschen
+                      {t.phases.agreement.digitalSignature.clearSignature}
                     </button>
                   </div>
-                  {errors.signature && (
+                  {formErrors.signature && (
                     <p className="mt-2 text-sm text-[#F54538]">
-                      {errors.signature[0]}
+                      {formErrors.signature[0]}
                     </p>
                   )}
                 </div>
@@ -696,16 +748,16 @@ Die Captain Frank GmbH nimmt die Abtretungserklärung an.`}
             </AccordionCard>
 
             <AccordionCard
-              title="Allgemeine Geschäftsbedingungen"
-              subtitle="Bitte überprüfe und akzeptiere die Bedingungen, um fortzufahren."
-              eyebrow="Schritt 2"
+              title={t.phases.agreement.termsAndConditions.title}
+              subtitle={t.phases.agreement.termsAndConditions.subtitle}
+              eyebrow={t.phases.agreement.step.replace('{number}', '2')}
               isCompleted={validationState[2] || false}
-              hasInteracted={Object.keys(errors).length > 0}
+              hasInteracted={Object.keys(formErrors).length > 0}
               className={accordionConfig.padding.wrapper}
               stepId="terms-and-conditions"
               isOpenByDefault={!validationState[2]}
               shouldStayOpen={false}
-              summary="Accept the terms and conditions"
+              summary={t.phases.agreement.termsAndConditions.summary}
               isOpen={openSteps.includes('terms-and-conditions')}
               onToggle={() => {
                 setOpenSteps((prev) =>
@@ -720,7 +772,7 @@ Die Captain Frank GmbH nimmt die Abtretungserklärung an.`}
                   <ConsentCheckbox
                     id="terms"
                     type="terms"
-                    label="Ich habe die Allgemeinen Geschäftsbedingungen gelesen und akzeptiere sie."
+                    label={t.phases.agreement.termsAndConditions.terms}
                     checked={formData.hasAcceptedTerms}
                     onChange={handleTermsChange('hasAcceptedTerms')}
                     required
@@ -728,7 +780,7 @@ Die Captain Frank GmbH nimmt die Abtretungserklärung an.`}
                   <ConsentCheckbox
                     id="privacy"
                     type="privacy"
-                    label="Ich habe die Datenschutzerklärung gelesen und akzeptiere sie."
+                    label={t.phases.agreement.termsAndConditions.privacy}
                     checked={formData.hasAcceptedPrivacy}
                     onChange={handleTermsChange('hasAcceptedPrivacy')}
                     required
@@ -736,26 +788,31 @@ Die Captain Frank GmbH nimmt die Abtretungserklärung an.`}
                   <ConsentCheckbox
                     id="marketing"
                     type="marketing"
-                    label="Ich stimme zu, dass Captain Frank mir Werbung zu Dienstleistungen, Aktionen und Zufriedenheitsumfragen per E-Mail sendet. Captain Frank verarbeitet meine persönlichen Daten zu diesem Zweck (siehe Datenschutzerklärung). Ich kann diese Einwilligung jederzeit widerrufen."
+                    label={t.phases.agreement.termsAndConditions.marketing}
                     checked={formData.hasAcceptedMarketing}
                     onChange={handleTermsChange('hasAcceptedMarketing')}
-                    details="Bleibe über unsere neuesten Dienstleistungen und Reisetipps auf dem Laufenden. Du kannst dich jederzeit abmelden."
+                    details={
+                      t.phases.agreement.termsAndConditions.marketingDetails
+                    }
                   />
                 </div>
               </div>
             </AccordionCard>
 
-            <FormError errors={errors.submit} />
-
-            <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
-              <BackButton onClick={handleBack} />
-              <ContinueButton
-                onClick={handleSubmit}
-                disabled={!canSubmit()}
-                text="Jetzt Anspruch auf Entschädigung einreichen"
-              />
-            </div>
+            <FormError errors={formErrors.submit} />
           </form>
+
+          <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
+            <BackButton
+              onClick={handleBack}
+              text={t.phases.agreement.navigation.back}
+            />
+            <ContinueButton
+              onClick={handleSubmit}
+              disabled={!canSubmit()}
+              text={t.phases.agreement.submit}
+            />
+          </div>
         </main>
       </div>
     </PhaseGuard>

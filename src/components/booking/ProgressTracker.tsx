@@ -4,7 +4,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useStore } from '@/lib/state/store';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/solid';
 import { ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import { useTranslation } from '@/hooks/useTranslation';
 import { PHASES } from '@/constants/phases';
+import type { Phase } from '@/constants/phases';
 
 interface ProgressTrackerProps {
   phaseData: {
@@ -23,17 +25,17 @@ interface Step {
   title: string;
 }
 
-const PERCENT_PER_PHASE = 100 / PHASES.length;
-
 export const ProgressTracker = ({ phaseData }: ProgressTrackerProps) => {
   const {
     completedSteps,
     wizardAnswers,
     personalDetails,
     currentPhase,
-    completedPhases,
     setCurrentPhase,
   } = useStore();
+  const { t } = useTranslation();
+  const phases = PHASES(t);
+  const PERCENT_PER_PHASE = 100 / phases.length;
 
   const [isClient, setIsClient] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -119,35 +121,18 @@ export const ProgressTracker = ({ phaseData }: ProgressTrackerProps) => {
     return `${baseClass} bg-white border border-gray-300 scale-90`;
   };
 
-  const calculateTotalProgress = useCallback(() => {
-    if (phaseData.currentPhase === 6) {
-      return 100;
-    }
-
-    const steps = Array.isArray(completedSteps) ? completedSteps : [];
-    const completedPhasesProgress =
-      (completedPhases?.length || 0) * PERCENT_PER_PHASE;
-    const currentPhaseStepProgress =
-      (steps.length / phaseData.totalStepsInPhase) * PERCENT_PER_PHASE;
-
-    return (
-      completedPhasesProgress +
-      (phaseData.currentPhase > (completedPhases?.length || 0)
-        ? currentPhaseStepProgress
-        : 0)
-    );
-  }, [
-    completedPhases?.length,
-    completedSteps,
-    phaseData.totalStepsInPhase,
-    phaseData.currentPhase,
-  ]);
+  const calculateProgress = useCallback(() => {
+    const currentStep = currentPhase;
+    const baseProgress = (currentStep - 1) * PERCENT_PER_PHASE;
+    const additionalProgress = completedSteps.length * (PERCENT_PER_PHASE / 3);
+    return Math.min(baseProgress + additionalProgress, 100);
+  }, [currentPhase, completedSteps, PERCENT_PER_PHASE]);
 
   useEffect(() => {
     if (isClient) {
-      setProgress(calculateTotalProgress());
+      setProgress(calculateProgress());
     }
-  }, [isClient, calculateTotalProgress]);
+  }, [isClient, calculateProgress]);
 
   useEffect(() => {
     if (isClient) {
@@ -209,14 +194,14 @@ export const ProgressTracker = ({ phaseData }: ProgressTrackerProps) => {
   );
 
   const currentPhaseSteps = useMemo(() => {
-    const phase = PHASES.find((p) => p.id === phaseData.currentPhase);
+    const phase = phases.find((p: Phase) => p.id === phaseData.currentPhase);
     return phase
-      ? phase.steps.map((stepNumber) => ({
+      ? phase.steps.map((stepNumber: number) => ({
           id: stepNumber,
           title: `Step ${stepNumber}`,
         }))
       : [];
-  }, [phaseData.currentPhase]);
+  }, [phaseData.currentPhase, phases]);
 
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50">

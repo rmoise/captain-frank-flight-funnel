@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { useStore } from '@/lib/state/store';
+import { useStore, getLanguageAwareUrl } from '@/lib/state/store';
+import { useTranslation } from '@/hooks/useTranslation';
 import { SpeechBubble } from '@/components/SpeechBubble';
 import { PhaseGuard } from '@/components/shared/PhaseGuard';
 import { FlightSelector } from '@/components/booking/FlightSelector';
@@ -13,10 +14,10 @@ import { PhaseNavigation } from '@/components/PhaseNavigation';
 import { XMarkIcon } from '@heroicons/react/20/solid';
 import { accordionConfig } from '@/config/accordion';
 import { AccordionProvider } from '@/components/shared/AccordionContext';
-import type { ValidationState } from '@/lib/state/store';
 
 export default function FlightDetailsPage() {
   const router = useRouter();
+  const { t, lang } = useTranslation();
   const [mounted, setMounted] = useState(false);
   const [bookingNumber, setLocalBookingNumber] = useState('');
   const [isBookingInputFocused, setIsBookingInputFocused] = useState(false);
@@ -29,7 +30,6 @@ export default function FlightDetailsPage() {
   const {
     selectedFlights,
     setCurrentPhase,
-    goToPreviousPhase,
     bookingNumber: storedBookingNumber,
     setSelectedFlights,
     setBookingNumber: setStoreBookingNumber,
@@ -151,8 +151,8 @@ export default function FlightDetailsPage() {
       // Store the initial accordion state for phase 4 in session storage
       sessionStorage.setItem('activeAccordion', 'trip-experience');
 
-      // Navigate after all state updates
-      router.push('/phases/trip-experience');
+      // Navigate after all state updates, preserving the language
+      router.push(`/${lang}/phases/trip-experience`);
       setIsNavigating(false);
     }
   }, [
@@ -163,6 +163,7 @@ export default function FlightDetailsPage() {
     setCurrentPhase,
     updateValidationState,
     validationState,
+    lang,
   ]);
 
   const handleInteraction = useCallback(
@@ -174,12 +175,69 @@ export default function FlightDetailsPage() {
     [interactedSteps]
   );
 
-  const handleBack = () => {
-    const previousUrl = goToPreviousPhase();
-    if (previousUrl) {
-      router.push(previousUrl);
-    }
+  const handleBack = async () => {
+    const previousUrl = '/phases/compensation-estimate';
+    // First update the current phase to the previous phase
+    await setCurrentPhase(2);
+    // Then navigate to the previous URL with language parameter
+    router.push(getLanguageAwareUrl(previousUrl, lang));
   };
+
+  // Add effect to initialize validation state
+  useEffect(() => {
+    console.log('=== Flight Details Page Initialization ===');
+
+    // Initialize validation state on mount only
+    if (!mounted) {
+      const isFlightValid = selectedFlights.length > 0;
+      const isBookingValid =
+        bookingNumber.trim().length >= 6 &&
+        /^[A-Z0-9]+$/i.test(bookingNumber.trim());
+
+      // Preserve existing validation state for other steps
+      const existingValidationState = { ...validationState };
+
+      // Only update if validation state has actually changed
+      if (
+        existingValidationState.stepValidation[1] !== isFlightValid ||
+        existingValidationState.stepValidation[2] !== isBookingValid
+      ) {
+        // Ensure dates are properly parsed before validation
+        updateValidationState({
+          ...existingValidationState,
+          stepValidation: {
+            ...existingValidationState.stepValidation,
+            1: isFlightValid,
+            2: isBookingValid,
+          },
+          stepInteraction: {
+            ...existingValidationState.stepInteraction,
+            1: selectedFlights.length > 0,
+            2: bookingNumber.trim().length > 0,
+          },
+          1: isFlightValid,
+          2: isBookingValid,
+          isFlightValid,
+          _timestamp: Date.now(),
+        });
+
+        console.log('Validation state initialized:', {
+          isFlightValid,
+          isBookingValid,
+          selectedFlights: selectedFlights.length,
+          bookingNumber: bookingNumber.length,
+        });
+      }
+    }
+
+    console.log('=== End Flight Details Page Initialization ===');
+  }, [
+    mounted,
+    selectedFlights,
+    bookingNumber,
+    validationState,
+    updateValidationState,
+  ]);
 
   if (!mounted) {
     return null;
@@ -192,21 +250,25 @@ export default function FlightDetailsPage() {
         initialActiveAccordion={initialAccordion}
       >
         <div className="min-h-screen bg-[#f5f7fa]">
-          <PhaseNavigation />
+          <PhaseNavigation currentPhase={3} completedPhases={[]} />
           <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
             <div className="space-y-6">
-              <SpeechBubble message="Bitte gib uns zusätzliche Details zu deinem Flug." />
+              <SpeechBubble message={t.phases.flightDetails.speechBubble} />
 
               <div className="space-y-4">
                 <AccordionCard
-                  title="Wähle deinen Flug"
-                  eyebrow="Schritt 1"
+                  title={t.phases.flightDetails.steps.flightSelection.title}
+                  eyebrow={t.phases.flightDetails.steps.flightSelection.eyebrow}
                   summary={(() => {
                     if (selectedFlights.length === 0) return '';
 
                     if (selectedFlights.length === 1) {
                       const flight = selectedFlights[0];
-                      return `${flight.airline} ${flight.flightNumber} • ${flight.departureCity} → ${flight.arrivalCity}`;
+                      return t.phases.flightDetails.steps.flightSelection.summary.singleFlight
+                        .replace('{airline}', flight.airline)
+                        .replace('{flightNumber}', flight.flightNumber)
+                        .replace('{departure}', flight.departureCity)
+                        .replace('{arrival}', flight.arrivalCity);
                     }
 
                     // Multi-segment flight
@@ -214,7 +276,9 @@ export default function FlightDetailsPage() {
                       (flight) =>
                         `${flight.departureCity} → ${flight.arrivalCity}`
                     );
-                    return `${selectedFlights.length} Flüge: ${segments.join(' | ')}`;
+                    return t.phases.flightDetails.steps.flightSelection.summary.multiSegment
+                      .replace('{count}', selectedFlights.length.toString())
+                      .replace('{segments}', segments.join(' | '));
                   })()}
                   isCompleted={validationState.stepValidation[1]}
                   hasInteracted={interactedSteps.includes('flight-selection')}
@@ -248,23 +312,24 @@ export default function FlightDetailsPage() {
                       stepNumber={1}
                       showFlightDetails={true}
                       setValidationState={(state) => {
-                        // Update validation state for step 1
                         if (typeof state === 'function') {
+                          const newState = state(
+                            validationState.stepValidation
+                          );
                           updateValidationState({
-                            stepValidation: {
-                              ...validationState.stepValidation,
-                              1: true,
-                            },
-                            1: true,
-                          } as Partial<ValidationState>);
+                            ...validationState,
+                            stepValidation: newState,
+                            1: newState[1] || false,
+                          });
                         } else {
                           updateValidationState({
+                            ...validationState,
                             stepValidation: {
                               ...validationState.stepValidation,
                               1: state[1] || false,
                             },
                             1: state[1] || false,
-                          } as Partial<ValidationState>);
+                          });
                         }
                       }}
                     />
@@ -272,18 +337,13 @@ export default function FlightDetailsPage() {
                 </AccordionCard>
 
                 <AccordionCard
-                  title="Gib deine Buchungsnummer ein"
-                  eyebrow="Schritt 2"
-                  summary={
-                    bookingNumber
-                      ? `Buchungsnummer: ${bookingNumber}`
-                      : 'Gib deine Buchungsreferenz ein'
-                  }
+                  title={t.phases.flightDetails.steps.bookingNumber.title}
+                  eyebrow={t.phases.flightDetails.steps.bookingNumber.eyebrow}
+                  summary={bookingNumber}
                   isCompleted={validationState.stepValidation[2]}
                   hasInteracted={interactedSteps.includes('booking-number')}
                   className={accordionConfig.padding.wrapper}
                   shouldStayOpen={false}
-                  isOpenByDefault={false}
                   stepId="booking-number"
                   isValid={validationState.stepValidation[2]}
                   isOpen={openSteps.includes('booking-number')}
@@ -345,22 +405,27 @@ export default function FlightDetailsPage() {
                           ${isBookingInputFocused ? 'text-[#464646]' : ''}
                         `}
                       >
-                        Buchungsnummer
+                        {t.phases.flightDetails.steps.bookingNumber.label}
                       </label>
                     </div>
                     <p className="mt-2 text-sm text-gray-500">
-                      Dein PNR (Passenger Name Record) ist ein 6- oder
-                      13-stelliger Code, der auf deiner Buchungsbestätigung oder
-                      deinem E-Ticket zu finden ist.
+                      {
+                        t.phases.flightDetails.steps.bookingNumber.validation
+                          .format
+                      }
                     </p>
                   </div>
                 </AccordionCard>
               </div>
 
-              <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
-                <BackButton onClick={handleBack} />
+              <div className="flex justify-between mt-8">
+                <BackButton
+                  onClick={handleBack}
+                  text={t.phases.flightDetails.navigation.back}
+                />
                 <ContinueButton
                   onClick={handleContinue}
+                  text={t.phases.flightDetails.navigation.continue}
                   disabled={!canContinue}
                 />
               </div>

@@ -2,13 +2,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useStore } from '@/lib/state/store';
+import { useStore, getLanguageAwareUrl } from '@/lib/state/store';
 import { PhaseGuard } from '@/components/shared/PhaseGuard';
 import { SpeechBubble } from '@/components/SpeechBubble';
 import { ContinueButton } from '@/components/shared/ContinueButton';
 import { BackButton } from '@/components/shared/BackButton';
 import { PhaseNavigation } from '@/components/PhaseNavigation';
 import type { LocationData } from '@/types/store';
+import { useTranslation } from '@/hooks/useTranslation';
 
 type RouteInfo = {
   departureCity: string;
@@ -19,6 +20,7 @@ type RouteInfo = {
 
 export default function CompensationEstimatePage() {
   const router = useRouter();
+  const { t, lang } = useTranslation();
   const {
     personalDetails,
     fromLocation,
@@ -31,7 +33,6 @@ export default function CompensationEstimatePage() {
     setCompensationAmount,
     setCompensationLoading,
     setCompensationError,
-    goToPreviousPhase,
     selectedType,
     selectedFlights,
     shouldRecalculateCompensation,
@@ -39,6 +40,7 @@ export default function CompensationEstimatePage() {
     directFlight,
     flightSegments,
     currentPhase,
+    completedPhases,
   } = useStore();
 
   const [mounted, setMounted] = useState(false);
@@ -256,7 +258,7 @@ export default function CompensationEstimatePage() {
       if (!nextPhaseUrl) {
         throw new Error('Invalid next phase URL');
       }
-      await router.push(nextPhaseUrl);
+      await router.push(getLanguageAwareUrl(nextPhaseUrl, lang));
     } catch (error) {
       setCurrentPhase(2);
     } finally {
@@ -265,15 +267,11 @@ export default function CompensationEstimatePage() {
   };
 
   const handleBack = async () => {
-    const previousUrl = goToPreviousPhase();
-    if (previousUrl !== null) {
-      // First update the current phase to the previous phase
-      const prevPhase = currentPhase - 1;
-      await setCurrentPhase(prevPhase);
-
-      // Then navigate to the previous URL
-      router.push(previousUrl);
-    }
+    const previousUrl = '/phases/initial-assessment';
+    // First update the current phase to the previous phase
+    await setCurrentPhase(1);
+    // Then navigate to the previous URL with language parameter
+    router.push(getLanguageAwareUrl(previousUrl, lang));
   };
 
   if (!mounted) {
@@ -283,18 +281,23 @@ export default function CompensationEstimatePage() {
   return (
     <PhaseGuard phase={2}>
       <div className="min-h-screen bg-[#f5f7fa]">
-        <PhaseNavigation />
+        <PhaseNavigation
+          currentPhase={currentPhase}
+          completedPhases={completedPhases}
+        />
         <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
           <div className="space-y-6">
-            <SpeechBubble message="Es gibt eine gute Chance, dass du Anspruch auf eine Entschädigung hast! Lass mich dir helfen. Komplett risikofrei: Ich erhalte nur eine Erfolgsprovision von 30 % (inkl. MwSt.), wenn ich erfolgreich bin." />
+            <SpeechBubble message={t.phases.compensationEstimate.description} />
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-xl font-semibold mb-4">
-                Flugzusammenfassung
+                {t.phases.compensationEstimate.flightSummary.title}
               </h2>
               <div className="space-y-4">
                 {personalDetails && (
                   <div className="pb-4 border-b border-gray-100">
-                    <p className="text-gray-600">Passagier</p>
+                    <p className="text-gray-600">
+                      {t.phases.compensationEstimate.flightSummary.passenger}
+                    </p>
                     <p className="font-medium">
                       {personalDetails.firstName} {personalDetails.lastName}
                     </p>
@@ -304,7 +307,9 @@ export default function CompensationEstimatePage() {
                   {selectedType === 'direct' ? (
                     <>
                       <div>
-                        <p className="text-gray-600">Von</p>
+                        <p className="text-gray-600">
+                          {t.phases.compensationEstimate.flightSummary.from}
+                        </p>
                         {(() => {
                           const fromCityData = {
                             selectedFlightCity:
@@ -335,13 +340,16 @@ export default function CompensationEstimatePage() {
                             fromCityData.selectedFlightCity ||
                             fromCityData.locationCity ||
                             fromCityData.departure ||
-                            'No departure city available';
+                            t.phases.compensationEstimate.flightSummary
+                              .noFlightDetails;
 
                           return <p className="font-medium">{cityName}</p>;
                         })()}
                       </div>
                       <div>
-                        <p className="text-gray-600">Nach</p>
+                        <p className="text-gray-600">
+                          {t.phases.compensationEstimate.flightSummary.to}
+                        </p>
                         {(() => {
                           const toCityData = {
                             selectedFlightCity:
@@ -372,7 +380,8 @@ export default function CompensationEstimatePage() {
                             toCityData.selectedFlightCity ||
                             toCityData.locationCity ||
                             toCityData.arrival ||
-                            'No arrival city available';
+                            t.phases.compensationEstimate.flightSummary
+                              .noFlightDetails;
 
                           return <p className="font-medium">{cityName}</p>;
                         })()}
@@ -424,7 +433,8 @@ export default function CompensationEstimatePage() {
                         departureCityData.selectedFlightCity ||
                         departureCityData.locationCity ||
                         departureCityData.departure ||
-                        'No departure city available';
+                        t.phases.compensationEstimate.flightSummary
+                          .noFlightDetails;
 
                       const arrivalCity =
                         arrivalCityFromLabel ||
@@ -432,7 +442,8 @@ export default function CompensationEstimatePage() {
                         arrivalCityData.selectedFlightCity ||
                         arrivalCityData.locationCity ||
                         arrivalCityData.arrival ||
-                        'No arrival city available';
+                        t.phases.compensationEstimate.flightSummary
+                          .noFlightDetails;
 
                       return (
                         <div
@@ -440,15 +451,23 @@ export default function CompensationEstimatePage() {
                           className="pb-4 border-b border-gray-100 last:border-b-0"
                         >
                           <p className="text-gray-600 font-medium mb-2">
-                            Flug {index + 1}
+                            {t.phases.compensationEstimate.flightSummary.flight}{' '}
+                            {index + 1}
                           </p>
                           <div className="space-y-2">
                             <div>
-                              <p className="text-gray-600">Von</p>
+                              <p className="text-gray-600">
+                                {
+                                  t.phases.compensationEstimate.flightSummary
+                                    .from
+                                }
+                              </p>
                               <p className="font-medium">{departureCity}</p>
                             </div>
                             <div>
-                              <p className="text-gray-600">Nach</p>
+                              <p className="text-gray-600">
+                                {t.phases.compensationEstimate.flightSummary.to}
+                              </p>
                               <p className="font-medium">{arrivalCity}</p>
                             </div>
                           </div>
@@ -456,7 +475,12 @@ export default function CompensationEstimatePage() {
                       );
                     })
                   ) : (
-                    <p>No flight details available</p>
+                    <p>
+                      {
+                        t.phases.compensationEstimate.flightSummary
+                          .noFlightDetails
+                      }
+                    </p>
                   )}
                 </div>
               </div>
@@ -464,35 +488,42 @@ export default function CompensationEstimatePage() {
 
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-xl font-semibold mb-4">
-                Geschätzte Entschädigung
+                {t.phases.compensationEstimate.estimatedCompensation.title}
               </h2>
               <div className="text-2xl font-bold text-[#F54538]">
                 {compensationLoading
-                  ? 'Entschädigung wird berechnet...'
+                  ? t.phases.compensationEstimate.estimatedCompensation
+                      .calculating
                   : compensationError
                     ? compensationError
                     : typeof compensationAmount === 'number'
                       ? `€${compensationAmount}`
-                      : 'Entschädigung konnte nicht berechnet werden'}
+                      : t.phases.compensationEstimate.flightSummary
+                          .noFlightDetails}
               </div>
               <p className="text-gray-600 mt-2">
-                Der endgültige Betrag wird festgelegt, nachdem wir deine
-                vollständigen Falldetails überprüft haben.
+                {t.phases.compensationEstimate.estimatedCompensation.disclaimer}
               </p>
             </div>
 
             <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-xl font-semibold mb-4">Nächste Schritte</h2>
+              <h2 className="text-xl font-semibold mb-4">
+                {t.phases.compensationEstimate.nextSteps.title}
+              </h2>
               <div className="space-y-4">
                 <div className="flex items-start gap-4">
                   <div className="w-8 h-8 rounded-full bg-[#F54538] text-white flex items-center justify-center flex-shrink-0">
                     1
                   </div>
                   <div>
-                    <h3 className="font-semibold mb-1">Flugdetails angeben</h3>
+                    <h3 className="font-semibold mb-1">
+                      {t.phases.compensationEstimate.nextSteps.step1.title}
+                    </h3>
                     <p className="text-gray-600">
-                      Hilf uns zu verstehen, was mit deinem Flug passiert ist,
-                      indem du uns mehr Details zu deiner Reise gibst.
+                      {
+                        t.phases.compensationEstimate.nextSteps.step1
+                          .description
+                      }
                     </p>
                   </div>
                 </div>
@@ -501,10 +532,14 @@ export default function CompensationEstimatePage() {
                     2
                   </div>
                   <div>
-                    <h3 className="font-semibold mb-1">Fall überprüfen</h3>
+                    <h3 className="font-semibold mb-1">
+                      {t.phases.compensationEstimate.nextSteps.step2.title}
+                    </h3>
                     <p className="text-gray-600">
-                      Wir überprüfen die Details deines Falls und bewerten deine
-                      Anspruchsberechtigung auf Entschädigung.
+                      {
+                        t.phases.compensationEstimate.nextSteps.step2
+                          .description
+                      }
                     </p>
                   </div>
                 </div>
@@ -513,26 +548,31 @@ export default function CompensationEstimatePage() {
                     3
                   </div>
                   <div>
-                    <h3 className="font-semibold mb-1">Anspruch einreichen</h3>
+                    <h3 className="font-semibold mb-1">
+                      {t.phases.compensationEstimate.nextSteps.step3.title}
+                    </h3>
                     <p className="text-gray-600">
-                      Sobald alles bestätigt ist, reichen wir deinen Anspruch
-                      ein und übernehmen die gesamte Kommunikation mit der
-                      Fluggesellschaft.
+                      {
+                        t.phases.compensationEstimate.nextSteps.step3
+                          .description
+                      }
                     </p>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
-            <BackButton onClick={handleBack} text="Zurück" />
-            <ContinueButton
-              onClick={handleContinue}
-              disabled={false}
-              isLoading={isLoading}
-              text="Weiter zu den Flugdetails"
-            />
+            <div className="flex justify-between">
+              <BackButton
+                onClick={handleBack}
+                text={t.phases.compensationEstimate.navigation.back}
+              />
+              <ContinueButton
+                onClick={handleContinue}
+                isLoading={isLoading}
+                text={t.phases.compensationEstimate.navigation.continue}
+              />
+            </div>
           </div>
         </main>
       </div>

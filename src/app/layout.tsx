@@ -7,6 +7,8 @@ import './globals.css';
 import '@/styles/autofill.css';
 import Script from 'next/script';
 import { HotjarScript } from '@/components/shared/HotjarScript';
+import { useParams } from 'next/navigation';
+import { isValidLanguage } from '@/config/language';
 
 const heebo = Heebo({
   subsets: ['latin'],
@@ -34,8 +36,15 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const params = useParams();
+  const langParam = params?.lang;
+  const lang =
+    typeof langParam === 'string' && isValidLanguage(langParam)
+      ? langParam
+      : 'de';
+
   return (
-    <html lang="de" className={`${heebo.variable}`}>
+    <html lang={lang} className={`${heebo.variable}`} suppressHydrationWarning>
       <head>
         <CookiebotScript />
         <meta

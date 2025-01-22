@@ -6,37 +6,9 @@ import { Select } from '../shared/Select';
 import { useStore } from '@/lib/state/store';
 import type { PassengerDetails } from '@/types/store';
 import { CountryAutocomplete } from '../shared/CountryAutocomplete';
+import { useTranslation } from '@/hooks/useTranslation';
 
-// Add debounce utility
-const useDebounce = <T extends unknown[]>(
-  callback: (...args: T) => void,
-  delay: number
-) => {
-  const timeoutRef = React.useRef<NodeJS.Timeout>();
-
-  React.useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, []);
-
-  return useCallback(
-    (...args: T) => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-
-      timeoutRef.current = setTimeout(() => {
-        callback(...args);
-      }, delay);
-    },
-    [callback, delay]
-  );
-};
-
-const COUNTRY_OPTIONS = [
+const COUNTRY_OPTIONS_DE = [
   // EU Countries
   { value: 'BEL', label: 'Belgien' },
   { value: 'BGR', label: 'Bulgarien' },
@@ -101,6 +73,71 @@ const COUNTRY_OPTIONS = [
   { value: 'VNM', label: 'Vietnam' },
 ];
 
+const COUNTRY_OPTIONS_EN = [
+  // EU Countries
+  { value: 'BEL', label: 'Belgium' },
+  { value: 'BGR', label: 'Bulgaria' },
+  { value: 'DNK', label: 'Denmark' },
+  { value: 'DEU', label: 'Germany' },
+  { value: 'EST', label: 'Estonia' },
+  { value: 'FIN', label: 'Finland' },
+  { value: 'FRA', label: 'France' },
+  { value: 'GRC', label: 'Greece' },
+  { value: 'IRL', label: 'Ireland' },
+  { value: 'ITA', label: 'Italy' },
+  { value: 'HRV', label: 'Croatia' },
+  { value: 'LVA', label: 'Latvia' },
+  { value: 'LTU', label: 'Lithuania' },
+  { value: 'LUX', label: 'Luxembourg' },
+  { value: 'MLT', label: 'Malta' },
+  { value: 'NLD', label: 'Netherlands' },
+  { value: 'AUT', label: 'Austria' },
+  { value: 'POL', label: 'Poland' },
+  { value: 'PRT', label: 'Portugal' },
+  { value: 'ROU', label: 'Romania' },
+  { value: 'SWE', label: 'Sweden' },
+  { value: 'SVK', label: 'Slovakia' },
+  { value: 'SVN', label: 'Slovenia' },
+  { value: 'ESP', label: 'Spain' },
+  { value: 'CZE', label: 'Czech Republic' },
+  { value: 'HUN', label: 'Hungary' },
+  { value: 'CYP', label: 'Cyprus' },
+  // Non-EU European countries
+  { value: 'GBR', label: 'United Kingdom' },
+  { value: 'CHE', label: 'Switzerland' },
+  { value: 'NOR', label: 'Norway' },
+  { value: 'ISL', label: 'Iceland' },
+  { value: 'LIE', label: 'Liechtenstein' },
+  // Rest of the World (in English)
+  { value: 'EGY', label: 'Egypt' },
+  { value: 'ARG', label: 'Argentina' },
+  { value: 'AUS', label: 'Australia' },
+  { value: 'BRA', label: 'Brazil' },
+  { value: 'CHL', label: 'Chile' },
+  { value: 'CHN', label: 'China' },
+  { value: 'IND', label: 'India' },
+  { value: 'IDN', label: 'Indonesia' },
+  { value: 'ISR', label: 'Israel' },
+  { value: 'JPN', label: 'Japan' },
+  { value: 'CAN', label: 'Canada' },
+  { value: 'COL', label: 'Colombia' },
+  { value: 'KOR', label: 'Republic of Korea' },
+  { value: 'MYS', label: 'Malaysia' },
+  { value: 'MEX', label: 'Mexico' },
+  { value: 'NZL', label: 'New Zealand' },
+  { value: 'PAK', label: 'Pakistan' },
+  { value: 'PHL', label: 'Philippines' },
+  { value: 'RUS', label: 'Russia' },
+  { value: 'SAU', label: 'Saudi Arabia' },
+  { value: 'SGP', label: 'Singapore' },
+  { value: 'ZAF', label: 'South Africa' },
+  { value: 'THA', label: 'Thailand' },
+  { value: 'TUR', label: 'Turkey' },
+  { value: 'ARE', label: 'United Arab Emirates' },
+  { value: 'USA', label: 'United States' },
+  { value: 'VNM', label: 'Vietnam' },
+];
+
 interface PersonalDetailsFormProps {
   onComplete: (details: PassengerDetails | null) => void;
   onInteract?: () => void;
@@ -114,6 +151,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
   isClaimSuccess = false,
   showAdditionalFields = false,
 }) => {
+  const { t, lang } = useTranslation();
   const {
     personalDetails: storedDetails,
     setPersonalDetails,
@@ -125,16 +163,38 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
   const hasInteracted = validationState.stepInteraction[stepId];
   const interactionRef = React.useRef(false);
 
-  // Debounce the validation update
-  const debouncedUpdateValidation = useDebounce((isValid: boolean) => {
-    useStore.getState().updateValidationState({
-      stepValidation: {
-        ...validationState.stepValidation,
-        [stepId]: isValid,
-      },
-      [stepId]: isValid,
-    });
-  }, 500);
+  // Handle initial load validation
+  useEffect(() => {
+    if (!storedDetails) return;
+
+    // Only run validation on mount or when stored details actually change
+    const hasAllRequiredFields = ['firstName', 'lastName', 'email'].every(
+      (field) => storedDetails[field as keyof PassengerDetails]?.trim()
+    );
+
+    // Get current validation state once
+    const store = useStore.getState();
+    const currentValidation = store.validationState;
+
+    // Check if we need to update validation state
+    if (
+      hasAllRequiredFields &&
+      (!currentValidation.isPersonalValid ||
+        !currentValidation.stepValidation[stepId])
+    ) {
+      // Update validation state to reflect completed state
+      const newValidationState = {
+        ...currentValidation,
+        stepValidation: {
+          ...currentValidation.stepValidation,
+          [stepId]: true,
+        },
+        isPersonalValid: true,
+      };
+
+      store.updateValidationState(newValidationState);
+    }
+  }, [storedDetails, stepId]);
 
   // Handle initial interaction
   useEffect(() => {
@@ -144,12 +204,17 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
     }
   }, [hasInteracted, onInteract]);
 
-  // Validate on mount for claim success page
+  // Separate effect for claim success page specific logic
   useEffect(() => {
     if (isClaimSuccess && storedDetails) {
-      setPersonalDetails(storedDetails);
+      const hasAllRequiredFields = ['firstName', 'lastName', 'email'].every(
+        (field) => storedDetails[field as keyof PassengerDetails]?.trim()
+      );
+      if (hasAllRequiredFields) {
+        onComplete(storedDetails);
+      }
     }
-  }, [isClaimSuccess, storedDetails, setPersonalDetails]);
+  }, [isClaimSuccess, storedDetails, onComplete]);
 
   // Memoize the input change handler
   const handleInputChange = useCallback(
@@ -164,53 +229,40 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
         [field]: value,
       } as PassengerDetails;
 
-      const isValid = Boolean(
-        isClaimSuccess
-          ? newDetails.salutation &&
-              newDetails.firstName &&
-              newDetails.lastName &&
-              newDetails.email &&
-              (!showAdditionalFields ||
-                (newDetails.phone &&
-                  newDetails.address &&
-                  newDetails.zipCode &&
-                  newDetails.city &&
-                  newDetails.country))
-          : newDetails.firstName && newDetails.lastName && newDetails.email
-      );
-
-      if (isClaimSuccess || storedDetails?.[field] !== value) {
+      // Only update if value actually changed
+      if (storedDetails?.[field] !== value) {
         setPersonalDetails(newDetails);
-        // Always use debounced validation to prevent unwanted transitions
-        debouncedUpdateValidation(isValid);
 
-        // Only call onComplete if the form is valid
-        if (isValid) {
-          onComplete(newDetails);
-        } else {
-          // Explicitly set validation to false when form becomes invalid
-          useStore.getState().updateValidationState({
+        // Check validation after input changes
+        const hasAllRequiredFields = ['firstName', 'lastName', 'email'].every(
+          (field) => newDetails[field as keyof PassengerDetails]?.trim()
+        );
+
+        // Get current validation state once
+        const store = useStore.getState();
+        const currentValidation = store.validationState;
+
+        // Only update if validation state needs to change
+        if (
+          currentValidation.isPersonalValid !== hasAllRequiredFields ||
+          currentValidation.stepValidation[stepId] !== hasAllRequiredFields
+        ) {
+          // Batch validation state updates
+          const newValidationState = {
+            ...currentValidation,
             stepValidation: {
-              ...validationState.stepValidation,
-              [stepId]: false,
+              ...currentValidation.stepValidation,
+              [stepId]: hasAllRequiredFields,
             },
-            [stepId]: false,
-            _timestamp: Date.now(),
-          });
+            [stepId]: hasAllRequiredFields,
+            isPersonalValid: hasAllRequiredFields,
+          };
+
+          store.updateValidationState(newValidationState);
         }
       }
     },
-    [
-      storedDetails,
-      setPersonalDetails,
-      onInteract,
-      isClaimSuccess,
-      showAdditionalFields,
-      debouncedUpdateValidation,
-      onComplete,
-      stepId,
-      validationState.stepValidation,
-    ]
+    [storedDetails, setPersonalDetails, onInteract, stepId]
   );
 
   return (
@@ -225,22 +277,22 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <Select
-            label="Anrede"
+            label={t.personalDetails.salutation}
             value={storedDetails?.salutation || ''}
             onChange={(value) => handleInputChange('salutation', value)}
             error={
               hasInteracted ? validationState.fieldErrors.salutation : undefined
             }
             options={[
-              { value: 'herr', label: 'Herr' },
-              { value: 'frau', label: 'Frau' },
+              { value: 'herr', label: t.salutation.mr },
+              { value: 'frau', label: t.salutation.mrs },
             ]}
             required={isClaimSuccess}
           />
         </div>
         <div>
           <Input
-            label="Vorname"
+            label={t.personalDetails.firstName}
             value={storedDetails?.firstName || ''}
             onChange={(value) => handleInputChange('firstName', value)}
             error={
@@ -251,7 +303,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
         </div>
         <div>
           <Input
-            label="Nachname"
+            label={t.personalDetails.lastName}
             value={storedDetails?.lastName || ''}
             onChange={(value) => handleInputChange('lastName', value)}
             error={
@@ -262,7 +314,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
         </div>
         <div>
           <Input
-            label="E-Mail-Adresse"
+            label={t.personalDetails.email}
             type="email"
             value={storedDetails?.email || ''}
             onChange={(value) => handleInputChange('email', value)}
@@ -276,7 +328,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
           <>
             <div>
               <Input
-                label="Telefonnummer"
+                label={t.personalDetails.phone}
                 type="tel"
                 value={storedDetails?.phone || ''}
                 onChange={(value) => handleInputChange('phone', value)}
@@ -288,7 +340,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
             </div>
             <div>
               <Input
-                label="Adresse"
+                label={t.personalDetails.address}
                 value={storedDetails?.address || ''}
                 onChange={(value) => handleInputChange('address', value)}
                 error={
@@ -301,20 +353,17 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
             </div>
             <div>
               <Input
-                label="Postleitzahl"
-                value={storedDetails?.zipCode || ''}
-                onChange={(value) => handleInputChange('zipCode', value)}
-                error={
-                  hasInteracted
-                    ? validationState.fieldErrors.zipCode
-                    : undefined
-                }
+                type="text"
+                label={t.personalDetails.postalCode}
+                value={storedDetails?.postalCode || ''}
+                onChange={(value) => handleInputChange('postalCode', value)}
+                error={validationState.fieldErrors?.postalCode}
                 required={isClaimSuccess}
               />
             </div>
             <div>
               <Input
-                label="Stadt"
+                label={t.personalDetails.city}
                 value={storedDetails?.city || ''}
                 onChange={(value) => handleInputChange('city', value)}
                 error={
@@ -325,15 +374,17 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
             </div>
             <div>
               <CountryAutocomplete
-                label="Land"
+                label={t.personalDetails.country}
                 value={storedDetails?.country}
                 onChange={(value) => {
-                  const selectedOption = COUNTRY_OPTIONS.find(
-                    (opt) => opt.value === value
-                  );
+                  const selectedOption = (
+                    lang === 'en' ? COUNTRY_OPTIONS_EN : COUNTRY_OPTIONS_DE
+                  ).find((opt) => opt.value === value);
                   handleInputChange('country', selectedOption?.label || value);
                 }}
-                options={COUNTRY_OPTIONS}
+                options={
+                  lang === 'en' ? COUNTRY_OPTIONS_EN : COUNTRY_OPTIONS_DE
+                }
                 error={
                   hasInteracted
                     ? validationState.fieldErrors.country

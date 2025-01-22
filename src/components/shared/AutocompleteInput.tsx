@@ -12,6 +12,7 @@ import type { LocationData } from '@/types/store';
 import { debounce } from 'lodash';
 import { PiAirplaneTakeoff, PiAirplaneLanding } from 'react-icons/pi';
 import { XMarkIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import { useTranslation } from '@/hooks/useTranslation';
 
 const LoadingSpinner = () => (
   <div className="relative w-6 h-6">
@@ -51,6 +52,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   showError = true,
   required = false,
 }) => {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [options, setOptions] = useState<LocationData[]>([]);
   const [loading, setLoading] = useState(false);
@@ -330,9 +332,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
             ))}
           </ul>
         ) : (
-          <div className="px-4 py-2 text-[#4B616D]">
-            Keine Ergebnisse gefunden
-          </div>
+          <div className="px-4 py-2 text-[#4B616D]">{t.common.noResults}</div>
         )}
       </div>
     );

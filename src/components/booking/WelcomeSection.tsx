@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Image from 'next/image';
+import { useTranslation } from '@/hooks/useTranslation';
+import { cn } from '@/lib/utils';
 
 type ScreenSize = 'mobile' | 'tablet' | 'desktop';
 
@@ -12,6 +14,7 @@ interface GreetingMessage {
 }
 
 export const WelcomeSection = () => {
+  const { t } = useTranslation();
   const [screenSize, setScreenSize] = useState<ScreenSize>('desktop');
 
   const checkScreenSize = useCallback(() => {
@@ -32,9 +35,9 @@ export const WelcomeSection = () => {
   }, [checkScreenSize]);
 
   const greetingMessages: GreetingMessage[] = [
-    { text: 'Hallo', emoji: '👋' },
-    { text: 'ich bin hier, um dir bei', highlight: true },
-    { text: 'Flugproblemen zu helfen' },
+    { text: t.welcome.greeting, emoji: '👋' },
+    { text: t.welcome.introduction, highlight: true },
+    { text: t.welcome.purpose },
   ];
 
   return (
@@ -74,16 +77,17 @@ export const WelcomeSection = () => {
       <div className="w-full h-[317px] lg:h-[400px] flex items-center relative z-10">
         <div className="w-full max-w-7xl mx-auto flex flex-col justify-start items-start gap-6 lg:gap-3 px-4 lg:px-8 lg:-mt-12">
           <div
-            className={`flex flex-col w-full ${
+            className={cn(
+              'flex flex-col w-full',
               screenSize === 'tablet' ? '-mt-8' : ''
-            }`}
+            )}
           >
             <div className="flex flex-col w-full">
               <div className="w-full flex items-center mb-0 lg:mb-4">
                 <div className="w-[124px] h-[120px] relative z-20">
                   <Image
                     src="https://ik.imagekit.io/0adjo0tl4/Mask%20group.svg"
-                    alt="Captain Frank"
+                    alt={t.welcome.captainAlt}
                     fill
                     priority
                     className="lg:scale-[1.25] object-contain origin-left"
@@ -91,7 +95,7 @@ export const WelcomeSection = () => {
                 </div>
                 <div className="flex flex-col ml-4 lg:ml-14 z-10">
                   <div className="text-white text-sm lg:text-lg font-normal leading-tight lg:leading-normal">
-                    Chatte mit
+                    {t.welcome.chatWith}
                   </div>
                   <div className="text-white text-[28px] sm:text-[34px] lg:text-[41.93px] font-semibold leading-[34px] sm:leading-[40.80px] lg:leading-[50.31px]">
                     Captain

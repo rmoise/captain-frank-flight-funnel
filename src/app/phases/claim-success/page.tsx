@@ -13,6 +13,15 @@ import { accordionConfig } from '@/config/accordion';
 import { pushToDataLayer } from '@/utils/gtm';
 import { BackButton } from '@/components/shared/BackButton';
 import { ContinueButton } from '@/components/shared/ContinueButton';
+import { useTranslation } from '@/hooks/useTranslation';
+import { StoreState, StoreActions } from '@/lib/state/store';
+
+// Extend the store state type properly
+type ExtendedStore = StoreState &
+  StoreActions & {
+    _isClaimSuccess?: boolean;
+    _preventPhaseChange?: boolean;
+  };
 
 function ClaimSuccessContent() {
   const router = useRouter();
@@ -23,10 +32,11 @@ function ClaimSuccessContent() {
     completePhase,
     setPersonalDetails,
     compensationAmount,
-    selectedFlight,
-    wizardAnswers,
     isStepValid,
+    wizardAnswers,
   } = useStore();
+
+  const { t, lang } = useTranslation();
   const [claimDetails, setClaimDetails] = React.useState({
     amount: 0,
     currency: 'EUR',
@@ -48,64 +58,79 @@ function ClaimSuccessContent() {
 
   // Initialize phase and claim details
   React.useEffect(() => {
-    // Set current phase without triggering validation
-    setCurrentPhase(5);
+    const CLAIM_SUCCESS_PHASE = 5;
 
-    // Initialize claim details from URL parameters or use stored compensation amount
-    const initializeFromUrl = () => {
-      const amount = searchParams?.get('amount');
-      const currency = searchParams?.get('currency');
-      const provision = searchParams?.get('provision');
-      const bookingRef = searchParams?.get('bookingRef');
-      const depAirport = searchParams?.get('depAirport');
-      const arrAirport = searchParams?.get('arrAirport');
-      const depTime = searchParams?.get('depTime');
+    // Set phase immediately to ensure rendering
+    useStore.setState({
+      currentPhase: CLAIM_SUCCESS_PHASE,
+      _preventPhaseChange: true,
+      _isClaimSuccess: true,
+      completedPhases: Array.from(
+        new Set([...useStore.getState().completedPhases, 1, 2, 3, 4])
+      ),
+      validationState: {
+        ...useStore.getState().validationState,
+        isFlightValid: true,
+        isWizardValid: true,
+        isTermsValid:
+          useStore.getState().validationState?.isTermsValid || false,
+        isSignatureValid:
+          useStore.getState().validationState?.isSignatureValid || false,
+        1: true,
+        2: true,
+        3: true,
+        4: true,
+      },
+    } as Partial<ExtendedStore>);
 
-      setClaimDetails({
-        amount: amount ? parseInt(amount, 10) : compensationAmount || 0,
-        currency: currency || 'EUR',
-        provision: provision || '',
-        bookingReference: bookingRef || '',
-        departureAirport: depAirport || '',
-        arrivalAirport: arrAirport || '',
-        scheduledDepartureTime: depTime || '',
-      });
+    // Subscribe to store changes to force phase 5
+    const unsubscribe = useStore.subscribe((state) => {
+      if (
+        state.currentPhase !== CLAIM_SUCCESS_PHASE &&
+        (state as ExtendedStore)._isClaimSuccess
+      ) {
+        console.log('Forcing phase back to 5');
+        useStore.setState({
+          currentPhase: CLAIM_SUCCESS_PHASE,
+          _preventPhaseChange: true,
+        } as Partial<ExtendedStore>);
+      }
+    });
+
+    // Initialize claim details from URL parameters
+    const amount = searchParams?.get('amount');
+    const currency = searchParams?.get('currency');
+    const provision = searchParams?.get('provision');
+    const bookingRef = searchParams?.get('bookingRef');
+    const depAirport = searchParams?.get('depAirport');
+    const arrAirport = searchParams?.get('arrAirport');
+    const depTime = searchParams?.get('depTime');
+
+    setClaimDetails({
+      amount: amount ? parseInt(amount, 10) : compensationAmount || 0,
+      currency: currency || 'EUR',
+      provision: provision || '',
+      bookingReference: bookingRef || '',
+      departureAirport: depAirport || '',
+      arrivalAirport: arrAirport || '',
+      scheduledDepartureTime: depTime || '',
+    });
+
+    return () => {
+      unsubscribe();
+      useStore.setState({
+        _preventPhaseChange: false,
+        _isClaimSuccess: false,
+      } as Partial<ExtendedStore>);
     };
+  }, [searchParams, compensationAmount]);
 
-    initializeFromUrl();
-  }, [setCurrentPhase, searchParams, compensationAmount, selectedFlight]);
-
+  // Handle personal details updates
   const handlePersonalDetailsComplete = useCallback(
     (details: PassengerDetails | null) => {
-      // Update personal details in store
       setPersonalDetails(details);
-
-      // Mark step as interacted with
-      setInteractedSteps((prev) => {
-        if (!prev.includes(1)) {
-          return [...prev, 1];
-        }
-        return prev;
-      });
-
-      // Validate the step
-      if (details) {
-        const isValid = Object.values(details).every((value) => {
-          // Check for required string fields
-          if (typeof value === 'string') {
-            return value.trim().length > 0;
-          }
-          // Check for other required fields
-          return value !== null && value !== undefined;
-        });
-
-        // Update validation state
-        if (isValid) {
-          completePhase(1);
-        }
-      }
     },
-    [setPersonalDetails, completePhase]
+    [setPersonalDetails]
   );
 
   const formatAmount = (amount: number, currency: string) => {
@@ -121,22 +146,34 @@ function ClaimSuccessContent() {
     }
   };
 
-  const handleContinue = async () => {
+  // Handle continue button click
+  const handleContinue = useCallback(() => {
+    console.log('=== Handle Continue ===');
+    console.log('Validation state before continue:', {
+      isStepValid: isStepValid(1),
+      interactedSteps,
+      completedPhases,
+    });
+
     if (!isStepValid(1)) {
+      console.log('Cannot continue - step 1 is not valid');
       return;
     }
 
     try {
       // Complete all required phases
       [1, 2, 3, 4, 5].forEach((phase) => {
+        console.log(`Completing phase ${phase}`);
         completePhase(phase);
       });
 
       // Set current phase to 6
+      console.log('Setting current phase to 6');
       setCurrentPhase(6);
 
       // Update localStorage with completed phases
       const updatedCompletedPhases = [...completedPhases, 1, 2, 3, 4, 5];
+      console.log('Updating completed phases:', updatedCompletedPhases);
       localStorage.setItem(
         'completedPhases',
         JSON.stringify(updatedCompletedPhases)
@@ -150,14 +187,28 @@ function ClaimSuccessContent() {
       searchParams.set('completed_phases', '1,2,3,4,5');
       searchParams.set('current_phase', '6');
 
+      const nextUrl = `/${lang}/phases/agreement?${searchParams.toString()}`;
+      console.log('Navigating to:', nextUrl);
+
       // Use replace instead of push to prevent history stack issues
-      router.replace(`/phases/agreement?${searchParams.toString()}`);
+      router.replace(nextUrl);
     } catch (err) {
+      console.error('Error in continue handler:', err);
       setError(
         'An error occurred while navigating to the agreement page. Please try again.'
       );
     }
-  };
+    console.log('=== End Handle Continue ===');
+  }, [
+    setCurrentPhase,
+    completePhase,
+    isStepValid,
+    interactedSteps,
+    completedPhases,
+    lang,
+    router,
+    setError,
+  ]);
 
   useEffect(() => {
     pushToDataLayer({
@@ -179,26 +230,25 @@ function ClaimSuccessContent() {
           ) : (
             <>
               <div className="mt-4 sm:mt-8 mb-8">
-                <SpeechBubble message="Glückwunsch! Jetzt, da du deinen Fall abgeschlossen hast, können wir deinen potenziellen Anspruch berechnen (abzüglich 30 % Erfolgsprovision)." />
+                <SpeechBubble message={t.phases.claimSuccess.speechBubble} />
               </div>
 
               <div className="space-y-6">
                 <div className="bg-white rounded-lg shadow-sm p-6">
                   <h2 className="text-xl font-semibold mb-4">
-                    Geschätzte Entschädigung
+                    {t.phases.claimSuccess.summary.estimatedCompensation}
                   </h2>
                   <div className="text-2xl font-bold text-[#F54538]">
                     {formatAmount(claimDetails.amount, claimDetails.currency)}
                   </div>
                   <p className="text-gray-600 mt-2">
-                    Der endgültige Betrag wird nach Überprüfung deiner
-                    vollständigen Falldetails festgelegt.
+                    {t.phases.claimSuccess.description}
                   </p>
                 </div>
 
                 <div className="bg-white rounded-lg shadow-sm p-6">
                   <h2 className="text-xl font-semibold mb-4">
-                    Nächste Schritte
+                    {t.phases.claimSuccess.nextSteps.title}
                   </h2>
                   <div className="text-left space-y-4">
                     <div className="flex items-start space-x-3">
@@ -206,7 +256,10 @@ function ClaimSuccessContent() {
                         1
                       </div>
                       <p className="text-gray-700">
-                        Vervollständige deine persönlichen Angaben
+                        {
+                          t.phases.claimSuccess.nextSteps.steps.review
+                            .description
+                        }
                       </p>
                     </div>
                     <div className="flex items-start space-x-3">
@@ -214,17 +267,24 @@ function ClaimSuccessContent() {
                         2
                       </div>
                       <p className="text-gray-700">
-                        Unterschreibe die Abtretungserklärung (Kosten erfolgen
-                        nur bei Erfolg)
+                        {
+                          t.phases.claimSuccess.nextSteps.steps.airline
+                            .description
+                        }
                       </p>
                     </div>
                   </div>
                 </div>
 
                 <AccordionCard
-                  title="Persönliche Angaben"
-                  eyebrow="Schritt 1"
-                  summary="Enter your personal details"
+                  title={t.phases.claimSuccess.nextSteps.steps.review.title}
+                  eyebrow={t.phases.initialAssessment.step.replace(
+                    '{number}',
+                    '1'
+                  )}
+                  summary={
+                    t.phases.claimSuccess.nextSteps.steps.review.description
+                  }
                   isCompleted={isStepValid(1)}
                   hasInteracted={interactedSteps.includes(1)}
                   className={accordionConfig.padding.wrapper}
@@ -258,11 +318,13 @@ function ClaimSuccessContent() {
 
               <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
                 <BackButton
-                  onClick={() => router.push('/phases/trip-experience')}
+                  onClick={() => router.push(`/${lang}/phases/trip-experience`)}
+                  text={t.phases.claimSuccess.navigation.back}
                 />
                 <ContinueButton
                   onClick={handleContinue}
                   disabled={!isStepValid(1)}
+                  text={t.phases.claimSuccess.navigation.viewStatus}
                 />
               </div>
             </>
@@ -274,6 +336,12 @@ function ClaimSuccessContent() {
 }
 
 export default function ClaimSuccessPage() {
+  const hideLoading = useStore((state) => state.hideLoading);
+
+  useEffect(() => {
+    hideLoading();
+  }, [hideLoading]);
+
   return (
     <Suspense fallback={<div>Loading...</div>}>
       <ClaimSuccessContent />
