@@ -36,6 +36,11 @@
   to = "/.netlify/functions/ordereuflightclaim"
   status = 200
 
+[[redirects]]
+  from = "/:lang/.netlify/functions/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
