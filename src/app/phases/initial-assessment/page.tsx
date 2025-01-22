@@ -148,9 +148,6 @@ export default function InitialAssessment() {
             termsAccepted;
           setIsFirstVisit(!hasExistingData);
 
-          // Get last active accordion from session storage
-          const lastActiveAccordion = sessionStorage.getItem('activeAccordion');
-
           // Get saved validation state from localStorage
           const savedValidationState = localStorage.getItem(
             'initialAssessmentValidation'
