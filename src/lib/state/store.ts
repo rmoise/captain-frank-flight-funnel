@@ -14,8 +14,18 @@ export type FlightSegment = {
   selectedFlight: Flight | null;
 };
 
+// Add initialization state tracking
+const isInitializingStore = {
+  value: false,
+};
+
 // Add validation helper functions
 export const validateFlightSelection = (state: StoreStateValues): boolean => {
+  // Skip validation during initialization
+  if (isInitializingStore.value) {
+    return false;
+  }
+
   try {
     let isValid = false;
     console.log('=== Flight Selection Validation ===');
@@ -948,14 +958,127 @@ export const validateAndUpdateWizard = (state: StoreStateValues): boolean => {
   return answers.length > 0 && hasValidAnswers && state.wizardIsCompleted;
 };
 
+// Initialize store with saved state if available
+const getInitialState = () => {
+  if (typeof window === 'undefined') return initialState;
+
+  try {
+    // Prevent multiple initializations
+    if (isInitializingStore.value) {
+      return initialState;
+    }
+
+    isInitializingStore.value = true;
+
+    const savedValidationState = localStorage.getItem('validationState');
+    if (savedValidationState) {
+      try {
+        const parsedState = JSON.parse(savedValidationState);
+        return {
+          ...initialState,
+          ...parsedState,
+          _lastUpdate: Date.now(),
+        };
+      } catch (error) {
+        console.error('Error parsing saved validation state:', error);
+      }
+    }
+  } catch (error) {
+    console.error('Error loading saved validation state:', error);
+  } finally {
+    isInitializingStore.value = false;
+  }
+
+  return {
+    ...initialState,
+    _lastUpdate: Date.now(),
+  };
+};
+
 // Create the store with combined type
 export const useStore = create<StoreState & StoreActions>()(
   persist(
     (set, get) => ({
       // Initial state
-      ...initialState,
+      ...getInitialState(),
 
       // Actions
+      initializeStore: () => {
+        const state = get();
+        // Skip if already initialized or initializing
+        if (state.isInitializing || state._lastUpdate) {
+          return;
+        }
+
+        try {
+          // Set initializing flag
+          set({ isInitializing: true });
+
+          // Restore validation state
+          const savedValidationState = localStorage.getItem(
+            'initialAssessmentValidation'
+          );
+          const savedCompletedSteps = localStorage.getItem(
+            'initialAssessmentCompletedSteps'
+          );
+
+          let newState = {
+            ...state,
+            validationState: {
+              ...initialValidationState,
+              stepValidation: {
+                ...initialValidationState.stepValidation,
+                1: true,
+              },
+              stepInteraction: {
+                ...initialValidationState.stepInteraction,
+                1: true,
+              },
+            },
+          };
+
+          if (savedValidationState) {
+            try {
+              const parsedValidation = JSON.parse(savedValidationState);
+              newState.validationState = {
+                ...newState.validationState,
+                ...parsedValidation,
+                stepValidation: {
+                  ...newState.validationState.stepValidation,
+                  ...parsedValidation.stepValidation,
+                  1: true,
+                },
+                stepInteraction: {
+                  ...newState.validationState.stepInteraction,
+                  ...parsedValidation.stepInteraction,
+                  1: true,
+                },
+              };
+            } catch (error) {
+              console.error('Error parsing validation state:', error);
+            }
+          }
+
+          if (savedCompletedSteps) {
+            try {
+              newState.completedSteps = JSON.parse(savedCompletedSteps);
+            } catch (error) {
+              console.error('Error parsing completed steps:', error);
+            }
+          }
+
+          // Update state once with all changes
+          set({
+            ...newState,
+            isInitializing: false,
+            _lastUpdate: Date.now(),
+          });
+        } catch (error) {
+          console.error('Error in store initialization:', error);
+          // Ensure we clear initializing flag even on error
+          set({ isInitializing: false });
+        }
+      },
       batchUpdateWizardState: (updates: Partial<StoreState>) => {
         set((state) => ({
           ...state,
@@ -1229,8 +1352,6 @@ export const useStore = create<StoreState & StoreActions>()(
 
         return true; // Return true to indicate successful completion
       },
-
-      initializeStore: () => set({ isInitializing: false }),
 
       setCurrentPhase: (phase: number) => {
         console.log('=== Setting Current Phase ===');
@@ -2812,6 +2933,13 @@ export const useStore = create<StoreState & StoreActions>()(
     {
       name: 'captain-frank-store',
       storage: createJSONStorage(() => sessionStorage),
+      onRehydrateStorage: () => (state) => {
+        // Only set initialization flags if state exists
+        if (state && !state._lastUpdate) {
+          state.isInitializing = false;
+          state._lastUpdate = Date.now();
+        }
+      },
     }
   )
 );

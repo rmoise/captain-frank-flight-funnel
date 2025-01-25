@@ -628,17 +628,10 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
     try {
       // Handle direct flight date initialization
       if (selectedType === 'direct') {
-        console.log('Initializing direct flight dates:', {
-          selectedDate,
-          directFlightDate: directFlight.date,
-        });
-
         // Only update if we have a selectedDate but no directFlight.date
         if (selectedDate && !directFlight.date) {
-          console.log('Found selectedDate:', selectedDate);
           const parsedDate = parseISO(selectedDate);
           if (isValid(parsedDate)) {
-            console.log('Parsed selectedDate is valid');
             // Set the time to noon to avoid timezone issues
             const normalizedDate = new Date(
               parsedDate.getFullYear(),
@@ -647,7 +640,6 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
               12
             );
 
-            console.log('Setting directFlight date to:', normalizedDate);
             // Update directFlight with the normalized date
             setDirectFlight({
               ...directFlight,
@@ -657,14 +649,12 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
         }
         // If we have a directFlight.date but no selectedDate
         else if (directFlight.date && !selectedDate) {
-          console.log('Found directFlight.date:', directFlight.date);
           const formattedDate = format(
             directFlight.date instanceof Date
               ? directFlight.date
               : new Date(directFlight.date),
             'yyyy-MM-dd'
           );
-          console.log('Setting selectedDate to:', formattedDate);
           setSelectedDate(formattedDate);
         }
       }
@@ -1359,13 +1349,17 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
     return [flightSegments[0]];
   }, [selectedType, flightSegments]);
 
-  // Add effect to maintain segment linking
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Consolidated effect to handle segment linking and initialization
   useEffect(() => {
-    if (selectedType !== 'multi') return;
+    // Skip if transitioning phases
+    if (isTransitioningPhases) return;
 
-    // Only initialize on mount when there are no segments
-    if (flightSegments.length === 0) {
+    // Handle initial state - only run once when component mounts
+    if (
+      selectedType === 'multi' &&
+      flightSegments.length === 0 &&
+      !isInitializing
+    ) {
       const initialSegments = [
         {
           fromLocation: null,
@@ -1384,45 +1378,59 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
       return;
     }
 
-    // Skip segment linking during type transitions
-    if (selectedType === 'multi' && flightSegments.length === 1) {
+    // Skip if initializing, not in multi-city mode, or if we don't have enough segments
+    if (
+      isInitializing ||
+      selectedType !== 'multi' ||
+      flightSegments.length < 2
+    ) {
       return;
     }
 
-    // Only update segments if there are actual changes needed
+    // Check if any segments need updating
     const needsUpdate = flightSegments.some((segment, index) => {
       if (index === 0) return false;
       const prevSegment = flightSegments[index - 1];
-      if (!prevSegment.selectedFlight) return false;
+      if (!prevSegment?.selectedFlight) return false;
 
-      const prevArrivalCity = prevSegment.selectedFlight.arrivalCity;
-      const currentFromCity = segment.fromLocation?.value;
-
-      return prevArrivalCity !== currentFromCity;
+      return (
+        !segment.fromLocation ||
+        segment.fromLocation.value !== prevSegment.selectedFlight.arrivalCity ||
+        segment.fromLocation.city !== prevSegment.selectedFlight.arrivalCity
+      );
     });
 
-    if (!needsUpdate) return;
+    // Only update if necessary
+    if (!needsUpdate) {
+      return;
+    }
 
-    // Update segment linking for existing segments
+    // Update segments that need linking
     const updatedSegments = flightSegments.map((segment, index) => {
-      if (index === 0 || !flightSegments[index - 1].selectedFlight) {
+      if (index === 0 || !flightSegments[index - 1]?.selectedFlight) {
         return segment;
       }
 
-      const previousFlight = flightSegments[index - 1].selectedFlight;
+      const prevSegment = flightSegments[index - 1];
+      const prevFlight = prevSegment.selectedFlight;
+
+      if (!prevFlight) {
+        return segment;
+      }
+
       if (
-        previousFlight &&
-        (!segment.fromLocation ||
-          segment.fromLocation.value !== previousFlight.arrivalCity)
+        !segment.fromLocation ||
+        segment.fromLocation.value !== prevFlight.arrivalCity ||
+        segment.fromLocation.city !== prevFlight.arrivalCity
       ) {
         return {
           ...segment,
           fromLocation: {
-            value: previousFlight.arrivalCity,
-            label: previousFlight.arrivalCity,
-            description: previousFlight.arrivalCity,
-            city: previousFlight.arrivalCity,
-            dropdownLabel: previousFlight.arrivalCity,
+            value: prevFlight.arrivalCity,
+            label: prevFlight.arrivalCity,
+            description: prevFlight.arrivalAirport,
+            city: prevFlight.arrivalCity,
+            dropdownLabel: `${prevFlight.arrivalAirport} (${prevFlight.arrivalCity})`,
           },
         };
       }
@@ -1431,7 +1439,13 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
     });
 
     setFlightSegments(updatedSegments);
-  }, [selectedType, flightSegments]);
+  }, [
+    selectedType,
+    flightSegments,
+    isInitializing,
+    isTransitioningPhases,
+    setFlightSegments,
+  ]);
 
   // Add a helper function to get current locations
   const getCurrentLocations = () => {
@@ -2415,7 +2429,6 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
     phase4Store,
     mainStore,
   ]);
-
   // Update loading check
   if (isInitializing && (currentPhase === 3 || currentPhase === 4)) {
     // Only show loading in phase 3 or 4

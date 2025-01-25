@@ -98,6 +98,16 @@ function ClaimSuccessContent() {
     });
 
     // Initialize claim details from URL parameters
+    console.log('Claim Success Details:', {
+      amount: searchParams?.get('amount'),
+      currency: searchParams?.get('currency'),
+      provision: searchParams?.get('provision'),
+      bookingRef: searchParams?.get('bookingRef'),
+      depAirport: searchParams?.get('depAirport'),
+      arrAirport: searchParams?.get('arrAirport'),
+      depTime: searchParams?.get('depTime'),
+    });
+
     const amount = searchParams?.get('amount');
     const currency = searchParams?.get('currency');
     const provision = searchParams?.get('provision');

@@ -3,7 +3,31 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   try {
     const data = await request.json();
-    console.log('Received order request:', JSON.stringify(data, null, 2));
+
+    // Log the full request details
+    console.log('=== ORDER CLAIM REQUEST DETAILS ===');
+    console.log('Booked Flights:', data.journey_booked_flightids);
+    console.log('Actual Flights:', data.journey_fact_flightids);
+    console.log('Journey Fact Type:', data.journey_fact_type);
+    console.log('Information Received At:', data.information_received_at);
+    console.log('PNR:', data.journey_booked_pnr);
+    console.log('Owner Details:', {
+      salutation: data.owner_salutation,
+      firstname: data.owner_firstname,
+      lastname: data.owner_lastname,
+      email: data.owner_email,
+      phone: data.owner_phone,
+      street: data.owner_street,
+      place: data.owner_place,
+      city: data.owner_city,
+      country: data.owner_country,
+    });
+    console.log('Marketing Status:', data.owner_marketable_status);
+    console.log('Contract Acceptance:', {
+      tac: data.contract_tac,
+      dp: data.contract_dp,
+    });
+    console.log('================================');
 
     // Validate required fields
     const requiredFields = [
@@ -95,7 +119,14 @@ export async function POST(request: Request) {
     );
 
     const responseText = await response.text();
-    console.log('Raw API response:', responseText);
+    console.log('=== ORDER CLAIM RESPONSE DETAILS ===');
+    console.log('Response Status:', response.status);
+    console.log(
+      'Response Headers:',
+      Object.fromEntries(response.headers.entries())
+    );
+    console.log('Raw Response:', responseText);
+    console.log('================================');
 
     if (!response.ok) {
       console.error('External API request failed:', {

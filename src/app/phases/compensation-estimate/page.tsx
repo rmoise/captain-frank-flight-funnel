@@ -110,50 +110,57 @@ export default function CompensationEstimatePage() {
       try {
         let flightData;
 
-        // First try to get flight data from selectedFlights
-        if (
-          selectedFlights?.length > 0 &&
-          selectedFlights.some((flight) => flight !== null)
-        ) {
-          const validFlights = selectedFlights.filter(
-            (flight) => flight !== null
-          );
-          flightData =
-            selectedType === 'direct'
-              ? validFlights[0]
-              : validFlights[validFlights.length - 1];
+        // For multi-segment flights, use first and last segments
+        if (selectedType === 'multi' && flightSegments?.length > 0) {
+          const firstSegment = flightSegments[0];
+          const lastSegment = flightSegments[flightSegments.length - 1];
+
+          // Get IATA codes from locations (they must be selected to get here)
+          const from_iata = firstSegment.fromLocation?.value;
+          const to_iata = lastSegment.toLocation?.value;
+
+          if (!from_iata || !to_iata) {
+            throw new Error('Missing IATA codes for compensation calculation');
+          }
+
+          flightData = {
+            departure: from_iata,
+            arrival: to_iata,
+          };
         }
-        // If no valid selectedFlights, use routeInfo
-        else if (routeInfo) {
+        // For direct flights, try selected flight first, then locations
+        else if (selectedType === 'direct') {
+          if (selectedFlights?.length > 0) {
+            const validFlights = selectedFlights.filter(
+              (flight) => flight !== null
+            );
+            if (validFlights.length > 0) {
+              flightData = validFlights[0];
+            }
+          }
+          // If no selected flight, try using locations from directFlight
+          else if (
+            directFlight?.fromLocation?.value &&
+            directFlight?.toLocation?.value
+          ) {
+            flightData = {
+              departure: directFlight.fromLocation.value,
+              arrival: directFlight.toLocation.value,
+            };
+          }
+        }
+        // If no valid data yet, use routeInfo as last resort
+        if (!flightData && routeInfo) {
           flightData = {
             departure: routeInfo.departure,
             arrival: routeInfo.arrival,
-            departureCity: routeInfo.departureCity,
-            arrivalCity: routeInfo.arrivalCity,
           };
         }
 
-        if (!flightData) {
-          throw new Error('No flight data available');
-        }
-
-        // Create a cache key based on the flight data
-        const cacheKey = `compensation_${flightData.departure}_${flightData.arrival}`;
-        const cachedData = localStorage.getItem(cacheKey);
-
-        // Check if we have valid cached data
-        if (cachedData) {
-          try {
-            const { amount, timestamp } = JSON.parse(cachedData);
-            // Cache is valid for 24 hours
-            if (Date.now() - timestamp < 24 * 60 * 60 * 1000) {
-              setCompensationAmount(amount);
-              setCompensationLoading(false);
-              return;
-            }
-          } catch (error) {
-            console.error('Error parsing cached compensation data:', error);
-          }
+        if (!flightData?.departure || !flightData?.arrival) {
+          throw new Error(
+            'Missing origin or destination for compensation calculation'
+          );
         }
 
         const queryParams = new URLSearchParams({
@@ -208,17 +215,9 @@ export default function CompensationEstimatePage() {
           },
         });
 
-        // Cache in localStorage with timestamp
-        localStorage.setItem(
-          cacheKey,
-          JSON.stringify({
-            amount: data.amount,
-            timestamp: Date.now(),
-          })
-        );
-
         setCompensationAmount(data.amount);
       } catch (error) {
+        console.error('Error calculating compensation:', error);
         setCompensationError(
           error instanceof Error
             ? error.message
@@ -229,10 +228,20 @@ export default function CompensationEstimatePage() {
       }
     };
 
-    // Call calculation if we have either selectedFlights or routeInfo
-    if (selectedFlights?.length > 0 || routeInfo) {
+    // Calculate compensation if we have enough data for either case
+    const hasMultiSegmentData =
+      selectedType === 'multi' &&
+      flightSegments?.length > 0 &&
+      flightSegments[0]?.fromLocation?.value &&
+      flightSegments[flightSegments.length - 1]?.toLocation?.value;
+
+    const hasDirectFlightData =
+      selectedType === 'direct' &&
+      ((selectedFlights?.length > 0 && selectedFlights[0] !== null) ||
+        (directFlight?.fromLocation?.value && directFlight?.toLocation?.value));
+
+    if (hasMultiSegmentData || hasDirectFlightData || routeInfo) {
       calculateCompensation();
-    } else {
     }
   }, [
     selectedFlights,

@@ -130,24 +130,46 @@ const initialState: Phase4State = {
   _lastUpdate: Date.now(),
 };
 
+// Add initialization state tracking
+const isInitializingPhase4Store = {
+  value: false,
+};
+
 // Initialize store with saved state if available
 const getInitialState = () => {
   if (typeof window === 'undefined') return initialState;
 
   try {
+    // Prevent multiple initializations
+    if (isInitializingPhase4Store.value) {
+      return initialState;
+    }
+
+    isInitializingPhase4Store.value = true;
+
     const savedValidationState = localStorage.getItem('phase4ValidationState');
     if (savedValidationState) {
-      const parsedState = JSON.parse(savedValidationState);
-      return {
-        ...initialState,
-        ...parsedState,
-      };
+      try {
+        const parsedState = JSON.parse(savedValidationState);
+        return {
+          ...initialState,
+          ...parsedState,
+          _lastUpdate: Date.now(),
+        };
+      } catch (error) {
+        console.error('Error parsing saved validation state:', error);
+      }
     }
   } catch (error) {
     console.error('Error loading saved validation state:', error);
+  } finally {
+    isInitializingPhase4Store.value = false;
   }
 
-  return initialState;
+  return {
+    ...initialState,
+    _lastUpdate: Date.now(),
+  };
 };
 
 export const usePhase4Store = create<Phase4State & Phase4Actions>()(

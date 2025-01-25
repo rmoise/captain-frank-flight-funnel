@@ -6,22 +6,17 @@ interface CompensationResult {
   reason: string;
 }
 
-export const calculateCompensation = (flight: Flight): CompensationResult => {
-  const baseAmount = getBaseCompensationAmount(flight);
+export const calculateCompensation = (
+  flights: Flight | Flight[]
+): CompensationResult => {
+  const flightArray = Array.isArray(flights) ? flights : [flights];
+  const firstFlight = flightArray[0];
 
   return {
-    amount: baseAmount,
+    amount: 0, // Will be set by API
     currency: 'EUR',
-    reason: getCompensationReason(flight),
+    reason: getCompensationReason(firstFlight),
   };
-};
-
-const getBaseCompensationAmount = (flight: Flight): number => {
-  const distance = flight.distance || 0;
-
-  if (distance <= 1500) return 250;
-  if (distance <= 3500) return 400;
-  return 600;
 };
 
 const getCompensationReason = (flight: Flight): string => {
