@@ -38,8 +38,10 @@ export default function TripExperiencePage() {
     travelStatusAnswers,
     informedDateAnswers,
     originalFlights,
-    stepValidation,
-    stepInteraction,
+    travelStatusStepValidation,
+    travelStatusStepInteraction,
+    informedDateStepValidation,
+    informedDateStepInteraction,
     setOriginalFlights,
   } = usePhase4Store();
 
@@ -75,11 +77,13 @@ export default function TripExperiencePage() {
   // Memoize validation states to prevent unnecessary re-renders
   const validationStates = useMemo(
     () => ({
-      isTripExperienceValid: stepValidation[2] || false,
-      isInformedDateValid: stepValidation[3] || false,
-      isFullyCompleted: (stepValidation[2] && stepValidation[3]) || false,
+      isTripExperienceValid: travelStatusStepValidation[2] || false,
+      isInformedDateValid: informedDateStepValidation[3] || false,
+      isFullyCompleted:
+        (travelStatusStepValidation[2] && informedDateStepValidation[3]) ||
+        false,
     }),
-    [stepValidation]
+    [travelStatusStepValidation, informedDateStepValidation]
   );
 
   const questions: Question[] = [
@@ -267,10 +271,16 @@ export default function TripExperiencePage() {
 
     // Update validation state on submit
     const newValidationState = {
-      stepValidation: {
-        ...store.stepValidation,
+      travelStatusStepValidation: {
+        ...store.travelStatusStepValidation,
         2: isStep2Valid,
       },
+      travelStatusStepInteraction: {
+        ...store.travelStatusStepInteraction,
+        2: true,
+      },
+      travelStatusShowingSuccess: isStep2Valid,
+      travelStatusIsValid: isStep2Valid,
       _lastUpdate: Date.now(),
     };
 
@@ -305,18 +315,32 @@ export default function TripExperiencePage() {
 
     // Update validation state on submit
     const newValidationState = {
-      stepValidation: {
-        ...store.stepValidation,
+      informedDateStepValidation: {
+        ...store.informedDateStepValidation,
         3: isStep3Valid,
       },
-      stepInteraction: {
-        ...store.stepInteraction,
+      informedDateStepInteraction: {
+        ...store.informedDateStepInteraction,
         3: true,
       },
+      informedDateShowingSuccess: isStep3Valid,
+      informedDateIsValid: isStep3Valid,
       _lastUpdate: Date.now(),
     };
 
     store.updateValidationState(newValidationState);
+
+    // Log the updated state
+    console.log('=== TripExperiencePage - handleInformedDateComplete ===', {
+      isStep3Valid,
+      newValidationState,
+      currentState: {
+        informedDateShowingSuccess: store.informedDateShowingSuccess,
+        informedDateIsValid: store.informedDateIsValid,
+        informedDateStepValidation: store.informedDateStepValidation,
+        informedDateStepInteraction: store.informedDateStepInteraction,
+      },
+    });
   }, []);
 
   // Initialize state only once
@@ -336,8 +360,8 @@ export default function TripExperiencePage() {
       if (!hasAnswers) {
         // Only update interaction state if no answers exist
         const newValidationState = {
-          stepInteraction: {
-            ...store.stepInteraction,
+          travelStatusStepInteraction: {
+            ...store.travelStatusStepInteraction,
             2: false,
             3: false,
           },
@@ -398,14 +422,15 @@ export default function TripExperiencePage() {
     (currentStepId: string) => {
       console.log('TripExperience - handleAutoTransition:', {
         currentStepId,
-        stepValidation,
+        travelStatusStepValidation,
+        informedDateStepValidation,
         validationStates,
       });
 
       // If we're on step 2 (trip experience) and it's valid, go to step 3 (informed date)
       if (
         currentStepId === '2' &&
-        stepValidation[2] &&
+        travelStatusStepValidation[2] &&
         validationStates.isTripExperienceValid &&
         !validationStates.isFullyCompleted
       ) {
@@ -415,7 +440,7 @@ export default function TripExperiencePage() {
       // If we're on step 3 (informed date) and it's valid, we're done
       if (
         currentStepId === '3' &&
-        stepValidation[3] &&
+        informedDateStepValidation[3] &&
         validationStates.isInformedDateValid
       ) {
         return null;
@@ -423,17 +448,21 @@ export default function TripExperiencePage() {
 
       return null;
     },
-    [stepValidation, validationStates]
+    [travelStatusStepValidation, validationStates]
   );
 
   // Add logging to track validation state updates
   useEffect(() => {
     console.log('Validation states updated:', {
       validationStates,
-      stepValidation,
-      stepInteraction,
+      travelStatusStepValidation,
+      travelStatusStepInteraction,
     });
-  }, [validationStates, stepValidation, stepInteraction]);
+  }, [
+    validationStates,
+    travelStatusStepValidation,
+    travelStatusStepInteraction,
+  ]);
 
   // Check if we can continue
   const canContinue = useCallback(() => {
@@ -449,8 +478,8 @@ export default function TripExperiencePage() {
     localStorage.setItem(
       'phase4ValidationState',
       JSON.stringify({
-        stepValidation,
-        stepInteraction,
+        travelStatusStepValidation,
+        travelStatusStepInteraction,
       })
     );
     router.replace(getLanguageAwareUrl(previousUrl, lang));
@@ -505,7 +534,7 @@ export default function TripExperiencePage() {
       console.log('Raw informed date answers:', {
         allAnswers: informedDateAnswers,
         informedDateAnswer,
-        validationState: stepValidation,
+        validationState: informedDateStepValidation,
         isValid: validationStates.isInformedDateValid,
       });
 
@@ -823,8 +852,8 @@ export default function TripExperiencePage() {
               <AccordionCard
                 title={t.phases.tripExperience.steps.travelStatus.title}
                 stepId="2"
-                isCompleted={stepValidation[2]}
-                hasInteracted={stepInteraction[2]}
+                isCompleted={travelStatusStepValidation[2]}
+                hasInteracted={travelStatusStepInteraction[2]}
                 isValid={validationStates.isTripExperienceValid}
                 summary={getTripExperienceSummary}
                 eyebrow={t.phases.tripExperience.steps.travelStatus.eyebrow}
@@ -839,8 +868,8 @@ export default function TripExperiencePage() {
               <AccordionCard
                 title={t.phases.tripExperience.steps.informedDate.title}
                 stepId="3"
-                isCompleted={stepValidation[3]}
-                hasInteracted={stepInteraction[3]}
+                isCompleted={informedDateStepValidation[3]}
+                hasInteracted={informedDateStepInteraction[3]}
                 isValid={validationStates.isInformedDateValid}
                 summary={getInformedDateSummary}
                 eyebrow={t.phases.tripExperience.steps.informedDate.eyebrow}

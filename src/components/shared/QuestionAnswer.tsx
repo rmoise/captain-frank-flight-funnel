@@ -134,31 +134,23 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
                           ? 'border-[#F54538] bg-[#FEF2F2]'
                           : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                       }`}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (option.externalLink) {
-                        window.open(option.externalLink, '_blank');
-                        return;
-                      }
-                      onSelect(question.id, option.value);
-                    }}
                   >
                     <input
                       type="radio"
                       name={question.id}
                       value={option.value}
                       checked={isSelected}
-                      onChange={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
+                      onChange={() => {
+                        // Handle external links separately
                         if (option.externalLink) {
                           window.open(option.externalLink, '_blank');
                           return;
                         }
+
+                        // Call onSelect directly
                         onSelect(question.id, option.value);
                       }}
-                      className="w-4 h-4 border-gray-300 text-[#F54538] focus:ring-[#F54538] focus:ring-offset-0 accent-[#F54538]"
+                      className="w-4 h-4 border border-gray-300 text-[#F54538] focus:ring-[#F54538] focus:ring-offset-0 accent-[#F54538]"
                     />
                     <span className="ml-3 text-base text-gray-900 flex-grow">
                       {option.label}

@@ -11,6 +11,7 @@ export type Phase4FlightSegment = {
 };
 
 export interface Phase4State {
+  // Flight selection state
   selectedType: 'direct' | 'multi';
   directFlight: Phase4FlightSegment;
   flightSegments: Phase4FlightSegment[];
@@ -30,17 +31,26 @@ export interface Phase4State {
   loading: boolean;
   errorMessage: string | null;
   errorMessages: Record<string, string>;
+
+  // Travel Status QA state
   travelStatusAnswers: Answer[];
+  travelStatusCurrentStep: number;
+  travelStatusShowingSuccess: boolean;
+  travelStatusIsValid: boolean;
+  travelStatusStepValidation: Record<number, boolean>;
+  travelStatusStepInteraction: Record<number, boolean>;
+
+  // Informed Date QA state
   informedDateAnswers: Answer[];
+  informedDateCurrentStep: number;
+  informedDateShowingSuccess: boolean;
+  informedDateIsValid: boolean;
+  informedDateStepValidation: Record<number, boolean>;
+  informedDateStepInteraction: Record<number, boolean>;
+
+  // Shared state
   lastAnsweredQuestion: string | null;
-  stepValidation: Record<number, boolean>;
-  stepInteraction: Record<number, boolean>;
   fieldErrors: Record<string, string>;
-  wizardCurrentStep: number;
-  wizardShowingSuccess: boolean;
-  wizardIsValid: boolean;
-  isWizardValid: boolean;
-  isWizardSubmitted: boolean;
   _lastUpdate: number;
 }
 
@@ -67,9 +77,12 @@ interface Phase4Actions {
   setWizardAnswer: (answer: Answer) => void;
   updateValidationState: (state: Partial<Phase4State>) => void;
   setWizardCurrentStep: (step: number) => void;
+  resetTravelStatusState: () => void;
+  resetInformedDateState: () => void;
 }
 
 const initialState: Phase4State = {
+  // Flight selection initial state
   selectedType: 'direct',
   directFlight: {
     fromLocation: null,
@@ -94,17 +107,26 @@ const initialState: Phase4State = {
   loading: false,
   errorMessage: null,
   errorMessages: {},
+
+  // Travel Status QA initial state
   travelStatusAnswers: [],
+  travelStatusCurrentStep: 0,
+  travelStatusShowingSuccess: false,
+  travelStatusIsValid: false,
+  travelStatusStepValidation: {},
+  travelStatusStepInteraction: {},
+
+  // Informed Date QA initial state
   informedDateAnswers: [],
+  informedDateCurrentStep: 0,
+  informedDateShowingSuccess: false,
+  informedDateIsValid: false,
+  informedDateStepValidation: {},
+  informedDateStepInteraction: {},
+
+  // Shared initial state
   lastAnsweredQuestion: null,
-  stepValidation: {},
-  stepInteraction: {},
   fieldErrors: {},
-  wizardCurrentStep: 0,
-  wizardShowingSuccess: false,
-  wizardIsValid: false,
-  isWizardValid: false,
-  isWizardSubmitted: false,
   _lastUpdate: Date.now(),
 };
 
@@ -290,13 +312,20 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
 
           // Only update step interaction state, not validation
           if (isAlternativeFlight) {
-            set((state) => ({
-              ...state,
-              stepInteraction: {
-                ...state.stepInteraction,
-                2: true, // Mark that user has interacted with step 2
-              },
-            }));
+            set((state) => {
+              // Initialize step interaction state if it doesn't exist
+              const currentStepInteraction =
+                state.travelStatusStepInteraction || {};
+
+              return {
+                ...state,
+                travelStatusStepInteraction: {
+                  ...currentStepInteraction,
+                  2: true,
+                },
+                _lastUpdate: Date.now(),
+              };
+            });
           }
         }
       },
@@ -400,13 +429,51 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
           _lastUpdate: Date.now(),
         })),
       resetStore: () => {
-        console.log('=== Phase4Store - resetStore ===');
-        set(() => {
+        console.log('=== Phase4Store - resetStore ENTRY ===', {
+          currentState: get(),
+          wizardType: get().lastAnsweredQuestion?.includes('informed_date')
+            ? 'informed_date'
+            : 'travel_status',
+        });
+
+        set((state) => {
+          // Determine which QA to reset based on the last answered question
+          const isInformedDate =
+            state.lastAnsweredQuestion?.includes('informed_date');
+
+          // Only reset the specific QA's state
           const newState = {
-            ...initialState,
+            ...state,
+            ...(isInformedDate
+              ? {
+                  // Reset only informed date state
+                  informedDateAnswers: [],
+                  informedDateCurrentStep: 0,
+                  informedDateShowingSuccess: false,
+                  informedDateIsValid: false,
+                  informedDateStepValidation: {},
+                  informedDateStepInteraction: {},
+                }
+              : {
+                  // Reset only travel status state
+                  travelStatusAnswers: [],
+                  travelStatusCurrentStep: 0,
+                  travelStatusShowingSuccess: false,
+                  travelStatusIsValid: false,
+                  travelStatusStepValidation: {},
+                  travelStatusStepInteraction: {},
+                }),
+            lastAnsweredQuestion: null,
             _lastUpdate: Date.now(),
           };
-          console.log('Store reset to initial state');
+
+          console.log('=== Phase4Store - resetStore EXIT ===', {
+            newState,
+            isInformedDate,
+            travelStatusAnswers: newState.travelStatusAnswers,
+            informedDateAnswers: newState.informedDateAnswers,
+          });
+
           return newState;
         });
       },
@@ -423,7 +490,7 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
           answer.questionId === 'specific_informed_date';
 
         if (isInformedDateQuestion) {
-          // Handle informed date answers
+          // Handle informed date answers independently
           const currentAnswers = get().informedDateAnswers;
           const answerIndex = currentAnswers.findIndex(
             (a) => a.questionId === answer.questionId
@@ -440,13 +507,7 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
             newAnswers = [...currentAnswers, answer];
           }
 
-          console.log('=== Phase4Store - New Informed Date Answers ===', {
-            newAnswers,
-            answerIndex,
-            isUpdate: answerIndex >= 0,
-          });
-
-          // Only update answers, no validation or auto-transition
+          // Only update informed date state
           set((state) => ({
             ...state,
             informedDateAnswers: newAnswers,
@@ -454,7 +515,7 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
             _lastUpdate: Date.now(),
           }));
         } else {
-          // Handle travel status answers
+          // Handle travel status answers independently
           const currentAnswers = get().travelStatusAnswers;
           const answerIndex = currentAnswers.findIndex(
             (a) => a.questionId === answer.questionId
@@ -471,13 +532,7 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
             newAnswers = [...currentAnswers, answer];
           }
 
-          console.log('=== Phase4Store - New Travel Status Answers ===', {
-            newAnswers,
-            answerIndex,
-            isUpdate: answerIndex >= 0,
-          });
-
-          // Only update answers, no validation or auto-transition
+          // Only update travel status state
           set((state) => ({
             ...state,
             travelStatusAnswers: newAnswers,
@@ -486,44 +541,95 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
           }));
         }
 
-        console.log('=== Phase4Store - After setWizardAnswer ===', {
+        console.log('=== Phase4Store - setWizardAnswer EXIT ===', {
           updatedTravelAnswers: get().travelStatusAnswers,
           updatedInformedAnswers: get().informedDateAnswers,
           lastAnsweredQuestion: get().lastAnsweredQuestion,
         });
       },
       updateValidationState: (newState) => {
-        // Skip update if no validation state changes
-        if (
-          !newState.stepValidation &&
-          !newState.stepInteraction &&
-          !newState.wizardShowingSuccess &&
-          !newState.wizardIsValid &&
-          !newState.isWizardValid &&
-          !newState.isWizardSubmitted &&
-          !newState.lastAnsweredQuestion
-        ) {
-          return;
-        }
-
+        // Handle travel status and informed date validation states separately
         set((state) => {
-          // Only include fields that have actually changed
           const updates: Partial<Phase4State> = {};
 
-          if (newState.stepValidation)
-            updates.stepValidation = newState.stepValidation;
-          if (newState.stepInteraction)
-            updates.stepInteraction = newState.stepInteraction;
-          if (typeof newState.wizardShowingSuccess === 'boolean')
-            updates.wizardShowingSuccess = newState.wizardShowingSuccess;
-          if (typeof newState.wizardIsValid === 'boolean')
-            updates.wizardIsValid = newState.wizardIsValid;
-          if (typeof newState.isWizardValid === 'boolean')
-            updates.isWizardValid = newState.isWizardValid;
-          if (typeof newState.isWizardSubmitted === 'boolean')
-            updates.isWizardSubmitted = newState.isWizardSubmitted;
-          if (newState.lastAnsweredQuestion !== undefined)
+          // Only update travel status validation if provided
+          if (
+            newState.travelStatusStepValidation ||
+            newState.travelStatusStepInteraction ||
+            typeof newState.travelStatusShowingSuccess === 'boolean' ||
+            typeof newState.travelStatusIsValid === 'boolean' ||
+            Array.isArray(newState.travelStatusAnswers)
+          ) {
+            if (newState.travelStatusStepValidation)
+              updates.travelStatusStepValidation = {
+                ...state.travelStatusStepValidation,
+                ...newState.travelStatusStepValidation,
+              };
+            if (newState.travelStatusStepInteraction)
+              updates.travelStatusStepInteraction = {
+                ...state.travelStatusStepInteraction,
+                ...newState.travelStatusStepInteraction,
+              };
+            if (typeof newState.travelStatusShowingSuccess === 'boolean')
+              updates.travelStatusShowingSuccess =
+                newState.travelStatusShowingSuccess;
+            if (typeof newState.travelStatusIsValid === 'boolean')
+              updates.travelStatusIsValid = newState.travelStatusIsValid;
+            if (Array.isArray(newState.travelStatusAnswers))
+              updates.travelStatusAnswers = newState.travelStatusAnswers;
+          }
+
+          // Only update informed date validation if provided
+          if (
+            newState.informedDateStepValidation ||
+            newState.informedDateStepInteraction ||
+            typeof newState.informedDateShowingSuccess === 'boolean' ||
+            typeof newState.informedDateIsValid === 'boolean' ||
+            Array.isArray(newState.informedDateAnswers)
+          ) {
+            if (newState.informedDateStepValidation)
+              updates.informedDateStepValidation = {
+                ...state.informedDateStepValidation,
+                ...newState.informedDateStepValidation,
+              };
+            if (newState.informedDateStepInteraction)
+              updates.informedDateStepInteraction = {
+                ...state.informedDateStepInteraction,
+                ...newState.informedDateStepInteraction,
+              };
+            if (typeof newState.informedDateShowingSuccess === 'boolean')
+              updates.informedDateShowingSuccess =
+                newState.informedDateShowingSuccess;
+            if (typeof newState.informedDateIsValid === 'boolean')
+              updates.informedDateIsValid = newState.informedDateIsValid;
+            if (Array.isArray(newState.informedDateAnswers))
+              updates.informedDateAnswers = newState.informedDateAnswers;
+          }
+
+          // Update lastAnsweredQuestion if provided
+          if (newState.lastAnsweredQuestion !== undefined) {
             updates.lastAnsweredQuestion = newState.lastAnsweredQuestion;
+          }
+
+          console.log('=== Phase4Store - Updating validation state ===', {
+            currentState: {
+              travelStatus: {
+                showingSuccess: state.travelStatusShowingSuccess,
+                isValid: state.travelStatusIsValid,
+                stepValidation: state.travelStatusStepValidation,
+                stepInteraction: state.travelStatusStepInteraction,
+                answers: state.travelStatusAnswers,
+              },
+              informedDate: {
+                showingSuccess: state.informedDateShowingSuccess,
+                isValid: state.informedDateIsValid,
+                stepValidation: state.informedDateStepValidation,
+                stepInteraction: state.informedDateStepInteraction,
+                answers: state.informedDateAnswers,
+              },
+            },
+            updates,
+          });
 
           return {
             ...state,
@@ -536,7 +642,10 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
         console.log('=== Phase4Store - setWizardCurrentStep ===', { step });
 
         // Skip if step hasn't changed
-        if (get().wizardCurrentStep === step) {
+        if (
+          get().travelStatusCurrentStep === step &&
+          get().informedDateCurrentStep === step
+        ) {
           return;
         }
 
@@ -545,20 +654,24 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
           if (step === 0) {
             return {
               ...state,
-              wizardCurrentStep: 0,
-              stepValidation: {},
-              stepInteraction: {},
-              wizardShowingSuccess: false,
-              wizardIsValid: false,
-              isWizardValid: false,
-              isWizardSubmitted: false,
+              travelStatusCurrentStep: 0,
+              travelStatusStepValidation: {},
+              travelStatusStepInteraction: {},
+              travelStatusShowingSuccess: false,
+              travelStatusIsValid: false,
+              informedDateCurrentStep: 0,
+              informedDateStepValidation: {},
+              informedDateStepInteraction: {},
+              informedDateShowingSuccess: false,
+              informedDateIsValid: false,
               _lastUpdate: Date.now(),
             };
           }
 
           return {
             ...state,
-            wizardCurrentStep: step,
+            travelStatusCurrentStep: step,
+            informedDateCurrentStep: step,
             _lastUpdate: Date.now(),
           };
         });
@@ -571,20 +684,24 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
           console.log('=== Phase4Store - Restoring wizard state ===', {
             travelStatusAnswers: state.travelStatusAnswers,
             informedDateAnswers: state.informedDateAnswers,
-            wizardShowingSuccess: state.wizardShowingSuccess,
-            wizardIsValid: state.wizardIsValid,
-            isWizardValid: state.isWizardValid,
-            isWizardSubmitted: state.isWizardSubmitted,
+            wizardShowingSuccess: state.travelStatusShowingSuccess,
+            wizardIsValid: state.travelStatusIsValid,
+            isWizardValid: state.travelStatusIsValid,
+            isWizardSubmitted: state.travelStatusAnswers.some(
+              (a) => a.questionId === state.lastAnsweredQuestion
+            ),
           });
 
           set((currentState) => ({
             ...currentState,
             travelStatusAnswers: state.travelStatusAnswers || [],
             informedDateAnswers: state.informedDateAnswers || [],
-            wizardShowingSuccess: state.wizardShowingSuccess || false,
-            wizardIsValid: state.wizardIsValid || false,
-            isWizardValid: state.isWizardValid || false,
-            isWizardSubmitted: state.isWizardSubmitted || false,
+            travelStatusShowingSuccess:
+              state.travelStatusShowingSuccess || false,
+            travelStatusIsValid: state.travelStatusIsValid || false,
+            informedDateShowingSuccess:
+              state.informedDateShowingSuccess || false,
+            informedDateIsValid: state.informedDateIsValid || false,
             _lastUpdate: Date.now(),
           }));
         }
@@ -624,6 +741,34 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
             _lastUpdate: Date.now(),
           }));
         }
+      },
+      resetTravelStatusState: () => {
+        console.log('=== Phase4Store - resetTravelStatusState ENTRY ===');
+        set((state) => ({
+          ...state,
+          travelStatusAnswers: [],
+          travelStatusCurrentStep: 0,
+          travelStatusShowingSuccess: false,
+          travelStatusIsValid: false,
+          travelStatusStepValidation: {},
+          travelStatusStepInteraction: {},
+          lastAnsweredQuestion: null,
+          _lastUpdate: Date.now(),
+        }));
+      },
+      resetInformedDateState: () => {
+        console.log('=== Phase4Store - resetInformedDateState ENTRY ===');
+        set((state) => ({
+          ...state,
+          informedDateAnswers: [],
+          informedDateCurrentStep: 0,
+          informedDateShowingSuccess: false,
+          informedDateIsValid: false,
+          informedDateStepValidation: {},
+          informedDateStepInteraction: {},
+          lastAnsweredQuestion: null,
+          _lastUpdate: Date.now(),
+        }));
       },
     }),
     {
