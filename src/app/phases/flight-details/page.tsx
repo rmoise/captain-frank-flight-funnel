@@ -14,6 +14,7 @@ import { PhaseNavigation } from '@/components/PhaseNavigation';
 import { XMarkIcon } from '@heroicons/react/20/solid';
 import { accordionConfig } from '@/config/accordion';
 import { AccordionProvider } from '@/components/shared/AccordionContext';
+import { usePhase4Store } from '@/lib/state/phase4Store';
 
 export default function FlightDetailsPage() {
   const router = useRouter();
@@ -41,16 +42,20 @@ export default function FlightDetailsPage() {
   // Initialize component
   useEffect(() => {
     if (!mounted) {
+      console.log('=== Flight Details Page Initialization ===', {
+        storedBookingNumber,
+        selectedFlights: selectedFlights.length,
+      });
+
       setMounted(true);
       setCurrentPhase(3);
 
-      // Set local booking number if not already set
-      if (!bookingNumber) {
-        setLocalBookingNumber(storedBookingNumber || '');
-      }
+      // Set local booking number from store
+      const bookingNumberToUse = storedBookingNumber || '';
+      setLocalBookingNumber(bookingNumberToUse);
 
       // Check if this is actually first visit by looking at store state
-      const hasExistingData = selectedFlights.length > 0 || storedBookingNumber;
+      const hasExistingData = selectedFlights.length > 0 || bookingNumberToUse;
       setIsFirstVisit(!hasExistingData);
 
       // Get the last active accordion from session storage
@@ -61,14 +66,58 @@ export default function FlightDetailsPage() {
 
       // Initialize open steps
       setOpenSteps(['flight-selection']);
+
+      // Initialize validation state
+      const isBookingValid =
+        bookingNumberToUse.trim().length >= 6 &&
+        /^[A-Z0-9]+$/i.test(bookingNumberToUse.trim());
+
+      // Check if flights are valid - must have all required fields
+      const isFlightValid =
+        selectedFlights.length > 0 &&
+        selectedFlights.every(
+          (flight) =>
+            flight.airline &&
+            flight.flightNumber &&
+            flight.departureCity &&
+            flight.arrivalCity &&
+            flight.date
+        );
+
+      // Update validation state with both flight and booking validation
+      updateValidationState({
+        stepValidation: {
+          ...validationState.stepValidation,
+          1: isFlightValid,
+          2: isBookingValid,
+        },
+        stepInteraction: {
+          ...validationState.stepInteraction,
+          1: selectedFlights.length > 0,
+          2: bookingNumberToUse.length > 0,
+        },
+        1: isFlightValid,
+        2: isBookingValid,
+        _timestamp: Date.now(),
+      });
+
+      console.log('Validation state initialized:', {
+        isFlightValid,
+        isBookingValid,
+        selectedFlights: selectedFlights.length,
+        bookingNumber: bookingNumberToUse.length,
+      });
+
+      console.log('=== End Flight Details Page Initialization ===');
     }
   }, [
     mounted,
-    setCurrentPhase,
     selectedFlights,
     storedBookingNumber,
-    bookingNumber,
-  ]);
+    validationState.stepValidation,
+    validationState.stepInteraction,
+    updateValidationState,
+  ]); // Add required dependencies
 
   // Add effect to handle auto-opening of step 2
   useEffect(() => {
@@ -131,6 +180,10 @@ export default function FlightDetailsPage() {
       completePhase(3);
       setCurrentPhase(4);
 
+      // Transfer Phase 3's selected flights to Phase 4's original flights
+      const phase4Store = usePhase4Store.getState();
+      phase4Store.setOriginalFlights(selectedFlights);
+
       // Reset validation states for phase 4
       updateValidationState({
         stepValidation: {
@@ -164,6 +217,7 @@ export default function FlightDetailsPage() {
     updateValidationState,
     validationState,
     lang,
+    selectedFlights,
   ]);
 
   const handleInteraction = useCallback(
@@ -182,62 +236,6 @@ export default function FlightDetailsPage() {
     // Then navigate to the previous URL with language parameter
     router.push(getLanguageAwareUrl(previousUrl, lang));
   };
-
-  // Add effect to initialize validation state
-  useEffect(() => {
-    console.log('=== Flight Details Page Initialization ===');
-
-    // Initialize validation state on mount only
-    if (!mounted) {
-      const isFlightValid = selectedFlights.length > 0;
-      const isBookingValid =
-        bookingNumber.trim().length >= 6 &&
-        /^[A-Z0-9]+$/i.test(bookingNumber.trim());
-
-      // Preserve existing validation state for other steps
-      const existingValidationState = { ...validationState };
-
-      // Only update if validation state has actually changed
-      if (
-        existingValidationState.stepValidation[1] !== isFlightValid ||
-        existingValidationState.stepValidation[2] !== isBookingValid
-      ) {
-        // Ensure dates are properly parsed before validation
-        updateValidationState({
-          ...existingValidationState,
-          stepValidation: {
-            ...existingValidationState.stepValidation,
-            1: isFlightValid,
-            2: isBookingValid,
-          },
-          stepInteraction: {
-            ...existingValidationState.stepInteraction,
-            1: selectedFlights.length > 0,
-            2: bookingNumber.trim().length > 0,
-          },
-          1: isFlightValid,
-          2: isBookingValid,
-          isFlightValid,
-          _timestamp: Date.now(),
-        });
-
-        console.log('Validation state initialized:', {
-          isFlightValid,
-          isBookingValid,
-          selectedFlights: selectedFlights.length,
-          bookingNumber: bookingNumber.length,
-        });
-      }
-    }
-
-    console.log('=== End Flight Details Page Initialization ===');
-  }, [
-    mounted,
-    selectedFlights,
-    bookingNumber,
-    validationState,
-    updateValidationState,
-  ]);
 
   if (!mounted) {
     return null;

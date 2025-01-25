@@ -57,12 +57,17 @@ const handler: Handler = async (event: HandlerEvent) => {
     }
 
     // Validate journey_fact_type
-    const validJourneyFactTypes = ['none', 'self', 'provided'];
+    const validJourneyFactTypes = [
+      'none',
+      'self',
+      'provided',
+      'took_alternative_own',
+    ];
     if (!validJourneyFactTypes.includes(requestBody.journey_fact_type)) {
       return {
         statusCode: 400,
         body: JSON.stringify({
-          error: 'Invalid journey_fact_type',
+          error: `Invalid journey_fact_type: ${requestBody.journey_fact_type}. Valid values are: ${validJourneyFactTypes.join(', ')}`,
           valid_values: validJourneyFactTypes,
           status: 'error',
         }),
@@ -93,10 +98,6 @@ const handler: Handler = async (event: HandlerEvent) => {
     const apiUrl = `${API_BASE_URL}/ordereuflightclaim`;
     console.log('Making request to:', apiUrl);
 
-    // Generate UUIDs if not provided
-    const guid = requestBody.guid || uuidv4();
-    const recommendation_guid = requestBody.recommendation_guid || uuidv4();
-
     const apiRequestBody = {
       ...requestBody,
       journey_booked_flightids,
@@ -105,8 +106,6 @@ const handler: Handler = async (event: HandlerEvent) => {
       owner_marketable_status: Boolean(requestBody.owner_marketable_status),
       contract_tac: Boolean(requestBody.contract_tac),
       contract_dp: Boolean(requestBody.contract_dp),
-      guid,
-      recommendation_guid,
       lang: 'en',
     };
 

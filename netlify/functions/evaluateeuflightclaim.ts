@@ -1,5 +1,5 @@
 import { Handler, HandlerEvent } from '@netlify/functions';
-import { EvaluationResult } from './types';
+import { EvaluationResult, EvaluationRequest } from './types';
 
 const API_BASE_URL =
   'https://secure.captain-frank.net/api/services/euflightclaim';
@@ -20,22 +20,40 @@ const handler: Handler = async (event: HandlerEvent) => {
   }
 
   try {
-    const requestBody = JSON.parse(event.body);
+    const requestBody = JSON.parse(event.body) as EvaluationRequest;
     console.log('Raw request received:', JSON.stringify(requestBody, null, 2));
 
-    // Validate required fields
-    const requiredFields = [
-      'journey_booked_flightids',
-      'information_received_at',
-    ];
+    // Type-safe validation of required fields
+    if (
+      !requestBody.journey_booked_flightids ||
+      !requestBody.information_received_at ||
+      !requestBody.journey_fact_type
+    ) {
+      const missingFields = [];
+      if (!requestBody.journey_booked_flightids)
+        missingFields.push('journey_booked_flightids');
+      if (!requestBody.information_received_at)
+        missingFields.push('information_received_at');
+      if (!requestBody.journey_fact_type)
+        missingFields.push('journey_fact_type');
 
-    const missingFields = requiredFields.filter((field) => !requestBody[field]);
-    if (missingFields.length > 0) {
       console.error('Missing required fields:', missingFields);
       return {
         statusCode: 400,
         body: JSON.stringify({
           error: `Missing required fields: ${missingFields.join(', ')}`,
+          status: 'error',
+        }),
+      };
+    }
+
+    // Validate journey_fact_type
+    if (!['none', 'self', 'provided'].includes(requestBody.journey_fact_type)) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          error: 'Invalid journey_fact_type',
+          valid_values: ['none', 'self', 'provided'],
           status: 'error',
         }),
       };
@@ -59,11 +77,9 @@ const handler: Handler = async (event: HandlerEvent) => {
     // Prepare request body according to API documentation
     const apiRequestBody = {
       journey_booked_flightids: requestBody.journey_booked_flightids,
-      journey_fact_flightids:
-        requestBody.travel_status === 'took_booked'
-          ? []
-          : requestBody.journey_fact_flightids || [], // Empty array if took booked flights
+      journey_fact_flightids: requestBody.journey_fact_flightids || [],
       information_received_at: requestBody.information_received_at,
+      journey_fact_type: requestBody.journey_fact_type,
       lang: 'en',
     };
 
@@ -74,7 +90,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     console.log('Journey comparison:', {
       booked: requestBody.journey_booked_flightids,
       fact: requestBody.journey_fact_flightids,
-      travel_status: requestBody.travel_status,
+      journey_fact_type: requestBody.journey_fact_type,
     });
 
     const response = await fetch(apiUrl, {
@@ -126,11 +142,12 @@ const handler: Handler = async (event: HandlerEvent) => {
       };
     }
 
-    // Extract the actual data from the response
-    const evaluationResult: EvaluationResult = result.data;
+    // Extract the evaluation result from the wrapped response
+    const evaluationResult = result.data;
 
     // Validate response format according to API documentation
     if (
+      !evaluationResult ||
       !evaluationResult.status ||
       !['accept', 'reject'].includes(evaluationResult.status)
     ) {
@@ -139,32 +156,25 @@ const handler: Handler = async (event: HandlerEvent) => {
         statusCode: 500,
         body: JSON.stringify({
           error: 'Ungültiges Antwortformat von der API',
-          expected: { status: "'accept' | 'reject'", contract: 'optional' },
-          received: evaluationResult,
+          expected: {
+            data: {
+              status: "'accept' | 'reject'",
+              contract: 'optional',
+              rejection_reasons: 'optional',
+            },
+          },
+          received: result,
         }),
       };
     }
 
-    // Format response according to API documentation
-    const formattedResponse = {
-      status: evaluationResult.status,
-      ...(evaluationResult.contract && {
-        contract: {
-          amount: evaluationResult.contract.amount,
-          provision: evaluationResult.contract.provision,
-        },
-      }),
-      ...(evaluationResult.rejection_reasons && {
-        rejection_reasons: evaluationResult.rejection_reasons,
-      }),
-    };
-
+    // Return the response in the format expected by the API documentation
     return {
       statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(formattedResponse),
+      body: JSON.stringify(result),
     };
   } catch (error) {
     console.error('Error evaluating EU flight claim:', error);

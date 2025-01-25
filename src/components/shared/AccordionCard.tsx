@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
 import { CheckCircleIcon } from '@heroicons/react/24/outline';
 import { useAccordion } from './AccordionContext';
@@ -48,13 +48,7 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
     isManualTransition,
   } = useAccordion();
 
-  // Track if we're waiting for validation
-  // isValidating is kept as part of the validation state management pattern
-  /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
-  const [isValidating, setIsValidating] = useState(false);
-  const validationTimer = React.useRef<NodeJS.Timeout>();
-  const isValidatingRef = React.useRef(false);
-  const wasValidRef = React.useRef(isValid);
+  // Track manual transitions
   const wasManualRef = React.useRef(false);
   const defaultOpenHandledRef = React.useRef(false);
 
@@ -88,106 +82,24 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
     isManualTransition,
   ]);
 
-  // Track previous validity state and handle auto-transition
+  // Handle auto-transition when step becomes valid and completed
   useEffect(() => {
-    // Skip if not mounted yet
-    if (!isInitialLoad.current) {
-      isInitialLoad.current = true;
-      return;
-    }
+    if (!isValid || !isCompleted) return;
+    if (!activeAccordion || activeAccordion !== stepId) return;
+    if (wasManualRef.current || shouldStayOpen) return;
 
-    // Only start validation if the step is valid and completed
-    if (isValid && isCompleted) {
-      // Skip validation for flight selector during type changes
-      const isFlightSelector =
-        stepId === '2' && title.toLowerCase().includes('flug');
-      const isCompletedStep = isValid && isCompleted;
+    const isFlightSelector =
+      stepId === '2' && title.toLowerCase().includes('flug');
+    if (isFlightSelector && !isCompleted) return;
 
-      // Skip auto-transition for flight selector unless completed
-      if (isFlightSelector && !isCompletedStep) {
-        console.log(
-          'AccordionCard - Skipping validation for flight selector during type change'
-        );
-        return;
+    const delay = isQA ? 2000 : 1000;
+    const timer = setTimeout(() => {
+      if (activeAccordion === stepId) {
+        autoTransition(stepId, true, isQA);
       }
+    }, delay);
 
-      console.log('AccordionCard - Step is valid and completed:', {
-        stepId,
-        wasManual: wasManualRef.current,
-        isInitialLoad: isInitialLoad.current,
-        activeAccordion,
-        isQA,
-      });
-
-      // If this is the active accordion and not a manual transition
-      if (
-        activeAccordion === stepId &&
-        !wasManualRef.current &&
-        !shouldStayOpen
-      ) {
-        console.log('AccordionCard - Starting auto-transition:', {
-          stepId,
-          delay: isQA ? 2000 : 1000,
-          isValidating: isValidatingRef.current,
-          isFlightSelector,
-          isCompletedStep,
-        });
-
-        // Set validation state
-        setIsValidating(true);
-        isValidatingRef.current = true;
-
-        // Wait before transitioning
-        const delay = isQA ? 2000 : 1000;
-        const timer = setTimeout(() => {
-          // Double check conditions before transitioning
-          if (
-            isValid &&
-            isCompleted &&
-            activeAccordion === stepId &&
-            !shouldStayOpen &&
-            !wasManualRef.current &&
-            (!isFlightSelector || isCompletedStep)
-          ) {
-            console.log('AccordionCard - Auto-transitioning:', {
-              stepId,
-              isQA,
-              isValidating: isValidatingRef.current,
-            });
-            autoTransition(stepId, true, isQA);
-          } else {
-            console.log('AccordionCard - Conditions no longer met:', {
-              stepId,
-              isValid,
-              isCompleted,
-              activeAccordion,
-              shouldStayOpen,
-              wasManual: wasManualRef.current,
-              isValidating: isValidatingRef.current,
-            });
-          }
-
-          // Reset validation state
-          setIsValidating(false);
-          isValidatingRef.current = false;
-          validationTimer.current = undefined;
-        }, delay);
-
-        validationTimer.current = timer;
-
-        return () => {
-          if (validationTimer.current) {
-            clearTimeout(validationTimer.current);
-            validationTimer.current = undefined;
-            isValidatingRef.current = false;
-            setIsValidating(false);
-          }
-        };
-      }
-    } else {
-      // Reset validation state when becoming invalid
-      wasValidRef.current = false;
-    }
+    return () => clearTimeout(timer);
   }, [
     isValid,
     isCompleted,
@@ -199,54 +111,19 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
     title,
   ]);
 
-  // Cleanup validation timer on unmount
-  useEffect(() => {
-    return () => {
-      if (validationTimer.current) {
-        clearTimeout(validationTimer.current);
-        validationTimer.current = undefined;
-        isValidatingRef.current = false;
-        setIsValidating(false);
-      }
-    };
-  }, []);
-
-  // Track if this is initial load
-  const isInitialLoad = React.useRef(true);
-
   const currentIsOpen =
     isOpen !== undefined ? isOpen : activeAccordion === stepId;
 
   const toggleAccordion = (e?: React.MouseEvent) => {
-    // Prevent toggle if validating
-    if (isValidatingRef.current) {
-      console.log('AccordionCard - Ignoring toggle while validating:', {
-        stepId,
-      });
-      return;
-    }
-
     // Only allow toggle from within the header
     if (e?.target) {
       const target = e.target as HTMLElement;
       const header = target.closest('.accordion-header');
 
       if (!header) {
-        console.log('AccordionCard - Ignoring click from outside header:', {
-          stepId,
-          element: target.tagName,
-        });
         return;
       }
     }
-
-    console.log('AccordionCard - Toggle clicked:', {
-      stepId,
-      isCurrentlyOpen: currentIsOpen,
-      shouldStayOpen,
-      willToggle: !shouldStayOpen,
-      isValidating: isValidatingRef.current,
-    });
 
     if (onToggle) {
       onToggle();
@@ -254,9 +131,7 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
       setActiveAccordion(currentIsOpen ? null : stepId);
       wasManualRef.current = true;
 
-      // Reset wasManual after a delay
       setTimeout(() => {
-        console.log('AccordionCard - Resetting wasManual:', { stepId });
         wasManualRef.current = false;
       }, 1000);
     }

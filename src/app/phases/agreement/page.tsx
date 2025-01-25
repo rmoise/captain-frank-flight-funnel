@@ -20,6 +20,8 @@ import { accordionConfig } from '@/config/accordion';
 import { BackButton } from '@/components/shared/BackButton';
 import { ContinueButton } from '@/components/shared/ContinueButton';
 import { useTranslation } from '@/hooks/useTranslation';
+import { Flight } from '@/types/store';
+import { usePhase4Store } from '@/lib/state/phase4Store';
 
 interface FormData {
   hasAcceptedTerms: boolean;
@@ -71,8 +73,14 @@ export default function AgreementPage() {
     setHasSignature,
     validateSignature,
     originalFlights,
+    setOriginalFlights,
   } = useStore();
   const { t, lang } = useTranslation();
+  const {
+    travelStatusAnswers,
+    selectedFlights: phase4SelectedFlights,
+    informedDateAnswers,
+  } = usePhase4Store();
 
   const signatureRef = useRef<SignaturePadRef>(null);
   const [mounted, setMounted] = useState(false);
@@ -116,6 +124,14 @@ export default function AgreementPage() {
           // Set current phase to 6
           setCurrentPhase(6);
 
+          // Get wizard answers from phase 4 store
+          const phase4Store = usePhase4Store.getState();
+          console.log('Agreement Page - Phase4Store state:', {
+            travelStatusAnswers: phase4Store.travelStatusAnswers,
+            informedDateAnswers: phase4Store.informedDateAnswers,
+            originalFlights: phase4Store.originalFlights,
+          });
+
           // Initialize form data from store state
           const initialFormData = {
             hasAcceptedTerms: termsAccepted,
@@ -145,6 +161,7 @@ export default function AgreementPage() {
           validateSignature();
           setMounted(true);
         } catch (error) {
+          console.error('Error initializing agreement page:', error);
           router.push('/phases/initial-assessment');
         }
       };
@@ -164,7 +181,27 @@ export default function AgreementPage() {
     setHasInteractedWithSignature,
     validationState,
     setMounted,
+    travelStatusAnswers,
   ]);
+
+  // Add effect to check Phase4Store state when mounted
+  useEffect(() => {
+    if (mounted) {
+      const phase4Store = usePhase4Store.getState();
+      console.log('Agreement Page - Checking Phase4Store state:', {
+        travelStatusAnswers: phase4Store.travelStatusAnswers,
+        informedDateAnswers: phase4Store.informedDateAnswers,
+        originalFlights: phase4Store.originalFlights,
+      });
+
+      // If we don't have informed date answers, redirect back to trip experience
+      if (!phase4Store.informedDateAnswers?.length) {
+        console.error('No informed date answers found, redirecting...');
+        router.push('/phases/trip-experience');
+        return;
+      }
+    }
+  }, [mounted, router]);
 
   // Add effect to sync form data with store state
   useEffect(() => {
@@ -256,6 +293,29 @@ export default function AgreementPage() {
       }
     }
   }, [mounted, validateSignature, setHasSignature]);
+
+  // Add useEffect to check flight data on mount
+  useEffect(() => {
+    console.log('Agreement Page - Checking flight data:', {
+      originalFlights,
+      selectedFlights,
+      travelStatus: travelStatusAnswers.find(
+        (a) => a.questionId === 'travel_status'
+      )?.value,
+    });
+
+    // If no original flights, try to get them from the store
+    if (!originalFlights?.length) {
+      const mainStoreFlights = useStore.getState().selectedFlights as Flight[];
+      if (mainStoreFlights?.length) {
+        console.log(
+          'Found flights in main store, setting original flights:',
+          mainStoreFlights
+        );
+        setOriginalFlights(mainStoreFlights);
+      }
+    }
+  }, []);
 
   const handleSignatureStart = () => {
     setHasInteractedWithSignature(true);
@@ -350,36 +410,72 @@ export default function AgreementPage() {
         validationRules as ValidationRules
       );
       if (Object.keys(validationErrors).length > 0) {
-        setFormErrors(
-          (prev: FormErrors): FormErrors => ({
-            ...prev,
-            ...validationErrors,
-          })
-        );
+        setFormErrors((prev) => ({
+          ...prev,
+          ...validationErrors,
+        }));
         hideLoading();
         return;
       }
 
       // Clear any previous errors
-      setFormErrors(
-        (prev: FormErrors): FormErrors => ({
-          ...prev,
-          submit: [],
-        })
-      );
+      setFormErrors((prev) => ({
+        ...prev,
+        submit: [],
+      }));
+
+      // Log current state before processing
+      console.log('Agreement Page - Submit - Current State:', {
+        originalFlights,
+        selectedFlights,
+        wizardAnswers: useStore.getState().wizardAnswers,
+      });
 
       // Get flight IDs from originalFlights for booked flights
-      const flightIdsAsStrings = originalFlights.map((flight) =>
-        String(flight.id)
-      );
+      const flightIdsAsStrings =
+        originalFlights
+          ?.filter((flight) => flight && flight.id)
+          .map((flight) => String(flight.id)) || [];
 
-      // Get travel status from store
-      const travelStatus = useStore
-        .getState()
-        .wizardAnswers.find((a) => a.questionId === 'travel_status')?.value as
-        | 'none'
-        | 'self'
-        | 'provided';
+      // If no flights in originalFlights, try to get them from the store
+      if (!flightIdsAsStrings.length) {
+        const mainStoreFlights = useStore.getState()
+          .selectedFlights as Flight[];
+        if (mainStoreFlights?.length) {
+          console.log(
+            'No flights in originalFlights, using main store flights:',
+            mainStoreFlights
+          );
+          const mainStoreFlightIds = mainStoreFlights
+            .filter((flight: Flight) => flight && flight.id)
+            .map((flight: Flight) => String(flight.id));
+          if (mainStoreFlightIds.length) {
+            console.log('Using main store flight IDs:', mainStoreFlightIds);
+            flightIdsAsStrings.push(...mainStoreFlightIds);
+          }
+        }
+      }
+
+      // Get travel status from phase4Store
+      const travelStatus = travelStatusAnswers.find(
+        (a) => a.questionId === 'travel_status'
+      )?.value;
+
+      console.log('Travel Status Check:', {
+        travelStatusAnswers,
+        travelStatus,
+      });
+
+      if (!travelStatus) {
+        setFormErrors((prev) => ({
+          ...prev,
+          submit: [
+            'Travel status not found. Please go back and select your travel status.',
+          ],
+        }));
+        hideLoading();
+        return;
+      }
 
       // Set journey_fact_flightids based on travel status
       const journey_fact_flightids_strings = (() => {
@@ -387,19 +483,30 @@ export default function AgreementPage() {
           return [];
         } else if (travelStatus === 'self') {
           return flightIdsAsStrings; // Use original flights if they took those
-        } else if (travelStatus === 'provided') {
-          return selectedFlights
-            .filter(
-              (flight) => !originalFlights.some((orig) => orig.id === flight.id)
-            )
+        } else if (
+          travelStatus === 'provided' ||
+          travelStatus === 'took_alternative_own'
+        ) {
+          // For provided or alternative flights, use selected flights from phase4Store
+          const alternativeFlights = phase4SelectedFlights
+            .filter((flight) => flight && flight.id)
             .map((flight) => String(flight.id));
+
+          // Validate that we have alternative flights when needed
+          if (!alternativeFlights.length) {
+            throw new Error(
+              'No alternative flights found. Please go back and select your alternative flights.'
+            );
+          }
+
+          return alternativeFlights;
         }
-        return flightIdsAsStrings.slice(0, 1); // Default to first flight
+        return [];
       })();
 
       // Map travel status to journey_fact_type
       const journey_fact_type = (() => {
-        switch (travelStatus as string) {
+        switch (travelStatus) {
           case 'none':
             return 'none';
           case 'self':
@@ -413,37 +520,94 @@ export default function AgreementPage() {
         }
       })();
 
-      const informedDate = useStore
-        .getState()
-        .wizardAnswers.find((a) => a.questionId === 'informed_date')?.value;
+      const informedDate = informedDateAnswers.find(
+        (a) => a.questionId === 'informed_date'
+      )?.value;
 
-      const specificDate = useStore
-        .getState()
-        .wizardAnswers.find(
-          (a) => a.questionId === 'specific_informed_date'
-        )?.value;
+      const specificDate = informedDateAnswers.find(
+        (a) => a.questionId === 'specific_informed_date'
+      )?.value;
+
+      console.log('Date validation check:', {
+        informedDate,
+        specificDate,
+        informedDateAnswers,
+        selectedFlights,
+      });
 
       // Format the date for the API
-      const formattedDate =
-        informedDate === 'on_departure'
-          ? String(selectedFlights[0].date).split('T')[0]
-          : typeof specificDate === 'string'
-            ? specificDate.split('T')[0]
-            : undefined;
+      const formattedDate = (() => {
+        // First try to get the specific date if provided
+        if (
+          informedDate === 'specific_date' &&
+          typeof specificDate === 'string' &&
+          specificDate.trim()
+        ) {
+          try {
+            // Ensure date is in YYYY-MM-DD format
+            const dateMatch = specificDate.match(
+              /^(\d{4})-(\d{1,2})-(\d{1,2})$/
+            );
+            if (dateMatch) {
+              const [, year, month, day] = dateMatch;
+              const formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+              console.log('Using specific informed date:', formattedDate);
+              return formattedDate;
+            }
+          } catch (e) {
+            console.error('Error parsing specific date:', e);
+          }
+        }
+
+        // Then try to use flight date if informed on departure
+        if (informedDate === 'on_departure' && originalFlights[0]) {
+          const flightDate = originalFlights[0].date;
+          if (flightDate) {
+            try {
+              // Ensure flight date is in YYYY-MM-DD format
+              const dateMatch = flightDate.match(
+                /^(\d{4})-(\d{1,2})-(\d{1,2})$/
+              );
+              if (dateMatch) {
+                const [, year, month, day] = dateMatch;
+                const formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                console.log('Using departure date:', formattedDate);
+                return formattedDate;
+              }
+            } catch (e) {
+              console.error('Error parsing flight date:', e);
+            }
+          }
+        }
+
+        console.error('Date validation failed:', {
+          informedDate,
+          specificDate,
+          flightDate: originalFlights[0]?.date,
+          departureTime: originalFlights[0]?.departureTime,
+        });
+
+        throw new Error(
+          'Bitte geben Sie das Datum an, an dem Sie über die Verspätung/Annullierung informiert wurden.'
+        );
+      })();
 
       // Create the evaluation data - only include required fields from API documentation
       const evaluationData = {
         journey_booked_flightids: flightIdsAsStrings,
         journey_fact_flightids: journey_fact_flightids_strings,
-        information_received_at:
-          formattedDate || new Date().toISOString().split('T')[0],
+        information_received_at: formattedDate,
+        journey_fact_type,
       };
+
+      // Log the evaluation data before making the API call
+      console.log('Evaluation Data:', evaluationData);
 
       const evaluationResult = await api.evaluateClaim(evaluationData);
 
-      if (evaluationResult.status !== 'accept') {
+      if (evaluationResult.data?.status !== 'accept') {
         // Get rejection reasons if available
-        const rejectionReasons = evaluationResult.rejection_reasons;
+        const rejectionReasons = evaluationResult.data?.rejection_reasons;
         const errorMessages = rejectionReasons
           ? Object.values(rejectionReasons)
           : ['Antragsüberprüfung wurde abgelehnt'];
@@ -498,14 +662,34 @@ export default function AgreementPage() {
         ].map((key) => [key, formDataEntries.get(key)?.toString() || ''])
       ) as Record<string, string>;
 
+      // Map salutation to backend format
+      const mapSalutationToBackend = (salutation: string): 'herr' | 'frau' => {
+        console.log('Mapping salutation:', salutation);
+        switch (salutation.toLowerCase()) {
+          case 'mr':
+          case 'herr':
+            return 'herr';
+          case 'mrs':
+          case 'ms':
+          case 'frau':
+            return 'frau';
+          default:
+            console.warn(
+              'Unknown salutation:',
+              salutation,
+              'defaulting to herr'
+            );
+            return 'herr';
+        }
+      };
+
       const orderRequestData: OrderClaimRequest = {
         journey_booked_flightids: flightIdsAsStrings,
         journey_fact_flightids: journey_fact_flightids_strings,
         journey_fact_type,
-        information_received_at:
-          formattedDate || new Date().toISOString().split('T')[0],
+        information_received_at: formattedDate,
         journey_booked_pnr: bookingNumber.trim(),
-        owner_salutation: formDataValues.salutation === 'Mr' ? 'herr' : 'frau',
+        owner_salutation: mapSalutationToBackend(formDataValues.salutation),
         owner_firstname:
           personalDetails?.firstName || formDataValues.firstName || '',
         owner_lastname:
@@ -523,12 +707,22 @@ export default function AgreementPage() {
         contract_signature: signatureRef.current?.toDataURL() || '',
         contract_tac: true,
         contract_dp: true,
-        guid: evaluationResult.guid,
-        recommendation_guid: evaluationResult.recommendation_guid,
       };
+
+      console.log('Submitting order request:', {
+        ...orderRequestData,
+        contract_signature: orderRequestData.contract_signature
+          ? '[SIGNATURE_DATA]'
+          : null,
+      });
 
       // Submit the order
       const response = await api.orderClaim(orderRequestData);
+      console.log('Order response:', {
+        status: response.status,
+        data: response.data,
+        message: response.message,
+      });
 
       hideLoading(); // Hide loading before redirect
 
@@ -541,12 +735,42 @@ export default function AgreementPage() {
         throw new Error('Antrag konnte nicht eingereicht werden');
       }
     } catch (error) {
+      const err = error as Error;
+      console.error('Submission error:', {
+        name: err.name,
+        message: err.message,
+        stack: err.stack,
+      });
+
+      // Get a user-friendly error message
+      let errorMessage =
+        'Ein unerwarteter Fehler ist aufgetreten. Bitte versuche es erneut.';
+
+      if (err instanceof Error) {
+        if (err.message.includes('journey_fact_type')) {
+          errorMessage =
+            'Ungültiger Reisestatus. Bitte gehe zurück und wähle deinen Reisestatus erneut.';
+        } else if (err.message.includes('Missing required fields')) {
+          errorMessage = 'Bitte fülle alle erforderlichen Felder aus.';
+        } else if (err.message.includes('Invalid request data')) {
+          errorMessage =
+            'Ungültige Eingabedaten. Bitte überprüfe deine Eingaben.';
+        } else if (err.message.includes('Internal server error')) {
+          errorMessage =
+            'Ein Serverfehler ist aufgetreten. Bitte versuche es später erneut.';
+        } else if (err.message) {
+          // Use the error message if it's in German, otherwise use the default
+          errorMessage =
+            err.message.includes('Ein') || err.message.includes('Bitte')
+              ? err.message
+              : 'Ein unerwarteter Fehler ist aufgetreten. Bitte versuche es erneut.';
+        }
+      }
+
       setFormErrors(
         (prev: FormErrors): FormErrors => ({
           ...prev,
-          submit: [
-            'Ein unerwarteter Fehler ist aufgetreten. Bitte versuche es erneut.',
-          ],
+          submit: [errorMessage],
         })
       );
       hideLoading(); // Hide loading on error
@@ -633,7 +857,9 @@ export default function AgreementPage() {
               message={t.phases.agreement.message
                 .replace(
                   '{salutation}',
-                  personalDetails?.salutation === 'herr' ? 'Mr.' : 'Mrs./Ms.'
+                  personalDetails?.salutation === 'herr'
+                    ? t.salutation.mr
+                    : t.salutation.mrs
                 )
                 .replace('{firstName}', personalDetails?.firstName ?? '')
                 .replace('{lastName}', personalDetails?.lastName ?? '')

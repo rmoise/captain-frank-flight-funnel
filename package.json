@@ -11,7 +11,8 @@
     "build:functions": "tsc --project netlify/functions/tsconfig.json",
     "start": "next start",
     "lint": "next lint",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "check": "npm run lint && npm run type-check"
   },
   "dependencies": {
     "@emotion/react": "^11.11.1",

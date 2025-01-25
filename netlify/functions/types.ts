@@ -25,15 +25,19 @@ export interface CompensationResult {
 }
 
 export interface EvaluationResult {
-  status: 'accept' | 'reject';
-  contract?: {
-    amount: number;
-    provision: number;
+  data: {
+    status: 'accept' | 'reject';
+    contract?: {
+      amount: number;
+      provision: number;
+    };
+    rejection_reasons?: Record<string, string>;
   };
-  rejection_reasons?: {
-    has_cancellation_received_intime?: string;
-    has_prerequisites?: string;
-    is_Eu_Norm?: string;
-    [key: string]: string | undefined;
-  };
+}
+
+export interface EvaluationRequest {
+  journey_booked_flightids: string[];
+  journey_fact_flightids?: string[];
+  information_received_at: string;
+  journey_fact_type: 'none' | 'self' | 'provided';
 }

@@ -100,15 +100,13 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
         return;
       }
 
-      // Normalize the date to noon UTC
-      const safeDate = safeParseDateToUTC(newDate);
-      if (!safeDate) {
-        console.error('Invalid date provided to handleDateChange');
-        return;
-      }
+      // Format the date in YYYY-MM-DD format
+      const year = newDate.getFullYear();
+      const month = String(newDate.getMonth() + 1).padStart(2, '0');
+      const day = String(newDate.getDate()).padStart(2, '0');
+      const formattedDate = `${year}-${month}-${day}`;
 
-      // Format the date for display and storage
-      const formattedDate = format(safeDate, 'yyyy-MM-dd');
+      console.log('Formatted date:', formattedDate);
       setLocalValue(formattedDate);
       onSelect(question.id, formattedDate);
     } catch (error) {
@@ -143,16 +141,13 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
                       value={option.value}
                       checked={isSelected}
                       onChange={(e) => {
-                        e.preventDefault();
                         e.stopPropagation();
                         if (option.externalLink) {
                           window.open(option.externalLink, '_blank');
                           return;
                         }
                         setLocalValue(option.value);
-                        setTimeout(() => {
-                          onSelect(question.id, option.value);
-                        }, 0);
+                        onSelect(question.id, option.value);
                       }}
                       className="w-4 h-4 border-gray-300 text-[#F54538] focus:ring-[#F54538] focus:ring-offset-0 accent-[#F54538]"
                     />
@@ -263,19 +258,24 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
         return (
           <>
             <FlightSelector
-              onSelect={(flight) => {
-                if (flight) {
-                  // Debounce the state update to prevent infinite loops
-                  setTimeout(() => {
-                    onSelect(
-                      question.id,
-                      Array.isArray(flight)
-                        ? flight.map((f) => f.id).join(',')
-                        : flight.id
-                    );
-                  }, 0);
-                }
-              }}
+              onSelect={
+                question.id === 'alternative_flight_airline_expense' ||
+                question.id === 'alternative_flight_own_expense'
+                  ? () => void 0
+                  : (flight) => {
+                      if (flight) {
+                        // Debounce the state update to prevent infinite loops
+                        setTimeout(() => {
+                          onSelect(
+                            question.id,
+                            Array.isArray(flight)
+                              ? flight.map((f) => f.id).join(',')
+                              : flight.id
+                          );
+                        }, 0);
+                      }
+                    }
+              }
               initialSelectedFlight={
                 Array.isArray(initialSelectedFlight)
                   ? initialSelectedFlight[0]
@@ -285,32 +285,51 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
               showFlightDetails={true}
               showResults={true}
               onInteract={() => {}}
-              stepNumber={1}
-              setValidationState={(state) => {
-                // Update validation state for step 1
-                if (typeof state === 'function') {
-                  const newState = state({} as Record<number, boolean>);
-                  updateValidationState({
-                    stepValidation: {
-                      1: newState[1] || false,
-                      2: false,
-                      3: false,
-                      4: false,
-                      5: false,
-                    } as Record<ValidationStep, boolean>,
-                  });
-                } else {
-                  updateValidationState({
-                    stepValidation: {
-                      1: state[1] || false,
-                      2: false,
-                      3: false,
-                      4: false,
-                      5: false,
-                    } as Record<ValidationStep, boolean>,
-                  });
-                }
-              }}
+              currentPhase={4}
+              stepNumber={
+                question.id === 'alternative_flight_airline_expense' ||
+                question.id === 'alternative_flight_own_expense'
+                  ? currentStep + 1
+                  : 1
+              }
+              setValidationState={
+                question.id === 'alternative_flight_airline_expense' ||
+                question.id === 'alternative_flight_own_expense'
+                  ? () => void 0
+                  : (state) => {
+                      // Update validation state for the correct step
+                      const stepNumber =
+                        question.id === 'alternative_flight_airline_expense' ||
+                        question.id === 'alternative_flight_own_expense'
+                          ? currentStep + 1
+                          : 1;
+
+                      if (typeof state === 'function') {
+                        const newState = state({} as Record<number, boolean>);
+                        updateValidationState({
+                          stepValidation: {
+                            [stepNumber]: newState[stepNumber] || false,
+                            ...Object.fromEntries(
+                              [1, 2, 3, 4, 5]
+                                .filter((n) => n !== stepNumber)
+                                .map((n) => [n, false])
+                            ),
+                          } as Record<ValidationStep, boolean>,
+                        });
+                      } else {
+                        updateValidationState({
+                          stepValidation: {
+                            [stepNumber]: state[stepNumber] || false,
+                            ...Object.fromEntries(
+                              [1, 2, 3, 4, 5]
+                                .filter((n) => n !== stepNumber)
+                                .map((n) => [n, false])
+                            ),
+                          } as Record<ValidationStep, boolean>,
+                        });
+                      }
+                    }
+              }
             />
             {question.relatedQuestions?.map((relatedQ) => (
               <div key={relatedQ.id} className="mt-24 pt-12 pb-12 mb-12">

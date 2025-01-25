@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback } from 'react';
 import { Question } from '@/types/experience';
 
 interface QuestionAnswerProps {
@@ -16,24 +16,15 @@ export const QuestionAnswer: React.FC<QuestionAnswerProps> = ({
   totalSteps,
   onSelect,
 }) => {
-  // Local state for the selected value
-  const [localValue, setLocalValue] = useState(selectedOption);
-
   // Handle answer selection
   const handleChange = useCallback(
     (value: string) => {
-      setLocalValue(value);
-      onSelect(question.id, value);
+      if (value !== selectedOption) {
+        onSelect(question.id, value);
+      }
     },
-    [question.id, onSelect]
+    [question.id, onSelect, selectedOption]
   );
-
-  // Update local value when selected option changes
-  useEffect(() => {
-    if (selectedOption !== localValue) {
-      setLocalValue(selectedOption);
-    }
-  }, [selectedOption, localValue]);
 
   // Render question input based on type
   const renderQuestionInput = () => {
@@ -43,7 +34,7 @@ export const QuestionAnswer: React.FC<QuestionAnswerProps> = ({
           <div className="space-y-4">
             {question.options?.map(
               (option: { value: string | number; label: string }) => {
-                const isSelected = localValue === option.value.toString();
+                const isSelected = selectedOption === option.value.toString();
                 return (
                   <div
                     key={option.value.toString()}

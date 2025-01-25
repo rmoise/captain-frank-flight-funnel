@@ -50,6 +50,8 @@ export interface FlightSlice {
   flightDetails: Flight | null;
   delayDuration: number | null;
   _lastUpdate?: number;
+  isFlightValid?: boolean;
+  _lastValidation?: number;
 }
 
 export interface WizardSlice {
@@ -193,10 +195,24 @@ export type StoreStateValues = StoreState;
 
 export type StoreStatePartial = Partial<StoreState>;
 
-export interface ValidationStore extends StoreState {
-  validationState: ValidationState;
-  hasValidLocations: boolean;
-  hasValidFlights: boolean;
+export interface ValidationStore {
+  isPersonalValid: boolean;
+  isFlightValid: boolean;
+  isBookingValid: boolean;
+  isWizardValid: boolean;
+  isTermsValid: boolean;
+  isSignatureValid: boolean;
+  isWizardSubmitted: boolean;
+  isValidating: boolean;
+  lastValidationKey?: string;
+  stepValidation: Record<ValidationStep, boolean>;
+  stepInteraction: Record<ValidationStep, boolean>;
+  fieldErrors: Record<string, string>;
+  transitionInProgress: boolean;
+  [key: number]: boolean;
+  _timestamp?: number;
+  _lastValidation?: number;
+  _lastUpdate?: number;
 }
 
 export interface StoreActions {

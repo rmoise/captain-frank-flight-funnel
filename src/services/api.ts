@@ -47,18 +47,14 @@ export interface CompensationResponse {
 }
 
 export interface EvaluationResponse {
-  status: 'accept' | 'reject';
-  guid: string;
-  recommendation_guid: string;
-  contract?: {
-    amount: number;
-    provision: number;
+  data: {
+    status: 'accept' | 'reject';
+    contract?: {
+      amount: number;
+      provision: number;
+    };
+    rejection_reasons?: Record<string, string>;
   };
-  rejection_reasons?: string[];
-  journey_booked_flightids?: string[];
-  journey_fact_flightids?: string[];
-  information_received_at?: string;
-  travel_status?: string;
 }
 
 export interface OrderClaimRequest {
@@ -141,7 +137,7 @@ class ApiClient {
         console.error('Could not parse response:', parseError);
         throw new ApiError(
           response.status,
-          `API request failed with status ${response.status}`
+          `API request failed: Invalid JSON response`
         );
       }
 
@@ -153,51 +149,41 @@ class ApiClient {
           data: responseData,
         });
 
-        // Extract error data from the response
-        const errorMessage = responseData.message || responseData.error;
-        const errorDetails = responseData.errors || {};
-
-        // If we have the original error response, use that
-        if (responseData.body) {
-          try {
-            const originalError = JSON.parse(responseData.body);
-            if (originalError.message || originalError.errors) {
-              throw new ApiError(response.status, originalError.message, {
-                errors: originalError.errors,
-                status: 'error',
-              });
-            }
-          } catch (e) {
-            console.error('Could not parse original error:', e);
-          }
+        // Extract error details from response
+        let errorMessage = 'API request failed';
+        if (responseData?.error) {
+          errorMessage = responseData.error;
+        } else if (responseData?.message) {
+          errorMessage = responseData.message;
+        } else if (responseData?.details) {
+          errorMessage = responseData.details;
+        } else if (response.status === 400) {
+          errorMessage = 'Invalid request data';
+        } else if (response.status === 401) {
+          errorMessage = 'Unauthorized';
+        } else if (response.status === 403) {
+          errorMessage = 'Forbidden';
+        } else if (response.status === 404) {
+          errorMessage = 'Resource not found';
+        } else if (response.status === 500) {
+          errorMessage = 'Internal server error';
+        } else {
+          errorMessage = `API request failed with status ${response.status}`;
         }
 
-        // Fallback to our parsed error
-        throw new ApiError(response.status, errorMessage, {
-          errors: errorDetails,
-          status: 'error',
-        });
-      }
-
-      if (responseData.status === 'error') {
-        throw new ApiError(
-          response.status || 500,
-          responseData.message ||
-            responseData.error ||
-            'API returned error status',
-          responseData
-        );
+        throw new ApiError(response.status, errorMessage, responseData);
       }
 
       return responseData;
     } catch (error) {
-      console.error('API Error:', error);
+      console.error('API request error:', error);
       if (error instanceof ApiError) {
         throw error;
       }
-      throw new ApiError(500, 'An unexpected error occurred', {
-        originalError: error instanceof Error ? error.message : String(error),
-      });
+      throw new ApiError(
+        500,
+        error instanceof Error ? error.message : 'An unexpected error occurred'
+      );
     }
   }
 
@@ -403,7 +389,7 @@ class ApiClient {
     journey_booked_flightids: string[];
     journey_fact_flightids?: string[];
     information_received_at: string;
-    travel_status?: string;
+    journey_fact_type: string;
   }): Promise<EvaluationResponse> {
     const baseUrl =
       process.env.NODE_ENV === 'development' ? 'http://localhost:8888' : '';

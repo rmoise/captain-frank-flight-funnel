@@ -9,6 +9,14 @@ export const validateFlightSelection = (
 ): boolean => {
   const { selectedType, flightSegments, currentPhase } = state;
 
+  // Skip validation if no changes since last validation
+  if (
+    state._lastUpdate === state._lastValidation &&
+    typeof state.isFlightValid !== 'undefined'
+  ) {
+    return state.isFlightValid;
+  }
+
   const isLocationValid = (loc: LocationLike | null | string): boolean => {
     if (!loc) return false;
     if (typeof loc === 'string') {
@@ -75,6 +83,9 @@ export const validateFlightSelection = (
       });
   }
 
+  // Update last validation timestamp and cache result
+  state._lastValidation = state._lastUpdate;
+  state.isFlightValid = isValid;
   return isValid;
 };
 

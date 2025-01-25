@@ -168,8 +168,22 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
     if (!storedDetails) return;
 
     // Only run validation on mount or when stored details actually change
-    const hasAllRequiredFields = ['firstName', 'lastName', 'email'].every(
-      (field) => storedDetails[field as keyof PassengerDetails]?.trim()
+    const requiredFields = isClaimSuccess
+      ? [
+          'salutation',
+          'firstName',
+          'lastName',
+          'email',
+          'phone',
+          'address',
+          'postalCode',
+          'city',
+          'country',
+        ]
+      : ['firstName', 'lastName', 'email'];
+
+    const hasAllRequiredFields = requiredFields.every((field) =>
+      storedDetails[field as keyof PassengerDetails]?.trim()
     );
 
     // Get current validation state once
@@ -178,23 +192,23 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
 
     // Check if we need to update validation state
     if (
-      hasAllRequiredFields &&
-      (!currentValidation.isPersonalValid ||
-        !currentValidation.stepValidation[stepId])
+      hasAllRequiredFields !== currentValidation.isPersonalValid ||
+      hasAllRequiredFields !== currentValidation.stepValidation[stepId]
     ) {
       // Update validation state to reflect completed state
       const newValidationState = {
         ...currentValidation,
         stepValidation: {
           ...currentValidation.stepValidation,
-          [stepId]: true,
+          [stepId]: hasAllRequiredFields,
         },
-        isPersonalValid: true,
+        isPersonalValid: hasAllRequiredFields,
+        [stepId]: hasAllRequiredFields,
       };
 
       store.updateValidationState(newValidationState);
     }
-  }, [storedDetails, stepId]);
+  }, [storedDetails, stepId, isClaimSuccess]);
 
   // Handle initial interaction
   useEffect(() => {
@@ -207,8 +221,19 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
   // Separate effect for claim success page specific logic
   useEffect(() => {
     if (isClaimSuccess && storedDetails) {
-      const hasAllRequiredFields = ['firstName', 'lastName', 'email'].every(
-        (field) => storedDetails[field as keyof PassengerDetails]?.trim()
+      const requiredFields = [
+        'salutation',
+        'firstName',
+        'lastName',
+        'email',
+        'phone',
+        'address',
+        'postalCode',
+        'city',
+        'country',
+      ];
+      const hasAllRequiredFields = requiredFields.every((field) =>
+        storedDetails[field as keyof PassengerDetails]?.trim()
       );
       if (hasAllRequiredFields) {
         onComplete(storedDetails);
@@ -234,8 +259,22 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
         setPersonalDetails(newDetails);
 
         // Check validation after input changes
-        const hasAllRequiredFields = ['firstName', 'lastName', 'email'].every(
-          (field) => newDetails[field as keyof PassengerDetails]?.trim()
+        const requiredFields = isClaimSuccess
+          ? [
+              'salutation',
+              'firstName',
+              'lastName',
+              'email',
+              'phone',
+              'address',
+              'postalCode',
+              'city',
+              'country',
+            ]
+          : ['firstName', 'lastName', 'email'];
+
+        const hasAllRequiredFields = requiredFields.every((field) =>
+          newDetails[field as keyof PassengerDetails]?.trim()
         );
 
         // Get current validation state once
@@ -262,7 +301,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
         }
       }
     },
-    [storedDetails, setPersonalDetails, onInteract, stepId]
+    [storedDetails, setPersonalDetails, onInteract, stepId, isClaimSuccess]
   );
 
   return (

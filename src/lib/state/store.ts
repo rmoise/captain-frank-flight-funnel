@@ -391,88 +391,14 @@ export const validateSignature = (state: StoreStateValues): boolean => {
 export const checkStepValidity =
   (state: StoreStateValues) =>
   (step: ValidationStep): boolean => {
-    console.log('=== Checking Step Validity ===');
-    console.log('Step:', step);
-    console.log('Current phase:', state.currentPhase);
-    console.log('Phase 5 check:', state.currentPhase === 5);
-    console.log('Validation state:', state.validationState);
-
-    // For step 1
-    if (step === 1) {
-      // In phase 5 (claim success), check personal details validation
-      if (state.currentPhase === 5) {
-        console.log('Validating personal details for claim success page');
-        // Check if all required fields are filled
-        if (!state.personalDetails) {
-          console.log('No personal details found');
-          return false;
-        }
-
-        const requiredFields = [
-          'salutation',
-          'firstName',
-          'lastName',
-          'email',
-          'phone',
-          'address',
-          'postalCode',
-          'city',
-          'country',
-        ] as const;
-
-        // Check if each field exists and has a non-empty value after trimming
-        const hasAllFields = requiredFields.every((field) => {
-          const value =
-            state.personalDetails?.[field as keyof PassengerDetails];
-          const isValid = Boolean(value && value.trim().length > 0);
-          console.log(
-            `Field ${field}: ${isValid ? 'valid' : 'invalid'} (${value || 'empty'})`
-          );
-          return isValid;
-        });
-
-        // Email validation
-        const emailRegex = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
-        const hasValidEmail = Boolean(
-          state.personalDetails.email &&
-            emailRegex.test(state.personalDetails.email)
-        );
-        console.log(`Email validation: ${hasValidEmail ? 'valid' : 'invalid'}`);
-
-        const isValid = hasAllFields && hasValidEmail;
-        console.log(
-          `Final validation result: ${isValid ? 'valid' : 'invalid'}`
-        );
-        console.log('=== End Step Validity Check ===');
-
-        return isValid;
-      }
-      // For phase 1, check flight validation
-      else if (state.currentPhase === 1) {
-        console.log('Validating flight selection for phase 1');
-        return state.validationState.isFlightValid;
-      }
-      // For other phases, check step validation and interaction
-      else {
-        console.log('Validating step for other phase:', state.currentPhase);
-        return !!(
-          state.validationState?.stepValidation?.[step] &&
-          state.validationState?.stepInteraction?.[step]
-        );
-      }
+    // During Phase 1, all steps should be accessible
+    if (state.currentPhase === 1) {
+      return true;
     }
 
-    // For step 3, check personal details validation directly from validation state
-    if (step === 3) {
-      return !!(
-        state.validationState?.isPersonalValid &&
-        state.validationState?.stepInteraction?.[step]
-      );
-    }
-
-    // For other steps, check both validation and interaction
+    // For other phases, maintain existing validation logic
     return !!(
-      state.validationState?.stepValidation?.[step] &&
+      state.validationState?.stepValidation?.[step] ||
       state.validationState?.stepInteraction?.[step]
     );
   };
@@ -531,6 +457,8 @@ export interface ValidationState {
   isTermsValid: boolean;
   isSignatureValid: boolean;
   isWizardSubmitted: boolean;
+  isValidating: boolean;
+  lastValidationKey?: string;
   stepValidation: Record<ValidationStateSteps, boolean>;
   stepInteraction: Record<ValidationStateSteps, boolean>;
   fieldErrors: Record<string, string>;
@@ -556,6 +484,8 @@ export const initialValidationState: ValidationState = {
   isTermsValid: false,
   isSignatureValid: false,
   isWizardSubmitted: false,
+  isValidating: false,
+  lastValidationKey: undefined,
   stepValidation: {
     1: false,
     2: false,
@@ -572,11 +502,6 @@ export const initialValidationState: ValidationState = {
   },
   fieldErrors: {},
   transitionInProgress: false,
-  1: false,
-  2: false,
-  3: false,
-  4: false,
-  5: false,
   _timestamp: Date.now(),
 };
 
@@ -1140,19 +1065,50 @@ export const useStore = create<StoreState & StoreActions>()(
       },
 
       validateAndUpdateStep: (step: ValidationStateSteps, isValid: boolean) => {
-        set((state) => ({
-          validationState: {
+        set((state) => {
+          // Skip update if validation state hasn't changed
+          const currentStepValid = state.validationState.stepValidation[step];
+          const currentStepInteraction =
+            state.validationState.stepInteraction[step];
+
+          // If nothing would change, return the current state
+          if (currentStepValid === isValid && currentStepInteraction === true) {
+            return state;
+          }
+
+          // Create new validation state only if needed
+          const newValidationState = {
             ...state.validationState,
-            stepValidation: {
-              ...state.validationState.stepValidation,
-              [step]: isValid,
-            },
+            stepValidation:
+              currentStepValid === isValid
+                ? state.validationState.stepValidation
+                : {
+                    ...state.validationState.stepValidation,
+                    [step]: isValid,
+                  },
+            stepInteraction:
+              currentStepInteraction === true
+                ? state.validationState.stepInteraction
+                : {
+                    ...state.validationState.stepInteraction,
+                    [step]: true,
+                  },
             [step]: isValid,
-          },
-          completedSteps: isValid
-            ? Array.from(new Set([...state.completedSteps, step]))
-            : state.completedSteps.filter((s) => s !== step),
-        }));
+            _timestamp: Date.now(),
+          };
+
+          // Only update if validation state actually changed
+          if (
+            JSON.stringify(newValidationState) ===
+            JSON.stringify(state.validationState)
+          ) {
+            return state;
+          }
+
+          return {
+            validationState: newValidationState,
+          };
+        });
       },
 
       validateStep: (step: ValidationStateSteps, isValid: boolean) => {
@@ -1286,246 +1242,49 @@ export const useStore = create<StoreState & StoreActions>()(
             new Set([...state.completedPhases, phase])
           ).sort((a, b) => a - b);
 
-          // Always preserve flight validation state regardless of phase
-          const isFlightValid = validateFlightSelection(state);
+          // For phase 4, try to restore validation state from localStorage first
+          let newValidationState = { ...state.validationState };
 
-          // Create base validation state that preserves all existing validations
-          const baseValidationState: ValidationState = {
-            ...state.validationState,
-            isFlightValid: isFlightValid || state.validationState.isFlightValid,
-            isBookingValid: state.validationState.isBookingValid,
-            stepValidation: {
-              ...state.validationState.stepValidation,
-              1: isFlightValid || state.validationState.stepValidation[1], // Preserve existing validation if true
-            },
-            stepInteraction: {
-              ...state.validationState.stepInteraction, // Preserve step interaction state
-            },
-            1: isFlightValid || state.validationState[1], // Preserve existing validation if true
-            fieldErrors: state.validationState.fieldErrors || {},
-            transitionInProgress: false,
-            isPersonalValid: state.validationState.isPersonalValid,
-            isWizardValid: state.validationState.isWizardValid,
-            isTermsValid: state.validationState.isTermsValid,
-            isSignatureValid: state.validationState.isSignatureValid,
-            isWizardSubmitted: state.validationState.isWizardSubmitted,
-            _timestamp: Date.now(),
-          };
-
-          // Phase-specific validation updates
-          let newValidationState: ValidationState = baseValidationState;
-
-          if (phase === 1) {
-            // Always preserve all validation states when returning to phase 1
-            const isPersonalValid = state.validationState.isPersonalValid;
-            const hasPersonalInteraction =
-              state.validationState.stepInteraction[3] || false;
-
-            const isWizardValid = state.validationState.isWizardValid;
-            const hasWizardInteraction =
-              state.validationState.stepInteraction[2] || false;
-
-            const isTermsValid = !!(
-              state.termsAccepted && state.privacyAccepted
-            );
-            const hasTermsInteraction =
-              state.validationState.stepInteraction[4] || false;
-
-            // Ensure validations persist once validated
-            newValidationState = {
-              ...baseValidationState,
-              isPersonalValid:
-                state.validationState.isPersonalValid || isPersonalValid,
-              isWizardValid:
-                isWizardValid || state.validationState.isWizardValid,
-              isTermsValid: state.validationState.isTermsValid || isTermsValid,
-              stepValidation: {
-                ...baseValidationState.stepValidation,
-                2: isWizardValid || state.validationState.stepValidation[2],
-                3:
-                  state.validationState.isPersonalValid ||
-                  state.validationState.stepValidation[3] ||
-                  isPersonalValid, // Always preserve step 3 validation
-                4: state.validationState.stepValidation[4] || isTermsValid,
-              },
-              stepInteraction: {
-                ...baseValidationState.stepInteraction,
-                2:
-                  hasWizardInteraction ||
-                  state.validationState.stepInteraction[2],
-                3:
-                  state.validationState.isPersonalValid ||
-                  state.validationState.stepInteraction[3] ||
-                  hasPersonalInteraction, // Always preserve step 3 interaction
-                4:
-                  state.validationState.stepInteraction[4] ||
-                  hasTermsInteraction,
-              },
-              2: isWizardValid || state.validationState[2],
-              3:
-                state.validationState.isPersonalValid ||
-                state.validationState[3] ||
-                isPersonalValid, // Always preserve step 3
-              4: state.validationState[4] || isTermsValid,
-            };
-          } else if (phase === 3) {
-            // For phase 3, preserve phase 1 validations but reset phase 3 specific ones
-            newValidationState = {
-              ...state.validationState, // Keep existing validation state
-              fieldErrors: state.validationState.fieldErrors || {}, // Preserve field errors
-              // Reset phase 3 specific validations
-              isBookingValid: false,
-              stepValidation: {
-                ...state.validationState.stepValidation,
-                2: false, // Reset booking validation
-              },
-              2: false, // Reset booking validation
-              transitionInProgress: false,
-            };
-
-            // Only validate flight selection if we have flights
-            if (state.selectedFlights.length > 0) {
-              const isFlightValid = validateFlightSelection(state);
-              newValidationState.isFlightValid = isFlightValid;
-              newValidationState.stepValidation[1] = isFlightValid;
-              newValidationState[1] = isFlightValid;
-            }
-
-            // Only validate booking if we have a booking number
-            if (state.bookingNumber) {
-              const isBookingValid = validateBookingNumber(state);
-              newValidationState.isBookingValid = isBookingValid;
-              newValidationState.stepValidation[2] = isBookingValid;
-              newValidationState[2] = isBookingValid;
-            }
-
-            // Save the validation state to localStorage
-            if (typeof window !== 'undefined') {
-              localStorage.setItem(
-                'phase3ValidationState',
-                JSON.stringify(newValidationState)
-              );
-            }
-          } else if (phase === 4) {
-            // Start with base validation state
-            const newValidationState: ValidationState = {
-              ...baseValidationState,
-              // Preserve validations from previous phases
-              isPersonalValid: state.validationState.isPersonalValid,
-              isFlightValid: state.validationState.isFlightValid,
-              isBookingValid: state.validationState.isBookingValid,
-              isWizardValid: state.validationState.isWizardValid,
-              isTermsValid: state.validationState.isTermsValid,
-              isSignatureValid: state.validationState.isSignatureValid,
-              isWizardSubmitted: state.validationState.isWizardSubmitted,
-              stepValidation: {
-                ...baseValidationState.stepValidation,
-                1: state.validationState.isFlightValid,
-                2: state.validationState.isBookingValid,
-              },
-              stepInteraction: baseValidationState.stepInteraction,
-              fieldErrors: {},
-              transitionInProgress: false,
-              1: state.validationState.isFlightValid,
-              2: state.validationState.isBookingValid,
-              _timestamp: Date.now(),
-            };
-
-            // For phase 4, try to restore validation state from localStorage first
+          if (phase === 4) {
+            console.log('=== Initializing Phase 4 State ===');
             if (typeof window !== 'undefined') {
               const savedState = localStorage.getItem('phase4ValidationState');
               if (savedState) {
                 try {
                   const parsedState = JSON.parse(savedState);
-                  // Use the parsed state to initialize newValidationState if needed
-                  Object.assign(newValidationState, parsedState);
+                  console.log(
+                    'Restored Phase 4 validation state:',
+                    parsedState
+                  );
+                  newValidationState = {
+                    ...newValidationState,
+                    ...parsedState,
+                  };
                 } catch (error) {
                   console.error(
                     'Error parsing saved phase 4 validation state:',
                     error
                   );
                 }
+              } else {
+                console.log('No saved Phase 4 validation state found');
               }
             }
-          } else {
-            // For other phases, preserve the validation state including step 4
-            newValidationState = {
-              ...state.validationState,
-              fieldErrors: state.validationState.fieldErrors || {}, // Preserve field errors
-              transitionInProgress: false,
-              stepValidation: {
-                ...state.validationState.stepValidation,
-                4: state.validationState.stepValidation[4] || false, // Preserve step 4 validation
-              },
-              stepInteraction: {
-                ...state.validationState.stepInteraction,
-                4: state.validationState.stepInteraction[4] || false, // Preserve step 4 interaction
-              },
-              4: state.validationState[4] || false, // Preserve step 4 validation
-            };
+            console.log('Current wizard answers:', state.wizardAnswers);
+            console.log(
+              'Current selected flights:',
+              state.selectedFlights.map((f) => ({
+                id: f.id,
+                flightNumber: f.flightNumber,
+              }))
+            );
           }
 
-          // Calculate which steps should be open based on validation and interaction state
-          let openSteps: number[] = [];
-
-          // If we're going back to phase 1, only open incomplete steps
-          if (phase === 1 && state.currentPhase > phase) {
-            // Find the first invalid or uninteracted step
-            let foundIncomplete = false;
-            for (let i = 1; i <= 4; i++) {
-              const stepKey = i as ValidationStateSteps;
-              const isStepValid = newValidationState.stepValidation[stepKey];
-              const hasInteracted = newValidationState.stepInteraction[stepKey];
-
-              if (!isStepValid || !hasInteracted) {
-                openSteps = [i];
-                foundIncomplete = true;
-                break;
-              }
-            }
-
-            // If all steps are valid and interacted, don't open any steps
-            if (!foundIncomplete) {
-              openSteps = [];
-            }
-          } else {
-            // For other phases, use existing logic
-            for (let i = 1; i <= 4; i++) {
-              const stepKey = i as ValidationStateSteps;
-              const isStepValid = newValidationState.stepValidation[stepKey];
-              const hasInteracted = newValidationState.stepInteraction[stepKey];
-
-              if (!isStepValid || !hasInteracted) {
-                openSteps.push(i);
-              }
-            }
-          }
-
-          // If no steps need to be open, open the last valid step
-          if (openSteps.length === 0) {
-            for (let i = 4; i >= 1; i--) {
-              const stepKey = i as ValidationStateSteps;
-              if (
-                newValidationState.stepValidation[stepKey] &&
-                newValidationState.stepInteraction[stepKey]
-              ) {
-                openSteps = [i];
-                break;
-              }
-            }
-          }
-
-          // If still no steps are selected, default to step 1
-          if (openSteps.length === 0) {
-            openSteps = [1];
-          }
-
-          // Return updated state
           return {
+            ...state,
             currentPhase: phase,
             completedPhases: uniqueCompletedPhases,
             validationState: newValidationState,
-            openSteps,
             _lastUpdate: Date.now(),
           };
         });
@@ -1945,20 +1704,21 @@ export const useStore = create<StoreState & StoreActions>()(
 
       setSelectedFlight: (flight: Flight | null) => {
         set((state) => {
-          console.log('=== setSelectedFlight START ===');
-          console.log('Input flight:', flight);
-          console.log('Current state:', {
-            selectedType: state.selectedType,
-            currentSegmentIndex: state.currentSegmentIndex,
-            flightSegments: state.flightSegments,
-            selectedFlights: state.selectedFlights,
-            selectedFlight: state.selectedFlight,
-            directFlight: state.directFlight,
+          console.log('=== MainStore - setSelectedFlight ENTRY ===', {
+            flight: flight
+              ? {
+                  id: flight.id,
+                  flightNumber: flight.flightNumber,
+                  storeType: 'mainStore',
+                  callStack: new Error().stack,
+                }
+              : null,
+            timestamp: new Date().toISOString(),
           });
 
           // For direct flights
           if (state.selectedType === 'direct') {
-            console.log('Processing direct flight selection');
+            console.log('MainStore - Processing direct flight selection');
             const newDirectFlight = {
               ...state.directFlight,
               selectedFlight: flight,
@@ -1991,12 +1751,21 @@ export const useStore = create<StoreState & StoreActions>()(
               _lastUpdate: Date.now(),
             };
 
-            console.log('New state for direct flight:', newState);
+            console.log('MainStore - New state for direct flight:', {
+              selectedFlight: newState.selectedFlight
+                ? {
+                    id: newState.selectedFlight.id,
+                    flightNumber: newState.selectedFlight.flightNumber,
+                    storeType: 'mainStore',
+                  }
+                : null,
+              timestamp: new Date().toISOString(),
+            });
             return newState;
           }
 
           // For multi-segment flights
-          console.log('Processing multi-segment flight selection');
+          console.log('MainStore - Processing multi-segment flight selection');
 
           // Create a new array of selected flights, preserving existing selections
           const newSelectedFlights: (Flight | null)[] = [
@@ -2694,87 +2463,53 @@ export const useStore = create<StoreState & StoreActions>()(
       },
 
       handleTripExperienceComplete: () => {
+        console.log('=== Handling Trip Experience Complete ===');
         const state = get();
-        // Get all relevant answers
-        const answers = state.wizardAnswers.filter(
-          (a) =>
-            a.questionId === 'travel_status' ||
-            a.questionId === 'refund_status' ||
-            a.questionId === 'ticket_cost'
-        );
+        const isValid = validateTripExperience(state);
 
-        // Check if we have the main travel status answer
-        const hasTravelStatus = answers.some(
-          (a) =>
-            a.questionId === 'travel_status' &&
-            ['none', 'self', 'provided'].includes(String(a.value))
-        );
+        console.log('Trip Experience Validation:', {
+          isValid,
+          wizardAnswers: state.wizardAnswers,
+          selectedFlights: state.selectedFlights.map((f) => ({
+            id: f.id,
+            flightNumber: f.flightNumber,
+          })),
+        });
 
-        // Get travel status value
-        const travelStatusAnswer = answers.find(
-          (a) => a.questionId === 'travel_status'
-        );
-        const travelStatus = travelStatusAnswer?.value;
+        // Create new validation state that preserves both QA sections
+        const newValidationState = {
+          ...state.validationState,
+          isWizardValid: state.validationState.isWizardValid,
+          stepValidation: {
+            ...state.validationState.stepValidation,
+            2: isValid,
+            3: state.validationState.stepValidation[3], // Preserve second QA
+          },
+          stepInteraction: {
+            ...state.validationState.stepInteraction,
+            2: true,
+            3: state.validationState.stepInteraction[3], // Preserve second QA
+          },
+          2: isValid,
+          3: state.validationState[3], // Preserve second QA
+          _timestamp: Date.now(),
+        };
 
-        // Get refund status value
-        const refundStatus = answers.find(
-          (a) => a.questionId === 'refund_status'
-        )?.value;
+        console.log('New validation state:', newValidationState);
 
-        // Check if ticket cost is needed and provided
-        const needsTicketCost =
-          travelStatus === 'none' && refundStatus === 'no';
-        const hasTicketCost = needsTicketCost
-          ? answers.some((a) => a.questionId === 'ticket_cost' && a.value)
-          : true;
-
-        // If we have a travel status answer and all required fields, it's valid
-        const isValid = hasTravelStatus && (!needsTicketCost || hasTicketCost);
-
-        // Update validation state
-        set((state) => {
-          // First, get all non-travel status answers
-          const otherAnswers = state.wizardAnswers.filter(
-            (a) =>
-              a.questionId !== 'travel_status' &&
-              a.questionId !== 'refund_status' &&
-              a.questionId !== 'ticket_cost'
+        // Save validation state to localStorage for phase 4
+        if (typeof window !== 'undefined' && state.currentPhase === 4) {
+          localStorage.setItem(
+            'phase4ValidationState',
+            JSON.stringify(newValidationState)
           );
+          console.log('Saved Phase 4 validation state to localStorage');
+        }
 
-          // Then, prepare the travel status answers with correct visibility and converted value
-          const travelAnswers = answers.map((a) => {
-            const shouldShow =
-              a.questionId === 'travel_status' ||
-              (a.questionId === 'refund_status' && travelStatus === 'none') ||
-              (a.questionId === 'ticket_cost' && needsTicketCost);
-
-            // Convert travel status value if needed
-            const value =
-              a.questionId === 'travel_status' && a.value === 'none'
-                ? 'no_travel'
-                : a.value;
-
-            return {
-              ...a,
-              shouldShow,
-              value,
-            };
-          });
-
-          return {
-            validationState: {
-              ...state.validationState,
-              stepValidation: {
-                ...state.validationState.stepValidation,
-                2: isValid,
-              },
-              stepInteraction: {
-                ...state.validationState.stepInteraction,
-                2: true,
-              },
-              2: isValid,
-              _timestamp: Date.now(),
-            },
+        // Update state
+        set((state) => {
+          const newState = {
+            validationState: newValidationState,
             completedSteps: isValid
               ? Array.from(new Set([...state.completedSteps, 2])).sort(
                   (a, b) => a - b
@@ -2782,20 +2517,28 @@ export const useStore = create<StoreState & StoreActions>()(
               : state.completedSteps.filter((step) => step !== 2),
             completedWizards: {
               ...state.completedWizards,
-              travel_status: isValid,
+              trip_experience: isValid,
             },
-            // Combine other answers with travel status answers
-            wizardAnswers: [...otherAnswers, ...travelAnswers],
+            wizardIsCompleted: isValid,
             _lastUpdate: Date.now(),
           };
+          console.log('Updated store state:', newState);
+          return newState;
         });
 
+        console.log('=== End Handling Trip Experience Complete ===');
         return isValid;
       },
 
       handleInformedDateComplete: () => {
+        console.log('=== Handling Informed Date Complete ===');
         const state = get();
         const isValid = validateInformedDate(state);
+
+        console.log('Informed Date Validation:', {
+          isValid,
+          wizardAnswers: state.wizardAnswers,
+        });
 
         // Create new validation state that preserves both QA sections
         const newValidationState = {
@@ -2804,17 +2547,19 @@ export const useStore = create<StoreState & StoreActions>()(
           stepValidation: {
             ...state.validationState.stepValidation,
             2: state.validationState.stepValidation[2], // Preserve first QA
-            3: isValid, // Update second QA
+            3: isValid,
           },
           stepInteraction: {
             ...state.validationState.stepInteraction,
             2: state.validationState.stepInteraction[2], // Preserve first QA
-            3: true, // Mark second QA as interacted
+            3: true,
           },
           2: state.validationState[2], // Preserve first QA
-          3: isValid, // Update second QA
+          3: isValid,
           _timestamp: Date.now(),
         };
+
+        console.log('New validation state:', newValidationState);
 
         // Save validation state to localStorage for phase 4
         if (typeof window !== 'undefined' && state.currentPhase === 4) {
@@ -2822,31 +2567,29 @@ export const useStore = create<StoreState & StoreActions>()(
             'phase4ValidationState',
             JSON.stringify(newValidationState)
           );
+          console.log('Saved Phase 4 validation state to localStorage');
         }
 
         // Update state
-        set((state) => ({
-          validationState: newValidationState,
-          completedSteps: isValid
-            ? Array.from(new Set([...state.completedSteps, 3])).sort(
-                (a, b) => a - b
-              )
-            : state.completedSteps.filter((step) => step !== 3),
-          completedWizards: {
-            ...state.completedWizards,
-            informed_date: isValid,
-          },
-          // Filter and update wizard answers while preserving both QA sections
-          wizardAnswers: [
-            ...state.wizardAnswers.filter(
-              (a) => !a.questionId.startsWith('informed_date')
-            ),
-            ...state.wizardAnswers.filter((a) =>
-              a.questionId.startsWith('informed_date')
-            ),
-          ],
-          _lastUpdate: Date.now(),
-        }));
+        set((state) => {
+          const newState = {
+            validationState: newValidationState,
+            completedSteps: isValid
+              ? Array.from(new Set([...state.completedSteps, 3])).sort(
+                  (a, b) => a - b
+                )
+              : state.completedSteps.filter((step) => step !== 3),
+            completedWizards: {
+              ...state.completedWizards,
+              informed_date: isValid,
+            },
+            _lastUpdate: Date.now(),
+          };
+          console.log('Updated store state:', newState);
+          return newState;
+        });
+
+        console.log('=== End Handling Informed Date Complete ===');
       },
 
       canProceedToNextPhase: () => {
@@ -3179,13 +2922,22 @@ export const validateBookingNumber = (state: StoreStateValues): boolean => {
 };
 
 export const validateTripExperience = (state: StoreStateValues): boolean => {
+  console.log('=== validateTripExperience START ===');
+
   // Get all travel status related answers
   const answers = state.wizardAnswers.filter((a) =>
     a.questionId.startsWith('travel_status')
   );
 
+  console.log('Travel status answers:', answers);
+
   // Check if we have the main travel status answer with a valid value
-  const validTravelStatuses = ['none', 'self', 'provided'];
+  const validTravelStatuses = [
+    'none',
+    'self',
+    'provided',
+    'took_alternative_own',
+  ];
   const travelStatus = answers.find(
     (a) => a.questionId === 'travel_status'
   )?.value;
@@ -3194,19 +2946,50 @@ export const validateTripExperience = (state: StoreStateValues): boolean => {
     travelStatus && validTravelStatuses.includes(String(travelStatus))
   );
 
-  // For 'provided' status, also check if flights are selected
-  if (hasTravelStatus && travelStatus === 'provided') {
-    return Boolean(state.selectedFlights && state.selectedFlights.length > 0);
+  console.log('Travel status validation:', {
+    travelStatus,
+    hasTravelStatus,
+    selectedFlights: state.selectedFlights?.map((f) => ({
+      id: f.id,
+      flightNumber: f.flightNumber,
+    })),
+  });
+
+  // For 'provided' or 'took_alternative_own' status, also check if flights are selected
+  let isValid = hasTravelStatus;
+  if (
+    hasTravelStatus &&
+    (travelStatus === 'provided' || travelStatus === 'took_alternative_own')
+  ) {
+    const hasSelectedFlight =
+      state.selectedFlights && state.selectedFlights.length > 0;
+    const hasAlternativeFlightAnswer = answers.some(
+      (a) =>
+        (a.questionId === 'alternative_flight_airline_expense' &&
+          travelStatus === 'provided') ||
+        (a.questionId === 'alternative_flight_own_expense' &&
+          travelStatus === 'took_alternative_own')
+    );
+    isValid = hasSelectedFlight && hasAlternativeFlightAnswer;
   }
 
-  return hasTravelStatus;
+  console.log('=== validateTripExperience END ===', {
+    isValid,
+    travelStatus,
+    hasFlights: state.selectedFlights?.length > 0,
+  });
+  return isValid;
 };
 
 export const validateInformedDate = (state: StoreStateValues): boolean => {
+  console.log('=== validateInformedDate START ===');
+
   // Get all informed date related answers
   const answers = state.wizardAnswers.filter((a) =>
     a.questionId.startsWith('informed_date')
   );
+
+  console.log('Informed date answers:', answers);
 
   // Check if we have the main informed date answer
   const hasInformedDate = answers.some(
@@ -3218,19 +3001,34 @@ export const validateInformedDate = (state: StoreStateValues): boolean => {
 
   let informedDateValid = hasInformedDate;
 
+  console.log('Initial informed date validation:', {
+    hasInformedDate,
+    informedDate,
+    informedDateValid,
+  });
+
   // Handle different date cases
   if (informedDate === 'on_departure') {
     // For on_departure, we just need to have a booked flight with a date
     informedDateValid =
       state.originalFlights.length > 0 &&
       state.originalFlights[0]?.date != null;
+
+    console.log('On departure validation:', {
+      hasOriginalFlights: state.originalFlights.length > 0,
+      firstFlightDate: state.originalFlights[0]?.date,
+      informedDateValid,
+    });
   } else if (informedDate === 'specific_date') {
     const specificDate = answers
       .find((a) => a.questionId === 'specific_informed_date')
       ?.value?.toString();
 
+    console.log('Specific date validation:', { specificDate });
+
     // Check if we have a specific date value
     if (!specificDate) {
+      console.log('=== validateInformedDate END ===', { isValid: false });
       return false;
     }
 
@@ -3238,11 +3036,19 @@ export const validateInformedDate = (state: StoreStateValues): boolean => {
     try {
       const date = parseISO(specificDate);
       informedDateValid = isValid(date);
+      console.log('Date format validation:', {
+        parsedDate: date,
+        isValid: informedDateValid,
+      });
     } catch (e) {
+      console.error('Date parsing error:', e);
       informedDateValid = false;
     }
   }
 
+  console.log('=== validateInformedDate END ===', {
+    isValid: informedDateValid,
+  });
   return informedDateValid;
 };
 
@@ -3293,6 +3099,9 @@ export const getPhaseFromUrl = (url: string): number => {
 export const initializeValidationState = (state: StoreStateValues) => {
   if (typeof window === 'undefined') return;
 
+  // Check if already initialized to prevent multiple initializations
+  if (state._lastUpdate) return;
+
   try {
     // Restore validation state
     const savedValidationState = localStorage.getItem(
@@ -3302,11 +3111,51 @@ export const initializeValidationState = (state: StoreStateValues) => {
       'initialAssessmentCompletedSteps'
     );
 
+    // Initialize with default validation state
+    state.validationState = {
+      isPersonalValid: false,
+      isFlightValid: false,
+      isBookingValid: false,
+      isWizardValid: false,
+      isTermsValid: false,
+      isSignatureValid: false,
+      isWizardSubmitted: false,
+      isValidating: false,
+      stepValidation: {
+        1: true, // Always enable first step
+        2: false,
+        3: false,
+        4: false,
+        5: false,
+      },
+      stepInteraction: {
+        1: true, // Always enable first step interaction
+        2: false,
+        3: false,
+        4: false,
+        5: false,
+      },
+      fieldErrors: {},
+      transitionInProgress: false,
+      _timestamp: Date.now(),
+    };
+
+    // Merge with saved state if exists
     if (savedValidationState) {
       const parsedValidation = JSON.parse(savedValidationState);
       state.validationState = {
         ...state.validationState,
         ...parsedValidation,
+        stepValidation: {
+          ...state.validationState.stepValidation,
+          ...parsedValidation.stepValidation,
+          1: true, // Always enable first step
+        },
+        stepInteraction: {
+          ...state.validationState.stepInteraction,
+          ...parsedValidation.stepInteraction,
+          1: true, // Always enable first step interaction
+        },
       };
     }
 
@@ -3315,31 +3164,14 @@ export const initializeValidationState = (state: StoreStateValues) => {
       state.completedSteps = parsedSteps;
     }
 
-    // If we have wizard answers, revalidate them
-    if (state.wizardAnswers.length > 0) {
-      validateQAWizard(state);
-    }
+    // Set last update to prevent multiple initializations
+    state._lastUpdate = Date.now();
   } catch (error) {
     console.error('Error initializing validation state:', error);
   }
 };
 
-// Update the store initialization
-export const initializeStore = (state: StoreStateValues) => {
-  try {
-    // Initialize validation state first
-    initializeValidationState(state);
-
-    // Set current phase
-    state.currentPhase = 1;
-
-    // Return success
-    return true;
-  } catch (error) {
-    console.error('Error in initializeStore:', error);
-    return false;
-  }
-};
+// ... existing code ...
 
 export interface LocationData {
   value: string;
