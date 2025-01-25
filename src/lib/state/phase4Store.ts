@@ -410,12 +410,11 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
           return newState;
         });
       },
-      setWizardAnswer: (answer: Answer) => {
+      setWizardAnswer: (answer) => {
         console.log('=== Phase4Store - setWizardAnswer ENTRY ===', {
           answer,
           currentTravelAnswers: get().travelStatusAnswers,
           currentInformedAnswers: get().informedDateAnswers,
-          currentValidation: get().stepValidation,
         });
 
         // Determine which answer array to update based on the question ID
@@ -447,7 +446,7 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
             isUpdate: answerIndex >= 0,
           });
 
-          // Update state for informed date answers
+          // Only update answers, no validation or auto-transition
           set((state) => ({
             ...state,
             informedDateAnswers: newAnswers,
@@ -478,7 +477,7 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
             isUpdate: answerIndex >= 0,
           });
 
-          // Update state for travel status answers
+          // Only update answers, no validation or auto-transition
           set((state) => ({
             ...state,
             travelStatusAnswers: newAnswers,
@@ -491,7 +490,6 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
           updatedTravelAnswers: get().travelStatusAnswers,
           updatedInformedAnswers: get().informedDateAnswers,
           lastAnsweredQuestion: get().lastAnsweredQuestion,
-          stepValidation: get().stepValidation,
         });
       },
       updateValidationState: (newState) => {
@@ -568,17 +566,25 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
       onRehydrateStorage: () => (state: Phase4State | null) => {
         console.log('=== Phase4Store - Rehydrated from storage ===', state);
 
-        // If we have a valid state, ensure we keep the wizard answers
+        // If we have a valid state, ensure we keep the wizard answers and success state
         if (state) {
-          console.log('=== Phase4Store - Restoring wizard answers ===', {
+          console.log('=== Phase4Store - Restoring wizard state ===', {
             travelStatusAnswers: state.travelStatusAnswers,
             informedDateAnswers: state.informedDateAnswers,
+            wizardShowingSuccess: state.wizardShowingSuccess,
+            wizardIsValid: state.wizardIsValid,
+            isWizardValid: state.isWizardValid,
+            isWizardSubmitted: state.isWizardSubmitted,
           });
 
           set((currentState) => ({
             ...currentState,
             travelStatusAnswers: state.travelStatusAnswers || [],
             informedDateAnswers: state.informedDateAnswers || [],
+            wizardShowingSuccess: state.wizardShowingSuccess || false,
+            wizardIsValid: state.wizardIsValid || false,
+            isWizardValid: state.isWizardValid || false,
+            isWizardSubmitted: state.isWizardSubmitted || false,
             _lastUpdate: Date.now(),
           }));
         }

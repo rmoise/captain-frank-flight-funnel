@@ -121,12 +121,11 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
     const isLastStep = nextStep >= visibleQuestions.length;
 
     if (!isLastStep) {
+      // Just move to next question
       setCurrentStep(nextStep);
-    } else {
-      // Move to success state by setting step past the last question
+    } else if (currentStep < visibleQuestions.length) {
+      // Only update validation state and show success when clicking submit
       setCurrentStep(visibleQuestions.length);
-
-      // Update validation state
       phase4Store.updateValidationState({
         stepValidation: {
           ...phase4Store.stepValidation,
@@ -169,7 +168,15 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
   // Handle selection of an answer
   const handleSelect = useCallback(
     (questionId: string, value: string | number | boolean) => {
+      console.log('=== Phase4QAWizard - handleSelect ===', {
+        questionId,
+        value,
+      });
+
+      // Create new answer
       const answer = { questionId, value, visible: true };
+
+      // Only update the answer in the store, no auto-transition
       phase4Store.setWizardAnswer(answer);
     },
     [phase4Store]
@@ -186,33 +193,31 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
 
   // Handle going back to questions
   const handleBackToQuestions = useCallback(() => {
+    // Reset current step
     setCurrentStep(0);
-  }, []);
+
+    // Reset all wizard state
+    phase4Store.resetStore();
+  }, [phase4Store]);
 
   // Get success state
   const successState = useMemo(() => {
-    const isLastStep = currentStep >= visibleQuestions.length;
-    const hasAnswers = wizardAnswers.length > 0;
+    const answers =
+      wizardType === 'travel_status'
+        ? phase4Store.travelStatusAnswers
+        : phase4Store.informedDateAnswers;
 
-    if (!isLastStep || !hasAnswers) {
+    // Only show success if explicitly set in store
+    if (!phase4Store.wizardShowingSuccess || !answers.length) {
       return { showing: false, message: '' };
     }
 
-    const lastAnswer = wizardAnswers[wizardAnswers.length - 1];
+    const lastAnswer = answers[answers.length - 1];
     if (!lastAnswer) return { showing: false, message: '' };
 
+    // Find the question and option for the last answer
     const question = questions.find((q) => q.id === lastAnswer.questionId);
     const option = question?.options?.find((o) => o.value === lastAnswer.value);
-
-    // Check if this is an alternative flight question
-    const isAlternativeFlight =
-      question?.id === 'alternative_flight_airline_expense' ||
-      question?.id === 'alternative_flight_own_expense';
-
-    // Don't show success for alternative flight questions
-    if (isAlternativeFlight) {
-      return { showing: false, message: '' };
-    }
 
     return {
       showing: true,
@@ -221,9 +226,10 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
         : t.wizard.success.answersSaved,
     };
   }, [
-    currentStep,
-    visibleQuestions.length,
-    wizardAnswers,
+    phase4Store.travelStatusAnswers,
+    phase4Store.informedDateAnswers,
+    phase4Store.wizardShowingSuccess,
+    wizardType,
     questions,
     t.wizard.success,
   ]);

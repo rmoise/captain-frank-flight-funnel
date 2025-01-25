@@ -134,6 +134,15 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
                           ? 'border-[#F54538] bg-[#FEF2F2]'
                           : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                       }`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (option.externalLink) {
+                        window.open(option.externalLink, '_blank');
+                        return;
+                      }
+                      onSelect(question.id, option.value);
+                    }}
                   >
                     <input
                       type="radio"
@@ -141,12 +150,12 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
                       value={option.value}
                       checked={isSelected}
                       onChange={(e) => {
+                        e.preventDefault();
                         e.stopPropagation();
                         if (option.externalLink) {
                           window.open(option.externalLink, '_blank');
                           return;
                         }
-                        setLocalValue(option.value);
                         onSelect(question.id, option.value);
                       }}
                       className="w-4 h-4 border-gray-300 text-[#F54538] focus:ring-[#F54538] focus:ring-offset-0 accent-[#F54538]"
