@@ -62,10 +62,30 @@ export const validateFlightSelection = (
         // Check connection with previous segment
         if (index > 0) {
           const prevSegment = flightSegments[index - 1];
-          const prevCity = prevSegment.toLocation?.value;
-          const currentCity = segment.fromLocation?.value;
-          if (!prevCity || !currentCity || prevCity !== currentCity) {
-            return false;
+          if (!prevSegment.toLocation || !segment.fromLocation) return false;
+
+          // Check city connections
+          const prevCity = prevSegment.toLocation.value.toLowerCase();
+          const currentCity = segment.fromLocation.value.toLowerCase();
+          if (prevCity !== currentCity) return false;
+
+          // Check dates and times if in phase 3 or above
+          if (currentPhase >= 3) {
+            if (!prevSegment.selectedFlight || !segment.selectedFlight)
+              return false;
+
+            const prevArrivalTime = new Date(
+              `${prevSegment.selectedFlight.date}T${prevSegment.selectedFlight.arrivalTime}:00.000Z`
+            );
+            const currentDepartureTime = new Date(
+              `${segment.selectedFlight.date}T${segment.selectedFlight.departureTime}:00.000Z`
+            );
+
+            // Check if there's at least 30 minutes between flights
+            const timeDiff =
+              (currentDepartureTime.getTime() - prevArrivalTime.getTime()) /
+              60000;
+            if (timeDiff < 30) return false;
           }
         }
 

@@ -115,9 +115,26 @@ export const createPersonalDetailsSlice = (
       // Run validation immediately
       validationManager.validate(context.state, 3).then((result) => {
         const currentDetails = get().personalDetails;
-        if (currentDetails === details) {
+        if (currentDetails === details && details) {
+          // Ensure all required fields are present
+          const validDetails: PassengerDetails = {
+            salutation: details.salutation || '',
+            firstName: details.firstName || '',
+            lastName: details.lastName || '',
+            email: details.email || '',
+            phone: details.phone || '',
+            address: details.address || '',
+            postalCode: details.postalCode || '',
+            city: details.city || '',
+            country: details.country || '',
+          };
           set((state) =>
-            updateValidationState(state, result.isValid, Date.now(), details)
+            updateValidationState(
+              state,
+              result.isValid,
+              Date.now(),
+              validDetails
+            )
           );
         }
       });
@@ -150,7 +167,23 @@ export const createPersonalDetailsSlice = (
       });
 
       const result = await validationManager.validate(context.state, 3);
-      set(() => updateValidationState(get(), result.isValid, now, details));
+
+      // Ensure all required fields are present
+      const validDetails: PassengerDetails = {
+        salutation: details.salutation || '',
+        firstName: details.firstName || '',
+        lastName: details.lastName || '',
+        email: details.email || '',
+        phone: details.phone || '',
+        address: details.address || '',
+        postalCode: details.postalCode || '',
+        city: details.city || '',
+        country: details.country || '',
+      };
+
+      set(() =>
+        updateValidationState(get(), result.isValid, now, validDetails)
+      );
       return result.isValid;
     },
   };

@@ -165,9 +165,30 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
 
   // Handle initial load validation
   useEffect(() => {
-    if (!storedDetails) return;
+    // Skip validation entirely on mount if no stored details or all values are empty
+    if (
+      !storedDetails ||
+      !Object.values(storedDetails).some((value) => value?.trim())
+    ) {
+      const store = useStore.getState();
+      store.updateValidationState({
+        ...store.validationState,
+        stepValidation: {
+          ...store.validationState.stepValidation,
+          [stepId]: false,
+        },
+        stepInteraction: {
+          ...store.validationState.stepInteraction,
+          [stepId]: false,
+        },
+        isPersonalValid: false,
+        [stepId]: false,
+        fieldErrors: {},
+      });
+      return;
+    }
 
-    // Only run validation on mount or when stored details actually change
+    // Only validate if we have stored details with actual values
     const requiredFields = isClaimSuccess
       ? [
           'salutation',
@@ -190,60 +211,40 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
     const store = useStore.getState();
     const currentValidation = store.validationState;
 
-    // Check if we need to update validation state
-    if (
-      hasAllRequiredFields !== currentValidation.isPersonalValid ||
-      hasAllRequiredFields !== currentValidation.stepValidation[stepId]
-    ) {
-      // Update validation state to reflect completed state
-      const newValidationState = {
-        ...currentValidation,
-        stepValidation: {
-          ...currentValidation.stepValidation,
-          [stepId]: hasAllRequiredFields,
-        },
-        isPersonalValid: hasAllRequiredFields,
+    // Update validation state to reflect completed state
+    const newValidationState = {
+      ...currentValidation,
+      stepValidation: {
+        ...currentValidation.stepValidation,
         [stepId]: hasAllRequiredFields,
-      };
+      },
+      stepInteraction: {
+        ...currentValidation.stepInteraction,
+        [stepId]: hasAllRequiredFields, // Only mark as interacted if all required fields are present
+      },
+      isPersonalValid: hasAllRequiredFields,
+      [stepId]: hasAllRequiredFields,
+      fieldErrors: hasAllRequiredFields ? {} : currentValidation.fieldErrors,
+    };
 
-      store.updateValidationState(newValidationState);
+    store.updateValidationState(newValidationState);
+
+    // If all required fields are present, call onComplete
+    if (hasAllRequiredFields) {
+      onComplete(storedDetails);
     }
-  }, [storedDetails, stepId, isClaimSuccess]);
 
-  // Handle initial interaction
-  useEffect(() => {
-    if (!interactionRef.current && hasInteracted && onInteract) {
+    // Mark as interacted if we have all required fields
+    if (!interactionRef.current && onInteract && hasAllRequiredFields) {
       interactionRef.current = true;
       onInteract();
     }
-  }, [hasInteracted, onInteract]);
-
-  // Separate effect for claim success page specific logic
-  useEffect(() => {
-    if (isClaimSuccess && storedDetails) {
-      const requiredFields = [
-        'salutation',
-        'firstName',
-        'lastName',
-        'email',
-        'phone',
-        'address',
-        'postalCode',
-        'city',
-        'country',
-      ];
-      const hasAllRequiredFields = requiredFields.every((field) =>
-        storedDetails[field as keyof PassengerDetails]?.trim()
-      );
-      if (hasAllRequiredFields) {
-        onComplete(storedDetails);
-      }
-    }
-  }, [isClaimSuccess, storedDetails, onComplete]);
+  }, [storedDetails, isClaimSuccess, onComplete, onInteract, stepId]);
 
   // Memoize the input change handler
   const handleInputChange = useCallback(
     (field: keyof PassengerDetails, value: string) => {
+      // Track interaction
       if (!interactionRef.current && onInteract) {
         onInteract();
         interactionRef.current = true;
@@ -258,46 +259,55 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
       if (storedDetails?.[field] !== value) {
         setPersonalDetails(newDetails);
 
-        // Check validation after input changes
-        const requiredFields = isClaimSuccess
-          ? [
-              'salutation',
-              'firstName',
-              'lastName',
-              'email',
-              'phone',
-              'address',
-              'postalCode',
-              'city',
-              'country',
-            ]
-          : ['firstName', 'lastName', 'email'];
-
-        const hasAllRequiredFields = requiredFields.every((field) =>
-          newDetails[field as keyof PassengerDetails]?.trim()
-        );
-
         // Get current validation state once
         const store = useStore.getState();
         const currentValidation = store.validationState;
 
-        // Only update if validation state needs to change
-        if (
-          currentValidation.isPersonalValid !== hasAllRequiredFields ||
-          currentValidation.stepValidation[stepId] !== hasAllRequiredFields
-        ) {
-          // Batch validation state updates
+        // Only validate if user has interacted with the form
+        if (interactionRef.current) {
+          const requiredFields = isClaimSuccess
+            ? [
+                'salutation',
+                'firstName',
+                'lastName',
+                'email',
+                'phone',
+                'address',
+                'postalCode',
+                'city',
+                'country',
+              ]
+            : ['firstName', 'lastName', 'email'];
+
+          const hasAllRequiredFields = requiredFields.every((field) =>
+            newDetails[field as keyof PassengerDetails]?.trim()
+          );
+
+          // Update validation state
           const newValidationState = {
             ...currentValidation,
             stepValidation: {
               ...currentValidation.stepValidation,
               [stepId]: hasAllRequiredFields,
             },
+            stepInteraction: {
+              ...currentValidation.stepInteraction,
+              [stepId]: true,
+            },
             [stepId]: hasAllRequiredFields,
             isPersonalValid: hasAllRequiredFields,
+            fieldErrors: hasAllRequiredFields
+              ? {}
+              : {
+                  ...currentValidation.fieldErrors,
+                  [field]: value.trim() ? '' : 'This field is required',
+                },
           };
 
           store.updateValidationState(newValidationState);
+        } else {
+          // If no interaction yet, just update the details without validation
+          setPersonalDetails(newDetails);
         }
       }
     },

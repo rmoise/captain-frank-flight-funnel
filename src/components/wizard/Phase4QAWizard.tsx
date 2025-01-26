@@ -3,7 +3,7 @@
 import React, {
   useCallback,
   useMemo,
-  useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from 'react';
@@ -36,76 +36,69 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
 
   const { t } = useTranslation();
   const phase4Store = usePhase4Store();
-  const prevWizardTypeRef = useRef(wizardType);
   const [currentStep, setCurrentStep] = useState(0);
+  const wizardTypeRef = useRef(wizardType);
+  const isInitialMount = useRef(true);
+  const prevAnswersRef = useRef<Answer[]>([]);
 
-  // Reset step when type changes
-  useEffect(() => {
-    console.log('=== Phase4QAWizard - wizardType changed ===', {
-      from: prevWizardTypeRef.current,
-      to: wizardType,
-      currentStep,
-      travelStatusShowingSuccess: phase4Store.travelStatusShowingSuccess,
-      informedDateShowingSuccess: phase4Store.informedDateShowingSuccess,
-    });
+  // Handle wizard type changes with layout effect to ensure synchronous update
+  useLayoutEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
 
-    if (prevWizardTypeRef.current !== wizardType) {
-      console.log('Resetting current step');
-      // Just reset the current step
+    if (wizardTypeRef.current !== wizardType) {
+      wizardTypeRef.current = wizardType;
       setCurrentStep(0);
-      // Update the ref
-      prevWizardTypeRef.current = wizardType;
     }
-  }, [wizardType, phase4Store, currentStep]);
+  }, [wizardType]);
 
-  // Get current answers
+  // Get current answers - memoize to prevent unnecessary recalculations
   const wizardAnswers = useMemo(() => {
-    // Never use initialAnswers for informed date wizard
-    if (wizardType === 'informed_date') {
-      return phase4Store.informedDateAnswers;
+    const answers =
+      wizardType === 'informed_date'
+        ? phase4Store.informedDateAnswers
+        : initialAnswers?.length > 0
+          ? initialAnswers
+          : phase4Store.travelStatusAnswers;
+
+    // Only update if answers have changed
+    if (JSON.stringify(answers) !== JSON.stringify(prevAnswersRef.current)) {
+      prevAnswersRef.current = answers;
     }
-    if (initialAnswers && initialAnswers.length > 0) {
-      return initialAnswers;
-    }
-    return phase4Store.travelStatusAnswers;
-  }, [initialAnswers, phase4Store, wizardType]);
+    return prevAnswersRef.current;
+  }, [
+    wizardType,
+    initialAnswers,
+    phase4Store.informedDateAnswers,
+    phase4Store.travelStatusAnswers,
+  ]);
 
   // Get visible questions
   const visibleQuestions = useMemo(() => {
-    if (!questions || !Array.isArray(questions) || questions.length === 0) {
-      return [];
-    }
+    if (!questions?.length) return [];
 
-    const firstQuestion = questions[0];
-    const remainingQuestions = questions.slice(1);
-
-    const filteredRemaining = remainingQuestions.filter(
-      (question: Question) => {
-        if (question.showIf) {
-          try {
-            return question.showIf(wizardAnswers);
-          } catch (err) {
-            return false;
-          }
+    return [
+      questions[0],
+      ...questions.slice(1).filter((question) => {
+        if (!question.showIf) return true;
+        try {
+          return question.showIf(wizardAnswers);
+        } catch {
+          return false;
         }
-        return true;
-      }
-    );
-
-    return [firstQuestion, ...filteredRemaining];
+      }),
+    ];
   }, [questions, wizardAnswers]);
 
   // Get current question
   const currentQuestion = useMemo(() => {
-    if (!visibleQuestions || visibleQuestions.length === 0) {
-      return null;
-    }
-
-    if (currentStep < 0 || currentStep >= visibleQuestions.length) {
-      return visibleQuestions[0];
-    }
-
-    return visibleQuestions[currentStep];
+    return visibleQuestions.length
+      ? currentStep < visibleQuestions.length
+        ? visibleQuestions[currentStep]
+        : visibleQuestions[0]
+      : null;
   }, [visibleQuestions, currentStep]);
 
   // Check if current question is answered
@@ -113,63 +106,72 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
     if (!currentQuestion) return false;
 
     if (currentQuestion.type === 'flight_selector') {
-      return Boolean(selectedFlight && selectedFlight.id);
+      const hasSelectedFlight = Boolean(selectedFlight?.id);
+      const hasStoredFlights = phase4Store.selectedFlights?.length > 0;
+      return hasSelectedFlight || hasStoredFlights;
+    }
+
+    // For date selection questions, consider them answered if they have any value
+    if (currentQuestion.id === 'specific_informed_date') {
+      return wizardAnswers.some(
+        (a) => a.questionId === currentQuestion.id && a.value
+      );
     }
 
     return wizardAnswers.some((a) => a.questionId === currentQuestion.id);
-  }, [currentQuestion, selectedFlight, wizardAnswers]);
+  }, [
+    currentQuestion,
+    selectedFlight?.id,
+    wizardAnswers,
+    phase4Store.selectedFlights,
+  ]);
 
   // Handle selection of an answer
   const handleSelect = useCallback(
     (questionId: string, value: string | number | boolean) => {
-      console.log('=== Phase4QAWizard - handleSelect ENTRY ===', {
+      // Special handling for informed date questions
+      if (
+        questionId === 'informed_date' ||
+        questionId === 'specific_informed_date'
+      ) {
+        // For date selection, we want to update the answer without validation
+        // and preserve the current step
+        phase4Store.batchUpdate({
+          informedDateAnswers: [
+            ...phase4Store.informedDateAnswers.filter(
+              (a) => a.questionId !== questionId
+            ),
+            { questionId, value },
+          ],
+          lastAnsweredQuestion: questionId,
+          // Preserve current validation and interaction states
+          informedDateStepValidation: phase4Store.informedDateStepValidation,
+          informedDateStepInteraction: phase4Store.informedDateStepInteraction,
+          travelStatusStepValidation: phase4Store.travelStatusStepValidation,
+          travelStatusStepInteraction: phase4Store.travelStatusStepInteraction,
+          _lastUpdate: Date.now(),
+        });
+        return;
+      }
+
+      // For other answers, proceed with normal handling
+      phase4Store.setWizardAnswer({
         questionId,
         value,
-        wizardType,
-        currentStep,
-        isCurrentQuestionAnswered,
-        travelStatusShowingSuccess: phase4Store.travelStatusShowingSuccess,
-        informedDateShowingSuccess: phase4Store.informedDateShowingSuccess,
-        travelStatusStepValidation: phase4Store.travelStatusStepValidation,
-        informedDateStepValidation: phase4Store.informedDateStepValidation,
-        travelStatusStepInteraction: phase4Store.travelStatusStepInteraction,
-        informedDateStepInteraction: phase4Store.informedDateStepInteraction,
-      });
-
-      // Create new answer
-      const answer = { questionId, value };
-
-      // Only update the answer in the store, no auto-transition
-      phase4Store.setWizardAnswer(answer);
-
-      console.log('=== Phase4QAWizard - handleSelect EXIT ===', {
-        currentStep,
-        isCurrentQuestionAnswered: wizardAnswers.some(
-          (a) => a.questionId === currentQuestion?.id
-        ),
-        travelStatusShowingSuccess: phase4Store.travelStatusShowingSuccess,
-        informedDateShowingSuccess: phase4Store.informedDateShowingSuccess,
-        travelStatusStepValidation: phase4Store.travelStatusStepValidation,
-        informedDateStepValidation: phase4Store.informedDateStepValidation,
-        travelStatusStepInteraction: phase4Store.travelStatusStepInteraction,
-        informedDateStepInteraction: phase4Store.informedDateStepInteraction,
+        shouldValidate: false,
       });
     },
-    [
-      phase4Store,
-      wizardType,
-      currentStep,
-      isCurrentQuestionAnswered,
-      currentQuestion,
-      wizardAnswers,
-    ]
+    [phase4Store]
   );
 
   // Get current answer for a question
   const getCurrentAnswer = useCallback(
     (questionId: string): string => {
-      const answer = wizardAnswers.find((a) => a.questionId === questionId);
-      return answer?.value?.toString() || '';
+      return (
+        wizardAnswers
+          .find((a) => a.questionId === questionId)
+          ?.value?.toString() || ''
+      );
     },
     [wizardAnswers]
   );
@@ -264,9 +266,15 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
   // Handle going back
   const goToPrevious = useCallback(() => {
     if (currentStep > 0) {
-      setCurrentStep(currentStep - 1);
+      // Reset state based on wizard type
+      if (wizardType === 'travel_status') {
+        phase4Store.resetTravelStatusState();
+      } else {
+        phase4Store.resetInformedDateState();
+      }
+      setCurrentStep(0);
     }
-  }, [currentStep]);
+  }, [currentStep, phase4Store, wizardType]);
 
   // Handle going back to questions
   const handleBackToQuestions = useCallback(() => {
@@ -290,11 +298,58 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
     // Reset current step first
     setCurrentStep(0);
 
-    // Reset state based on wizard type
+    // Preserve existing flight type or default to 'direct'
+    const currentFlightType = phase4Store.selectedType || 'direct';
+
+    // Reset state based on wizard type and ensure UI cleanup
     if (wizardType === 'travel_status') {
-      phase4Store.resetTravelStatusState();
+      phase4Store.batchUpdate({
+        travelStatusAnswers: [],
+        travelStatusCurrentStep: 0,
+        travelStatusShowingSuccess: false,
+        travelStatusIsValid: false,
+        travelStatusStepValidation: {},
+        travelStatusStepInteraction: {},
+        lastAnsweredQuestion: null,
+        selectedFlights: [],
+        selectedFlight: undefined,
+        flightSegments: [],
+        fromLocation: undefined,
+        toLocation: undefined,
+        selectedDate: undefined,
+        selectedType: currentFlightType,
+        directFlight: {
+          fromLocation: null,
+          toLocation: null,
+          date: null,
+          selectedFlight: null,
+        },
+        _lastUpdate: Date.now(),
+      });
     } else {
-      phase4Store.resetInformedDateState();
+      phase4Store.batchUpdate({
+        informedDateAnswers: [],
+        informedDateCurrentStep: 0,
+        informedDateShowingSuccess: false,
+        informedDateIsValid: false,
+        informedDateStepValidation: {},
+        informedDateStepInteraction: {},
+        lastAnsweredQuestion: null,
+        selectedFlights: [],
+        selectedFlight: undefined,
+        flightSegments: [],
+        fromLocation: undefined,
+        toLocation: undefined,
+        selectedDate: undefined,
+        selectedType: currentFlightType,
+        directFlight: {
+          fromLocation: null,
+          toLocation: null,
+          date: null,
+          selectedFlight: null,
+        },
+        _lastUpdate: Date.now(),
+      });
     }
 
     console.log('=== Phase4QAWizard - handleBackToQuestions EXIT ===', {
@@ -313,7 +368,7 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
         },
       },
     });
-  }, [phase4Store, wizardType]);
+  }, [phase4Store, wizardType, currentStep, setCurrentStep]);
 
   // Get success state
   const successState = useMemo(() => {
@@ -360,6 +415,8 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
     phase4Store.informedDateAnswers,
     phase4Store.travelStatusShowingSuccess,
     phase4Store.informedDateShowingSuccess,
+    phase4Store.travelStatusIsValid,
+    phase4Store.informedDateIsValid,
     wizardType,
     questions,
     t.wizard.success,

@@ -3,4 +3,5 @@ export interface Answer {
   value: string | number | boolean;
   shouldShow?: boolean;
   isActiveSelection?: boolean;
+  shouldValidate?: boolean;
 }

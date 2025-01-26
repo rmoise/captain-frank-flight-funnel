@@ -1,14 +1,11 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { Flight, LocationData } from '@/types/store';
+import type { Flight } from '@/types/store';
 import type { Answer } from '@/types/wizard';
+import type { SharedFlightSearch } from './types';
 
-export type Phase4FlightSegment = {
-  fromLocation: LocationData | null;
-  toLocation: LocationData | null;
-  date: Date | null;
-  selectedFlight: Flight | null;
-};
+// Use shared interface for consistent formatting
+export type Phase4FlightSegment = SharedFlightSearch;
 
 export interface Phase4State {
   // Flight selection state
@@ -79,6 +76,7 @@ interface Phase4Actions {
   setWizardCurrentStep: (step: number) => void;
   resetTravelStatusState: () => void;
   resetInformedDateState: () => void;
+  batchUpdate: (updates: Partial<Phase4State>) => void;
 }
 
 const initialState: Phase4State = {
@@ -261,13 +259,26 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
       setSelectedDate: (date) => {
         console.log('=== Phase4Store - setSelectedDate ===', { date });
         set((state) => {
-          const newState = {
+          // Get current validation states
+          const currentTravelStatusValidation =
+            state.travelStatusStepValidation;
+          const currentInformedDateValidation =
+            state.informedDateStepValidation;
+          const currentTravelStatusInteraction =
+            state.travelStatusStepInteraction;
+          const currentInformedDateInteraction =
+            state.informedDateStepInteraction;
+
+          return {
             ...state,
             selectedDate: date,
+            // Preserve validation states
+            travelStatusStepValidation: currentTravelStatusValidation,
+            informedDateStepValidation: currentInformedDateValidation,
+            travelStatusStepInteraction: currentTravelStatusInteraction,
+            informedDateStepInteraction: currentInformedDateInteraction,
             _lastUpdate: Date.now(),
           };
-          console.log('New state:', newState);
-          return newState;
         });
       },
       setSelectedFlight: (flight) => {
@@ -281,33 +292,69 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
         });
 
         set((state) => {
-          // If no flight is selected, reset both selected and original flights
+          // If no flight is selected, reset selected flight but keep original flights
           if (!flight) {
             return {
               ...state,
               selectedFlight: null,
               selectedFlights: [],
-              originalFlights: [],
               _lastUpdate: Date.now(),
             };
           }
 
-          // Create a new array with the selected flight
-          const newSelectedFlights = [flight];
+          // Get current flights array
+          const currentFlights: (Flight | null)[] = [...state.selectedFlights];
 
-          // If this is the first flight selection, set it as both selected and original
-          if (!state.originalFlights?.length) {
-            console.log('Setting first selected flight as original flight');
+          // Update or add the flight at the current segment index
+          if (state.currentSegmentIndex < currentFlights.length) {
+            currentFlights[state.currentSegmentIndex] = flight;
+          } else {
+            // If we're adding a new flight, ensure we preserve the order
+            while (currentFlights.length < state.currentSegmentIndex) {
+              currentFlights.push(null);
+            }
+            currentFlights.push(flight);
+          }
+
+          // Filter out any null values
+          const newSelectedFlights = currentFlights.filter(
+            (f): f is Flight => f !== null
+          );
+
+          // Check if this is an alternative flight
+          const isAlternativeFlight =
+            state.originalFlights.length > 0 &&
+            !state.originalFlights.some((f) => {
+              // If either flight doesn't have an ID, compare by flight number and date
+              if (!f.id || !flight.id) {
+                return (
+                  f.flightNumber === flight.flightNumber &&
+                  f.date === flight.date &&
+                  f.departureCity === flight.departureCity &&
+                  f.arrivalCity === flight.arrivalCity
+                );
+              }
+              // Otherwise, compare by ID
+              return f.id === flight.id;
+            });
+
+          if (isAlternativeFlight) {
+            // Initialize step interaction state if it doesn't exist
+            const currentStepInteraction =
+              state.travelStatusStepInteraction || {};
+
             return {
               ...state,
               selectedFlight: flight,
               selectedFlights: newSelectedFlights,
-              originalFlights: [{ ...flight }],
+              travelStatusStepInteraction: {
+                ...currentStepInteraction,
+                2: true,
+              },
               _lastUpdate: Date.now(),
             };
           }
 
-          // Otherwise, just update the selected flight
           return {
             ...state,
             selectedFlight: flight,
@@ -315,41 +362,6 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
             _lastUpdate: Date.now(),
           };
         });
-
-        // After setting the flight, check if we need to update validation
-        const currentState = get();
-        if (flight) {
-          const isAlternativeFlight =
-            currentState.originalFlights.length > 0 &&
-            !currentState.originalFlights.some((f) => f.id === flight.id);
-
-          console.log('=== Phase4Store - Alternative Flight Check ===', {
-            isAlternativeFlight,
-            flightId: flight.id,
-            originalFlights: currentState.originalFlights.map((f) => ({
-              id: f.id,
-              flightNumber: f.flightNumber,
-            })),
-          });
-
-          // Only update step interaction state, not validation
-          if (isAlternativeFlight) {
-            set((state) => {
-              // Initialize step interaction state if it doesn't exist
-              const currentStepInteraction =
-                state.travelStatusStepInteraction || {};
-
-              return {
-                ...state,
-                travelStatusStepInteraction: {
-                  ...currentStepInteraction,
-                  2: true,
-                },
-                _lastUpdate: Date.now(),
-              };
-            });
-          }
-        }
       },
       setSelectedFlights: (flights) => {
         console.log('=== Phase4Store - setSelectedFlights ===', {
@@ -512,55 +524,103 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
           answer.questionId === 'specific_informed_date';
 
         if (isInformedDateQuestion) {
-          // Handle informed date answers independently
-          const currentAnswers = get().informedDateAnswers;
-          const answerIndex = currentAnswers.findIndex(
-            (a) => a.questionId === answer.questionId
-          );
-
-          let newAnswers;
-          if (answerIndex >= 0) {
-            newAnswers = [
-              ...currentAnswers.slice(0, answerIndex),
-              answer,
-              ...currentAnswers.slice(answerIndex + 1),
-            ];
-          } else {
-            newAnswers = [...currentAnswers, answer];
-          }
+          // For informed date questions, only keep the current answer
+          const newAnswers = [answer];
 
           // Only update informed date state
           set((state) => ({
             ...state,
             informedDateAnswers: newAnswers,
             lastAnsweredQuestion: answer.questionId,
+            // Only update validation if shouldValidate is true
+            ...(answer.shouldValidate !== false && {
+              informedDateStepValidation: state.informedDateStepValidation,
+              informedDateStepInteraction: state.informedDateStepInteraction,
+            }),
             _lastUpdate: Date.now(),
           }));
         } else {
-          // Handle travel status answers independently
-          const currentAnswers = get().travelStatusAnswers;
-          const answerIndex = currentAnswers.findIndex(
-            (a) => a.questionId === answer.questionId
-          );
+          // Get existing answers that we might want to keep
+          const existingAnswers = get().travelStatusAnswers;
 
-          let newAnswers;
-          if (answerIndex >= 0) {
-            newAnswers = [
-              ...currentAnswers.slice(0, answerIndex),
-              answer,
-              ...currentAnswers.slice(answerIndex + 1),
-            ];
+          // If this is a travel status answer, handle conditional answers
+          if (answer.questionId === 'travel_status') {
+            const status = answer.value;
+
+            // Keep related answers based on travel status
+            const relatedAnswers = existingAnswers.filter((a) => {
+              // For 'none' status, keep refund_status and ticket_cost if refund_status is 'no'
+              if (status === 'none') {
+                if (a.questionId === 'refund_status') return true;
+                if (a.questionId === 'ticket_cost') {
+                  const hasNoRefund = existingAnswers.some(
+                    (r) => r.questionId === 'refund_status' && r.value === 'no'
+                  );
+                  return hasNoRefund;
+                }
+              }
+
+              // For 'provided' status, keep alternative_flight_airline_expense
+              if (
+                status === 'provided' &&
+                a.questionId === 'alternative_flight_airline_expense'
+              ) {
+                return true;
+              }
+
+              // For 'took_alternative_own' status, keep alternative_flight_own_expense and trip_costs
+              if (status === 'took_alternative_own') {
+                return [
+                  'alternative_flight_own_expense',
+                  'trip_costs',
+                ].includes(a.questionId);
+              }
+
+              return false;
+            });
+
+            // Clear selected flights if travel status is 'none' or 'self'
+            const shouldClearFlights = status === 'none' || status === 'self';
+
+            // Combine new answer with related existing answers
+            const newAnswers = [answer, ...relatedAnswers];
+
+            // Update state
+            set((state) => ({
+              ...state,
+              travelStatusAnswers: newAnswers,
+              lastAnsweredQuestion: answer.questionId,
+              selectedFlights: shouldClearFlights ? [] : state.selectedFlights,
+              // Only update validation if shouldValidate is true
+              ...(answer.shouldValidate !== false && {
+                travelStatusStepValidation: state.travelStatusStepValidation,
+                travelStatusStepInteraction: state.travelStatusStepInteraction,
+              }),
+              _lastUpdate: Date.now(),
+            }));
           } else {
-            newAnswers = [...currentAnswers, answer];
-          }
+            // For other travel status related questions, preserve existing answers
+            const existingTravelStatus = existingAnswers.find(
+              (a) => a.questionId === 'travel_status'
+            );
 
-          // Only update travel status state
-          set((state) => ({
-            ...state,
-            travelStatusAnswers: newAnswers,
-            lastAnsweredQuestion: answer.questionId,
-            _lastUpdate: Date.now(),
-          }));
+            // Keep travel status answer and add the new answer
+            const newAnswers = existingTravelStatus
+              ? [existingTravelStatus, answer]
+              : [answer];
+
+            set((state) => ({
+              ...state,
+              travelStatusAnswers: newAnswers,
+              lastAnsweredQuestion: answer.questionId,
+              // Only update validation if shouldValidate is true
+              ...(answer.shouldValidate !== false && {
+                travelStatusStepValidation: state.travelStatusStepValidation,
+                travelStatusStepInteraction: state.travelStatusStepInteraction,
+              }),
+              _lastUpdate: Date.now(),
+            }));
+          }
         }
 
         console.log('=== Phase4Store - setWizardAnswer EXIT ===', {
@@ -775,6 +835,7 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
           travelStatusStepValidation: {},
           travelStatusStepInteraction: {},
           lastAnsweredQuestion: null,
+          selectedFlights: [],
           _lastUpdate: Date.now(),
         }));
       },
@@ -790,6 +851,12 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
           informedDateStepInteraction: {},
           lastAnsweredQuestion: null,
           _lastUpdate: Date.now(),
+        }));
+      },
+      batchUpdate: (updates: Partial<Phase4State>) => {
+        set((state) => ({
+          ...state,
+          ...updates,
         }));
       },
     }),

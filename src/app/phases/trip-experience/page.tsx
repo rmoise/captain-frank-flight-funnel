@@ -13,8 +13,8 @@ import { ContinueButton } from '@/components/shared/ContinueButton';
 import { BackButton } from '@/components/shared/BackButton';
 import { PhaseNavigation } from '@/components/PhaseNavigation';
 import { accordionConfig } from '@/config/accordion';
-import { isValidYYYYMMDD } from '@/utils/dateUtils';
-import api from '@/services/api';
+import { isValidYYYYMMDD, formatDateToYYYYMMDD } from '@/utils/dateUtils';
+import { ClaimService } from '@/services/claimService';
 import { AccordionProvider } from '@/components/shared/AccordionContext';
 import { useStore } from '@/lib/state/store';
 
@@ -487,138 +487,37 @@ export default function TripExperiencePage() {
 
   const handleContinue = async () => {
     if (!canContinue()) return;
-
     setIsLoading(true);
 
     try {
-      // Get the travel status from step 1 answers
+      // Get travel status from answers
       const travelStatus = travelStatusAnswers.find(
         (a) => a.questionId === 'travel_status'
       )?.value;
 
       if (!travelStatus) {
-        throw new Error('Travel status not found');
+        throw new Error('No travel status selected');
       }
 
-      // Get the originally booked flights
-      const bookedFlightIds = originalFlights
-        .filter((flight) => flight && flight.id)
-        .map((flight) => String(flight.id));
+      // Get informed date
+      const informedDate = (() => {
+        const specificDate = informedDateAnswers.find(
+          (a) => a.questionId === 'specific_informed_date'
+        )?.value;
 
-      if (bookedFlightIds.length === 0) {
-        console.error('No booked flight IDs available');
-        return;
-      }
-
-      // Map travel status to journey_fact_type
-      const journey_fact_type = (() => {
-        switch (travelStatus as string) {
-          case 'none':
-            return 'none';
-          case 'self':
-            return 'self';
-          case 'provided':
-            return 'provided';
-          case 'took_alternative_own':
-            return 'self'; // Treat own alternative as self-travel
-          default:
-            return 'none';
+        if (specificDate) {
+          return String(specificDate);
         }
+
+        // If no specific date, use the flight date
+        if (originalFlights[0]?.date) {
+          return formatDateToYYYYMMDD(new Date(originalFlights[0].date));
+        }
+
+        return formatDateToYYYYMMDD(new Date());
       })();
 
-      // Get the informed date with better validation
-      const informedDateAnswer = informedDateAnswers.find(
-        (a) => a.questionId === 'informed_date'
-      );
-
-      console.log('Raw informed date answers:', {
-        allAnswers: informedDateAnswers,
-        informedDateAnswer,
-        validationState: informedDateStepValidation,
-        isValid: validationStates.isInformedDateValid,
-      });
-
-      if (!informedDateAnswer || !informedDateAnswer.value) {
-        console.error('No informed date answer found');
-        throw new Error(
-          'Please select when you were informed about the delay/cancellation'
-        );
-      }
-
-      const informedDate = informedDateAnswer.value.toString();
-
-      console.log('Starting date validation with:', {
-        informedDate,
-        informedDateAnswers,
-        originalFlights,
-      });
-
-      // Format the date without timezone conversion
-      const formattedDate = (() => {
-        // First check for specific date
-        if (informedDate === 'specific_date') {
-          const dateAnswer = informedDateAnswers.find(
-            (a) => a.questionId === 'specific_informed_date'
-          );
-
-          console.log('Found specific date answer:', dateAnswer);
-
-          if (!dateAnswer || !dateAnswer.value) {
-            console.error('No specific date provided');
-            throw new Error(
-              'Please enter the specific date when you were informed'
-            );
-          }
-
-          if (typeof dateAnswer.value === 'string') {
-            // Ensure date is in YYYY-MM-DD format
-            const dateMatch = dateAnswer.value.match(
-              /^(\d{4})-(\d{1,2})-(\d{1,2})$/
-            );
-            if (dateMatch) {
-              const [, year, month, day] = dateMatch;
-              const formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-              console.log('Using specific informed date:', formattedDate);
-              return formattedDate;
-            }
-          }
-          throw new Error('Please enter a valid date in YYYY-MM-DD format');
-        }
-
-        // Then check for flight date if informed on departure
-        if (informedDate === 'on_departure') {
-          if (!originalFlights || originalFlights.length === 0) {
-            console.error('No original flights found');
-            throw new Error('No flight information available');
-          }
-
-          const flightDate = originalFlights[0].date;
-          console.log('Using flight date:', flightDate);
-
-          if (!flightDate) {
-            console.error('Flight has no date');
-            throw new Error('Flight date is not available');
-          }
-
-          // Ensure flight date is in YYYY-MM-DD format
-          const dateMatch = flightDate.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-          if (dateMatch) {
-            const [, year, month, day] = dateMatch;
-            const formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-            console.log('Using departure date:', formattedDate);
-            return formattedDate;
-          }
-          throw new Error('Flight date format is invalid');
-        }
-
-        // If no valid date selection found
-        console.error('Invalid informed date type:', informedDate);
-        throw new Error(
-          'Please select when you were informed about the delay/cancellation'
-        );
-      })();
-
-      if (!formattedDate || !isValidYYYYMMDD(formattedDate)) {
+      if (!informedDate || !isValidYYYYMMDD(String(informedDate))) {
         console.error('Date validation failed:', {
           informedDate,
           specificDate: informedDateAnswers.find(
@@ -632,63 +531,36 @@ export default function TripExperiencePage() {
         );
       }
 
-      console.log('Informed date from Q&A:', informedDate);
-      console.log('Informed date answers:', informedDateAnswers);
-      console.log('Final formatted date:', formattedDate);
+      console.log('=== Trip Experience - Evaluating Claim ===', {
+        originalFlights: originalFlights.map((f) => ({
+          id: f.id,
+          flightNumber: f.flightNumber,
+        })),
+        selectedFlights: selectedFlights.map((f) => ({
+          id: f.id,
+          flightNumber: f.flightNumber,
+        })),
+        travelStatusAnswers,
+        informedDateAnswers,
+      });
 
-      const cleanedEvalData = {
-        journey_booked_flightids: bookedFlightIds,
-        journey_fact_flightids: (() => {
-          if (travelStatus === 'provided') {
-            // Get only the alternative flights (flights that are not in original booking)
-            const providedFlights = selectedFlights
-              .filter((flight) => !bookedFlightIds.includes(String(flight.id)))
-              .map((flight) => String(flight.id));
-            console.log(
-              'Journey fact flights (provided by airline):',
-              providedFlights
-            );
-            return providedFlights;
-          } else if (travelStatus === 'took_alternative_own') {
-            const ownAlternativeFlightAnswer = travelStatusAnswers.find(
-              (a) => a.questionId === 'alternative_flight_own_expense'
-            );
-            const ownFlights = ownAlternativeFlightAnswer?.value
-              ? [String(ownAlternativeFlightAnswer.value)]
-              : [];
-            console.log('Journey fact flights (own alternative):', ownFlights);
-            return ownFlights;
-          } else if (travelStatus === 'self') {
-            console.log(
-              'Journey fact flights (took booked flights):',
-              bookedFlightIds
-            );
-            return bookedFlightIds;
-          }
-          console.log('Journey fact flights (no travel): []');
-          return [];
-        })(),
-        information_received_at: formattedDate,
-        journey_fact_type,
-        travel_status: String(travelStatus),
-      };
-
-      console.log('Travel status from Q&A:', travelStatus);
-      console.log(
-        'Original booked flights:',
-        originalFlights.map((f) => ({ id: f.id, flightNumber: f.flightNumber }))
+      const evaluationResult = await ClaimService.evaluateClaim(
+        originalFlights,
+        selectedFlights,
+        travelStatusAnswers,
+        informedDateAnswers
       );
-      console.log(
-        'Selected alternative flights:',
-        selectedFlights.map((f) => ({ id: f.id, flightNumber: f.flightNumber }))
-      );
-      console.log('Final evaluation data:', cleanedEvalData);
 
-      const evaluationResult = await api.evaluateClaim(cleanedEvalData);
       console.log('Evaluation result:', evaluationResult);
 
+      // Store the evaluation result in sessionStorage directly to ensure it persists
+      sessionStorage.setItem(
+        'claim_evaluation_response',
+        JSON.stringify(evaluationResult)
+      );
+
       // Get the next URL based on evaluation result
-      const isAccepted = evaluationResult.data.status === 'accept';
+      const isAccepted = evaluationResult.status === 'accept';
       const baseNextUrl = isAccepted
         ? '/phases/claim-success'
         : '/phases/claim-rejected';
@@ -696,45 +568,34 @@ export default function TripExperiencePage() {
       // Prepare URL parameters
       const searchParams = new URLSearchParams();
 
-      if (isAccepted && evaluationResult.data.contract) {
-        // Add contract details to URL for accepted claims
-        searchParams.set(
-          'amount',
-          evaluationResult.data.contract.amount.toString()
-        );
+      // Add contract details to URL for accepted claims
+      if (isAccepted && evaluationResult.contract) {
+        searchParams.set('amount', String(evaluationResult.contract.amount));
         searchParams.set(
           'provision',
-          evaluationResult.data.contract.provision.toString()
+          String(evaluationResult.contract.provision)
         );
-      } else if (!isAccepted && evaluationResult.data.rejection_reasons) {
+      } else if (!isAccepted && evaluationResult.rejection_reasons) {
         // Add rejection reasons to URL for rejected claims
         searchParams.set(
           'reasons',
-          JSON.stringify(evaluationResult.data.rejection_reasons)
+          JSON.stringify(evaluationResult.rejection_reasons)
         );
       }
 
-      // Add flight details to URL
-      if (originalFlights.length > 0) {
-        const firstFlight = originalFlights[0];
-        searchParams.set(
-          'bookingReference',
-          firstFlight.bookingReference || ''
-        );
-        searchParams.set('depAirport', firstFlight.departureCity || '');
-        searchParams.set('arrAirport', firstFlight.arrivalCity || '');
-        searchParams.set('depTime', firstFlight.departureTime || '');
-      }
+      // Add common parameters
+      searchParams.set('redirected', String(true));
+      const { completedPhases } = useStore.getState();
+      searchParams.set('completed_phases', completedPhases.join(','));
+      searchParams.set('current_phase', '4');
 
-      // Navigate to the appropriate page with parameters
-      const nextUrl = `${baseNextUrl}${
-        searchParams.toString() ? `?${searchParams.toString()}` : ''
-      }`;
-      router.replace(getLanguageAwareUrl(nextUrl, lang));
+      // Navigate to the appropriate page
+      const nextUrl = `${baseNextUrl}?${searchParams.toString()}`;
+      router.push(nextUrl);
     } catch (error) {
       console.error('Error in handleContinue:', error);
       setErrorMessage(
-        error instanceof Error ? error.message : 'An error occurred'
+        error instanceof Error ? error.message : 'An unknown error occurred'
       );
     } finally {
       setIsLoading(false);

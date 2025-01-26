@@ -54,7 +54,7 @@ import type { Translations } from '../../translations/types';
 import { ValidationState, ValidationStateSteps } from '@/types/validation';
 
 interface RawFlight {
-  id: number;
+  id: number | undefined; // Make it explicitly number | undefined instead of optional
   flightnumber_iata: string;
   dep_iata: string;
   arr_iata: string;
@@ -354,29 +354,29 @@ const useConnectionTimeUpdates = (
     []
   );
 
-  // Memoize the segments to prevent unnecessary updates
-  const memoizedSegments = useMemo(
-    () => flightSegments,
-    [JSON.stringify(flightSegments)]
-  );
-
-  // Update connection times when language changes
+  // Memoize segments using a stable reference check
+  const segmentsRef = useRef(flightSegments);
   useEffect(() => {
-    if (!mounted || selectedType !== 'multi' || memoizedSegments.length <= 1)
+    segmentsRef.current = flightSegments;
+  }, [flightSegments]);
+
+  // Update connection times when language changes or segments change
+  useEffect(() => {
+    if (!mounted || selectedType !== 'multi' || segmentsRef.current.length <= 1)
       return;
 
     let hasUpdates = false;
-    const newSegments = memoizedSegments.map((segment, i) => {
+    const newSegments = segmentsRef.current.map((segment, i) => {
       if (
         i === 0 ||
         !segment.selectedFlight ||
-        !memoizedSegments[i - 1]?.selectedFlight
+        !segmentsRef.current[i - 1]?.selectedFlight
       ) {
         return segment;
       }
 
       const connectionInfo = getConnectionTimeInfo(
-        memoizedSegments[i - 1].selectedFlight!,
+        segmentsRef.current[i - 1].selectedFlight!,
         segment.selectedFlight,
         t
       );
@@ -398,19 +398,19 @@ const useConnectionTimeUpdates = (
     if (hasUpdates) {
       setFlightSegments(newSegments);
     }
-  }, [mounted, t, selectedType, memoizedSegments, getConnectionTimeInfo]);
+  }, [mounted, t, selectedType, getConnectionTimeInfo, setFlightSegments]);
 
   // Check connection time for editing segment
   useEffect(() => {
     if (
       !mounted ||
       editingSegmentIndex <= 0 ||
-      !memoizedSegments[editingSegmentIndex]?.selectedFlight
+      !segmentsRef.current[editingSegmentIndex]?.selectedFlight
     )
       return;
 
-    const currentSegment = memoizedSegments[editingSegmentIndex];
-    const prevSegment = memoizedSegments[editingSegmentIndex - 1];
+    const currentSegment = segmentsRef.current[editingSegmentIndex];
+    const prevSegment = segmentsRef.current[editingSegmentIndex - 1];
 
     if (!prevSegment?.selectedFlight || !currentSegment.selectedFlight) return;
 
@@ -423,7 +423,7 @@ const useConnectionTimeUpdates = (
     if (
       connectionInfo?.message !== currentSegment.selectedFlight.connectionInfo
     ) {
-      const newSegments = [...memoizedSegments];
+      const newSegments = [...segmentsRef.current];
       newSegments[editingSegmentIndex] = {
         ...currentSegment,
         selectedFlight: {
@@ -436,9 +436,9 @@ const useConnectionTimeUpdates = (
   }, [
     mounted,
     editingSegmentIndex,
-    memoizedSegments,
     t,
     getConnectionTimeInfo,
+    setFlightSegments,
   ]);
 
   return getConnectionTimeInfo;
@@ -470,6 +470,60 @@ const formatFlightForStore = (flight: FlightData): Flight => ({
   actualArrival: flight.actualArrival || null,
   arrivalDelay: flight.arrivalDelay || null,
 });
+
+// Transform raw flight data into a validated Flight object
+function transformRawFlight(
+  rawFlight: RawFlight,
+  formattedDate: string
+): Flight | null {
+  // Early return if required fields are missing
+  if (!rawFlight || typeof rawFlight.id !== 'number') {
+    console.error('Invalid flight data:', rawFlight);
+    return null;
+  }
+
+  // Create validated flight object with required fields
+  const flight: Flight = {
+    id: String(rawFlight.id),
+    flightNumber: rawFlight.flightnumber_iata || '',
+    airline: rawFlight.flightnumber_iata?.substring(0, 2) || '',
+    departureCity: rawFlight.dep_city || rawFlight.dep_iata || '',
+    arrivalCity: rawFlight.arr_city || rawFlight.arr_iata || '',
+    departureTime: formatTime(rawFlight.dep_time_sched),
+    arrivalTime: formatTime(rawFlight.arr_time_sched),
+    departure: rawFlight.dep_iata || '',
+    arrival: rawFlight.arr_iata || '',
+    duration: calculateDuration(
+      formatTime(rawFlight.dep_time_sched),
+      formatTime(rawFlight.arr_time_sched)
+    ),
+    stops: 0,
+    date: formattedDate,
+    status: rawFlight.status || 'Unknown',
+    aircraft: rawFlight.aircraft_type || 'Unknown',
+    class: 'economy',
+    price: 0,
+    departureAirport: rawFlight.dep_iata || '',
+    arrivalAirport: rawFlight.arr_iata || '',
+    scheduledDepartureTime: formatTime(rawFlight.dep_time_sched),
+    scheduledArrivalTime: formatTime(rawFlight.arr_time_sched),
+    actualDeparture: rawFlight.dep_time_fact
+      ? formatTime(rawFlight.dep_time_fact)
+      : null,
+    actualArrival: rawFlight.arr_time_fact
+      ? formatTime(rawFlight.arr_time_fact)
+      : null,
+    arrivalDelay: rawFlight.arr_delay_min || null,
+  };
+
+  // Validate the transformed flight
+  if (!isValidFlight(flight)) {
+    console.error('Transformed flight failed validation:', flight);
+    return null;
+  }
+
+  return flight;
+}
 
 export const FlightSelector: React.FC<FlightSelectorProps> = ({
   onSelect = () => {},
@@ -588,29 +642,63 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
         return;
       }
 
-      // Batch the state updates
+      // Ensure we preserve the actual flight ID
       const flightData = {
         ...flight,
-        id: flight.id || Math.random().toString(),
+        // Only use the actual flight ID, never generate a random one
+        id: flight.id,
       };
 
-      if (selectedType === 'direct') {
-        setSelectedFlights([flightData]);
+      // Get current flights array and update it
+      const currentFlights: (Flight | null)[] = [...(selectedFlights || [])];
+      if (currentSegmentIndex < currentFlights.length) {
+        currentFlights[currentSegmentIndex] = flightData;
       } else {
-        const updatedFlights = Array(currentSegmentIndex + 1).fill(null);
-        updatedFlights[currentSegmentIndex] = flightData;
-        setSelectedFlights(updatedFlights);
+        while (currentFlights.length < currentSegmentIndex) {
+          currentFlights.push(null);
+        }
+        currentFlights.push(flightData);
+      }
+
+      // Filter out null values
+      const newSelectedFlights = currentFlights.filter(
+        (f): f is Flight => f !== null
+      );
+
+      // Batch updates using the store's batch update mechanism
+      if (currentPhase === 4) {
+        phase4Store.batchUpdate({
+          selectedFlight: flightData,
+          selectedFlights: newSelectedFlights,
+        });
+      } else {
+        batchUpdateWizardState({
+          selectedFlight: flightData,
+          selectedFlights: newSelectedFlights,
+        });
       }
 
       onInteract();
     },
-    [selectedType, currentSegmentIndex, onInteract, setSelectedFlights]
+    [
+      selectedType,
+      currentSegmentIndex,
+      onInteract,
+      currentPhase,
+      phase4Store,
+      batchUpdateWizardState,
+      selectedFlights,
+      setSelectedFlights,
+    ]
   );
 
   // Use handleFlightSelection in your component
-  const onFlightClick = (flight: Flight) => {
-    handleFlightSelection(flight);
-  };
+  const onFlightClick = useCallback(
+    (flight: Flight) => {
+      handleFlightSelection(flight);
+    },
+    [handleFlightSelection]
+  );
 
   // Mount effect
   useEffect(() => {
@@ -848,108 +936,76 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
         lang: 'en',
       });
 
-      try {
-        const response = await fetch(
-          `/.netlify/functions/searchFlights?${params.toString()}`
+      const response = await fetch(
+        `/.netlify/functions/searchFlights?${params.toString()}`
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `Failed to fetch flights: ${response.status} - ${errorText}`
         );
+      }
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(
-            `Failed to fetch flights: ${response.status} - ${errorText}`
-          );
-        }
+      const data = await response.json();
+      const flights = data.data || [];
 
-        const data = await response.json();
-        const flights = data.data || [];
-
-        // Transform and validate the flights
-        let validFlights = flights
-          .map((flight: RawFlight) => {
-            try {
-              return {
-                id: flight.id?.toString() || Math.random().toString(),
-                flightNumber: flight.flightnumber_iata || '',
-                airline: flight.flightnumber_iata?.substring(0, 2) || '',
-                departureCity: flight.dep_city || flight.dep_iata || '',
-                arrivalCity: flight.arr_city || flight.arr_iata || '',
-                departureTime: formatTime(flight.dep_time_sched),
-                arrivalTime: formatTime(flight.arr_time_sched),
-                departure: flight.dep_iata || '',
-                arrival: flight.arr_iata || '',
-                duration: calculateDuration(
-                  formatTime(flight.dep_time_sched),
-                  formatTime(flight.arr_time_sched)
-                ),
-                stops: 0,
-                date: formattedDate,
-                status: flight.status || 'Unknown',
-                aircraft: flight.aircraft_type || 'Unknown',
-                class: 'economy',
-                price: 0,
-                departureAirport: flight.dep_iata || '',
-                arrivalAirport: flight.arr_iata || '',
-                scheduledDepartureTime: formatTime(flight.dep_time_sched),
-                scheduledArrivalTime: formatTime(flight.arr_time_sched),
-                actualDeparture: flight.dep_time_fact
-                  ? formatTime(flight.dep_time_fact)
-                  : null,
-                actualArrival: flight.arr_time_fact
-                  ? formatTime(flight.arr_time_fact)
-                  : null,
-                arrivalDelay: flight.arr_delay_min || null,
-              };
-            } catch (error) {
-              console.error('Error transforming flight:', error);
+      // Transform and validate the flights
+      let validFlights = flights
+        .map((flight: RawFlight) => {
+          try {
+            // Transform raw flight data into validated Flight object
+            const transformedFlight = transformRawFlight(flight, formattedDate);
+            if (!transformedFlight) {
+              console.error('Failed to transform flight:', flight);
               return null;
             }
-          })
-          .filter(
-            (flight: unknown): flight is Flight =>
-              flight !== null && isValidFlight(flight)
-          );
-
-        // For multi-segment flights after the first segment, filter based on previous segment's arrival time
-        if (selectedType === 'multi' && segmentIndex > 0) {
-          const previousSegment = flightSegments[segmentIndex - 1];
-          if (previousSegment?.selectedFlight) {
-            const previousArrivalTime = parseISO(
-              `${previousSegment.selectedFlight.date}T${previousSegment.selectedFlight.arrivalTime}:00.000Z`
-            );
-
-            // Filter flights that depart at least 30 minutes after previous flight arrives
-            validFlights = validFlights.filter((flight: Flight) => {
-              const departureTime = parseISO(
-                `${flight.date}T${flight.departureTime}:00.000Z`
-              );
-              const timeDiff =
-                (departureTime.getTime() - previousArrivalTime.getTime()) /
-                60000; // in minutes
-              return timeDiff >= 30;
-            });
+            return transformedFlight;
+          } catch (error) {
+            console.error('Error transforming flight:', error);
+            return null;
           }
-        }
+        })
+        .filter(
+          (flight: unknown): flight is Flight =>
+            flight !== null && isValidFlight(flight)
+        );
 
-        setDisplayedFlights(validFlights);
-        setAllFlights(validFlights);
-        setFlightSearchLoading(false);
-
-        if (validFlights.length > 0) {
-          setSearchModalOpen(true);
-        } else {
-          setFlightErrorMessage(
-            segmentIndex > 0
-              ? t.flightSelector.errors.noValidConnecting
-              : t.flightSelector.errors.noFlightsRoute
+      // For multi-segment flights after the first segment, filter based on previous segment's arrival time
+      if (selectedType === 'multi' && segmentIndex > 0) {
+        const previousSegment = flightSegments[segmentIndex - 1];
+        if (previousSegment?.selectedFlight) {
+          const previousArrivalTime = parseISO(
+            `${previousSegment.selectedFlight.date}T${previousSegment.selectedFlight.arrivalTime}:00.000Z`
           );
+
+          // Filter flights that depart at least 30 minutes after previous flight arrives
+          validFlights = validFlights.filter((flight: Flight) => {
+            const departureTime = parseISO(
+              `${flight.date}T${flight.departureTime}:00.000Z`
+            );
+            const timeDiff =
+              (departureTime.getTime() - previousArrivalTime.getTime()) / 60000; // in minutes
+            return timeDiff >= 30;
+          });
         }
-      } catch (error) {
-        console.error('Search flights error:', error);
-        setFlightErrorMessage('Failed to search flights. Please try again.');
-        setFlightSearchLoading(false);
+      }
+
+      setDisplayedFlights(validFlights);
+      setAllFlights(validFlights);
+      setFlightSearchLoading(false);
+
+      if (validFlights.length > 0) {
+        setSearchModalOpen(true);
+      } else {
+        setFlightErrorMessage(
+          segmentIndex > 0
+            ? t.flightSelector.errors.noValidConnecting
+            : t.flightSelector.errors.noFlightsRoute
+        );
       }
     } catch (error) {
-      console.error('Error handling search flights:', error);
+      console.error('Search flights error:', error);
       setFlightErrorMessage('Failed to search flights. Please try again.');
       setFlightSearchLoading(false);
     }
@@ -985,7 +1041,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
     return `${flight.flightNumber}-${flight.date}-${flight.departureTime}-${flight.arrivalTime}`;
   };
 
-  // Update handleFlightSelect to prevent duplicate selections
+  // Optimize handleFlightSelect to prevent unnecessary updates
   const handleFlightSelect = useCallback(
     (data: {
       flight: Flight;
@@ -994,94 +1050,132 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
     }) => {
       const { flight, segmentIndex, selectedType } = data;
 
-      // Format the flight for store
-      const storeFormatFlight: Flight = {
-        id: flight.id,
-        flightNumber: flight.flightNumber,
-        airline: flight.airline,
-        departureCity: flight.departureCity,
-        arrivalCity: flight.arrivalCity,
-        departureTime: flight.departureTime,
-        arrivalTime: flight.arrivalTime,
-        departure: flight.departureCity,
-        arrival: flight.arrivalCity,
-        duration: flight.duration || '0h 0m',
-        stops: flight.stops || 0,
-        date: flight.date,
-        status: flight.status || 'scheduled',
-        aircraft: flight.aircraft || 'unknown',
-        class: flight.class || 'economy',
-        departureAirport: flight.departureAirport,
-        arrivalAirport: flight.arrivalAirport,
-        price: flight.price || 0,
-        scheduledDepartureTime:
-          flight.scheduledDepartureTime || flight.departureTime,
-        scheduledArrivalTime: flight.scheduledArrivalTime || flight.arrivalTime,
-        actualDeparture: flight.actualDeparture || null,
-        actualArrival: flight.actualArrival || null,
-        arrivalDelay: flight.arrivalDelay || null,
-      };
+      // Format flight for store
+      const storeFormatFlight = formatFlightForStore(flight);
 
-      // Create location data for store updates
-      const locationData = {
-        from: {
-          value: storeFormatFlight.departureCity,
-          label: storeFormatFlight.departureCity,
-          description: storeFormatFlight.departureAirport,
-          dropdownLabel: `${storeFormatFlight.departureAirport} (${storeFormatFlight.departureCity})`,
+      // Create new segments first to ensure consistent state
+      const newSegments = [...flightSegments];
+      newSegments[segmentIndex] = {
+        ...newSegments[segmentIndex],
+        selectedFlight: storeFormatFlight,
+        fromLocation: {
+          value: flight.departureCity,
+          label: flight.departureCity,
+          description: flight.departureAirport,
+          city: flight.departureCity,
+          dropdownLabel: `${flight.departureAirport} (${flight.departureCity})`,
         },
-        to: {
-          value: storeFormatFlight.arrivalCity,
-          label: storeFormatFlight.arrivalCity,
-          description: storeFormatFlight.arrivalAirport,
-          dropdownLabel: `${storeFormatFlight.arrivalAirport} (${storeFormatFlight.arrivalCity})`,
+        toLocation: {
+          value: flight.arrivalCity,
+          label: flight.arrivalCity,
+          description: flight.arrivalAirport,
+          city: flight.arrivalCity,
+          dropdownLabel: `${flight.arrivalAirport} (${flight.arrivalCity})`,
         },
       };
 
-      const targetStore = currentPhase === 4 ? phase4Store : store;
-
-      // Update store
-      targetStore.setSelectedFlight(storeFormatFlight);
-      targetStore.setFromLocation(JSON.stringify(locationData.from));
-      targetStore.setToLocation(JSON.stringify(locationData.to));
-
-      // Update selected flights array
-      if (selectedType === 'direct') {
-        targetStore.setSelectedFlights([storeFormatFlight]);
-      } else {
-        const updatedFlights = Array(segmentIndex + 1).fill(null);
-        updatedFlights[segmentIndex] = storeFormatFlight;
-        targetStore.setSelectedFlights(updatedFlights);
+      // For multi-city, update the next segment's fromLocation if it exists
+      if (selectedType === 'multi' && segmentIndex < newSegments.length - 1) {
+        newSegments[segmentIndex + 1] = {
+          ...newSegments[segmentIndex + 1],
+          fromLocation: {
+            value: flight.arrivalCity,
+            label: flight.arrivalCity,
+            description: flight.arrivalAirport,
+            city: flight.arrivalCity,
+            dropdownLabel: `${flight.arrivalAirport} (${flight.arrivalCity})`,
+          },
+          // Clear the selected flight since the connection changed
+          selectedFlight: null,
+        };
       }
 
-      // Call onSelect callback if provided and not in Phase 4
-      if (onSelect && currentPhase !== 4) {
-        onSelect(storeFormatFlight);
+      // Update segments state
+      setFlightSegments(newSegments);
+
+      // Create the new flights array for store update
+      const newSelectedFlights = newSegments
+        .map((segment) => segment.selectedFlight)
+        .filter((flight): flight is Flight => flight !== null);
+
+      // Update main store
+      batchUpdateWizardState({
+        selectedFlight: storeFormatFlight,
+        fromLocation: JSON.stringify(newSegments[0].fromLocation),
+        toLocation: JSON.stringify(
+          newSegments[newSegments.length - 1].toLocation
+        ),
+        selectedFlights: newSelectedFlights,
+      });
+
+      // If in phase 4, also update phase4Store
+      if (currentPhase === 4) {
+        phase4Store.batchUpdate({
+          selectedFlight: storeFormatFlight,
+          fromLocation: JSON.stringify(newSegments[0].fromLocation),
+          toLocation: JSON.stringify(
+            newSegments[newSegments.length - 1].toLocation
+          ),
+          selectedFlights: newSelectedFlights,
+        });
       }
 
-      // Call onInteract callback
-      onInteract();
+      // Update validation state for phase 3
+      if (currentPhase === 3 && setValidationState && stepNumber) {
+        // Check if all segments have selected flights and valid connections
+        const isValid = newSegments.every((segment, index) => {
+          if (!segment.selectedFlight) return false;
 
-      // Close the search modal
-      setSearchModalOpen(false);
+          // Check connection with previous segment
+          if (index > 0) {
+            const prevSegment = newSegments[index - 1];
+            if (!prevSegment.selectedFlight) return false;
 
-      // Update validation state only for non-phase-4
-      if (setValidationState && currentPhase !== 4) {
+            // Validate city connection
+            const prevArrivalCity =
+              prevSegment.selectedFlight.arrivalCity.toLowerCase();
+            const currentDepartureCity =
+              segment.selectedFlight.departureCity.toLowerCase();
+            if (prevArrivalCity !== currentDepartureCity) return false;
+
+            // Validate connection time
+            const connectionInfo = getConnectionTimeInfo(
+              prevSegment.selectedFlight,
+              segment.selectedFlight,
+              t
+            );
+            if (!connectionInfo?.isValid) return false;
+          }
+          return true;
+        });
+
         setValidationState((prev: Record<number, boolean>) => ({
           ...prev,
-          [stepNumber || 1]: true,
+          [stepNumber]: isValid,
         }));
+
+        // Also trigger store validation
+        validateFlightSelection();
       }
+
+      // Close modal and notify parent
+      setSearchModalOpen(false);
+      onSelect(storeFormatFlight);
+      onInteract();
     },
     [
       currentPhase,
       phase4Store,
-      store,
+      batchUpdateWizardState,
       onSelect,
       onInteract,
-      setSearchModalOpen,
+      flightSegments,
+      setFlightSegments,
       setValidationState,
       stepNumber,
+      validateFlightSelection,
+      getConnectionTimeInfo,
+      t,
     ]
   );
 
@@ -1256,7 +1350,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
     });
   }, [displayedFlights, searchTerm]);
 
-  // Update handleSheetSearch to properly search flights
+  // Update handleSheetSearch to use main store's search functionality
   const handleSheetSearch = async (term: string) => {
     setSearchTerm(term);
     if (!term) {
@@ -1264,10 +1358,31 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
       return;
     }
 
+    const currentSegment =
+      selectedType === 'multi'
+        ? flightSegments[currentSegmentIndex]
+        : directFlight;
+    if (
+      !currentSegment.fromLocation ||
+      !currentSegment.toLocation ||
+      !currentSegment.date
+    ) {
+      return;
+    }
+
     try {
-      const params = new URLSearchParams();
-      params.append('term', term);
-      params.append('lang', 'en');
+      setFlightSearchLoading(true);
+      const searchDate =
+        currentSegment.date instanceof Date
+          ? currentSegment.date
+          : new Date(currentSegment.date);
+      const params = new URLSearchParams({
+        from_iata: currentSegment.fromLocation.value,
+        to_iata: currentSegment.toLocation.value,
+        date: format(searchDate, 'yyyy-MM-dd'),
+        flight_number: term,
+        lang: 'en',
+      });
 
       const response = await fetch(
         `/.netlify/functions/searchFlights?${params.toString()}`
@@ -1279,38 +1394,37 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
       const data = await response.json();
       const flights = data.data || [];
 
-      // Transform the flights data
-      const transformedFlights = flights.map((flight: RawFlight) => ({
-        id: flight.id?.toString() || Math.random().toString(),
-        flightNumber: flight.flightnumber_iata || '',
-        airline: flight.flightnumber_iata?.substring(0, 2) || '',
-        departureCity: flight.dep_city || flight.dep_iata || '',
-        arrivalCity: flight.arr_city || flight.arr_iata || '',
-        departureTime: formatTime(flight.dep_time_sched),
-        arrivalTime: formatTime(flight.arr_time_sched),
-        departure: flight.dep_iata || '',
-        arrival: flight.arr_iata || '',
-        duration: calculateDuration(
-          formatTime(flight.dep_time_sched),
-          formatTime(flight.arr_time_sched)
-        ),
-        stops: 0,
-        date: format(new Date(), 'yyyy-MM-dd'),
-        status: flight.status || 'Unknown',
-        aircraft: 'Unknown',
-        class: 'economy',
-        dep_iata: flight.dep_iata,
-        arr_iata: flight.arr_iata,
-        dep_time_sched: flight.dep_time_sched,
-        arr_time_sched: flight.arr_time_sched,
-        departureAirport: flight.dep_iata || '',
-        arrivalAirport: flight.arr_iata || '',
-        price: 0,
-      }));
+      // Transform the flights data using the same format as handleSearchFlights
+      const transformedFlights = flights
+        .map((flight: RawFlight) => {
+          try {
+            // Transform raw flight data into validated Flight object
+            const transformedFlight = transformRawFlight(
+              flight,
+              format(searchDate, 'yyyy-MM-dd')
+            );
+            if (!transformedFlight) {
+              console.error('Failed to transform flight:', flight);
+              return null;
+            }
+            return transformedFlight;
+          } catch (error) {
+            console.error('Error transforming flight:', error);
+            return null;
+          }
+        })
+        .filter(
+          (flight: unknown): flight is Flight =>
+            flight !== null && isValidFlight(flight)
+        );
 
       setDisplayedFlights(transformedFlights);
+      setAllFlights(transformedFlights);
     } catch (error) {
+      console.error('Error searching flights:', error);
       setDisplayedFlights([]);
+    } finally {
+      setFlightSearchLoading(false);
     }
   };
 
@@ -1483,6 +1597,25 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
 
   // Update the handleFlightTypeChange to handle state updates properly
   const handleFlightTypeChange = (type: 'direct' | 'multi') => {
+    // If switching to direct mode and we have a first flight, preserve it
+    if (type === 'direct' && flightSegments[0]?.selectedFlight) {
+      const firstSegment = flightSegments[0];
+      setDirectFlight({
+        fromLocation: firstSegment.fromLocation,
+        toLocation: firstSegment.toLocation,
+        selectedFlight: firstSegment.selectedFlight,
+        date: firstSegment.date,
+      });
+    } else {
+      // Clear direct flight state when switching to multi
+      setDirectFlight({
+        fromLocation: null,
+        toLocation: null,
+        selectedFlight: null,
+        date: null,
+      });
+    }
+
     // Update selected type
     if (currentPhase === 4) {
       phase4Store.setSelectedType(type);
@@ -1490,12 +1623,12 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
       setSelectedType(type);
     }
 
-    // Clear selected flights
+    // Clear selected flights array
     if (currentPhase === 4) {
       phase4Store.setSelectedFlights([]);
       phase4Store.setSelectedFlight(null);
     } else {
-      setSelectedFlights([]);
+      setSelectedFlights(type === 'direct' ? [] : []);
       setSelectedFlight(null);
     }
 
@@ -3247,30 +3380,21 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                   renderFlightPreviewCard(directFlight.selectedFlight, 0)
                 ) : (
                   <div className="space-y-4">
-                    {/* Use a Set to track rendered flights */}
-                    {(() => {
-                      const renderedFlightKeys = new Set<string>();
-                      return flightSegments
-                        .map((segment, index) => {
-                          if (!segment?.selectedFlight) return null;
-
-                          const flightKey = getUniqueFlightKey(
-                            segment.selectedFlight
-                          );
-                          if (renderedFlightKeys.has(flightKey)) return null;
-
-                          renderedFlightKeys.add(flightKey);
-                          return (
-                            <div key={`flight-${flightKey}`}>
-                              {renderFlightPreviewCard(
-                                segment.selectedFlight,
-                                index
-                              )}
-                            </div>
-                          );
-                        })
-                        .filter(Boolean);
-                    })()}
+                    {flightSegments.map((segment, index) => (
+                      <React.Fragment key={`flight-preview-${index}`}>
+                        {segment.selectedFlight && (
+                          <>
+                            {renderFlightPreviewCard(
+                              segment.selectedFlight,
+                              index
+                            )}
+                            {index < flightSegments.length - 1 && (
+                              <div className="h-4 border-l-2 border-dashed border-gray-300 ml-6" />
+                            )}
+                          </>
+                        )}
+                      </React.Fragment>
+                    ))}
                   </div>
                 )}
               </div>
@@ -3591,3 +3715,8 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
   );
 };
 export default FlightSelector;
+
+// Type guard to validate flight ID
+function hasValidId(flight: RawFlight): flight is RawFlight & { id: number } {
+  return flight.id !== undefined && typeof flight.id === 'number';
+}

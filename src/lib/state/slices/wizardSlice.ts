@@ -105,30 +105,58 @@ export const createWizardSlice = (
         return answer;
       });
 
-      const currentPrefix = formattedAnswers[0]?.questionId?.split('_')[0];
-      const existingAnswers = state.wizardAnswers.filter((a) => {
-        const prefix = a.questionId.split('_')[0];
-        return prefix !== currentPrefix;
-      });
-
-      const uniqueNewAnswers = formattedAnswers.reduce(
-        (acc: Answer[], curr) => {
-          const existingIndex = acc.findIndex(
-            (a) => a.questionId === curr.questionId
-          );
-          if (existingIndex >= 0) {
-            acc[existingIndex] = curr;
-          } else {
-            acc.push(curr);
-          }
-          return acc;
-        },
-        []
+      // Get the current travel status answer if it exists
+      const travelStatusAnswer = formattedAnswers.find(
+        (a) => a.questionId === 'travel_status'
       );
+
+      // Get existing answers that we might want to keep
+      const existingAnswers = state.wizardAnswers;
+
+      // Determine which answers to keep based on the travel status
+      let newAnswers = formattedAnswers;
+
+      if (travelStatusAnswer) {
+        const status = travelStatusAnswer.value;
+
+        // Keep related answers based on travel status
+        const relatedAnswers = existingAnswers.filter((a) => {
+          // For 'none' status, keep refund_status and ticket_cost if refund_status is 'no'
+          if (status === 'none') {
+            if (a.questionId === 'refund_status') return true;
+            if (a.questionId === 'ticket_cost') {
+              const hasNoRefund = existingAnswers.some(
+                (r) => r.questionId === 'refund_status' && r.value === 'no'
+              );
+              return hasNoRefund;
+            }
+          }
+
+          // For 'provided' status, keep alternative_flight_airline_expense
+          if (
+            status === 'provided' &&
+            a.questionId === 'alternative_flight_airline_expense'
+          ) {
+            return true;
+          }
+
+          // For 'took_alternative_own' status, keep alternative_flight_own_expense and trip_costs
+          if (status === 'took_alternative_own') {
+            return ['alternative_flight_own_expense', 'trip_costs'].includes(
+              a.questionId
+            );
+          }
+
+          return false;
+        });
+
+        // Combine new answers with related existing answers
+        newAnswers = [...formattedAnswers, ...relatedAnswers];
+      }
 
       return {
         ...state,
-        wizardAnswers: [...existingAnswers, ...uniqueNewAnswers],
+        wizardAnswers: newAnswers,
         _lastUpdate: Date.now(),
       };
     });

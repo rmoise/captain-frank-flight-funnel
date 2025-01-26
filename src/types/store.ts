@@ -41,15 +41,15 @@ export interface Answer {
 }
 
 export interface PassengerDetails {
+  salutation: string;
   firstName: string;
   lastName: string;
   email: string;
-  salutation: string;
   phone: string;
-  address?: string;
-  postalCode?: string;
-  city?: string;
-  country?: string;
+  address: string;
+  postalCode: string;
+  city: string;
+  country: string;
 }
 
 export interface LocationData {

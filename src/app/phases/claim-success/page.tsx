@@ -76,7 +76,19 @@ function ClaimSuccessContent() {
           useStore.getState().validationState?.isTermsValid || false,
         isSignatureValid:
           useStore.getState().validationState?.isSignatureValid || false,
-        1: true,
+        isPersonalValid: false,
+        stepValidation: {
+          ...useStore.getState().validationState.stepValidation,
+          1: false,
+          2: true,
+          3: true,
+          4: true,
+        },
+        stepInteraction: {
+          ...useStore.getState().validationState.stepInteraction,
+          1: false,
+        },
+        1: false,
         2: true,
         3: true,
         4: true,

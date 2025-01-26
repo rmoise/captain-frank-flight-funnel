@@ -28,6 +28,14 @@ export interface ValidationState {
   _timestamp?: number;
 }
 
+// Shared flight search interface for consistent formatting across stores
+export interface SharedFlightSearch {
+  fromLocation: LocationLike | null;
+  toLocation: LocationLike | null;
+  date: Date | null;
+  selectedFlight: Flight | null;
+}
+
 export interface FlightSegment {
   fromLocation: LocationLike | null;
   toLocation: LocationLike | null;

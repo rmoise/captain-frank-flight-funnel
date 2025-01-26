@@ -383,101 +383,92 @@ export const createFlightSlice = (
     }
   },
 
-  setSelectedFlights: (flights) => {
-    const state = get();
-    if (JSON.stringify(state.selectedFlights) === JSON.stringify(flights))
-      return;
-
-    // Filter out null flights and ensure type safety
-    const validFlights = flights.filter(
-      (flight): flight is Flight =>
-        flight !== null && typeof flight === 'object' && 'id' in flight
-    );
-
-    // Create a map to track unique flights by ID
-    const flightMap = new Map<string, Flight>();
-    validFlights.forEach((flight) => {
-      if (!flightMap.has(flight.id)) {
-        flightMap.set(flight.id, flight);
+  setSelectedFlights: (flights: Flight[]) =>
+    set((state) => {
+      // Skip update if nothing has changed
+      if (JSON.stringify(state.selectedFlights) === JSON.stringify(flights)) {
+        return state;
       }
-    });
 
-    const cleanedFlights = Array.from(flightMap.values());
+      // Filter out any null flights and ensure type safety
+      const validFlights = flights.filter(
+        (flight): flight is Flight =>
+          flight !== null && typeof flight === 'object' && 'id' in flight
+      );
 
-    // Update segments based on selected flights
-    let updatedSegments = state.flightSegments;
-    if (state.selectedType === 'multi') {
-      // In multi mode, create or update segments for each flight
-      updatedSegments = cleanedFlights.map((flight) => ({
-        fromLocation: {
-          value: flight.departureCity,
-          label: flight.departureCity,
-        },
-        toLocation: { value: flight.arrivalCity, label: flight.arrivalCity },
-        date: flight.date ? new Date(flight.date) : null,
-        selectedFlight: flight,
-      }));
+      // For multi-city flights, ensure we maintain segment order
+      let cleanedFlights = validFlights;
+      if (state.selectedType === 'multi') {
+        // Create a map of flights by departure city to maintain order
+        const flightsByDeparture = new Map<string, Flight>();
+        validFlights.forEach((flight) => {
+          flightsByDeparture.set(flight.departureCity.toLowerCase(), flight);
+        });
 
-      // Ensure minimum 2 segments
-      if (updatedSegments.length < 2) {
-        updatedSegments = [
-          ...updatedSegments,
-          ...Array(2 - updatedSegments.length).fill({
-            fromLocation: null,
-            toLocation: null,
-            date: null,
-            selectedFlight: null,
-          }),
-        ];
+        // Build ordered flight list based on segments
+        cleanedFlights = state.flightSegments
+          .map((segment) => {
+            if (!segment.fromLocation) return null;
+            return (
+              flightsByDeparture.get(
+                segment.fromLocation.value.toLowerCase()
+              ) || null
+            );
+          })
+          .filter((f): f is Flight => f !== null);
+      } else {
+        // For direct flights, just take the first valid flight
+        cleanedFlights = validFlights.slice(0, 1);
       }
-    } else {
-      // In direct mode, update the direct flight
-      const newDirectFlight = {
-        ...state.directFlight,
-        selectedFlight: cleanedFlights[0] || null,
+
+      // Update segments based on selected flights
+      const updatedSegments = state.flightSegments.map((segment, index) => {
+        const matchingFlight = cleanedFlights[index];
+        if (!matchingFlight) return segment;
+
+        return {
+          ...segment,
+          selectedFlight: matchingFlight,
+          fromLocation: {
+            value: matchingFlight.departureCity,
+            label: matchingFlight.departureCity,
+          },
+          toLocation: {
+            value: matchingFlight.arrivalCity,
+            label: matchingFlight.arrivalCity,
+          },
+          date: matchingFlight.date ? new Date(matchingFlight.date) : null,
+        };
+      });
+
+      const newState = {
+        ...state,
+        selectedFlights: cleanedFlights,
+        flightSegments: updatedSegments,
+        selectedFlight: cleanedFlights[state.currentSegmentIndex] || null,
+        _lastUpdate: Date.now(),
       };
 
-      set(() => ({
-        ...state,
-        directFlight: newDirectFlight,
-        selectedFlight: newDirectFlight.selectedFlight,
-        selectedFlights: newDirectFlight.selectedFlight
-          ? [newDirectFlight.selectedFlight]
-          : [],
-        _lastUpdate: Date.now(),
-      }));
+      const isValid = validateFlightSelection(newState);
 
-      return;
-    }
-
-    const newState = {
-      ...state,
-      selectedFlights: cleanedFlights,
-      flightSegments: updatedSegments,
-      selectedFlight: cleanedFlights[cleanedFlights.length - 1] || null,
-      _lastUpdate: Date.now(),
-    };
-
-    const isValid = validateFlightSelection(newState);
-
-    set((state) => ({
-      ...newState,
-      validationState: {
-        ...state.validationState,
-        isFlightValid: isValid,
-        stepValidation: {
-          ...state.validationState.stepValidation,
+      return {
+        ...newState,
+        validationState: {
+          ...state.validationState,
+          isFlightValid: isValid,
+          stepValidation: {
+            ...state.validationState.stepValidation,
+            [state.currentPhase]: isValid,
+          },
           [state.currentPhase]: isValid,
         },
-        [state.currentPhase]: isValid,
-      },
-      completedSteps: isValid
-        ? Array.from(
-            new Set([...state.completedSteps, state.currentPhase])
-          ).sort((a, b) => a - b)
-        : state.completedSteps.filter((step) => step !== state.currentPhase),
-    }));
-  },
+        completedSteps: isValid
+          ? Array.from(
+              new Set([...state.completedSteps, state.currentPhase])
+            ).sort((a, b) => a - b)
+          : state.completedSteps.filter((step) => step !== state.currentPhase),
+      };
+    }),
 
   setFlightSegments: (segments) => {
     const state = get();

@@ -13,7 +13,11 @@ import type { Question } from '@/types/experience';
 import { useRouter } from 'next/navigation';
 import { pushToDataLayer } from '@/utils/gtm';
 import { useStore, PHASE_TO_URL, getLanguageAwareUrl } from '@/lib/state/store';
-import type { StoreStateValues, ValidationStateSteps } from '@/lib/state/store';
+import type {
+  StoreStateValues,
+  ValidationStateSteps,
+  ValidationState,
+} from '@/lib/state/store';
 import { PhaseNavigation } from '@/components/PhaseNavigation';
 import { ContinueButton } from '@/components/shared/ContinueButton';
 import { AccordionProvider } from '@/components/shared/AccordionContext';
@@ -697,16 +701,14 @@ export default function InitialAssessment() {
         component: PersonalDetailsForm,
         props: {
           onComplete: (details: PassengerDetails | null) => {
-            console.log('PersonalDetails completed:', {
-              details,
-              currentValidation: validationState.stepValidation,
-            });
-            setPersonalDetails(details);
-            setInteractedSteps((prev) => [...new Set([...prev, 3])]);
+            console.log('PersonalDetails completed:', details);
+
             if (details) {
-              // Update validation state to trigger auto-transition
-              const newValidationState = {
-                ...validationState,
+              // Set personal details first
+              setPersonalDetails(details);
+
+              // Update validation state
+              const validationUpdate: Partial<ValidationState> = {
                 isPersonalValid: true,
                 stepValidation: {
                   ...validationState.stepValidation,
@@ -717,20 +719,20 @@ export default function InitialAssessment() {
                   3: true,
                 },
                 3: true,
-                _timestamp: Date.now(),
               };
+              updateValidationState(validationUpdate);
 
-              // Update validation state and completed steps atomically
-              updateValidationState(newValidationState);
-
-              // Force a transition to step 4 after validation is updated
+              // Force a transition after state is updated
               setTimeout(() => {
                 autoTransition('3', true);
               }, 100);
+            } else {
+              setPersonalDetails(null);
             }
           },
-          onInteract: () =>
-            setInteractedSteps((prev) => [...new Set([...prev, 3])]),
+          onInteract: () => {
+            // No-op - interaction is handled in onComplete
+          },
           isClaimSuccess: false,
           showAdditionalFields: false,
         } as PersonalDetailsFormProps,
