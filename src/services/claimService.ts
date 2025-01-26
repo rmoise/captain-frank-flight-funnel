@@ -122,22 +122,29 @@ export class ClaimService {
       (a) => a.questionId === 'travel_status'
     )?.value;
 
-    // Ensure all flight IDs are included for multi-city trips
-    const journey_booked_flightids = originalFlights
-      .filter((f): f is Flight => f !== null && typeof f.id === 'string')
-      .map((f) => f.id);
+    // For multi-city trips, we need to include all booked flights
+    const journey_booked_flightids = selectedFlights
+      .filter(
+        (f): f is Flight =>
+          f !== null && (typeof f.id === 'string' || typeof f.id === 'number')
+      )
+      .map((f) => String(f.id));
 
     // For multi-city trips, ensure we maintain the correct order of flight IDs
     const journey_fact_flightids =
       journeyFactType === 'provided'
         ? selectedFlights
-            .filter((f): f is Flight => f !== null && typeof f.id === 'string')
-            .map((f) => f.id)
+            .filter(
+              (f): f is Flight =>
+                f !== null &&
+                (typeof f.id === 'string' || typeof f.id === 'number')
+            )
+            .map((f) => String(f.id))
         : [];
 
     // Validate that we have all required flight IDs
     if (journey_booked_flightids.length === 0) {
-      throw new Error('No valid flight IDs found in original flights');
+      throw new Error('No valid flight IDs found in selected flights');
     }
 
     if (journeyFactType === 'provided' && journey_fact_flightids.length === 0) {
