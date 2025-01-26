@@ -88,11 +88,17 @@ class ApiError extends Error {
 class ApiClient {
   private async makeRequest<T>(
     url: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    retryCount = 0
   ): Promise<T> {
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY = 1000; // 1 second
+
     try {
       const fullUrl = `${BASE_URL}${url}`;
-      console.log('Making API request to:', fullUrl);
+      console.log('Making API request to:', fullUrl, {
+        attempt: retryCount + 1,
+      });
       const response = await fetch(fullUrl, {
         ...options,
         headers: {
@@ -102,8 +108,23 @@ class ApiClient {
         },
       });
 
+      // For 502 errors, retry the request
+      if (response.status === 502 && retryCount < MAX_RETRIES) {
+        console.log(`Received 502 error, retrying in ${RETRY_DELAY}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
+        return this.makeRequest<T>(url, options, retryCount + 1);
+      }
+
       const responseText = await response.text();
       console.log('Raw API response:', responseText);
+
+      // If the response is empty and status is not ok, throw an error
+      if (!responseText && !response.ok) {
+        throw new ApiError(
+          response.status,
+          `API request failed: Empty response with status ${response.status}`
+        );
+      }
 
       let responseData;
       try {
@@ -111,10 +132,19 @@ class ApiClient {
         console.log('Parsed response data:', responseData);
       } catch (parseError) {
         console.error('Could not parse response:', parseError);
-        throw new ApiError(
-          response.status,
-          `API request failed: Invalid JSON response`
+        // If we've hit max retries or status isn't 502, throw error
+        if (retryCount >= MAX_RETRIES || response.status !== 502) {
+          throw new ApiError(
+            response.status,
+            `API request failed: Invalid JSON response`
+          );
+        }
+        // For 502 with invalid JSON, retry
+        console.log(
+          `Received invalid JSON with 502, retrying in ${RETRY_DELAY}ms...`
         );
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
+        return this.makeRequest<T>(url, options, retryCount + 1);
       }
 
       if (!response.ok) {
@@ -123,6 +153,7 @@ class ApiClient {
           statusText: response.statusText,
           url: response.url,
           data: responseData,
+          attempt: retryCount + 1,
         });
 
         // Extract error details from response
@@ -143,6 +174,8 @@ class ApiClient {
           errorMessage = 'Resource not found';
         } else if (response.status === 500) {
           errorMessage = 'Internal server error';
+        } else if (response.status === 502) {
+          errorMessage = 'Bad Gateway - The server is temporarily unavailable';
         } else {
           errorMessage = `API request failed with status ${response.status}`;
         }
@@ -152,13 +185,23 @@ class ApiClient {
 
       return responseData;
     } catch (error) {
-      console.error('API request error:', error);
+      // If it's already an ApiError, rethrow it
       if (error instanceof ApiError) {
         throw error;
       }
+
+      // For network errors, retry if we haven't hit the limit
+      if (error instanceof TypeError && retryCount < MAX_RETRIES) {
+        console.log(`Network error, retrying in ${RETRY_DELAY}ms...`, error);
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
+        return this.makeRequest<T>(url, options, retryCount + 1);
+      }
+
+      // For other errors, wrap in ApiError
+      console.error('Unexpected error in API request:', error);
       throw new ApiError(
         500,
-        error instanceof Error ? error.message : 'An unexpected error occurred'
+        error instanceof Error ? error.message : 'Unknown error occurred'
       );
     }
   }
