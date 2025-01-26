@@ -1049,9 +1049,66 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
       selectedType: 'direct' | 'multi';
     }) => {
       const { flight, segmentIndex, selectedType } = data;
+      console.log('=== Handling Flight Selection ===', {
+        flight,
+        segmentIndex,
+        selectedType,
+        currentPhase,
+      });
 
       // Format flight for store
       const storeFormatFlight = formatFlightForStore(flight);
+
+      if (selectedType === 'direct') {
+        // Update direct flight state
+        const newDirectFlight = {
+          ...directFlight,
+          selectedFlight: storeFormatFlight,
+          fromLocation: {
+            value: flight.departureCity,
+            label: flight.departureCity,
+            description: flight.departureAirport,
+            dropdownLabel: `${flight.departureAirport} (${flight.departureCity})`,
+          },
+          toLocation: {
+            value: flight.arrivalCity,
+            label: flight.arrivalCity,
+            description: flight.arrivalAirport,
+            dropdownLabel: `${flight.arrivalAirport} (${flight.arrivalCity})`,
+          },
+        };
+        setDirectFlight(newDirectFlight);
+
+        // Update store
+        batchUpdateWizardState({
+          selectedFlight: storeFormatFlight,
+          selectedFlights: [storeFormatFlight],
+          fromLocation: JSON.stringify(newDirectFlight.fromLocation),
+          toLocation: JSON.stringify(newDirectFlight.toLocation),
+        });
+
+        // Update validation state for phase 3
+        if (currentPhase === 3 && setValidationState && stepNumber) {
+          const isValid = !!(
+            newDirectFlight.selectedFlight &&
+            newDirectFlight.date &&
+            newDirectFlight.fromLocation &&
+            newDirectFlight.toLocation
+          );
+
+          setValidationState((prev: Record<number, boolean>) => ({
+            ...prev,
+            [stepNumber]: isValid,
+          }));
+
+          // Also trigger store validation
+          validateFlightSelection();
+        }
+
+        // Close modal
+        setSearchModalOpen(false);
+        return;
+      }
 
       // Create new segments first to ensure consistent state
       const newSegments = [...flightSegments];
