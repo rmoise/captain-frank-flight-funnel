@@ -129,8 +129,22 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
 
   const handleOptionSelect = useCallback(
     (option: LocationData) => {
-      onChange(option);
-      setInputValue(option.label || '');
+      // Extract the full name and code from dropdownLabel
+      const fullName = option.dropdownLabel
+        ? option.dropdownLabel.split(' (')[0]
+        : option.description || option.label;
+      const code = option.dropdownLabel
+        ? option.dropdownLabel.split(' (')[1]?.replace(')', '')
+        : option.value;
+
+      const updatedOption = {
+        ...option,
+        label: code || option.value, // Use code for the input display
+        description: fullName,
+      };
+
+      onChange(updatedOption);
+      setInputValue(code || option.value); // Display the code in the input
       setIsOpen(false);
       setIsTyping(false);
       setHighlightedIndex(null);
@@ -305,31 +319,38 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
           </div>
         ) : options.length > 0 ? (
           <ul className="py-2">
-            {options.map((option, index) => (
-              <li
-                key={option.value || index}
-                onClick={() =>
-                  option.value ? handleOptionSelect(option) : null
-                }
-                className={`px-4 py-2 ${
-                  option.value
-                    ? 'cursor-pointer hover:bg-gray-100'
-                    : 'text-gray-500 cursor-default'
-                } ${highlightedIndex === index ? 'bg-gray-100' : ''}`}
-              >
-                <div
-                  className={`${option.value ? 'font-medium text-[#4B616D]' : 'text-gray-500'}`}
+            {options.map((option, index) => {
+              // Extract the full name and code from dropdownLabel
+              const fullName = option.dropdownLabel
+                ? option.dropdownLabel.split(' (')[0]
+                : option.description || option.label;
+              const code = option.dropdownLabel
+                ? option.dropdownLabel.split(' (')[1]?.replace(')', '')
+                : option.value;
+
+              return (
+                <li
+                  key={option.value || index}
+                  onClick={() =>
+                    option.value ? handleOptionSelect(option) : null
+                  }
+                  className={`px-4 py-2 ${
+                    option.value
+                      ? 'cursor-pointer hover:bg-gray-100'
+                      : 'text-gray-500 cursor-default'
+                  } ${highlightedIndex === index ? 'bg-gray-100' : ''}`}
                 >
-                  {option.dropdownLabel ||
-                    `${option.label} - ${option.description}`}
-                </div>
-                {option.description && option.value && (
-                  <div className="text-sm text-[#4B616D]/70">
-                    {option.description}
+                  <div className="flex items-center justify-between">
+                    <span className="text-base font-medium text-[#4B616D]">
+                      {fullName}
+                    </span>
+                    {code && (
+                      <span className="text-sm text-gray-500 ml-2">{code}</span>
+                    )}
                   </div>
-                )}
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <div className="px-4 py-2 text-[#4B616D]">{t.common.noResults}</div>

@@ -5,6 +5,7 @@ export interface Location {
   label: string;
   description?: string;
   city?: string;
+  dropdownLabel?: string;
 }
 
 export type LocationLike = Location | LocationData;

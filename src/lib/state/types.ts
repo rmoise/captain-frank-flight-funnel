@@ -230,5 +230,7 @@ export interface StoreActions {
     answers: Answer[];
     bookingNumber: string;
   };
+  notifyInteraction: () => void;
+  setOnInteract: (callback: () => void) => void;
   // ... rest of the interface
 }

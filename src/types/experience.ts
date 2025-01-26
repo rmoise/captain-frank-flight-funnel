@@ -1,6 +1,11 @@
 import type { Answer } from './wizard';
 
-export type QuestionType = 'radio' | 'money' | 'date' | 'flight_selector';
+export type QuestionType =
+  | 'radio'
+  | 'money'
+  | 'date'
+  | 'flight_selector'
+  | 'journey_fact_flight_selector';
 
 export interface QuestionOption {
   id: string;
