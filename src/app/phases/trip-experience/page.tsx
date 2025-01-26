@@ -70,6 +70,29 @@ export default function TripExperiencePage() {
         setOriginalFlights(mainStoreFlights);
       }
 
+      // Try to restore evaluation response and flight state
+      const storedEvaluation = sessionStorage.getItem(
+        'claim_evaluation_response'
+      );
+      if (storedEvaluation) {
+        try {
+          const evaluationResponse = JSON.parse(storedEvaluation);
+          if (evaluationResponse.journey_booked_flightids) {
+            // Restore the flight state from the evaluation response
+            const restoredFlights = originalFlights.filter((flight) =>
+              evaluationResponse.journey_booked_flightids.includes(
+                String(flight.id)
+              )
+            );
+            if (restoredFlights.length > 0) {
+              usePhase4Store.getState().setSelectedFlights(restoredFlights);
+            }
+          }
+        } catch (error) {
+          console.error('Error restoring flight state:', error);
+        }
+      }
+
       console.log('=== End Trip Experience Page Initialization ===');
     }
   }, [mounted, originalFlights, mainStoreFlights, setOriginalFlights]);
