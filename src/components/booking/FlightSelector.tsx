@@ -651,30 +651,55 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
 
       // Get current flights array and update it
       const currentFlights: (Flight | null)[] = [...(selectedFlights || [])];
-      if (currentSegmentIndex < currentFlights.length) {
-        currentFlights[currentSegmentIndex] = flightData;
-      } else {
-        while (currentFlights.length < currentSegmentIndex) {
+
+      // For multi-city, ensure we maintain all segments
+      if (selectedType === 'multi') {
+        // Update the current segment
+        if (currentSegmentIndex < currentFlights.length) {
+          currentFlights[currentSegmentIndex] = flightData;
+        } else {
+          // Fill any gaps with null and add the new flight
+          while (currentFlights.length < currentSegmentIndex) {
+            currentFlights.push(null);
+          }
+          currentFlights.push(flightData);
+        }
+
+        // Ensure we have at least 2 segments for multi-city
+        while (currentFlights.length < 2) {
           currentFlights.push(null);
         }
-        currentFlights.push(flightData);
+      } else {
+        // For direct flights, just use the single flight
+        currentFlights[0] = flightData;
       }
 
-      // Filter out null values
+      // Filter out null values for the store update
       const newSelectedFlights = currentFlights.filter(
         (f): f is Flight => f !== null
       );
+
+      console.log('Updating selected flights:', {
+        currentFlights,
+        newSelectedFlights,
+        selectedType,
+        currentSegmentIndex,
+      });
 
       // Batch updates using the store's batch update mechanism
       if (currentPhase === 4) {
         phase4Store.batchUpdate({
           selectedFlight: flightData,
           selectedFlights: newSelectedFlights,
+          selectedType,
+          currentSegmentIndex,
         });
       } else {
         batchUpdateWizardState({
           selectedFlight: flightData,
           selectedFlights: newSelectedFlights,
+          selectedType,
+          currentSegmentIndex,
         });
       }
 
