@@ -15,9 +15,18 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   title,
   children,
 }) => {
+  const dialogTitleId = React.useId();
+  const dialogDescriptionId = React.useId();
+
   return (
     <Transition.Root show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-50" onClose={onClose}>
+      <Dialog
+        as="div"
+        className="relative z-50"
+        onClose={onClose}
+        aria-labelledby={dialogTitleId}
+        aria-describedby={dialogDescriptionId}
+      >
         <Transition.Child
           as={Fragment}
           enter="ease-out duration-300"
@@ -47,6 +56,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                     type="button"
                     className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-[#F54538] focus:ring-offset-2"
                     onClick={onClose}
+                    aria-label="Close dialog"
                   >
                     <span className="sr-only">Close</span>
                     <XMarkIcon className="h-6 w-6" aria-hidden="true" />
@@ -56,12 +66,20 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
                   <div className="px-6 pt-6 pb-4">
                     <Dialog.Title
                       as="h3"
+                      id={dialogTitleId}
                       className="text-lg font-medium leading-6 text-gray-900"
                     >
                       {title}
                     </Dialog.Title>
                   </div>
                 )}
+                <Dialog.Description
+                  id={dialogDescriptionId}
+                  className="sr-only"
+                >
+                  A bottom sheet dialog that slides up from the bottom of the
+                  screen
+                </Dialog.Description>
                 <div className="max-h-[80vh] overflow-y-auto">{children}</div>
               </Dialog.Panel>
             </Transition.Child>

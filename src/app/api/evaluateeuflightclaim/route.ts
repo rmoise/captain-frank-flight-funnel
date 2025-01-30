@@ -130,19 +130,33 @@ export async function POST(request: Request) {
     const result = JSON.parse(responseText);
     console.log('Parsed API response:', result);
 
-    const status = result.status || (result.data && result.data.status);
+    // Ensure we have a valid response structure
+    const responseData = result.data || result;
 
-    if (!status || !['accept', 'reject'].includes(status)) {
+    if (
+      !responseData ||
+      typeof responseData.status === 'undefined' ||
+      !['accept', 'reject'].includes(responseData.status)
+    ) {
       console.error('Invalid response format from external API:', result);
       return NextResponse.json(
-        { error: 'Invalid response format from external API' },
+        {
+          error: 'Invalid response format from external API',
+          details:
+            'Response must include a status of either "accept" or "reject"',
+        },
         { status: 500 }
       );
     }
 
-    const finalResult = result.data || result;
-    console.log('Returning API response:', finalResult);
-    return NextResponse.json(finalResult);
+    // Return a properly structured response
+    return NextResponse.json({
+      data: {
+        status: responseData.status,
+        contract: responseData.contract,
+        rejection_reasons: responseData.rejection_reasons,
+      },
+    });
   } catch (error) {
     console.error('Error in evaluateEuflightClaim:', error);
     return NextResponse.json(

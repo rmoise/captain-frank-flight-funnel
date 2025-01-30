@@ -15,6 +15,7 @@ export const SpeechBubble: React.FC<SpeechBubbleProps> = ({ message }) => {
       <div className="w-full h-auto min-h-[53px] flex items-end gap-2 sm:gap-3">
         {/* Avatar Circle with Bubble Tail */}
         <div className="w-10 sm:w-12 h-[50px] sm:h-[60px] relative shrink-0 mb-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <Image
             src="https://ik.imagekit.io/0adjo0tl4/Group%2079.svg"
             alt="Captain Frank Avatar"

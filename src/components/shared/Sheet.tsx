@@ -3,7 +3,6 @@
 import React, { useEffect } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import * as Sheet from 'vaul';
-import * as Dialog from '@radix-ui/react-dialog';
 
 interface BottomSheetProps {
   isOpen: boolean;
@@ -29,10 +28,14 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
     };
   }, [isOpen]);
 
+  const sheetId = React.useId();
+  const titleId = `${sheetId}-title`;
+  const descriptionId = `${sheetId}-description`;
+
   return (
     <Sheet.Root
       open={isOpen}
-      onOpenChange={(isOpen: boolean) => !isOpen && onClose()}
+      onOpenChange={(open) => !open && onClose()}
       snapPoints={[0.5, 0.95]}
       activeSnapPoint={0.95}
       modal={true}
@@ -48,36 +51,38 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
             maxHeight: '98vh',
             overscrollBehavior: 'contain',
           }}
-          asChild
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          aria-describedby={descriptionId}
+          tabIndex={-1}
         >
-          <Dialog.Content>
-            <Dialog.Title className="sr-only">
-              {title || 'Dialog Content'}
-            </Dialog.Title>
-            <Dialog.Description className="sr-only">
+          <div role="document" className="flex flex-col h-full">
+          <h2 id={titleId} className="sr-only">
+            {title || 'Dialog Content'}
+          </h2>
+          <p id={descriptionId} className="sr-only">
               A bottom sheet dialog that slides up from the bottom of the
               screen. Drag the handle at the top to resize or swipe down to
               close.
-            </Dialog.Description>
-            <div className="mx-auto w-12 h-1.5 flex-shrink-0 rounded-full bg-gray-300 mt-2 mb-4" />
-            <div className="absolute right-4 top-4 z-10">
-              <button
-                onClick={onClose}
-                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
-                aria-label="Close dialog"
-              >
-                <XMarkIcon className="w-6 h-6" />
-              </button>
+          </p>
+          <div className="mx-auto w-12 h-1.5 flex-shrink-0 rounded-full bg-gray-300 mt-2 mb-4" />
+          <button
+            onClick={onClose}
+            className="absolute right-4 top-4 z-10 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
+            aria-label="Close dialog"
+          >
+            <XMarkIcon className="w-6 h-6" />
+          </button>
+          {title && (
+            <h3 className="px-4 mb-4 text-lg font-semibold text-gray-900">
+              {title}
+            </h3>
+          )}
+          <div className="flex-1 overflow-y-auto">
+            <div className="px-4 pb-16">{children}</div>
             </div>
-            {title && (
-              <h3 className="px-4 mb-4 text-lg font-semibold text-gray-900">
-                {title}
-              </h3>
-            )}
-            <div className="flex-1 overflow-y-auto">
-              <div className="px-4 pb-16">{children}</div>
-            </div>
-          </Dialog.Content>
+          </div>
         </Sheet.Content>
       </Sheet.Portal>
     </Sheet.Root>

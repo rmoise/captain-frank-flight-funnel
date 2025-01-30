@@ -320,6 +320,7 @@ export interface Translations {
       tripExperience: string;
       claimStatus: string;
       agreement: string;
+      claimSuccess: string;
     };
     compensationEstimate: {
       title: string;

@@ -11,10 +11,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Answer } from '../../types/wizard';
 import { Question } from '../../types/experience';
 import { QuestionAnswer } from '../shared/QuestionAnswer';
-import { useStore } from '../../lib/state/store';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
 import { qaWizardConfig } from '@/config/qaWizard';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useStore } from '../../lib/state/store';
+import type { StoreState, ValidationStateSteps } from '../../lib/state/store';
+
+type StoreWithActions = StoreState & {
+  validateAndUpdateStep: (step: ValidationStateSteps, isValid: boolean) => void;
+  batchUpdateWizardState: (updates: Partial<StoreState>) => void;
+};
 
 interface Phase1QAWizardProps {
   questions: Question[];
@@ -28,17 +34,28 @@ export const Phase1QAWizard: React.FC<Phase1QAWizardProps> = ({
   initialAnswers = [],
 }) => {
   const { t } = useTranslation();
-  const {
-    wizardAnswers,
-    wizardCurrentSteps,
-    wizardSuccessStates,
-    validationState,
-    batchUpdateWizardState,
-    handleWizardComplete,
-  } = useStore();
 
-  // Get wizard ID and type
-  const wizardId = questions?.[0]?.id;
+  const wizardAnswers = useStore(
+    (state: StoreWithActions) => state.wizardAnswers
+  );
+  const wizardCurrentSteps = useStore(
+    (state: StoreWithActions) => state.wizardCurrentSteps
+  );
+  const isCompleted = useStore(
+    (state: StoreWithActions) => state.wizardIsCompleted
+  );
+  const isValid = useStore((state: StoreWithActions) => state.wizardIsValid);
+  const successMessage = useStore(
+    (state: StoreWithActions) => state.wizardSuccessMessage
+  );
+  const validateAndUpdateStep = useStore(
+    (state: StoreWithActions) => state.validateAndUpdateStep
+  );
+  const batchUpdateWizardState = useStore(
+    (state: StoreWithActions) => state.batchUpdateWizardState
+  );
+
+  // Get wizard type
   const wizardType = 'phase1';
 
   // Filter answers specific to this wizard instance
@@ -50,6 +67,19 @@ export const Phase1QAWizard: React.FC<Phase1QAWizardProps> = ({
 
   // Get success state for this wizard
   const successState = useMemo(() => {
+    const showing = isCompleted;
+    const storedMessage = successMessage;
+
+    // If we have a stored message, use it
+    if (showing && storedMessage) {
+      return { showing, message: storedMessage };
+    }
+
+    // Otherwise calculate based on answers
+    if (!isValid) {
+      return { showing: false, message: '' };
+    }
+
     const lastAnswer = instanceAnswers[instanceAnswers.length - 1];
     if (!lastAnswer) return { showing: false, message: '' };
 
@@ -57,13 +87,19 @@ export const Phase1QAWizard: React.FC<Phase1QAWizardProps> = ({
     const question = questions.find((q) => q.id === lastAnswer.questionId);
     const option = question?.options?.find((o) => o.value === lastAnswer.value);
 
-    const showing = wizardSuccessStates[wizardType]?.showing || false;
     const message = option?.showConfetti
       ? t.wizard.success.goodChance
       : t.wizard.success.answersSaved;
 
     return { showing, message };
-  }, [wizardSuccessStates, instanceAnswers, questions, t.wizard.success]);
+  }, [
+    isCompleted,
+    isValid,
+    successMessage,
+    instanceAnswers,
+    questions,
+    t.wizard.success,
+  ]);
 
   // Get current step
   const currentStep = useMemo(
@@ -142,7 +178,9 @@ export const Phase1QAWizard: React.FC<Phase1QAWizardProps> = ({
   // Get current answer for a question
   const getCurrentAnswer = useCallback(
     (questionId: string): string => {
-      const answer = instanceAnswers.find((a) => a.questionId === questionId);
+      const answer = instanceAnswers.find(
+        (a: Answer) => a.questionId === questionId
+      );
       return answer?.value?.toString() || '';
     },
     [instanceAnswers]
@@ -170,7 +208,7 @@ export const Phase1QAWizard: React.FC<Phase1QAWizardProps> = ({
         currentAnswers.push(newAnswer);
       }
 
-      // Only update answers, no validation or auto-transition
+      // Update wizard state
       batchUpdateWizardState({
         wizardAnswers: currentAnswers,
         lastAnsweredQuestion: questionId,
@@ -187,46 +225,35 @@ export const Phase1QAWizard: React.FC<Phase1QAWizardProps> = ({
     const isLastStep = nextStep >= visibleQuestions.length;
 
     if (isLastStep) {
-      // On last step, update validation state immediately
+      // Determine success message based on answers
+      const lastAnswer = instanceAnswers[instanceAnswers.length - 1];
+      const question = questions.find((q) => q.id === lastAnswer?.questionId);
+      const option = question?.options?.find(
+        (o) => o.value === lastAnswer?.value
+      );
+      const successMessage = option?.showConfetti
+        ? t.wizard.success.goodChance
+        : t.wizard.success.answersSaved;
+
+      // Update wizard state
       batchUpdateWizardState({
-        validationState: {
-          ...validationState,
-          isWizardValid: true,
-          isWizardSubmitted: true,
-          isValidating: false,
-          stepValidation: {
-            ...validationState.stepValidation,
-            2: true,
-          },
-          stepInteraction: {
-            ...validationState.stepInteraction,
-            2: true,
-          },
-          _timestamp: Date.now(),
-        },
+        wizardIsValid: true,
+        wizardIsCompleted: true,
+        wizardSuccessMessage: successMessage,
+        lastAnsweredQuestion: lastAnswer.questionId,
       });
 
-      // Show success message
-      const successMessage = t.wizard.success.answersSaved;
-      batchUpdateWizardState({
-        wizardSuccessStates: {
-          ...wizardSuccessStates,
-          [wizardType]: { showing: true, message: successMessage },
-        },
-      });
-
-      // Complete the wizard after a delay
+      // Call onComplete callback after a delay
       window.setTimeout(() => {
-        // Complete the wizard
-        handleWizardComplete(wizardId, instanceAnswers, successMessage);
-
-        // Call onComplete callback if provided
         if (onComplete) {
-          window.setTimeout(() => {
-            onComplete(instanceAnswers);
-          }, 500);
+          onComplete(instanceAnswers);
         }
-      }, 1500); // Show success message for 1.5 seconds before transitioning
+
+        // Force auto-transition after a longer delay
+        window.setTimeout(() => {
+          validateAndUpdateStep(2 as ValidationStateSteps, true);
+        }, 2000); // Increased delay to ensure success message is visible
+      }, 1000);
     } else {
       // Move to next question without validation
       batchUpdateWizardState({
@@ -240,16 +267,13 @@ export const Phase1QAWizard: React.FC<Phase1QAWizardProps> = ({
     currentQuestion,
     currentStep,
     visibleQuestions.length,
-    t.wizard.success.answersSaved,
-    batchUpdateWizardState,
-    validationState,
-    wizardId,
+    questions,
+    t.wizard.success,
     instanceAnswers,
-    handleWizardComplete,
     onComplete,
     wizardCurrentSteps,
-    wizardType,
-    wizardSuccessStates,
+    validateAndUpdateStep,
+    batchUpdateWizardState,
   ]);
 
   // Handle going back
@@ -267,40 +291,16 @@ export const Phase1QAWizard: React.FC<Phase1QAWizardProps> = ({
   // Handle going back to questions
   const handleBackToQuestions = useCallback(() => {
     batchUpdateWizardState({
-      wizardSuccessStates: {
-        ...wizardSuccessStates,
-        [wizardType]: { showing: false, message: '' },
-      },
+      wizardIsCompleted: false,
       wizardCurrentSteps: {
         ...wizardCurrentSteps,
         [wizardType]: 0,
       },
-      validationState: {
-        ...validationState,
-        isWizardValid: false,
-        isWizardSubmitted: false,
-        isValidating: false,
-        stepValidation: {
-          ...validationState.stepValidation,
-          2: false,
-        },
-        stepInteraction: {
-          ...validationState.stepInteraction,
-          2: false,
-        },
-        _timestamp: Date.now(),
-      },
+      wizardIsValid: false,
       wizardAnswers: [],
       lastAnsweredQuestion: null,
-      wizardIsCompleted: false,
-      wizardIsValid: false,
     });
-  }, [
-    wizardSuccessStates,
-    wizardCurrentSteps,
-    validationState,
-    batchUpdateWizardState,
-  ]);
+  }, [wizardCurrentSteps, batchUpdateWizardState]);
 
   // Update button text
   const backButtonText = t.wizard.navigation.back;

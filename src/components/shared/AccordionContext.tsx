@@ -31,9 +31,22 @@ export const AccordionProvider: React.FC<{
     initialActiveAccordion
   );
   const [isManualTransition, setIsManualTransition] = useState(false);
-  /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
-  const [isTransitioning, setIsTransitioning] = useState(false);
   const transitionTimer = useRef<NodeJS.Timeout | null>(null);
+
+  // Expose context to window object
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).__accordionContext = {
+        setActiveAccordion: handleSetActiveAccordion,
+      };
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        delete (window as any).__accordionContext;
+      }
+    };
+  }, []);
 
   // Persist active accordion state
   useEffect(() => {
@@ -87,33 +100,22 @@ export const AccordionProvider: React.FC<{
             `AccordionContext - Starting ${delay}ms delay for step ${id} -> ${nextId}`
           );
 
-          setIsTransitioning(true);
+          setIsManualTransition(false);
+          // Set the next accordion as active
+          setActiveAccordion(nextId);
+
+          // Scroll to the next accordion after a brief delay to ensure it's expanded
           setTimeout(() => {
-            console.log(`AccordionContext - Delay complete for step ${id}`, {
-              currentTime: new Date().toISOString(),
-              transitioning_to: nextId,
-            });
-
-            // Clear any existing manual transition flag
-            setIsManualTransition(false);
-            // Set the next accordion as active
-            setActiveAccordion(nextId);
-
-            // Scroll to the next accordion after a brief delay to ensure it's expanded
-            setTimeout(() => {
-              const nextAccordion = document.querySelector(
-                `[data-step="${nextId}"]`
-              );
-              if (nextAccordion) {
-                nextAccordion.scrollIntoView({
-                  behavior: 'smooth',
-                  block: 'start',
-                });
-              }
-            }, 500);
-
-            setIsTransitioning(false);
-          }, delay);
+            const nextAccordion = document.querySelector(
+              `[data-step="${nextId}"]`
+            );
+            if (nextAccordion) {
+              nextAccordion.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start',
+              });
+            }
+          }, 500);
         }
       }
     }, 500);

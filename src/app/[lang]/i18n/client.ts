@@ -7,7 +7,14 @@ export function useTranslation() {
   const translations = getTranslations(lang);
 
   return {
-    t: (key: string) => translations[key] || key,
+    t: {
+      flightSelector: {
+        types: {
+          direct: translations['flightSelector.types.direct'],
+          multi: translations['flightSelector.types.multi'],
+        },
+      },
+    },
     lang,
   };
 }

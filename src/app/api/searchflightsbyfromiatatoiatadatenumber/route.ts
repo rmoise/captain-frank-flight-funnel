@@ -86,10 +86,18 @@ export async function GET(request: Request) {
     const searchDate = new Date(date);
     const dates = [
       searchDate.toISOString().split('T')[0], // Original date
-      new Date(searchDate.setDate(searchDate.getDate() - 1))
+      new Date(
+        searchDate.getFullYear(),
+        searchDate.getMonth(),
+        searchDate.getDate() - 1
+      )
         .toISOString()
         .split('T')[0], // Day before
-      new Date(searchDate.setDate(searchDate.getDate() + 2))
+      new Date(
+        searchDate.getFullYear(),
+        searchDate.getMonth(),
+        searchDate.getDate() + 1
+      )
         .toISOString()
         .split('T')[0], // Day after
     ];

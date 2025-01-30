@@ -52,6 +52,7 @@ import { Flight as FlightData } from '@/types/flight';
 import { useTranslation } from '@/hooks/useTranslation';
 import type { Translations } from '../../translations/types';
 import { ValidationState, ValidationStateSteps } from '@/types/validation';
+import { useFlightStore } from '@/lib/state/flightStore';
 
 interface RawFlight {
   id: number | undefined; // Make it explicitly number | undefined instead of optional
@@ -624,6 +625,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
     string | null
   >(null);
   const [editingSegmentIndex, setEditingSegmentIndex] = useState<number>(-1);
+  const lastSelectedFlightRef = useRef<string | null>(null);
 
   const getConnectionTimeInfo = useConnectionTimeUpdates(
     mounted,
@@ -908,6 +910,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
         if (dateStr.match(/^\d{4}-\d{2}-\d{2}/)) {
           searchDate = parseISO(dateStr);
         } else if (dateStr.includes('.')) {
+          // Handle German date format (DD.MM.YYYY)
           const [day, month, year] = dateStr.split('.');
           searchDate = new Date(Number(year), Number(month) - 1, Number(day));
         } else {
@@ -980,13 +983,19 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
           );
 
           // Filter flights that depart at least 30 minutes after previous flight arrives
+          // and within 48 hours of the previous flight's arrival
           validFlights = validFlights.filter((flight: Flight) => {
             const departureTime = parseISO(
               `${flight.date}T${flight.departureTime}:00.000Z`
             );
             const timeDiff =
-              (departureTime.getTime() - previousArrivalTime.getTime()) / 60000; // in minutes
-            return timeDiff >= 30;
+              departureTime.getTime() - previousArrivalTime.getTime();
+            const timeDiffMinutes = timeDiff / 60000; // Convert to minutes
+
+            // Allow flights that depart:
+            // 1. At least 30 minutes after previous arrival
+            // 2. Within 48 hours of previous arrival
+            return timeDiffMinutes >= 30 && timeDiffMinutes <= 48 * 60;
           });
         }
       }
@@ -1147,13 +1156,47 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
         };
       }
 
+      // Validate segment cities match the selected flight
+      if (selectedType === 'multi') {
+        // Ensure the selected flight matches the segment's from/to locations
+        if (
+          flight.departureCity.toLowerCase() !==
+            newSegments[segmentIndex].fromLocation?.value?.toLowerCase() ||
+          flight.arrivalCity.toLowerCase() !==
+            newSegments[segmentIndex].toLocation?.value?.toLowerCase()
+        ) {
+          console.error('Flight cities do not match segment locations', {
+            flight,
+            segment: newSegments[segmentIndex],
+          });
+          return;
+        }
+
+        // Validate no same-city segments
+        if (
+          newSegments[segmentIndex].fromLocation?.value?.toLowerCase() ===
+          newSegments[segmentIndex].toLocation?.value?.toLowerCase()
+        ) {
+          console.error('Cannot select same city for departure and arrival', {
+            segment: newSegments[segmentIndex],
+          });
+          return;
+        }
+      }
+
       // Update segments state
       setFlightSegments(newSegments);
 
-      // Create the new flights array for store update
+      // Create the new flights array for store update, ensuring no duplicates
       const newSelectedFlights = newSegments
         .map((segment) => segment.selectedFlight)
-        .filter((flight): flight is Flight => flight !== null);
+        .filter((flight): flight is Flight => flight !== null)
+        .reduce((acc: Flight[], flight) => {
+          if (!acc.some((f) => f.id === flight.id)) {
+            acc.push(flight);
+          }
+          return acc;
+        }, []);
 
       // Update main store
       batchUpdateWizardState({
@@ -1167,14 +1210,37 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
 
       // If in phase 4, also update phase4Store
       if (currentPhase === 4) {
+        // Get the current original flights from flightStore
+        const flightStore = useFlightStore.getState();
+        const originalFlights = flightStore.originalFlights;
+
+        // Ensure we're not duplicating flights and they match segment cities
+        const uniqueFlights = newSelectedFlights.filter(
+          (flight) =>
+            !originalFlights.some(
+              (origFlight) => origFlight.id === flight.id
+            ) &&
+            newSegments.some(
+              (segment) =>
+                segment.fromLocation?.value?.toLowerCase() ===
+                  flight.departureCity.toLowerCase() &&
+                segment.toLocation?.value?.toLowerCase() ===
+                  flight.arrivalCity.toLowerCase()
+            )
+        );
+
         phase4Store.batchUpdate({
           selectedFlight: storeFormatFlight,
           fromLocation: JSON.stringify(newSegments[0].fromLocation),
           toLocation: JSON.stringify(
             newSegments[newSegments.length - 1].toLocation
           ),
-          selectedFlights: newSelectedFlights,
+          selectedFlights: uniqueFlights,
         });
+
+        // Update flightStore with both original and selected flights
+        flightStore.setOriginalFlights(originalFlights);
+        flightStore.setSelectedFlights(uniqueFlights);
       }
 
       // Update validation state for phase 3
@@ -2065,7 +2131,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
           selectedFlight: null,
         };
         setFlightSegments(newSegments);
-        if (index === 0) {
+        if (index === 0 && selectedType === 'multi') {
           setSelectedDate(null);
         }
         return;
@@ -2092,8 +2158,8 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
 
       setFlightSegments(newSegments);
 
-      // Update store's selectedDate with the first segment's date
-      if (index === 0) {
+      // Update store's selectedDate with the first segment's date only when in multi mode
+      if (index === 0 && selectedType === 'multi') {
         setSelectedDate(format(safeDate, 'yyyy-MM-dd'));
       }
 
@@ -2209,7 +2275,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
             fromLocation: lastSegment?.toLocation || null,
             toLocation: null,
             selectedFlight: null,
-            date: new Date(),
+            date: null, // Changed from new Date() to null
           });
         }
         setFlightSegments(currentSegments);
@@ -2233,10 +2299,15 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
   // Flight selection notification effect - onSelect callback intentionally included
   // as it's provided by the parent and should trigger updates
   useEffect(() => {
-    if (directFlight && directFlight.selectedFlight) {
-      onSelect(directFlight.selectedFlight);
+    if (directFlight && directFlight.selectedFlight && !isInitializing) {
+      // Prevent infinite updates by checking if the flight has actually changed
+      const flightKey = getUniqueFlightKey(directFlight.selectedFlight);
+      if (flightKey !== lastSelectedFlightRef.current) {
+        lastSelectedFlightRef.current = flightKey;
+        onSelect(directFlight.selectedFlight);
+      }
     }
-  }, [directFlight, onSelect]);
+  }, [directFlight, onSelect, isInitializing]);
 
   // Update segment initialization effect
   useEffect(() => {
@@ -2619,15 +2690,82 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
     phase4Store,
     mainStore,
   ]);
-  // Update loading check
-  if (isInitializing && (currentPhase === 3 || currentPhase === 4)) {
-    // Only show loading in phase 3 or 4
-    return (
-      <div className="flex items-center justify-center p-4">
-        <LoadingSpinner />
-      </div>
-    );
-  }
+
+  const handleFlightDelete = useCallback(
+    (index: number) => {
+      console.log('=== Deleting Flight ===', { index, currentPhase });
+
+      // Create new segments array with the flight removed
+      const newSegments = [...flightSegments];
+
+      // Clear the selected flight and date from the current segment
+      newSegments[index] = {
+        ...newSegments[index],
+        selectedFlight: null,
+        date: null,
+      };
+
+      // If this is not the last segment, clear the next segment's fromLocation and flight
+      if (index < newSegments.length - 1) {
+        newSegments[index + 1] = {
+          ...newSegments[index + 1],
+          fromLocation: null,
+          selectedFlight: null,
+          date: null,
+        };
+      }
+
+      // Update store states first
+      if (currentPhase === 4) {
+        phase4Store.batchUpdate({
+          selectedFlight: null,
+          selectedFlights: [],
+        });
+
+        // Update flightStore
+        const flightStore = useFlightStore.getState();
+        flightStore.setSelectedFlights([]);
+      } else {
+        batchUpdateWizardState({
+          selectedFlight: null,
+          selectedFlights: [],
+          fromLocation: newSegments[0]?.fromLocation
+            ? JSON.stringify(newSegments[0].fromLocation)
+            : null,
+          toLocation: newSegments[newSegments.length - 1]?.toLocation
+            ? JSON.stringify(newSegments[newSegments.length - 1].toLocation)
+            : null,
+        });
+      }
+
+      // Update validation state
+      if (setValidationState && stepNumber) {
+        setValidationState((prev: Record<number, boolean>) => ({
+          ...prev,
+          [stepNumber]: false,
+        }));
+      }
+
+      // Update local state
+      setFlightSegments([...newSegments]);
+
+      // Trigger validation
+      validateFlightSelection();
+
+      // Notify parent component
+      onInteract();
+    },
+    [
+      currentPhase,
+      flightSegments,
+      phase4Store,
+      batchUpdateWizardState,
+      setValidationState,
+      stepNumber,
+      validateFlightSelection,
+      onInteract,
+    ]
+  );
 
   // Convert to a proper React component
   const FlightPreviewCard = React.memo(
@@ -2724,9 +2862,13 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                 <p className="text-xs text-gray-500">{flight.arrivalTime}</p>
               </div>
             </div>
-            {flight.connectionInfo && index > 0 && (
+            {connectionInfo && index > 0 && (
               <div className="mt-2 pt-2 border-t border-gray-100">
-                <p className="text-sm text-gray-500">{flight.connectionInfo}</p>
+                <p
+                  className={`text-sm ${connectionInfo.isValid ? 'text-gray-500' : 'text-red-500'}`}
+                >
+                  {connectionInfo.message}
+                </p>
               </div>
             )}
           </div>
@@ -2756,7 +2898,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                     </p>
                   </div>
                   <p className="text-sm text-gray-500">
-                    {flight.departure} → {flight.arrival}
+                    {flight.departureCity} → {flight.arrivalCity}
                   </p>
                 </div>
               </div>
@@ -2795,9 +2937,11 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                 </button>
               </div>
             </div>
-            {flight.connectionInfo && index > 0 && (
-              <div className="mb-4 pb-2 border-b border-gray-100">
-                <p className="text-sm text-gray-500 flex items-center">
+            {connectionInfo && index > 0 && (
+              <div className="mt-2 pt-2 border-t border-gray-100">
+                <p
+                  className={`text-sm flex items-center ${connectionInfo.isValid ? 'text-gray-500' : 'text-red-500'}`}
+                >
                   <svg
                     className="w-4 h-4 mr-1"
                     viewBox="0 0 24 24"
@@ -2811,7 +2955,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                       d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                     />
                   </svg>
-                  {flight.connectionInfo}
+                  {connectionInfo.message}
                 </p>
               </div>
             )}
@@ -2823,6 +2967,85 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
 
   FlightPreviewCard.displayName = 'FlightPreviewCard';
 
+  const handleSegmentDelete = useCallback(
+    (index: number) => {
+      // Only allow deletion of segments after the first two
+      if (index <= 1) return;
+
+      // Remove the segment
+      const newSegments = flightSegments.filter((_, i) => i !== index);
+
+      // Ensure we maintain connections between segments
+      if (index > 0 && index < flightSegments.length - 1) {
+        // When removing a middle segment, connect the segments before and after
+        const prevSegment = newSegments[index - 1];
+        const nextSegment = newSegments[index];
+
+        // Clear the connection points since they need to be re-established
+        if (prevSegment && nextSegment) {
+          prevSegment.toLocation = null;
+          prevSegment.selectedFlight = null;
+          nextSegment.fromLocation = null;
+          nextSegment.selectedFlight = null;
+        }
+      }
+
+      // Update the store with the new segments
+      setFlightSegments(newSegments);
+
+      // Update selected flights array
+      const remainingFlights = newSegments
+        .map((segment) => segment.selectedFlight)
+        .filter((flight): flight is Flight => flight !== null);
+
+      if (currentPhase === 4) {
+        phase4Store.batchUpdate({
+          selectedFlight: null,
+          selectedFlights: remainingFlights,
+        });
+      } else {
+        batchUpdateWizardState({
+          selectedFlight: null,
+          selectedFlights: remainingFlights,
+        });
+      }
+
+      // Reset current segment index if needed
+      if (currentSegmentIndex >= newSegments.length) {
+        setCurrentSegmentIndex(newSegments.length - 1);
+      }
+
+      // Update validation state if needed
+      if (setValidationState && currentPhase === 3) {
+        const allSegmentsValid = newSegments.every(
+          (segment) => segment.selectedFlight !== null
+        );
+        setValidationState((prev: Record<number, boolean>) => ({
+          ...prev,
+          [stepNumber || 1]: allSegmentsValid,
+        }));
+      }
+
+      // Trigger validation
+      validateFlightSelection();
+    },
+    [
+      currentPhase,
+      flightSegments,
+      currentSegmentIndex,
+      phase4Store,
+      batchUpdateWizardState,
+      setValidationState,
+      stepNumber,
+      validateFlightSelection,
+    ]
+  );
+
+  // Type guard to validate flight ID
+  function hasValidId(flight: RawFlight): flight is RawFlight & { id: number } {
+    return flight.id !== undefined && typeof flight.id === 'number';
+  }
+
   // Update the render to use the new component
   const renderFlightPreviewCard = (flight: Flight, index: number) => (
     <FlightPreviewCard
@@ -2831,36 +3054,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
       index={index}
       flightSegments={flightSegments}
       onEdit={handleFlightEdit}
-      onDelete={(index) => {
-        // Create new segments array with the flight removed
-        const newSegments = [...flightSegments];
-        newSegments[index] = {
-          ...newSegments[index],
-          selectedFlight: null,
-        };
-
-        // Update local state
-        setFlightSegments(newSegments);
-
-        // Update store state
-        const remainingFlights = newSegments
-          .map((segment) => segment.selectedFlight)
-          .filter((flight): flight is Flight => flight !== null);
-        setSelectedFlights(remainingFlights);
-
-        // If this was the only flight, also clear the selected flight
-        if (remainingFlights.length === 0) {
-          setSelectedFlight(null);
-        }
-
-        // Update validation state if needed
-        if (setValidationState && currentPhase === 3) {
-          setValidationState((prev: Record<number, boolean>) => ({
-            ...prev,
-            [stepNumber || 1]: false,
-          }));
-        }
-      }}
+      onDelete={handleFlightDelete}
     />
   );
 
@@ -2963,6 +3157,164 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
     }
   };
 
+  // Add a function to render the flight segments
+  const renderFlightSegments = () => {
+    return flightSegments.map((segment, index) => (
+      <div key={`segment-${index}`} className="relative">
+        <div className="relative">
+          <div className="relative flex items-start">
+            <div className="flex-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="relative">
+                  <AutocompleteInput
+                    value={segment.fromLocation as LocationData | null}
+                    onChange={(location) =>
+                      handleMultiLocationChange(location, 'fromLocation', index)
+                    }
+                    onSearch={searchAirports}
+                    onFocus={handleFocus}
+                    label={t.flightSelector.labels.from}
+                    leftIcon="departure"
+                    error={errorMessages.from}
+                    disabled={disabled}
+                  />
+                </div>
+                <div className="relative">
+                  <AutocompleteInput
+                    value={segment.toLocation as LocationData | null}
+                    onChange={(location) =>
+                      handleMultiLocationChange(location, 'toLocation', index)
+                    }
+                    onSearch={searchAirports}
+                    onFocus={handleFocus}
+                    label={t.flightSelector.labels.to}
+                    leftIcon="arrival"
+                    error={errorMessages.to}
+                    disabled={disabled}
+                  />
+                </div>
+              </div>
+            </div>
+            {/* Delete button for segments after the first two */}
+            {index > 1 && (
+              <button
+                onClick={() => handleSegmentDelete(index)}
+                className="absolute -right-6 top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-gray-600"
+              >
+                <TrashIcon className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Selected flight preview */}
+        {segment.selectedFlight && (
+          <div className="mt-4">
+            <FlightPreviewCard
+              key={`flight-preview-${segment.selectedFlight.id}-${index}`}
+              flight={segment.selectedFlight}
+              index={index}
+              flightSegments={flightSegments}
+              onEdit={handleFlightEdit}
+              onDelete={handleFlightDelete}
+            />
+          </div>
+        )}
+
+        {/* Date picker and search button */}
+        {showFlightSearch && (currentPhase === 3 || currentPhase === 4) && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
+            <div className="relative date-picker-input w-full">
+              <DatePicker
+                selected={
+                  segment.date instanceof Date
+                    ? segment.date
+                    : segment.date
+                      ? parseISO(segment.date)
+                      : null
+                }
+                onChange={(date: Date | null) =>
+                  handleMultiDateChange(date, index)
+                }
+                customInput={
+                  <CustomDateInput
+                    value={
+                      segment.date
+                        ? format(
+                            segment.date instanceof Date
+                              ? segment.date
+                              : parseISO(segment.date),
+                            'dd.MM.yyyy'
+                          )
+                        : ''
+                    }
+                    onClear={() => {
+                      handleMultiDateChange(null, index);
+                      setFlightErrorMessage(null);
+                    }}
+                    label={t.flightSelector.labels.departureDate}
+                  />
+                }
+                dateFormat="dd.MM.yyyy"
+                showMonthDropdown
+                showYearDropdown
+                dropdownMode="select"
+                isClearable={false}
+                placeholderText="DD.MM.YYYY"
+                shouldCloseOnSelect={true}
+                maxDate={new Date()}
+                minDate={
+                  new Date(new Date().setFullYear(new Date().getFullYear() - 3))
+                }
+                openToDate={
+                  segment.date instanceof Date
+                    ? segment.date
+                    : segment.date
+                      ? parseISO(segment.date)
+                      : new Date()
+                }
+                disabledKeyboardNavigation
+                preventOpenOnFocus
+                popperProps={{
+                  strategy: 'fixed',
+                  placement: 'top-start',
+                }}
+                className="react-datepicker-popper"
+                calendarClassName="custom-calendar"
+                onSelect={(date: Date | null) => {
+                  if (date) {
+                    const formattedDate = format(date, 'yyyy-MM-dd');
+                    setSelectedDate(formattedDate);
+                  }
+                }}
+              />
+            </div>
+
+            <button
+              onClick={() => {
+                setCurrentSegmentIndex(index);
+                setSearchModalOpen(true);
+                handleSearchFlights(index);
+              }}
+              disabled={
+                !segment.date ||
+                !isValid(
+                  segment.date instanceof Date
+                    ? segment.date
+                    : new Date(segment.date)
+                ) ||
+                !segment.toLocation
+              }
+              className="h-14 w-full text-white bg-[#F54538] rounded-xl hover:bg-[#F54538]/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#F54538] disabled:opacity-50 disabled:cursor-not-allowed font-sans font-medium text-base"
+            >
+              {t.flightSelector.labels.searchFlights}
+            </button>
+          </div>
+        )}
+      </div>
+    ));
+  };
+
   return (
     <div className="space-y-4">
       <FlightTypeSelector
@@ -2978,260 +3330,8 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
       <div className="space-y-4">
         {selectedType === 'multi' ? (
           <div className="space-y-8">
-            {flightSegments.map((segment, index) => (
-              <div key={index} className="relative">
-                <div className="relative">
-                  <div className="relative flex items-start">
-                    <div className="flex-1">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="relative">
-                          <AutocompleteInput
-                            value={segment.fromLocation as LocationData | null}
-                            onChange={(location) =>
-                              handleMultiLocationChange(
-                                location,
-                                'fromLocation',
-                                index
-                              )
-                            }
-                            onSearch={searchAirports}
-                            onFocus={handleFocus}
-                            label={t.flightSelector.labels.from}
-                            leftIcon="departure"
-                            error={errorMessages.from}
-                            disabled={disabled}
-                          />
-                        </div>
-                        <div className="relative">
-                          <AutocompleteInput
-                            value={segment.toLocation as LocationData | null}
-                            onChange={(location) =>
-                              handleMultiLocationChange(
-                                location,
-                                'toLocation',
-                                index
-                              )
-                            }
-                            onSearch={searchAirports}
-                            onFocus={handleFocus}
-                            label={t.flightSelector.labels.to}
-                            leftIcon="arrival"
-                            error={errorMessages.to}
-                            disabled={disabled}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    {/* Show delete button for segments after the first two on both mobile and desktop */}
-                    {index > 1 && (
-                      <>
-                        {/* Mobile delete button */}
-                        <div className="md:hidden absolute -right-6 top-1/2 -translate-y-1/2">
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-
-                              // Remove the segment if it's beyond the minimum required
-                              const newSegments = flightSegments.filter(
-                                (_, i) => i !== index
-                              );
-
-                              // Ensure we maintain connections between segments
-                              if (
-                                index > 0 &&
-                                index < flightSegments.length - 1
-                              ) {
-                                // When removing a middle segment, connect the segments before and after
-                                const prevSegment = newSegments[index - 1];
-                                const nextSegment = newSegments[index];
-
-                                // Clear the connection points since they need to be re-established
-                                if (prevSegment && nextSegment) {
-                                  prevSegment.toLocation = null;
-                                  prevSegment.selectedFlight = null;
-                                  nextSegment.fromLocation = null;
-                                  nextSegment.selectedFlight = null;
-                                }
-                              }
-
-                              // Update the store with the new segments
-                              setFlightSegments(newSegments);
-
-                              // Update selected flights array
-                              const remainingFlights = newSegments
-                                .map((segment) => segment.selectedFlight)
-                                .filter(
-                                  (flight): flight is Flight => flight !== null
-                                );
-                              setSelectedFlights(remainingFlights);
-
-                              // Reset current segment index if needed
-                              if (currentSegmentIndex >= newSegments.length) {
-                                setCurrentSegmentIndex(
-                                  Math.max(0, newSegments.length - 1)
-                                );
-                              }
-                            }}
-                            className="w-7 h-7 rounded-full bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors shadow-sm"
-                          >
-                            <TrashIcon className="h-3.5 w-3.5 text-gray-500" />
-                          </button>
-                        </div>
-                        {/* Desktop delete button */}
-                        <div className="hidden md:block absolute -right-12 top-1/2 -translate-y-1/2">
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-
-                              // Remove the segment if it's beyond the minimum required
-                              const newSegments = flightSegments.filter(
-                                (_, i) => i !== index
-                              );
-
-                              // Ensure we maintain connections between segments
-                              if (
-                                index > 0 &&
-                                index < flightSegments.length - 1
-                              ) {
-                                // When removing a middle segment, connect the segments before and after
-                                const prevSegment = newSegments[index - 1];
-                                const nextSegment = newSegments[index];
-
-                                // Clear the connection points since they need to be re-established
-                                if (prevSegment && nextSegment) {
-                                  prevSegment.toLocation = null;
-                                  prevSegment.selectedFlight = null;
-                                  nextSegment.fromLocation = null;
-                                  nextSegment.selectedFlight = null;
-                                }
-                              }
-
-                              // Update the store with the new segments
-                              setFlightSegments(newSegments);
-
-                              // Update selected flights array
-                              const remainingFlights = newSegments
-                                .map((segment) => segment.selectedFlight)
-                                .filter(
-                                  (flight): flight is Flight => flight !== null
-                                );
-                              setSelectedFlights(remainingFlights);
-
-                              // Reset current segment index if needed
-                              if (currentSegmentIndex >= newSegments.length) {
-                                setCurrentSegmentIndex(
-                                  Math.max(0, newSegments.length - 1)
-                                );
-                              }
-                            }}
-                            className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors shadow-sm"
-                          >
-                            <TrashIcon className="h-4 w-4 text-gray-500" />
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-                {showFlightSearch &&
-                  (currentPhase === 3 || currentPhase === 4) && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
-                      <div className="relative date-picker-input w-full">
-                        <DatePicker
-                          selected={
-                            segment.date instanceof Date
-                              ? segment.date
-                              : segment.date
-                                ? parseISO(segment.date)
-                                : null
-                          }
-                          onChange={(date: Date | null) =>
-                            handleMultiDateChange(date, index)
-                          }
-                          customInput={
-                            <CustomDateInput
-                              value={
-                                segment.date
-                                  ? format(
-                                      segment.date instanceof Date
-                                        ? segment.date
-                                        : parseISO(segment.date),
-                                      'dd.MM.yyyy'
-                                    )
-                                  : ''
-                              }
-                              onClear={() => {
-                                handleMultiDateChange(null, index);
-                                setFlightErrorMessage(null);
-                              }}
-                              label={t.flightSelector.labels.departureDate}
-                            />
-                          }
-                          dateFormat="dd.MM.yyyy"
-                          showMonthDropdown
-                          showYearDropdown
-                          dropdownMode="select"
-                          isClearable={false}
-                          placeholderText="DD.MM.YYYY"
-                          shouldCloseOnSelect={true}
-                          maxDate={new Date()}
-                          minDate={
-                            new Date(
-                              new Date().setFullYear(
-                                new Date().getFullYear() - 3
-                              )
-                            )
-                          }
-                          openToDate={
-                            segment.date instanceof Date
-                              ? segment.date
-                              : segment.date
-                                ? parseISO(segment.date)
-                                : new Date()
-                          }
-                          disabledKeyboardNavigation
-                          preventOpenOnFocus
-                          popperProps={{
-                            strategy: 'fixed',
-                            placement: 'top-start',
-                          }}
-                          className="react-datepicker-popper"
-                          calendarClassName="custom-calendar"
-                          onSelect={(date: Date | null) => {
-                            if (date) {
-                              const formattedDate = format(date, 'yyyy-MM-dd');
-                              setSelectedDate(formattedDate);
-                            }
-                          }}
-                        />
-                      </div>
-
-                      <button
-                        onClick={() => {
-                          setCurrentSegmentIndex(index);
-                          setSearchModalOpen(true);
-                          handleSearchFlights(index);
-                        }}
-                        disabled={
-                          !segment.date ||
-                          !isValid(
-                            segment.date instanceof Date
-                              ? segment.date
-                              : new Date(segment.date)
-                          ) ||
-                          !segment.toLocation
-                        }
-                        className="h-14 w-full text-white bg-[#F54538] rounded-xl hover:bg-[#F54538]/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#F54538] disabled:opacity-50 disabled:cursor-not-allowed font-sans font-medium text-base"
-                      >
-                        {t.flightSelector.labels.searchFlights}
-                      </button>
-                    </div>
-                  )}
-              </div>
-            ))}
-
+            {renderFlightSegments()}
+            {/* Add flight button */}
             {flightSegments.length < 4 && (
               <div className="flex flex-col gap-4">
                 <button
@@ -3257,16 +3357,6 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                     {t.flightSelector.labels.addFlight}
                   </span>
                 </button>
-
-                {showFlightSearch &&
-                  (currentPhase === 3 || currentPhase === 4) && (
-                    <button
-                      onClick={() => {}}
-                      className="hidden w-full h-12 bg-red-50 text-[#F54538] rounded-lg font-medium hover:bg-red-100 transition-colors text-sm"
-                    >
-                      Flight not found?
-                    </button>
-                  )}
               </div>
             )}
           </div>
@@ -3383,7 +3473,7 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
                                 )
                               );
                             })()
-                          : new Date()
+                          : undefined
                       }
                       disabledKeyboardNavigation
                       preventOpenOnFocus
@@ -3772,8 +3862,3 @@ export const FlightSelector: React.FC<FlightSelectorProps> = ({
   );
 };
 export default FlightSelector;
-
-// Type guard to validate flight ID
-function hasValidId(flight: RawFlight): flight is RawFlight & { id: number } {
-  return flight.id !== undefined && typeof flight.id === 'number';
-}

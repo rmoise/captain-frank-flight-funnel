@@ -1,123 +1,291 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from 'react';
 import { useRouter } from 'next/navigation';
-import { useStore, getLanguageAwareUrl } from '@/lib/state/store';
+import { useStore } from '@/lib/state/store';
+import { useFlightStore } from '@/lib/state/flightStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { SpeechBubble } from '@/components/SpeechBubble';
-import { PhaseGuard } from '@/components/shared/PhaseGuard';
-import { FlightSelector } from '@/components/booking/FlightSelector';
 import { AccordionCard } from '@/components/shared/AccordionCard';
+import { AccordionProvider } from '@/components/shared/AccordionContext';
+import { PhaseNavigation } from '@/components/PhaseNavigation';
+import { PhaseGuard } from '@/components/shared/PhaseGuard';
+import { ModularFlightSelector } from '@/components/booking/ModularFlightSelector';
+import { accordionConfig } from '@/config/accordion';
+import { getLanguageAwareUrl } from '@/lib/state/store';
+import type { FlightSegmentData } from '@/types/store';
 import { ContinueButton } from '@/components/shared/ContinueButton';
 import { BackButton } from '@/components/shared/BackButton';
-import { PhaseNavigation } from '@/components/PhaseNavigation';
-import { XMarkIcon } from '@heroicons/react/20/solid';
-import { accordionConfig } from '@/config/accordion';
-import { AccordionProvider } from '@/components/shared/AccordionContext';
-import { usePhase4Store } from '@/lib/state/phase4Store';
+import { XMarkIcon } from '@heroicons/react/24/outline';
+import { formatDateForDisplay } from '@/utils/dateUtils';
+import { validateBookingNumber } from '@/lib/validation/bookingValidation';
 
 export default function FlightDetailsPage() {
   const router = useRouter();
   const { t, lang } = useTranslation();
   const [mounted, setMounted] = useState(false);
+  const isInitializedRef = useRef(false);
   const [bookingNumber, setLocalBookingNumber] = useState('');
   const [isBookingInputFocused, setIsBookingInputFocused] = useState(false);
   const [interactedSteps, setInteractedSteps] = useState<string[]>([]);
   const [isFirstVisit, setIsFirstVisit] = useState(true);
   const [initialAccordion, setInitialAccordion] = useState<string | null>(null);
-  const [isNavigating, setIsNavigating] = useState(false);
   const [openSteps, setOpenSteps] = useState<string[]>(['flight-selection']);
 
   const {
     selectedFlights,
     setCurrentPhase,
-    bookingNumber: storedBookingNumber,
     setSelectedFlights,
     setBookingNumber: setStoreBookingNumber,
     completePhase,
     validationState,
     updateValidationState,
+    flightSegments,
+    directFlight,
+    selectedType,
   } = useStore();
+
+  const flightStore = useFlightStore();
 
   // Initialize component
   useEffect(() => {
-    if (!mounted) {
-      console.log('=== Flight Details Page Initialization ===', {
-        storedBookingNumber,
-        selectedFlights: selectedFlights.length,
-      });
+    if (isInitializedRef.current) return;
+    isInitializedRef.current = true;
 
-      setMounted(true);
-      setCurrentPhase(3);
+    const initializePhase = async () => {
+      try {
+        // First ensure we're in phase 3
+        await setCurrentPhase(3);
 
-      // Set local booking number from store
-      const bookingNumberToUse = storedBookingNumber || '';
-      setLocalBookingNumber(bookingNumberToUse);
+        // Try to restore flight data from localStorage FIRST before any other operations
+        const storedFlightData = localStorage.getItem('phase3FlightData');
+        const storedPhase3State = localStorage.getItem('phase3State');
+        let restoredData = null;
 
-      // Check if this is actually first visit by looking at store state
-      const hasExistingData = selectedFlights.length > 0 || bookingNumberToUse;
-      setIsFirstVisit(!hasExistingData);
+        // First handle flight data restoration
+        if (storedFlightData) {
+          try {
+            const parsedData = JSON.parse(storedFlightData);
+            const timestamp = parsedData.timestamp || Date.now();
+            const isDataFresh = Date.now() - timestamp < 300000; // 5 minutes
 
-      // Get the last active accordion from session storage
-      const lastActiveAccordion = sessionStorage.getItem('activeAccordion');
-      setInitialAccordion(
-        lastActiveAccordion || (hasExistingData ? null : 'flight-selection')
-      );
+            if (isDataFresh) {
+              restoredData = parsedData;
 
-      // Initialize open steps
-      setOpenSteps(['flight-selection']);
+              // First, immediately set the selected type to prevent default to 'direct'
+              if (
+                parsedData.selectedType === 'multi' ||
+                parsedData.selectedType === 'direct'
+              ) {
+                useStore.setState((state) => ({
+                  ...state,
+                  selectedType: parsedData.selectedType,
+                }));
+              }
 
-      // Initialize validation state
-      const isBookingValid =
-        bookingNumberToUse.trim().length >= 6 &&
-        /^[A-Z0-9]+$/i.test(bookingNumberToUse.trim());
+              // Ensure we have at least 2 segments for multi-city
+              const flightSegmentsToUse =
+                parsedData.flightSegments?.map(
+                  (segment: FlightSegmentData) => ({
+                    ...segment,
+                    fromLocation: segment.fromLocation || null,
+                    toLocation: segment.toLocation || null,
+                    date: segment.date ? new Date(segment.date) : null,
+                    selectedFlight: segment.selectedFlight || null,
+                  })
+                ) || [];
 
-      // Check if flights are valid - must have all required fields
-      const isFlightValid =
-        selectedFlights.length > 0 &&
-        selectedFlights.every(
-          (flight) =>
-            flight.airline &&
-            flight.flightNumber &&
-            flight.departureCity &&
-            flight.arrivalCity &&
-            flight.date
+              if (
+                parsedData.selectedType === 'multi' &&
+                flightSegmentsToUse.length < 2
+              ) {
+                flightSegmentsToUse.push({
+                  fromLocation: null,
+                  toLocation: null,
+                  selectedFlight: null,
+                  date: null,
+                });
+              }
+
+              // Update all stores synchronously
+              await Promise.all([
+                // Update main store with segments (type is already set)
+                new Promise<void>((resolve) => {
+                  useStore.setState((state) => ({
+                    ...state,
+                    flightSegments: flightSegmentsToUse,
+                  }));
+                  resolve();
+                }),
+
+                // Update flight store
+                ...(parsedData.selectedFlights?.length > 0
+                  ? [
+                      flightStore.setSelectedFlights(
+                        parsedData.selectedFlights
+                      ),
+                      flightStore.setOriginalFlights(
+                        parsedData.selectedFlights
+                      ),
+                      new Promise<void>((resolve) => {
+                        setSelectedFlights(parsedData.selectedFlights);
+                        resolve();
+                      }),
+                    ]
+                  : []),
+              ]);
+
+              // Force a small delay to ensure state updates are processed
+              await new Promise((resolve) => setTimeout(resolve, 0));
+            }
+          } catch (error) {
+            console.error('Error restoring flight data:', error);
+          }
+        }
+
+        // Then handle phase 3 state restoration (including booking number and validation)
+        if (storedPhase3State) {
+          try {
+            const parsedState = JSON.parse(storedPhase3State);
+
+            // First restore the booking number from stored state
+            const storedBookingNumber = parsedState.bookingNumber || '';
+            setLocalBookingNumber(storedBookingNumber);
+            setStoreBookingNumber(storedBookingNumber);
+
+            // Validate the booking number
+            const bookingValidation =
+              validateBookingNumber(storedBookingNumber);
+
+            // Create initial validation state
+            const initialValidationState = {
+              isFlightValid:
+                parsedState.validationState?.isFlightValid ?? false,
+              isBookingValid: bookingValidation.isValid,
+              stepValidation: {
+                ...(parsedState.validationState?.stepValidation ?? {}),
+                1: parsedState.validationState?.stepValidation?.[1] ?? false,
+                2: bookingValidation.isValid,
+              },
+              stepInteraction: {
+                ...(parsedState.validationState?.stepInteraction ?? {}),
+                1: parsedState.validationState?.stepInteraction?.[1] ?? false,
+                2: !!storedBookingNumber,
+              },
+              errors: bookingValidation.errors,
+              _timestamp: Date.now(),
+              1: parsedState.validationState?.stepValidation?.[1] ?? false,
+              2: bookingValidation.isValid,
+            };
+
+            // Update validation state in store
+            updateValidationState(initialValidationState);
+
+            // Save the complete state for all phases
+            const sharedState = {
+              flightSegments: flightSegments.map((segment) => ({
+                ...segment,
+                date: segment.date ? formatDateForDisplay(segment.date) : null,
+                selectedFlight: segment.selectedFlight,
+                fromLocation: segment.fromLocation,
+                toLocation: segment.toLocation,
+              })),
+              selectedType,
+              bookingNumber: storedBookingNumber,
+              validationState: initialValidationState,
+              _timestamp: Date.now(),
+            };
+
+            // Save state for each phase
+            [1, 2, 3].forEach((phase) => {
+              const phaseState = {
+                ...sharedState,
+                currentPhase: phase,
+              };
+              localStorage.setItem(
+                `phase${phase}State`,
+                JSON.stringify(phaseState)
+              );
+            });
+
+            // Log validation state restoration
+            console.log('=== Restored Booking Validation State ===', {
+              storedBookingNumber,
+              validationResult: bookingValidation,
+              validationState: initialValidationState,
+              timestamp: new Date().toISOString(),
+            });
+          } catch (error) {
+            console.error('Error restoring phase 3 state:', error);
+          }
+        }
+
+        // Get the current state after all updates
+        const currentState = useStore.getState();
+        const currentFlightStore = {
+          selectedFlights: flightStore.selectedFlights,
+          originalFlights: flightStore.originalFlights,
+        };
+
+        // Now log the initialization state after all updates
+        console.log('=== Flight Details Page Initialization ===', {
+          storedBookingNumber: currentState.bookingNumber,
+          selectedFlights: currentState.selectedFlights.length,
+          flightStoreFlights: currentFlightStore.selectedFlights.length,
+          mainStoreState: {
+            selectedType: currentState.selectedType,
+            directFlight: currentState.directFlight
+              ? {
+                  selectedFlight: currentState.directFlight.selectedFlight,
+                  fromLocation: currentState.directFlight.fromLocation,
+                  toLocation: currentState.directFlight.toLocation,
+                }
+              : null,
+            flightSegments: currentState.flightSegments?.length || 0,
+          },
+          restoredFromStorage: !!restoredData,
+        });
+
+        // Check if this is actually first visit
+        const hasExistingData =
+          currentState.selectedFlights.length > 0 || currentState.bookingNumber;
+        setIsFirstVisit(!hasExistingData);
+
+        // Get the last active accordion from session storage
+        const lastActiveAccordion = sessionStorage.getItem('activeAccordion');
+        setInitialAccordion(
+          lastActiveAccordion || (hasExistingData ? null : 'flight-selection')
         );
 
-      // Update validation state with both flight and booking validation
-      updateValidationState({
-        stepValidation: {
-          ...validationState.stepValidation,
-          1: isFlightValid,
-          2: isBookingValid,
-        },
-        stepInteraction: {
-          ...validationState.stepInteraction,
-          1: selectedFlights.length > 0,
-          2: bookingNumberToUse.length > 0,
-        },
-        1: isFlightValid,
-        2: isBookingValid,
-        _timestamp: Date.now(),
-      });
+        // Initialize open steps
+        setOpenSteps(['flight-selection']);
 
-      console.log('Validation state initialized:', {
-        isFlightValid,
-        isBookingValid,
-        selectedFlights: selectedFlights.length,
-        bookingNumber: bookingNumberToUse.length,
-      });
+        setMounted(true);
+      } catch (error) {
+        console.error('Error during phase initialization:', error);
+      }
+    };
 
-      console.log('=== End Flight Details Page Initialization ===');
-    }
+    initializePhase();
   }, [
-    mounted,
-    selectedFlights,
-    storedBookingNumber,
-    validationState.stepValidation,
-    validationState.stepInteraction,
+    setCurrentPhase,
+    setLocalBookingNumber,
+    setStoreBookingNumber,
     updateValidationState,
-  ]); // Add required dependencies
+    setSelectedFlights,
+    flightStore,
+    setIsFirstVisit,
+    setInitialAccordion,
+    setOpenSteps,
+    flightSegments,
+    selectedType,
+  ]);
 
   // Add effect to handle auto-opening of step 2
   useEffect(() => {
@@ -133,40 +301,188 @@ export default function FlightDetailsPage() {
     (currentStepId: string) => {
       console.log('FlightDetails - handleAutoTransition:', {
         currentStepId,
-        isStepValid:
-          validationState.stepValidation[
-            currentStepId === 'flight-selection' ? 1 : 2
-          ],
+        validationState: validationState.stepValidation,
+        isFlightValid: validationState.stepValidation[1],
+        isBookingValid: validationState.stepValidation[2],
       });
 
-      if (
-        currentStepId === 'flight-selection' &&
-        validationState.stepValidation[1]
-      ) {
-        return 'booking-number';
+      // Only allow transition if the current step is fully validated
+      if (currentStepId === 'flight-selection') {
+        const isFlightValid = validationState.stepValidation[1];
+        return isFlightValid ? 'booking-number' : null;
       }
       return null;
     },
     [validationState.stepValidation]
   );
 
+  // Update ModularFlightSelector validation handler
+  const handleFlightValidation = useCallback(
+    (state: any) => {
+      const newValidationState =
+        typeof state === 'function'
+          ? state(validationState.stepValidation)
+          : state;
+
+      // For multi-city, ensure all segments have flights selected
+      const isFlightValid =
+        selectedType === 'multi'
+          ? selectedFlights.length === flightSegments.length && // All segments must have flights
+            selectedFlights.every(
+              (flight) =>
+                flight.airline &&
+                flight.flightNumber &&
+                flight.departureCity &&
+                flight.arrivalCity &&
+                flight.date
+            )
+          : selectedFlights.length > 0 && // Direct flight just needs one selection
+            selectedFlights.every(
+              (flight) =>
+                flight.airline &&
+                flight.flightNumber &&
+                flight.departureCity &&
+                flight.arrivalCity &&
+                flight.date
+            );
+
+      console.log('=== Flight Validation Update ===', {
+        newState: newValidationState,
+        currentValidation: validationState,
+        selectedFlights: selectedFlights.length,
+        totalSegments: flightSegments.length,
+        selectedType,
+        isFlightValid,
+      });
+
+      updateValidationState({
+        ...validationState,
+        stepValidation: {
+          ...validationState.stepValidation,
+          1: isFlightValid,
+        },
+        1: isFlightValid,
+        isFlightValid,
+        _timestamp: Date.now(),
+      });
+    },
+    [
+      validationState,
+      updateValidationState,
+      selectedFlights,
+      selectedType,
+      flightSegments,
+    ]
+  );
+
+  // Add effect to sync flight validation state
+  useEffect(() => {
+    if (mounted) {
+      handleFlightValidation(validationState.stepValidation);
+    }
+  }, [mounted, selectedFlights, handleFlightValidation]);
+
+  // Update booking number validation handler to match ModularFlightSelector pattern
   const handleBookingNumberChange = (value: string) => {
     setLocalBookingNumber(value);
     setStoreBookingNumber(value);
 
-    // Validate the booking number
-    const isValid =
-      value.trim().length >= 6 && /^[A-Z0-9]+$/i.test(value.trim());
+    // Use the new validation system
+    const validationResult = validateBookingNumber(value);
 
-    // Update validation state
-    updateValidationState({
+    // Create a consistent validation state update
+    const validationUpdate = {
+      isFlightValid: validationState.isFlightValid,
+      isBookingValid: validationResult.isValid,
       stepValidation: {
         ...validationState.stepValidation,
-        2: isValid,
+        1: validationState.stepValidation[1],
+        2: validationResult.isValid,
       },
-      2: isValid,
+      stepInteraction: {
+        ...validationState.stepInteraction,
+        1: validationState.stepInteraction[1] ?? false,
+        2: true,
+      },
+      errors: validationResult.errors,
+      _timestamp: Date.now(),
+      1: validationState.stepValidation[1],
+      2: validationResult.isValid,
+    };
+
+    // Update the validation state
+    updateValidationState(validationUpdate);
+
+    // Save the complete state for all relevant phases
+    const sharedState = {
+      flightSegments: flightSegments.map((segment) => ({
+        ...segment,
+        date: segment.date ? formatDateForDisplay(segment.date) : null,
+        selectedFlight: segment.selectedFlight,
+        fromLocation: segment.fromLocation,
+        toLocation: segment.toLocation,
+      })),
+      selectedType,
+      bookingNumber: value,
+      _timestamp: Date.now(),
+    };
+
+    // Save state for each phase with its specific validation state
+    const phases = [1, 2, 3];
+    phases.forEach((phase) => {
+      const phaseState = {
+        ...sharedState,
+        currentPhase: phase,
+        validationState: validationUpdate,
+      };
+      localStorage.setItem(`phase${phase}State`, JSON.stringify(phaseState));
+    });
+
+    // Log validation update for debugging
+    console.log('=== Booking Number Validation Update ===', {
+      value,
+      validationResult,
+      validationState: validationUpdate,
+      timestamp: new Date().toISOString(),
     });
   };
+
+  // Add effect to persist validation state across phase transitions
+  useEffect(() => {
+    if (!mounted) return;
+
+    const persistValidationState = () => {
+      const currentValidationState = {
+        ...validationState,
+        _timestamp: Date.now(),
+      };
+
+      const sharedState = {
+        flightSegments: flightSegments.map((segment) => ({
+          ...segment,
+          date: segment.date ? formatDateForDisplay(segment.date) : null,
+          selectedFlight: segment.selectedFlight,
+          fromLocation: segment.fromLocation,
+          toLocation: segment.toLocation,
+        })),
+        selectedType,
+        bookingNumber,
+        _timestamp: Date.now(),
+      };
+
+      // Save state for each phase
+      [1, 2, 3].forEach((phase) => {
+        const phaseState = {
+          ...sharedState,
+          currentPhase: phase,
+          validationState: currentValidationState,
+        };
+        localStorage.setItem(`phase${phase}State`, JSON.stringify(phaseState));
+      });
+    };
+
+    persistValidationState();
+  }, [mounted, validationState, flightSegments, selectedType, bookingNumber]);
 
   const canContinue = useMemo(() => {
     return (
@@ -174,50 +490,47 @@ export default function FlightDetailsPage() {
     );
   }, [validationState.stepValidation]);
 
-  const handleContinue = useCallback(() => {
-    if (canContinue && !isNavigating) {
-      setIsNavigating(true);
-      completePhase(3);
-      setCurrentPhase(4);
+  const handleContinue = useCallback(async () => {
+    if (!canContinue) return;
 
-      // Transfer Phase 3's selected flights to Phase 4's original flights
-      const phase4Store = usePhase4Store.getState();
-      phase4Store.setOriginalFlights(selectedFlights);
+    try {
+      // Save the current flight data to localStorage before transitioning
+      const flightData = {
+        selectedFlights,
+        flightSegments,
+        directFlight,
+        selectedType,
+        timestamp: Date.now(),
+      };
+      localStorage.setItem('phase3FlightData', JSON.stringify(flightData));
 
-      // Reset validation states for phase 4
-      updateValidationState({
-        stepValidation: {
-          ...validationState.stepValidation,
-          2: false, // Trip experience step
-          3: false, // Informed date step
-        },
-        stepInteraction: {
-          ...validationState.stepInteraction,
-          2: false, // Trip experience step
-          3: false, // Informed date step
-        },
-        2: false, // Trip experience step
-        3: false, // Informed date step
-        _timestamp: Date.now(),
-      });
+      // Store the selected flights from phase 3 as original flights for comparison in phase 4
+      // But don't set them as selected flights for phase 4
+      await flightStore.setOriginalFlights(selectedFlights);
 
-      // Store the initial accordion state for phase 4 in session storage
-      sessionStorage.setItem('activeAccordion', 'trip-experience');
+      // Clear any previously selected flights for phase 4
+      await flightStore.setSelectedFlights([]);
 
-      // Navigate after all state updates, preserving the language
+      // Complete phase 3 and move to phase 4
+      await completePhase(3);
+      await setCurrentPhase(4);
+
+      // Navigate to the next page
       router.push(`/${lang}/phases/trip-experience`);
-      setIsNavigating(false);
+    } catch (error) {
+      console.error('Error during phase transition:', error);
     }
   }, [
     canContinue,
     completePhase,
-    isNavigating,
-    router,
     setCurrentPhase,
-    updateValidationState,
-    validationState,
+    router,
     lang,
     selectedFlights,
+    flightStore,
+    flightSegments,
+    directFlight,
+    selectedType,
   ]);
 
   const handleInteraction = useCallback(
@@ -231,8 +544,48 @@ export default function FlightDetailsPage() {
 
   const handleBack = async () => {
     const previousUrl = '/phases/compensation-estimate';
+
+    // Save current validation state before transitioning
+    const currentState = {
+      flightSegments: flightSegments.map((segment) => ({
+        ...segment,
+        date: segment.date ? formatDateForDisplay(segment.date) : null,
+        selectedFlight: segment.selectedFlight,
+        fromLocation: segment.fromLocation,
+        toLocation: segment.toLocation,
+      })),
+      selectedType,
+      currentPhase: 2,
+      validationState: {
+        ...validationState,
+        stepValidation: {
+          ...validationState.stepValidation,
+          1: validationState.stepValidation[1],
+          2: validationState.stepValidation[2],
+        },
+        stepInteraction: {
+          ...validationState.stepInteraction,
+          1: validationState.stepInteraction[1],
+          2: validationState.stepInteraction[2],
+        },
+      },
+      bookingNumber,
+      _timestamp: Date.now(),
+    };
+
+    // Save state for both phases to ensure validation persists
+    localStorage.setItem('phase2State', JSON.stringify(currentState));
+    localStorage.setItem(
+      'phase1State',
+      JSON.stringify({
+        ...currentState,
+        currentPhase: 1,
+      })
+    );
+
     // First update the current phase to the previous phase
     await setCurrentPhase(2);
+
     // Then navigate to the previous URL with language parameter
     router.push(getLanguageAwareUrl(previousUrl, lang));
   };
@@ -292,44 +645,19 @@ export default function FlightDetailsPage() {
                         ? prev.filter((step) => step !== 'flight-selection')
                         : [...prev, 'flight-selection']
                     );
+                    handleInteraction('flight-selection');
                   }}
                 >
-                  <div className={accordionConfig.padding.content}>
-                    <FlightSelector
-                      onSelect={(flight) => {
-                        handleInteraction('flight-selection');
-                        if (flight) {
-                          if (Array.isArray(flight)) {
-                            setSelectedFlights(flight);
-                          } else {
-                            setSelectedFlights([flight]);
-                          }
-                        }
-                      }}
+                  <div className="space-y-6">
+                    <ModularFlightSelector
+                      showFlightSearch={true}
+                      showFlightDetails={false}
                       currentPhase={3}
+                      disabled={false}
                       stepNumber={1}
-                      showFlightDetails={true}
-                      setValidationState={(state) => {
-                        if (typeof state === 'function') {
-                          const newState = state(
-                            validationState.stepValidation
-                          );
-                          updateValidationState({
-                            ...validationState,
-                            stepValidation: newState,
-                            1: newState[1] || false,
-                          });
-                        } else {
-                          updateValidationState({
-                            ...validationState,
-                            stepValidation: {
-                              ...validationState.stepValidation,
-                              1: state[1] || false,
-                            },
-                            1: state[1] || false,
-                          });
-                        }
-                      }}
+                      setValidationState={handleFlightValidation}
+                      onSelect={() => {}}
+                      onInteract={() => handleInteraction('flight-selection')}
                     />
                   </div>
                 </AccordionCard>
@@ -351,6 +679,7 @@ export default function FlightDetailsPage() {
                         ? prev.filter((step) => step !== 'booking-number')
                         : [...prev, 'booking-number']
                     );
+                    handleInteraction('booking-number');
                   }}
                 >
                   <div className={accordionConfig.padding.content}>

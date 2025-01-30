@@ -20,12 +20,11 @@ const nextConfig = {
   },
   // Development settings
   ...(process.env.NODE_ENV === 'development' ? {
-    optimizeFonts: false,
-    swcMinify: false,
+    optimizeFonts: true,
+    swcMinify: true,
     experimental: {
-      optimizeCss: false,
-      optimizeServerReact: false,
-      webpackBuildWorker: false,
+      optimizeCss: true,
+      optimizeServerReact: true,
     },
   } : {
     // Production settings
@@ -37,13 +36,25 @@ const nextConfig = {
   }),
   async rewrites() {
     return [
+      // Handle direct API paths
       {
         source: '/api/:path*',
-        destination: 'http://localhost:8888/api/:path*',
+        destination: 'http://localhost:9999/.netlify/functions/:path*',
       },
+      // Handle direct Netlify function paths
       {
-        source: '/phases/:path*',
-        destination: '/phases/:path*',
+        source: '/.netlify/functions/:path*',
+        destination: 'http://localhost:9999/.netlify/functions/:path*',
+      },
+      // Handle language-prefixed API paths
+      {
+        source: '/:lang/api/:path*',
+        destination: 'http://localhost:9999/.netlify/functions/:path*',
+      },
+      // Handle language-prefixed Netlify function paths
+      {
+        source: '/:lang/.netlify/functions/:path*',
+        destination: 'http://localhost:9999/.netlify/functions/:path*',
       },
     ];
   },
@@ -57,33 +68,11 @@ const nextConfig = {
               key: 'Cache-Control',
               value: 'no-cache, no-store, max-age=0, must-revalidate',
             },
-            {
-              key: 'Pragma',
-              value: 'no-cache',
-            },
-            {
-              key: 'Expires',
-              value: '0',
-            },
           ],
         },
       ];
     }
-    return [
-      {
-        source: '/studio/:path*',
-        headers: [{ key: 'Access-Control-Allow-Origin', value: '*' }],
-      },
-      {
-        source: '/:path*',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
-          },
-        ],
-      },
-    ];
+    return [];
   },
 };
 

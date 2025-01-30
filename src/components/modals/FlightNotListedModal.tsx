@@ -27,19 +27,30 @@ export const FlightNotListedModal: React.FC<Props> = ({ isOpen, onClose }) => {
     onClose();
   };
 
+  const dialogTitleId = React.useId();
+  const dialogDescriptionId = React.useId();
+
   return (
     <Dialog
       open={isOpen}
       onClose={onClose}
       className="fixed inset-0 z-50 overflow-y-auto"
+      aria-labelledby={dialogTitleId}
+      aria-describedby={dialogDescriptionId}
     >
       <div className="flex items-center justify-center min-h-screen">
-        <div className="fixed inset-0 bg-black opacity-30" />
+        <Dialog.Overlay className="fixed inset-0 bg-black opacity-30" />
         <Dialog.Panel className="relative bg-white rounded-lg p-6 max-w-md w-full mx-4">
-          <Dialog.Title className="text-lg font-semibold mb-4">
+          <Dialog.Title
+            id={dialogTitleId}
+            className="text-lg font-semibold mb-4"
+          >
             Flight Not Listed?
           </Dialog.Title>
-          <Dialog.Description className="text-gray-600 mb-6">
+          <Dialog.Description
+            id={dialogDescriptionId}
+            className="text-gray-600 mb-6"
+          >
             Please provide your flight details and we&apos;ll help you find it.
           </Dialog.Description>
 

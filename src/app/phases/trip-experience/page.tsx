@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useTranslation } from '@/hooks/useTranslation';
 import { usePhase4Store } from '@/lib/state/phase4Store';
-import { Answer, Question } from '@/types/store';
+import { Answer, Question, Flight } from '@/types/store';
 import { QAWizard } from '@/components/wizard/QAWizard';
 import { PhaseGuard } from '@/components/shared/PhaseGuard';
 import { AccordionCard } from '@/components/shared/AccordionCard';
@@ -14,9 +14,11 @@ import { BackButton } from '@/components/shared/BackButton';
 import { PhaseNavigation } from '@/components/PhaseNavigation';
 import { accordionConfig } from '@/config/accordion';
 import { isValidYYYYMMDD, formatDateToYYYYMMDD } from '@/utils/dateUtils';
-import { ClaimService } from '@/services/claimService';
 import { AccordionProvider } from '@/components/shared/AccordionContext';
 import { useStore } from '@/lib/state/store';
+import { useFlightStore } from '@/lib/state/flightStore';
+import { EvaluateService } from '@/services/evaluateService';
+import { ClaimService } from '@/services/claimService';
 
 // Helper function to get language-aware URL
 const getLanguageAwareUrl = (url: string, lang: string) => {
@@ -27,75 +29,166 @@ export default function TripExperiencePage() {
   const { t } = useTranslation();
   const router = useRouter();
   const params = useParams();
-  const lang = params?.lang as string;
+  const lang = params?.lang?.toString() || '';
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
+  const phase4Store = usePhase4Store();
+  const flightStore = useFlightStore();
+  const mainStore = useStore();
 
-  // Use Phase4Store exclusively
   const {
-    selectedFlights,
     travelStatusAnswers,
     informedDateAnswers,
-    originalFlights,
     travelStatusStepValidation,
-    travelStatusStepInteraction,
     informedDateStepValidation,
+    travelStatusStepInteraction,
     informedDateStepInteraction,
-    setOriginalFlights,
-  } = usePhase4Store();
+    updateValidationState,
+  } = phase4Store;
 
-  // Get selected flights from main store
-  const { selectedFlights: mainStoreFlights } = useStore();
-
-  // Initialize component
+  // Initialize state on mount
   useEffect(() => {
-    if (!mounted) {
+    let isInitialized = false;
+
+    const initializeFlights = () => {
+      if (isInitialized) return;
+
       console.log('=== Trip Experience Page Initialization ===', {
-        originalFlights: originalFlights.length,
-        mainStoreFlights: mainStoreFlights.length,
+        originalFlights: flightStore.originalFlights.length,
+        mainStoreFlights: mainStore.selectedFlights.length,
+        hasPersistedData: !!localStorage.getItem('phase4FlightData'),
+        phase4StoreFlights: phase4Store.selectedFlights.length,
       });
 
-      setMounted(true);
+      try {
+        // First check if phase4Store is already initialized with valid data
+        if (
+          phase4Store.selectedFlights.length > 0 &&
+          phase4Store.originalFlights.length > 0
+        ) {
+          console.log('Phase4Store already initialized with flights');
 
-      // If we don't have original flights but have flights in the main store, use those
-      if (
-        (!originalFlights || originalFlights.length === 0) &&
-        mainStoreFlights.length > 0
-      ) {
-        console.log(
-          'Setting original flights from main store:',
-          mainStoreFlights
-        );
-        setOriginalFlights(mainStoreFlights);
-      }
+          // Ensure flightStore is in sync
+          flightStore.setSelectedFlights(phase4Store.selectedFlights);
+          flightStore.setOriginalFlights(phase4Store.originalFlights);
 
-      // Try to restore evaluation response and flight state
-      const storedEvaluation = sessionStorage.getItem(
-        'claim_evaluation_response'
-      );
-      if (storedEvaluation) {
-        try {
-          const evaluationResponse = JSON.parse(storedEvaluation);
-          if (evaluationResponse.journey_booked_flightids) {
-            // Restore the flight state from the evaluation response
-            const restoredFlights = originalFlights.filter((flight) =>
-              evaluationResponse.journey_booked_flightids.includes(
-                String(flight.id)
-              )
-            );
-            if (restoredFlights.length > 0) {
-              usePhase4Store.getState().setSelectedFlights(restoredFlights);
-            }
-          }
-        } catch (error) {
-          console.error('Error restoring flight state:', error);
+          isInitialized = true;
+          return;
         }
-      }
 
-      console.log('=== End Trip Experience Page Initialization ===');
-    }
-  }, [mounted, originalFlights, mainStoreFlights, setOriginalFlights]);
+        // Then check if we have flights in the flightStore
+        if (flightStore.originalFlights.length > 0) {
+          console.log('Using existing flights from store:', {
+            originalFlights: flightStore.originalFlights.length,
+            selectedFlights: flightStore.selectedFlights.length,
+          });
+
+          // Get travel status to determine which flights to use
+          const travelStatus = phase4Store.travelStatusAnswers.find(
+            (a) => a.questionId === 'travel_status'
+          )?.value;
+
+          const requiresAlternativeFlights =
+            travelStatus === 'provided' ||
+            travelStatus === 'took_alternative_own';
+
+          // Set selected flights in phase4Store
+          phase4Store.batchUpdate({
+            selectedFlights:
+              requiresAlternativeFlights &&
+              flightStore.selectedFlights.length > 0
+                ? flightStore.selectedFlights
+                : flightStore.originalFlights,
+            originalFlights: flightStore.originalFlights,
+          });
+
+          isInitialized = true;
+          return;
+        }
+
+        // Try to get persisted flight data
+        const persistedFlightData = localStorage.getItem('phase4FlightData');
+        let flightData;
+
+        if (persistedFlightData) {
+          try {
+            flightData = JSON.parse(persistedFlightData);
+            console.log('Found persisted flight data:', {
+              originalFlights: flightData.originalFlights?.length,
+              selectedFlights: flightData.selectedFlights?.length,
+              flightSegments: flightData.flightSegments?.length,
+              selectedType: flightData.selectedType,
+              timestamp: new Date(flightData.timestamp).toISOString(),
+            });
+
+            // Validate persisted data
+            if (!flightData.originalFlights?.length) {
+              console.warn('Invalid persisted flight data - no flights found');
+              return;
+            }
+
+            // Set the flights in flightStore first
+            console.log('Setting flights from persisted data');
+            flightStore.setOriginalFlights(flightData.originalFlights);
+
+            // Get travel status to determine which flights to use
+            const travelStatus = phase4Store.travelStatusAnswers.find(
+              (a) => a.questionId === 'travel_status'
+            )?.value;
+
+            const requiresAlternativeFlights =
+              travelStatus === 'provided' ||
+              travelStatus === 'took_alternative_own';
+
+            // Set selected flights based on travel status
+            const selectedFlights =
+              requiresAlternativeFlights &&
+              flightData.selectedFlights?.length > 0
+                ? flightData.selectedFlights
+                : flightData.originalFlights;
+
+            flightStore.setSelectedFlights(selectedFlights);
+
+            // Initialize phase4Store with the persisted data in one batch update
+            phase4Store.batchUpdate({
+              selectedType: flightData.selectedType || 'direct',
+              flightSegments: flightData.flightSegments || [],
+              selectedFlights,
+              originalFlights: flightData.originalFlights,
+            });
+
+            isInitialized = true;
+            return;
+          } catch (error) {
+            console.error('Error processing persisted flight data:', error);
+            localStorage.removeItem('phase4FlightData'); // Clear invalid data
+          }
+        }
+
+        // Final check if we have flights
+        const hasFlights = flightStore.originalFlights.length > 0;
+
+        if (!hasFlights) {
+          console.warn('No flights found in flight store or persisted data');
+          setErrorMessage(
+            'No flights available. Please select your flights first.'
+          );
+          return;
+        }
+
+        isInitialized = true;
+      } catch (error) {
+        console.error('Error initializing flights:', error);
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : 'Failed to initialize flight data'
+        );
+      }
+    };
+
+    initializeFlights();
+  }, [flightStore.originalFlights.length, phase4Store.selectedFlights.length]);
 
   // Memoize validation states to prevent unnecessary re-renders
   const validationStates = useMemo(
@@ -275,96 +368,48 @@ export default function TripExperiencePage() {
 
   // Handle step completion - now only updates validation on submit
   const handleTripExperienceComplete = useCallback(() => {
-    const store = usePhase4Store.getState();
-    const travelStatus = store.travelStatusAnswers[0]?.value;
-
-    // Check if we need flights based on travel status
-    const needsFlights =
-      travelStatus === 'provided' || travelStatus === 'took_alternative_own';
-    const hasValidTravelStatus =
-      store.travelStatusAnswers.length > 0 &&
-      ['none', 'self', 'provided', 'took_alternative_own'].includes(
-        String(travelStatus)
-      );
-
-    // Step 2 is valid if we have a valid travel status AND (we don't need flights OR we have selected flights)
-    const isStep2Valid =
-      hasValidTravelStatus &&
-      (!needsFlights || store.selectedFlights.length > 0);
-
-    // Update validation state on submit
+    // Update validation state
     const newValidationState = {
       travelStatusStepValidation: {
-        ...store.travelStatusStepValidation,
-        2: isStep2Valid,
+        ...travelStatusStepValidation,
+        isValid: true,
       },
       travelStatusStepInteraction: {
-        ...store.travelStatusStepInteraction,
-        2: true,
+        ...travelStatusStepInteraction,
+        isComplete: true,
       },
-      travelStatusShowingSuccess: isStep2Valid,
-      travelStatusIsValid: isStep2Valid,
-      _lastUpdate: Date.now(),
+      travelStatusShowingSuccess: true,
+      travelStatusIsValid: true,
     };
 
-    usePhase4Store.getState().updateValidationState(newValidationState);
-  }, []);
+    updateValidationState(newValidationState);
+  }, [
+    updateValidationState,
+    travelStatusStepValidation,
+    travelStatusStepInteraction,
+  ]);
 
   const handleInformedDateComplete = useCallback(() => {
-    const store = usePhase4Store.getState();
-
-    // Check if we have both the informed date type and specific date if needed
-    const informedDateAnswer = store.informedDateAnswers.find(
-      (a) => a.questionId === 'informed_date'
-    );
-
-    let isStep3Valid = false;
-
-    if (informedDateAnswer?.value === 'specific_date') {
-      // For specific date, we need both the selection and the actual date
-      const specificDateAnswer = store.informedDateAnswers.find(
-        (a) => a.questionId === 'specific_informed_date'
-      );
-      isStep3Valid = Boolean(specificDateAnswer?.value);
-    } else if (informedDateAnswer?.value === 'on_departure') {
-      // For on_departure, we just need the selection
-      isStep3Valid = true;
-    }
-
-    console.log('Validating informed date completion:', {
-      answers: store.informedDateAnswers,
-      isValid: isStep3Valid,
-    });
-
-    // Update validation state on submit
+    // Update validation state
     const newValidationState = {
       informedDateStepValidation: {
-        ...store.informedDateStepValidation,
-        3: isStep3Valid,
+        ...informedDateStepValidation,
+        isValid: true,
       },
       informedDateStepInteraction: {
-        ...store.informedDateStepInteraction,
-        3: true,
+        ...informedDateStepInteraction,
+        isComplete: true,
       },
-      informedDateShowingSuccess: isStep3Valid,
-      informedDateIsValid: isStep3Valid,
-      _lastUpdate: Date.now(),
+      informedDateShowingSuccess: true,
+      informedDateIsValid: true,
     };
 
-    store.updateValidationState(newValidationState);
-
-    // Log the updated state
-    console.log('=== TripExperiencePage - handleInformedDateComplete ===', {
-      isStep3Valid,
-      newValidationState,
-      currentState: {
-        informedDateShowingSuccess: store.informedDateShowingSuccess,
-        informedDateIsValid: store.informedDateIsValid,
-        informedDateStepValidation: store.informedDateStepValidation,
-        informedDateStepInteraction: store.informedDateStepInteraction,
-      },
-    });
-  }, []);
+    updateValidationState(newValidationState);
+  }, [
+    updateValidationState,
+    informedDateStepValidation,
+    informedDateStepInteraction,
+  ]);
 
   // Initialize state only once
   useEffect(() => {
@@ -375,7 +420,7 @@ export default function TripExperiencePage() {
       mounted = true;
 
       console.log('Initializing state...');
-      const store = usePhase4Store.getState();
+      const store = phase4Store;
       const hasAnswers =
         store.travelStatusAnswers.length > 0 ||
         store.informedDateAnswers.length > 0;
@@ -401,9 +446,9 @@ export default function TripExperiencePage() {
 
   // Add effect to track when original flights are set
   useEffect(() => {
-    if (originalFlights.length > 0) {
+    if (flightStore.originalFlights.length > 0) {
       console.log('Original flights updated:', {
-        flights: originalFlights.map((f) => ({
+        flights: flightStore.originalFlights.map((f: Flight) => ({
           id: f.id,
           flightNumber: f.flightNumber,
           date: f.date,
@@ -412,33 +457,33 @@ export default function TripExperiencePage() {
         })),
       });
     }
-  }, [originalFlights]);
+  }, [flightStore.originalFlights]);
 
   // Add logging to track when validation is checked
   useEffect(() => {
     console.log('Trip Experience Validation Check:', {
       travelStatusAnswers,
-      selectedFlights,
+      selectedFlights: flightStore.selectedFlights,
       isValid: validationStates.isTripExperienceValid,
     });
   }, [
     travelStatusAnswers,
-    selectedFlights,
+    flightStore.selectedFlights,
     validationStates.isTripExperienceValid,
   ]);
 
   // Add logging for when selected flights change
   useEffect(() => {
-    if (selectedFlights && selectedFlights.length > 0) {
+    if (flightStore.selectedFlights && flightStore.selectedFlights.length > 0) {
       console.log('Selected Flights Updated:', {
-        selectedFlights: selectedFlights.map((f) => ({
+        selectedFlights: flightStore.selectedFlights.map((f: Flight) => ({
           id: f.id,
           flightNumber: f.flightNumber,
           date: f.date,
         })),
       });
     }
-  }, [selectedFlights]);
+  }, [flightStore.selectedFlights]);
 
   // Update handleAutoTransition to check both validation states
   const handleAutoTransition = useCallback(
@@ -508,19 +553,122 @@ export default function TripExperiencePage() {
     router.replace(getLanguageAwareUrl(previousUrl, lang));
   };
 
+  // Add validation for flight data before evaluation
+  const validateFlightData = useCallback(
+    (originalFlights: Flight[], selectedFlights: Flight[]) => {
+      // Get travel status from answers
+      const travelStatusAnswer = travelStatusAnswers.find(
+        (a) => a.questionId === 'travel_status'
+      );
+
+      if (!travelStatusAnswer || typeof travelStatusAnswer.value !== 'string') {
+        throw new Error('No valid travel status selected');
+      }
+
+      const travelStatus = travelStatusAnswer.value;
+
+      console.log('=== Trip Experience - validateFlightData ENTRY ===', {
+        travelStatus,
+        requiresAlternativeFlights:
+          travelStatus === 'provided' ||
+          travelStatus === 'took_alternative_own',
+        timestamp: new Date().toISOString(),
+      });
+
+      // Only validate alternative flights if travel status requires it
+      if (
+        travelStatus === 'provided' ||
+        travelStatus === 'took_alternative_own'
+      ) {
+        // Compare each selected flight with original flights
+        const flightComparison = selectedFlights.map(
+          (selectedFlight, index) => {
+            const originalFlight = originalFlights[index];
+            const isIdentical =
+              originalFlight &&
+              (selectedFlight.id === originalFlight.id ||
+                (selectedFlight.flightNumber === originalFlight.flightNumber &&
+                  selectedFlight.date === originalFlight.date));
+
+            return {
+              selectedFlight: {
+                id: selectedFlight.id,
+                flightNumber: selectedFlight.flightNumber,
+                date: selectedFlight.date,
+              },
+              originalFlight: originalFlight
+                ? {
+                    id: originalFlight.id,
+                    flightNumber: originalFlight.flightNumber,
+                    date: originalFlight.date,
+                  }
+                : null,
+              isIdentical,
+            };
+          }
+        );
+
+        console.log('=== Trip Experience - Flight Comparison ===', {
+          flightComparison,
+          hasNewFlights: flightComparison.some((comp) => !comp.isIdentical),
+          timestamp: new Date().toISOString(),
+        });
+
+        // If any flights are identical, throw error
+        if (flightComparison.some((comp) => comp.isIdentical)) {
+          console.error('=== Trip Experience - Validation Error ===', {
+            error: 'Selected flights must be different from original flights',
+            flightComparison,
+            timestamp: new Date().toISOString(),
+          });
+          throw new Error(
+            'Please select different flights for your alternative travel'
+          );
+        }
+      } else {
+        // For other travel statuses, ensure selected flights match original flights
+        if (selectedFlights.length !== originalFlights.length) {
+          throw new Error('Selected flights must match original flights');
+        }
+
+        selectedFlights.forEach((selectedFlight, index) => {
+          const originalFlight = originalFlights[index];
+          if (
+            !originalFlight ||
+            selectedFlight.id !== originalFlight.id ||
+            selectedFlight.flightNumber !== originalFlight.flightNumber ||
+            selectedFlight.date !== originalFlight.date
+          ) {
+            throw new Error('Selected flights must match original flights');
+          }
+        });
+      }
+
+      console.log('=== Trip Experience - validateFlightData EXIT ===', {
+        isValid: true,
+        timestamp: new Date().toISOString(),
+      });
+
+      return true;
+    },
+    [travelStatusAnswers]
+  );
+
   const handleContinue = async () => {
     if (!canContinue()) return;
     setIsLoading(true);
 
     try {
       // Get travel status from answers
-      const travelStatus = travelStatusAnswers.find(
+      const travelStatusAnswer = travelStatusAnswers.find(
         (a) => a.questionId === 'travel_status'
-      )?.value;
+      );
 
-      if (!travelStatus) {
-        throw new Error('No travel status selected');
+      if (!travelStatusAnswer || typeof travelStatusAnswer.value !== 'string') {
+        throw new Error('No valid travel status selected');
       }
+
+      const travelStatus = travelStatusAnswer.value;
 
       // Get informed date
       const informedDate = (() => {
@@ -533,8 +681,10 @@ export default function TripExperiencePage() {
         }
 
         // If no specific date, use the flight date
-        if (originalFlights[0]?.date) {
-          return formatDateToYYYYMMDD(new Date(originalFlights[0].date));
+        if (flightStore.originalFlights[0]?.date) {
+          return formatDateToYYYYMMDD(
+            new Date(flightStore.originalFlights[0].date)
+          );
         }
 
         return formatDateToYYYYMMDD(new Date());
@@ -546,77 +696,171 @@ export default function TripExperiencePage() {
           specificDate: informedDateAnswers.find(
             (a) => a.questionId === 'specific_informed_date'
           )?.value,
-          flightDate: originalFlights[0]?.date,
-          departureTime: originalFlights[0]?.departureTime,
+          flightDate: flightStore.originalFlights[0]?.date,
+          departureTime: flightStore.originalFlights[0]?.departureTime,
         });
         throw new Error(
           'The date format is invalid. Please use YYYY-MM-DD format'
         );
       }
 
-      console.log('=== Trip Experience - Evaluating Claim ===', {
-        originalFlights: originalFlights.map((f) => ({
-          id: f.id,
-          flightNumber: f.flightNumber,
-        })),
-        selectedFlights: selectedFlights.map((f) => ({
-          id: f.id,
-          flightNumber: f.flightNumber,
-        })),
-        travelStatusAnswers,
-        informedDateAnswers,
+      // Validate flight data first
+      validateFlightData(
+        flightStore.originalFlights,
+        flightStore.selectedFlights
+      );
+
+      // Ensure we have valid flight IDs
+      const validOriginalFlights = flightStore.originalFlights.filter(
+        (f) =>
+          f !== null &&
+          typeof f.id === 'string' &&
+          f.id.length > 0 &&
+          typeof f.flightNumber === 'string' &&
+          f.flightNumber.length > 0
+      );
+
+      // Only validate selected flights if alternative travel was chosen
+      const requiresAlternativeFlights =
+        travelStatus === 'provided' || travelStatus === 'took_alternative_own';
+
+      if (requiresAlternativeFlights) {
+        const validSelectedFlights = flightStore.selectedFlights.filter(
+          (f) =>
+            f !== null &&
+            typeof f.id === 'string' &&
+            f.id.length > 0 &&
+            typeof f.flightNumber === 'string' &&
+            f.flightNumber.length > 0
+        );
+
+        if (validSelectedFlights.length === 0) {
+          throw new Error(
+            'Please select your alternative flights before continuing'
+          );
+        }
+
+        // Validate that selected flights are different from original flights
+        const hasIdenticalFlights = validSelectedFlights.some(
+          (selectedFlight) =>
+            validOriginalFlights.some(
+              (originalFlight) =>
+                originalFlight.id === selectedFlight.id ||
+                (originalFlight.flightNumber === selectedFlight.flightNumber &&
+                  originalFlight.date === selectedFlight.date)
+            )
+        );
+
+        if (hasIdenticalFlights) {
+          throw new Error(
+            'Alternative flights must be different from your original flights'
+          );
+        }
+      }
+
+      // Complete phase 4 before evaluation
+      await mainStore.completePhase(4);
+
+      // Use the EvaluateService to evaluate the claim
+      const evaluationResult = await EvaluateService.evaluateClaim(
+        validOriginalFlights,
+        requiresAlternativeFlights ? flightStore.selectedFlights : [],
+        travelStatus,
+        informedDate
+      );
+
+      // Validate evaluation result
+      if (!evaluationResult || typeof evaluationResult.status === 'undefined') {
+        throw new Error('Invalid evaluation response received');
+      }
+
+      // Store the evaluation result in ClaimService
+      ClaimService.setStoredEvaluationResponse({
+        status: evaluationResult.status,
+        contract: evaluationResult.contract,
+        rejection_reasons: evaluationResult.rejection_reasons,
+        journey_booked_flightids: validOriginalFlights.map((f) => f.id),
+        journey_fact_flightids: requiresAlternativeFlights
+          ? flightStore.selectedFlights.map((f) => f.id)
+          : [],
+        information_received_at: informedDate,
+        travel_status: travelStatus,
+        journey_fact_type: (() => {
+          switch (travelStatus) {
+            case 'none':
+              return 'none';
+            case 'self':
+              return 'self';
+            case 'provided':
+              return 'provided';
+            case 'took_alternative_own':
+              return 'self';
+            default:
+              return 'none';
+          }
+        })(),
+        guid: evaluationResult.guid,
+        recommendation_guid: evaluationResult.recommendation_guid,
       });
-
-      const evaluationResult = await ClaimService.evaluateClaim(
-        originalFlights,
-        selectedFlights,
-        travelStatusAnswers,
-        informedDateAnswers
-      );
-
-      console.log('Evaluation result:', evaluationResult);
-
-      // Store the evaluation result in sessionStorage directly to ensure it persists
-      sessionStorage.setItem(
-        'claim_evaluation_response',
-        JSON.stringify(evaluationResult)
-      );
 
       // Get the next URL based on evaluation result
       const isAccepted = evaluationResult.status === 'accept';
-      const baseNextUrl = isAccepted
+      const nextUrl = isAccepted
         ? '/phases/claim-success'
         : '/phases/claim-rejected';
 
-      // Prepare URL parameters
-      const searchParams = new URLSearchParams();
+      // Save final validation state
+      const finalValidationState = {
+        ...validationStates,
+        stepValidation: {
+          ...travelStatusStepValidation,
+          2: true,
+          3: true,
+        },
+        stepInteraction: {
+          ...travelStatusStepInteraction,
+          2: true,
+          3: true,
+        },
+        2: true,
+        3: true,
+        _timestamp: Date.now(),
+      };
 
-      // Add contract details to URL for accepted claims
-      if (isAccepted && evaluationResult.contract) {
-        searchParams.set('amount', String(evaluationResult.contract.amount));
-        searchParams.set(
-          'provision',
-          String(evaluationResult.contract.provision)
-        );
-      } else if (!isAccepted && evaluationResult.rejection_reasons) {
-        // Add rejection reasons to URL for rejected claims
-        searchParams.set(
-          'reasons',
-          JSON.stringify(evaluationResult.rejection_reasons)
-        );
-      }
+      // Update store with final validation state
+      phase4Store.updateValidationState({
+        travelStatusStepValidation: {
+          ...travelStatusStepValidation,
+          2: true,
+        },
+        informedDateStepValidation: {
+          ...informedDateStepValidation,
+          3: true,
+        },
+        travelStatusStepInteraction: {
+          ...travelStatusStepInteraction,
+          2: true,
+        },
+        informedDateStepInteraction: {
+          ...informedDateStepInteraction,
+          3: true,
+        },
+        travelStatusShowingSuccess: true,
+        travelStatusIsValid: true,
+        informedDateShowingSuccess: true,
+        informedDateIsValid: true,
+      });
 
-      // Add common parameters
-      searchParams.set('redirected', String(true));
-      const { completedPhases } = useStore.getState();
-      searchParams.set('completed_phases', completedPhases.join(','));
-      searchParams.set('current_phase', '4');
+      // Save to localStorage
+      localStorage.setItem(
+        'phase4ValidationState',
+        JSON.stringify(finalValidationState)
+      );
 
-      // Navigate to the appropriate page
-      const nextUrl = `${baseNextUrl}?${searchParams.toString()}`;
+      // Navigate to next page
       router.push(nextUrl);
     } catch (error) {
-      console.error('Error in handleContinue:', error);
+      console.error('Error during claim evaluation:', error);
       setErrorMessage(
         error instanceof Error ? error.message : 'An unknown error occurred'
       );
@@ -689,7 +933,7 @@ export default function TripExperiencePage() {
         questions={questions}
         onComplete={handleTripExperienceComplete}
         initialAnswers={travelStatusAnswers}
-        selectedFlight={selectedFlights[0] || null}
+        selectedFlight={flightStore.selectedFlights[0] || null}
         phase={4}
       />
     ),
@@ -697,7 +941,7 @@ export default function TripExperiencePage() {
       questions,
       handleTripExperienceComplete,
       travelStatusAnswers,
-      selectedFlights,
+      flightStore.selectedFlights,
     ]
   );
 

@@ -84,17 +84,23 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
 
   // Handle auto-transition when step becomes valid and completed
   useEffect(() => {
-    if (!isValid || !isCompleted) return;
+    // Check both validation and completion state
+    const isStepValid = isValid && isCompleted;
+    if (!isStepValid) return;
     if (!activeAccordion || activeAccordion !== stepId) return;
     if (wasManualRef.current || shouldStayOpen) return;
-
-    const isFlightSelector =
-      stepId === '2' && title.toLowerCase().includes('flug');
-    if (isFlightSelector && !isCompleted) return;
 
     const delay = isQA ? 2000 : 1000;
     const timer = setTimeout(() => {
       if (activeAccordion === stepId) {
+        console.log('AccordionCard - Auto transitioning:', {
+          stepId,
+          isValid,
+          isCompleted,
+          isQA,
+          delay,
+          currentTime: new Date().toISOString(),
+        });
         autoTransition(stepId, true, isQA);
       }
     }, delay);
@@ -108,7 +114,6 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
     shouldStayOpen,
     isQA,
     autoTransition,
-    title,
   ]);
 
   const currentIsOpen =
@@ -118,8 +123,23 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
     // Only allow toggle from within the header
     if (e?.target) {
       const target = e.target as HTMLElement;
-      const header = target.closest('.accordion-header');
 
+      // Prevent toggle if interacting with input fields
+      if (
+        target.tagName.toLowerCase() === 'input' ||
+        target.tagName.toLowerCase() === 'select' ||
+        target.closest('input') ||
+        target.closest('select') ||
+        target.closest('[role="combobox"]') ||
+        target.closest('[role="listbox"]') ||
+        target.closest('[role="searchbox"]')
+      ) {
+        e.stopPropagation();
+        return;
+      }
+
+      // Check if click is within header
+      const header = target.closest('.accordion-header');
       if (!header) {
         return;
       }

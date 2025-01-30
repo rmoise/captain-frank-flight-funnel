@@ -35,7 +35,21 @@ export const PhaseGuard: React.FC<PhaseGuardProps> = ({
     (phase === 5 &&
       completedPhases.includes(4) &&
       useStore.getState().validationState.stepValidation[2] &&
-      useStore.getState().validationState.stepValidation[3]);
+      useStore.getState().validationState.stepValidation[3]) ||
+    (phase === 6 &&
+      ((completedPhases.includes(5) &&
+        useStore.getState().evaluationResult?.status === 'accept') ||
+        (new URLSearchParams(window.location.search).get('redirected') ===
+          'true' &&
+          new URLSearchParams(window.location.search).get(
+            'bypass_phase_check'
+          ) === 'true')));
+
+  useEffect(() => {
+    if (phase === 6 && currentPhase !== 6) {
+      useStore.setState({ currentPhase: 6 });
+    }
+  }, [phase, currentPhase]);
 
   if (!isPhaseAccessible) {
     return null;

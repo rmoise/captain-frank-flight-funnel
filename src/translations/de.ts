@@ -299,12 +299,13 @@ export const de: Translations = {
       },
     },
     names: {
-      initialAssessment: 'Erzähle uns von deinem Flug',
+      initialAssessment: 'Erste Einschätzung',
       summary: 'Zusammenfassung',
       flightDetails: 'Flugdetails',
       tripExperience: 'Reiseerlebnis',
       claimStatus: 'Antragsstatus',
       agreement: 'Vereinbarung',
+      claimSuccess: 'Anspruch erfolgreich',
     },
     compensationEstimate: {
       title: 'Entschädigungsschätzung',

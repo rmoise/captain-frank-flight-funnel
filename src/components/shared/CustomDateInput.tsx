@@ -11,6 +11,7 @@ export interface CustomDateInputProps {
   placeholder?: string;
   onClear?: () => void;
   label: string;
+  disabled?: boolean;
 }
 
 // Helper function to safely parse and format dates
@@ -55,6 +56,7 @@ export const CustomDateInput = forwardRef<
       placeholder = 'DD.MM.YYYY',
       onClear,
       label = 'Departure Date',
+      disabled,
     },
     ref
   ) => {
@@ -217,6 +219,7 @@ export const CustomDateInput = forwardRef<
           autoCapitalize="off"
           spellCheck="false"
           data-form-type="other"
+          disabled={disabled}
         />
         <button
           type="button"

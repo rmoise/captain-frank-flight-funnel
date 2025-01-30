@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/lib/state/store';
+import { usePhase4Store } from '@/lib/state/phase4Store';
 import FormError from '@/components/shared/FormError';
 import { useLoading } from '@/providers/LoadingProvider';
 import { PhaseGuard } from '@/components/guards/PhaseGuard';
@@ -18,13 +19,15 @@ import { BackButton } from '@/components/shared/BackButton';
 import { ContinueButton } from '@/components/shared/ContinueButton';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Flight } from '@/types/store';
-import { usePhase4Store } from '@/lib/state/phase4Store';
 import { ClaimService } from '@/services/claimService';
+import { validateTerms } from '@/lib/validation/termsValidation';
 
 interface FormData {
   hasAcceptedTerms: boolean;
   hasAcceptedPrivacy: boolean;
   hasAcceptedMarketing: boolean;
+  travelStatusAnswers: any[];
+  informedDateAnswers: any[];
   [key: string]: unknown;
 }
 
@@ -41,18 +44,24 @@ type SetStateFunction<T> = (action: SetStateAction<T>) => void;
 export default function AgreementPage() {
   const router = useRouter();
   const { hideLoading } = useLoading();
+  const store = useStore();
+  const phase4Store = usePhase4Store();
+  const [isClient, setIsClient] = useState(false);
+  const { t, lang } = useTranslation();
+
+  // Set isClient to true on mount
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
   const {
-    selectedFlight: flightDetails,
     selectedFlights,
     personalDetails,
     bookingNumber,
     completedPhases,
-    setCurrentPhase,
-    completePhase,
     setTermsAccepted,
     setPrivacyAccepted,
     setMarketingAccepted,
-    validateTerms,
     termsAccepted,
     privacyAccepted,
     marketingAccepted,
@@ -62,13 +71,14 @@ export default function AgreementPage() {
     validateSignature,
     originalFlights,
     setOriginalFlights,
-  } = useStore();
-  const { t, lang } = useTranslation();
+    updateValidationState,
+  } = store;
+
   const {
     travelStatusAnswers,
     selectedFlights: phase4SelectedFlights,
     informedDateAnswers,
-  } = usePhase4Store();
+  } = phase4Store;
 
   const signatureRef = useRef<SignaturePadRef>(null);
   const [mounted, setMounted] = useState(false);
@@ -83,249 +93,128 @@ export default function AgreementPage() {
     hasAcceptedTerms: false,
     hasAcceptedPrivacy: false,
     hasAcceptedMarketing: false,
+    travelStatusAnswers: [],
+    informedDateAnswers: [],
   });
   const [hasInteractedWithSignature, setHasInteractedWithSignature] =
     useState(false);
   const [isNavigatingBack, setIsNavigatingBack] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const validationRules = {
-    hasAcceptedTerms: [
-      {
-        test: (value: unknown) => value === true,
-        message: 'You must accept the terms and conditions',
-      },
-    ],
-    hasAcceptedPrivacy: [
-      {
-        test: (value: unknown) => value === true,
-        message: 'You must accept the privacy policy',
-      },
-    ],
-  };
-
-  // Initialize state
+  // Initialize state only on client side
   useEffect(() => {
-    if (!mounted) {
-      const initializeState = async () => {
-        try {
-          // Set current phase to 6
-          setCurrentPhase(6);
+    if (!isClient || mounted) return;
 
-          // Get wizard answers from phase 4 store
-          const phase4Store = usePhase4Store.getState();
-          console.log('Agreement Page - Phase4Store state:', {
-            travelStatusAnswers: phase4Store.travelStatusAnswers,
-            informedDateAnswers: phase4Store.informedDateAnswers,
-            originalFlights: phase4Store.originalFlights,
+    const initializeState = async () => {
+      try {
+        // Get the stored evaluation response - this will throw if not available
+        const evaluationResponse = ClaimService.getLastEvaluationResponse();
+
+        // Only proceed if we have an accepted evaluation
+        if (evaluationResponse.status !== 'accept') {
+          throw new Error('Claim was not accepted during evaluation');
+        }
+
+        // Set current phase to 6 and prevent changes
+        const store = useStore.getState();
+        store.setCurrentPhase(6);
+
+        // Initialize flight data if needed
+        if (!originalFlights?.length) {
+          const mainStoreFlights = store.selectedFlights as Flight[];
+          if (mainStoreFlights?.length) {
+            setOriginalFlights(mainStoreFlights);
+          }
+        }
+
+        // Try to restore validation state from phase 1
+        let phase1ValidationState;
+        let phase1TermsValid = false;
+
+        try {
+          phase1ValidationState = localStorage.getItem(
+            'initialAssessmentValidation'
+          );
+          if (phase1ValidationState) {
+            const parsedValidation = JSON.parse(phase1ValidationState);
+            phase1TermsValid =
+              parsedValidation.validationState?.isTermsValid || false;
+          }
+        } catch (error) {
+          console.error('Error accessing/parsing localStorage:', error);
+        }
+
+        // Initialize form data
+        setFormData({
+          hasAcceptedTerms: termsAccepted || phase1TermsValid,
+          hasAcceptedPrivacy: privacyAccepted || phase1TermsValid,
+          hasAcceptedMarketing: marketingAccepted,
+          travelStatusAnswers: phase4Store.travelStatusAnswers,
+          informedDateAnswers: phase4Store.informedDateAnswers,
+        });
+
+        // Validate terms if previously accepted
+        if ((termsAccepted && privacyAccepted) || phase1TermsValid) {
+          store.updateValidationState({
+            isTermsValid: true,
+            stepValidation: {
+              ...store.validationState.stepValidation,
+              2: true,
+            },
+            stepInteraction: {
+              ...store.validationState.stepInteraction,
+              2: true,
+            },
+            2: true,
+            _timestamp: Date.now(),
           });
 
-          // Initialize form data from store state
-          const initialFormData = {
-            hasAcceptedTerms: termsAccepted,
-            hasAcceptedPrivacy: privacyAccepted,
-            hasAcceptedMarketing: marketingAccepted,
-          };
-          setFormData(initialFormData);
-
-          // If terms were already accepted in a previous phase, validate them
-          if (termsAccepted && privacyAccepted) {
-            const store = useStore.getState();
-            store.updateValidationState({
-              isTermsValid: true,
-              stepValidation: {
-                ...store.validationState.stepValidation,
-                2: true,
-              },
-              stepInteraction: {
-                ...store.validationState.stepInteraction,
-                2: true,
-              },
-              2: true,
-            });
+          if (phase1TermsValid) {
+            setTermsAccepted(true);
+            setPrivacyAccepted(true);
           }
-
-          // Validate initial state
-          validateSignature();
-          setMounted(true);
-        } catch (error) {
-          console.error('Error initializing agreement page:', error);
-          router.push('/phases/initial-assessment');
         }
-      };
 
-      initializeState();
-    }
-  }, [
-    mounted,
-    router,
-    setCurrentPhase,
-    termsAccepted,
-    privacyAccepted,
-    marketingAccepted,
-    validateTerms,
-    personalDetails,
-    validateSignature,
-    setHasInteractedWithSignature,
-    validationState,
-    setMounted,
-    travelStatusAnswers,
-  ]);
-
-  // Add effect to check Phase4Store state when mounted
-  useEffect(() => {
-    if (mounted) {
-      const phase4Store = usePhase4Store.getState();
-      console.log('Agreement Page - Checking Phase4Store state:', {
-        travelStatusAnswers: phase4Store.travelStatusAnswers,
-        informedDateAnswers: phase4Store.informedDateAnswers,
-        originalFlights: phase4Store.originalFlights,
-      });
-
-      // If we don't have informed date answers, redirect back to trip experience
-      if (!phase4Store.informedDateAnswers?.length) {
-        console.error('No informed date answers found, redirecting...');
-        router.push('/phases/trip-experience');
-        return;
+        setMounted(true);
+      } catch (error) {
+        console.error('Error initializing agreement page:', error);
+        // Redirect to trip experience page if evaluation not found or rejected
+        router.push('/trip-experience');
       }
-    }
-  }, [mounted, router]);
+    };
 
-  // Add effect to sync form data with store state
+    initializeState();
+  }, [isClient, mounted]);
+
+  // Separate useEffect for signature restoration to ensure SignaturePad is mounted
   useEffect(() => {
-    if (mounted) {
-      setFormData(
-        (prev: FormData): FormData => ({
-          ...prev,
-          hasAcceptedTerms: termsAccepted,
-          hasAcceptedPrivacy: privacyAccepted,
-          hasAcceptedMarketing: marketingAccepted,
-        })
-      );
-    }
-  }, [mounted, termsAccepted, privacyAccepted, marketingAccepted]);
+    if (!isClient || !mounted || !signatureRef.current) return;
 
-  // Initialize phase state from URL
-  useEffect(() => {
-    const searchParams = new URLSearchParams(window.location.search);
-    const isRedirected = searchParams.get('redirected') === 'true';
-    const completedPhasesStr = searchParams.get('completed_phases');
-    const currentPhaseStr = searchParams.get('current_phase');
-
-    if (isRedirected && completedPhasesStr && currentPhaseStr) {
-      // Parse completed phases
-      const phases = completedPhasesStr.split(',').map(Number);
-      phases.forEach((phase) => completePhase(phase));
-
-      // Set current phase
-      const phase = parseInt(currentPhaseStr, 10);
-      setCurrentPhase(phase);
-
-      // Validate personal details
-      const isValid = useStore.getState().validatePersonalDetails();
-
-      if (isValid) {
-        const store = useStore.getState();
-        store.updateValidationState({
-          isPersonalValid: true,
-          stepValidation: {
-            1: true,
-            2: true,
-            3: true,
-            4: true,
-            5: true,
-          },
-        });
-      }
-    }
-  }, [completePhase, setCurrentPhase, personalDetails]);
-
-  // Add effect to check flight details and validate personal details on mount
-  useEffect(() => {
-    if (mounted) {
-      // Validate personal details
-      const isValid = useStore.getState().validatePersonalDetails();
-
-      if (isValid) {
-        const store = useStore.getState();
-        store.updateValidationState({
-          isPersonalValid: true,
-          stepValidation: {
-            1: true,
-            2: true,
-            3: true,
-            4: true,
-            5: true,
-          },
-        });
-      }
-    }
-  }, [
-    mounted,
-    flightDetails,
-    selectedFlights,
-    completedPhases,
-    personalDetails,
-  ]);
-
-  // Initialize signature pad
-  useEffect(() => {
-    if (mounted && signatureRef.current) {
-      const store = useStore.getState();
-      const signature = store.signature;
-      if (signature) {
-        signatureRef.current.fromDataURL(signature);
+    try {
+      const storedSignature = store.signature;
+      if (storedSignature) {
+        // Restore the signature to the pad
+        signatureRef.current.fromDataURL(storedSignature);
         setHasSignature(true);
         validateSignature();
         setHasInteractedWithSignature(true);
-      }
-    }
-  }, [mounted, validateSignature, setHasSignature]);
 
-  // Add useEffect to check flight data on mount
-  useEffect(() => {
-    console.log('Agreement Page - Checking flight data:', {
-      originalFlights,
-      selectedFlights,
-      travelStatus: travelStatusAnswers.find(
-        (a) => a.questionId === 'travel_status'
-      )?.value,
-    });
-
-    // If no original flights, try to get them from the store
-    if (!originalFlights?.length) {
-      const mainStoreFlights = useStore.getState().selectedFlights as Flight[];
-      if (mainStoreFlights?.length) {
-        console.log(
-          'Found flights in main store, setting original flights:',
-          mainStoreFlights
-        );
-        setOriginalFlights(mainStoreFlights);
-      }
-    }
-  }, []);
-
-  // Add effect to verify evaluation response
-  useEffect(() => {
-    try {
-      // Try to get the evaluation response
-      const evaluationResult = ClaimService.getLastEvaluationResponse();
-      console.log(
-        'Retrieved evaluation response on agreement page:',
-        evaluationResult
-      );
-
-      // If the status isn't 'accept', redirect back to trip experience
-      if (evaluationResult.status !== 'accept') {
-        console.error('Invalid evaluation status:', evaluationResult.status);
-        router.replace(`/${lang}/phases/trip-experience`);
+        // Update validation state
+        store.updateValidationState({
+          ...store.validationState,
+          isSignatureValid: true,
+          _timestamp: Date.now(),
+        });
       }
     } catch (error) {
-      console.error('Error retrieving evaluation response:', error);
-      // If no evaluation response is available, redirect back to trip experience
-      router.replace(`/${lang}/phases/trip-experience`);
+      console.error('Error restoring signature:', error);
     }
-  }, [router, lang]);
+  }, [isClient, mounted, store.signature]);
+
+  // Remove redundant effects
+  useEffect(() => {
+    hideLoading();
+  }, [hideLoading]);
 
   const handleSignatureStart = () => {
     setHasInteractedWithSignature(true);
@@ -393,6 +282,83 @@ export default function AgreementPage() {
       } else if (field === 'hasAcceptedMarketing') {
         setMarketingAccepted(checked);
       }
+
+      // Use the validateTerms function for consistent validation
+      const validationResult = validateTerms(
+        (field === 'hasAcceptedTerms' ? checked : termsAccepted) &&
+          (field === 'hasAcceptedPrivacy' ? checked : privacyAccepted)
+      );
+
+      // Create a consistent validation state update
+      const validationUpdate = {
+        ...validationState,
+        isTermsValid: validationResult.isValid,
+        stepValidation: {
+          ...validationState.stepValidation,
+          2: validationResult.isValid,
+        },
+        stepInteraction: {
+          ...validationState.stepInteraction,
+          2: true,
+        },
+        errors: validationResult.errors,
+        _timestamp: Date.now(),
+        2: validationResult.isValid,
+      };
+
+      // Update validation state
+      updateValidationState(validationUpdate);
+
+      // Save state to both phase 6 and initial assessment localStorage
+      const currentState = {
+        ...useStore.getState(),
+        validationState: validationUpdate,
+        _timestamp: Date.now(),
+      };
+
+      // Save to phase 6 state
+      localStorage.setItem('phase6State', JSON.stringify(currentState));
+
+      // Also update initial assessment validation if terms are valid
+      if (validationResult.isValid) {
+        const phase1ValidationState = localStorage.getItem(
+          'initialAssessmentValidation'
+        );
+        if (phase1ValidationState) {
+          try {
+            const parsedValidation = JSON.parse(phase1ValidationState);
+            parsedValidation.validationState = {
+              ...parsedValidation.validationState,
+              isTermsValid: true,
+              stepValidation: {
+                ...parsedValidation.validationState.stepValidation,
+                4: true,
+              },
+              stepInteraction: {
+                ...parsedValidation.validationState.stepInteraction,
+                4: true,
+              },
+              4: true,
+              _timestamp: Date.now(),
+            };
+            localStorage.setItem(
+              'initialAssessmentValidation',
+              JSON.stringify(parsedValidation)
+            );
+          } catch (error) {
+            console.error('Error updating phase 1 validation state:', error);
+          }
+        }
+      }
+
+      // Log validation update for debugging
+      console.log('=== Terms Validation Update ===', {
+        field,
+        checked,
+        validationResult,
+        validationState: validationUpdate,
+        timestamp: new Date().toISOString(),
+      });
     };
 
   const isSignatureEmpty = () => {
@@ -415,29 +381,31 @@ export default function AgreementPage() {
     setIsSubmitting(true);
 
     try {
-      // Check if we have a valid evaluation response
-      const evaluationResult = ClaimService.getLastEvaluationResponse();
-      if (evaluationResult.status !== 'accept') {
-        const rejectionReasons = evaluationResult.rejection_reasons;
-        const errorMessages = rejectionReasons
-          ? Object.values(rejectionReasons)
-          : ['Claim was rejected'];
-
-        setFormErrors((prev) => ({
-          ...prev,
-          submit: errorMessages,
-        }));
-        return;
-      }
-
       // Get personal details from store
       const personalDetails = useStore.getState().personalDetails;
 
+      // Try to get booking number from phase 3 state if not provided
+      let finalBookingNumber = bookingNumber;
+      try {
+        if (!finalBookingNumber) {
+          const phase3State = localStorage.getItem('phase3State');
+          if (phase3State) {
+            const parsedState = JSON.parse(phase3State);
+            finalBookingNumber = parsedState.bookingNumber;
+          }
+        }
+      } catch (error) {
+        console.error(
+          'Error getting booking number from phase 3 state:',
+          error
+        );
+      }
+
       // Validate booking number
       if (
-        !bookingNumber ||
-        bookingNumber.trim().length < 6 ||
-        !/^[A-Z0-9]+$/i.test(bookingNumber.trim())
+        !finalBookingNumber ||
+        finalBookingNumber.trim().length < 6 ||
+        !/^[A-Z0-9]+$/i.test(finalBookingNumber.trim())
       ) {
         setFormErrors((prev) => ({
           ...prev,
@@ -457,22 +425,36 @@ export default function AgreementPage() {
         travelStatusAnswers,
         informedDateAnswers,
         personalDetails,
-        bookingNumber,
+        finalBookingNumber,
         signatureRef.current?.toDataURL() || '',
         termsAccepted,
         privacyAccepted,
         marketingAccepted
       );
 
+      // Log the order result for debugging
+      console.log('=== Order Result ===', {
+        orderResult,
+        timestamp: new Date().toISOString(),
+      });
+
       if (orderResult.data?.guid) {
         // Navigate to success page with claim ID
         router.push(
           `/${lang}/phases/claim-submitted?claim_id=${orderResult.data.guid}`
         );
+      } else if (orderResult.error?.includes('evaluated as reject')) {
+        // If the claim was rejected, redirect to rejection page
+        router.push(`/${lang}/phases/claim-rejected`);
       } else {
+        // For other errors, show the error message
         setFormErrors((prev) => ({
           ...prev,
-          submit: [orderResult.message || 'Failed to submit claim'],
+          submit: [
+            orderResult.message ||
+              orderResult.error ||
+              'Failed to submit claim',
+          ],
         }));
       }
     } catch (error) {
@@ -490,16 +472,19 @@ export default function AgreementPage() {
   const handleBack = () => {
     if (isSubmitting) return;
 
-    // Get the current URL
-    const currentUrl = window.location.pathname;
-    // If we're already being redirected to claim-submitted, go to claim-success
-    if (currentUrl.includes('claim-submitted')) {
-      router.replace(`/${lang}/phases/claim-success`);
-      return;
-    }
+    // Get URL parameters to preserve them
+    const searchParams = new URLSearchParams(window.location.search);
+    const amount = searchParams.get('amount');
+    const provision = searchParams.get('provision');
 
-    // Normal back navigation
-    router.replace(`/${lang}/phases/claim-success`);
+    // Construct URL parameters
+    const params = new URLSearchParams();
+    params.set('redirected', 'true');
+    if (amount) params.set('amount', amount);
+    if (provision) params.set('provision', provision);
+
+    // Navigate to claim success page
+    router.push(`/${lang}/phases/claim-success?${params.toString()}`);
   };
 
   const handleSignatureChange = (dataUrl: string) => {
@@ -552,11 +537,98 @@ export default function AgreementPage() {
     }
   }, [mounted, validationState.isSignatureValid]);
 
-  useEffect(() => {
-    hideLoading();
-  }, [hideLoading]);
+  const handleContinue = async () => {
+    if (!canSubmit()) return;
+    setIsSubmitting(true);
 
-  /* eslint-enable @typescript-eslint/no-unused-vars */
+    try {
+      // Get personal details from store
+      const personalDetails = useStore.getState().personalDetails;
+
+      // Try to get booking number from phase 3 state if not provided
+      let finalBookingNumber = bookingNumber;
+      try {
+        if (!finalBookingNumber) {
+          const phase3State = localStorage.getItem('phase3State');
+          if (phase3State) {
+            const parsedState = JSON.parse(phase3State);
+            finalBookingNumber = parsedState.bookingNumber;
+          }
+        }
+      } catch (error) {
+        console.error(
+          'Error getting booking number from phase 3 state:',
+          error
+        );
+      }
+
+      // Validate booking number
+      if (
+        !finalBookingNumber ||
+        finalBookingNumber.trim().length < 6 ||
+        !/^[A-Z0-9]+$/i.test(finalBookingNumber.trim())
+      ) {
+        setFormErrors((prev) => ({
+          ...prev,
+          submit: ['Please enter a valid booking number'],
+        }));
+        return;
+      }
+
+      // Submit the order
+      if (!personalDetails) {
+        throw new Error('Personal details are required');
+      }
+
+      const orderResult = await ClaimService.orderClaim(
+        originalFlights,
+        phase4SelectedFlights,
+        travelStatusAnswers,
+        informedDateAnswers,
+        personalDetails,
+        finalBookingNumber,
+        signatureRef.current?.toDataURL() || '',
+        termsAccepted,
+        privacyAccepted,
+        marketingAccepted
+      );
+
+      // Log the order result for debugging
+      console.log('=== Order Result ===', {
+        orderResult,
+        timestamp: new Date().toISOString(),
+      });
+
+      if (orderResult.data?.guid) {
+        // Navigate to success page with claim ID
+        router.push(
+          `/${lang}/phases/claim-submitted?claim_id=${orderResult.data.guid}`
+        );
+      } else {
+        // For other errors, show the error message
+        setFormErrors((prev) => ({
+          ...prev,
+          submit: [
+            orderResult.message ||
+              orderResult.error ||
+              'Failed to submit claim',
+          ],
+        }));
+      }
+    } catch (error) {
+      console.error('Error submitting claim:', error);
+      setFormErrors((prev) => ({
+        ...prev,
+        submit: [error instanceof Error ? error.message : 'An error occurred'],
+      }));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (!isClient) {
+    return null; // or a loading state
+  }
 
   return (
     <PhaseGuard phase={6} allowDevAccess>
@@ -745,7 +817,7 @@ export default function AgreementPage() {
               text={t.phases.agreement.navigation.back}
             />
             <ContinueButton
-              onClick={handleSubmit}
+              onClick={handleContinue}
               disabled={!canSubmit()}
               text={t.phases.agreement.submit}
             />

@@ -15,6 +15,7 @@ import { BackButton } from '@/components/shared/BackButton';
 import { ContinueButton } from '@/components/shared/ContinueButton';
 import { useTranslation } from '@/hooks/useTranslation';
 import { StoreState, StoreActions } from '@/lib/state/store';
+import { ClaimService } from '@/services/claimService';
 
 // Extend the store state type properly
 type ExtendedStore = StoreState &
@@ -60,97 +61,124 @@ function ClaimSuccessContent() {
   React.useEffect(() => {
     const CLAIM_SUCCESS_PHASE = 5;
 
-    // Set phase immediately to ensure rendering
-    useStore.setState({
-      currentPhase: CLAIM_SUCCESS_PHASE,
-      _preventPhaseChange: true,
-      _isClaimSuccess: true,
-      completedPhases: Array.from(
-        new Set([...useStore.getState().completedPhases, 1, 2, 3, 4])
-      ),
-      validationState: {
-        ...useStore.getState().validationState,
-        isFlightValid: true,
-        isWizardValid: true,
-        isTermsValid:
-          useStore.getState().validationState?.isTermsValid || false,
-        isSignatureValid:
-          useStore.getState().validationState?.isSignatureValid || false,
-        isPersonalValid: false,
-        stepValidation: {
-          ...useStore.getState().validationState.stepValidation,
-          1: false,
-          2: true,
-          3: true,
-          4: true,
-        },
-        stepInteraction: {
-          ...useStore.getState().validationState.stepInteraction,
-          1: false,
-        },
-        1: false,
-        2: true,
-        3: true,
-        4: true,
-      },
-    } as Partial<ExtendedStore>);
+    const initializeState = async () => {
+      try {
+        // Get URL parameters
+        const urlAmount = searchParams?.get('amount');
+        const urlProvision = searchParams?.get('provision');
 
-    // Subscribe to store changes to force phase 5
-    const unsubscribe = useStore.subscribe((state) => {
-      if (
-        state.currentPhase !== CLAIM_SUCCESS_PHASE &&
-        (state as ExtendedStore)._isClaimSuccess
-      ) {
-        console.log('Forcing phase back to 5');
+        // Set phase immediately to ensure rendering
         useStore.setState({
           currentPhase: CLAIM_SUCCESS_PHASE,
           _preventPhaseChange: true,
+          _isClaimSuccess: true,
+          completedPhases: Array.from(
+            new Set([...useStore.getState().completedPhases, 1, 2, 3, 4])
+          ),
+          phasesCompletedViaContinue: Array.from(
+            new Set([
+              ...useStore.getState().phasesCompletedViaContinue,
+              1,
+              2,
+              3,
+              4,
+            ])
+          ),
+          validationState: {
+            ...useStore.getState().validationState,
+            isFlightValid: true,
+            isWizardValid: true,
+            isTermsValid:
+              useStore.getState().validationState?.isTermsValid || false,
+            isSignatureValid:
+              useStore.getState().validationState?.isSignatureValid || false,
+            isPersonalValid: false,
+            stepValidation: {
+              ...useStore.getState().validationState.stepValidation,
+              1: true,
+              2: true,
+              3: true,
+              4: true,
+              5: true,
+            },
+            stepInteraction: {
+              ...useStore.getState().validationState.stepInteraction,
+              1: false,
+            },
+            1: true,
+            2: true,
+            3: true,
+            4: true,
+            5: true,
+          },
         } as Partial<ExtendedStore>);
+
+        // Subscribe to store changes to force phase 5
+        const unsubscribe = useStore.subscribe((state) => {
+          if (
+            state.currentPhase !== CLAIM_SUCCESS_PHASE &&
+            (state as ExtendedStore)._isClaimSuccess
+          ) {
+            console.log('Forcing phase back to 5');
+            useStore.setState({
+              currentPhase: CLAIM_SUCCESS_PHASE,
+              _preventPhaseChange: true,
+              completedPhases: Array.from(
+                new Set([...useStore.getState().completedPhases, 1, 2, 3, 4])
+              ),
+              phasesCompletedViaContinue: Array.from(
+                new Set([
+                  ...useStore.getState().phasesCompletedViaContinue,
+                  1,
+                  2,
+                  3,
+                  4,
+                ])
+              ),
+            } as Partial<ExtendedStore>);
+          }
+        });
+
+        // Initialize claim details from URL parameters
+        const amount = urlAmount ? Number(urlAmount) : compensationAmount || 0;
+        const currency = searchParams?.get('currency') || 'EUR';
+        const provision = urlProvision ? String(urlProvision) : '';
+
+        setClaimDetails({
+          amount,
+          currency,
+          provision,
+          bookingReference: searchParams?.get('bookingRef') || '',
+          departureAirport: searchParams?.get('depAirport') || '',
+          arrivalAirport: searchParams?.get('arrAirport') || '',
+          scheduledDepartureTime: searchParams?.get('depTime') || '',
+        });
+
+        return () => {
+          unsubscribe();
+          useStore.setState({
+            _preventPhaseChange: false,
+            _isClaimSuccess: false,
+          } as Partial<ExtendedStore>);
+        };
+      } catch (error) {
+        console.error('Error initializing claim success page:', error);
+        setError('Failed to initialize claim success page');
       }
-    });
-
-    // Initialize claim details from URL parameters
-    console.log('Claim Success Details:', {
-      amount: searchParams?.get('amount'),
-      currency: searchParams?.get('currency'),
-      provision: searchParams?.get('provision'),
-      bookingRef: searchParams?.get('bookingRef'),
-      depAirport: searchParams?.get('depAirport'),
-      arrAirport: searchParams?.get('arrAirport'),
-      depTime: searchParams?.get('depTime'),
-    });
-
-    const amount = searchParams?.get('amount');
-    const currency = searchParams?.get('currency');
-    const provision = searchParams?.get('provision');
-    const bookingRef = searchParams?.get('bookingRef');
-    const depAirport = searchParams?.get('depAirport');
-    const arrAirport = searchParams?.get('arrAirport');
-    const depTime = searchParams?.get('depTime');
-
-    setClaimDetails({
-      amount: amount ? parseInt(amount, 10) : compensationAmount || 0,
-      currency: currency || 'EUR',
-      provision: provision || '',
-      bookingReference: bookingRef || '',
-      departureAirport: depAirport || '',
-      arrivalAirport: arrAirport || '',
-      scheduledDepartureTime: depTime || '',
-    });
-
-    return () => {
-      unsubscribe();
-      useStore.setState({
-        _preventPhaseChange: false,
-        _isClaimSuccess: false,
-      } as Partial<ExtendedStore>);
     };
-  }, [searchParams, compensationAmount]);
+
+    initializeState();
+  }, [searchParams, router, lang]);
 
   // Handle personal details updates
   const handlePersonalDetailsComplete = useCallback(
     (details: PassengerDetails | null) => {
-      setPersonalDetails(details);
+      if (details) {
+        // Store in main store
+        setPersonalDetails(details);
+        // Store in ClaimService for order request
+        ClaimService.setStoredPersonalDetails(details);
+      }
     },
     [setPersonalDetails]
   );
@@ -247,7 +275,13 @@ function ClaimSuccessContent() {
           {error ? (
             <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
               <p className="text-red-700">{error}</p>
-              <BackButton onClick={() => router.back()} />
+              <BackButton
+                onClick={() => {
+                  // Always navigate back to trip experience
+                  router.replace(`/${lang}/phases/trip-experience`);
+                }}
+                text={t.phases.claimSuccess.navigation.back}
+              />
             </div>
           ) : (
             <>
@@ -340,7 +374,10 @@ function ClaimSuccessContent() {
 
               <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
                 <BackButton
-                  onClick={() => router.push(`/${lang}/phases/trip-experience`)}
+                  onClick={() => {
+                    // Always navigate back to trip experience
+                    router.replace(`/${lang}/phases/trip-experience`);
+                  }}
                   text={t.phases.claimSuccess.navigation.back}
                 />
                 <ContinueButton

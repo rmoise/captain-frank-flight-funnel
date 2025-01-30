@@ -106,7 +106,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
 
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const newValue = e.target.value;
+      const newValue = e.target.value.toUpperCase();
       setInputValue(newValue);
       setIsTyping(true);
       setIsTouched(true);
@@ -121,30 +121,36 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
         return;
       }
 
-      // Trigger search immediately
-      debouncedSearch(newValue);
+      // If the input is exactly 3 characters and matches an IATA code format
+      if (newValue.length === 3 && /^[A-Z]{3}$/.test(newValue)) {
+        // Search for exact IATA code match
+        debouncedSearch(newValue);
+      } else {
+        // Normal search for other cases
+        debouncedSearch(newValue);
+      }
     },
     [debouncedSearch, onChange]
   );
 
   const handleOptionSelect = useCallback(
     (option: LocationData) => {
-      // Extract the full name and code from dropdownLabel
+      // Extract the full name and code
       const fullName = option.dropdownLabel
         ? option.dropdownLabel.split(' (')[0]
         : option.description || option.label;
-      const code = option.dropdownLabel
-        ? option.dropdownLabel.split(' (')[1]?.replace(')', '')
-        : option.value;
+      const code = option.value;
 
       const updatedOption = {
         ...option,
-        label: code || option.value, // Use code for the input display
+        label: code,
+        value: code, // Ensure value is the IATA code
         description: fullName,
+        dropdownLabel: `${fullName} (${code})`, // Keep the full format for dropdown
       };
 
       onChange(updatedOption);
-      setInputValue(code || option.value); // Display the code in the input
+      setInputValue(code);
       setIsOpen(false);
       setIsTyping(false);
       setHighlightedIndex(null);

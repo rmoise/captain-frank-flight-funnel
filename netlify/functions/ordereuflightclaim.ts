@@ -57,12 +57,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     }
 
     // Validate journey_fact_type
-    const validJourneyFactTypes = [
-      'none',
-      'self',
-      'provided',
-      'took_alternative_own',
-    ];
+    const validJourneyFactTypes = ['none', 'self', 'provided'];
     if (!validJourneyFactTypes.includes(requestBody.journey_fact_type)) {
       return {
         statusCode: 400,
@@ -98,6 +93,14 @@ const handler: Handler = async (event: HandlerEvent) => {
     const apiUrl = `${API_BASE_URL}/ordereuflightclaim`;
     console.log('Making request to:', apiUrl);
 
+    // Log evaluation state if available
+    if (requestBody.guid || requestBody.recommendation_guid) {
+      console.log('=== EVALUATION STATE ===');
+      console.log('Evaluation GUID:', requestBody.guid);
+      console.log('Recommendation GUID:', requestBody.recommendation_guid);
+      console.log('=====================');
+    }
+
     const apiRequestBody = {
       ...requestBody,
       journey_booked_flightids,
@@ -108,6 +111,23 @@ const handler: Handler = async (event: HandlerEvent) => {
       contract_dp: Boolean(requestBody.contract_dp),
       lang: 'en',
     };
+
+    console.log('=== DETAILED REQUEST LOGGING ===');
+    console.log('Journey Booked Flight IDs:', journey_booked_flightids);
+    console.log('Journey Fact Flight IDs:', journey_fact_flightids);
+    console.log(
+      'Journey Fact Type:',
+      requestBody.journey_fact_type,
+      '(must be one of:',
+      validJourneyFactTypes.join(', '),
+      ')'
+    );
+    console.log(
+      'Information Received At:',
+      requestBody.information_received_at
+    );
+    console.log('PNR:', requestBody.journey_booked_pnr);
+    console.log('================================');
 
     console.log('API request body:', apiRequestBody);
 
@@ -121,12 +141,20 @@ const handler: Handler = async (event: HandlerEvent) => {
     });
 
     const responseText = await response.text();
-    console.log('API Response:', responseText);
+    console.log('=== DETAILED API RESPONSE LOGGING ===');
+    console.log('Response Status:', response.status);
+    console.log(
+      'Response Headers:',
+      Object.fromEntries(response.headers.entries())
+    );
+    console.log('Raw Response Text:', responseText);
+    console.log('================================');
 
     if (!response.ok) {
       let errorMessage = `API responded with status ${response.status}`;
       try {
         const errorData = JSON.parse(responseText);
+        console.log('Parsed Error Data:', errorData);
         errorMessage = errorData.message || errorData.error || errorMessage;
       } catch (e) {
         console.error('Failed to parse error response:', e);

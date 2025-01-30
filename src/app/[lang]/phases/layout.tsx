@@ -3,7 +3,6 @@
 import React from 'react';
 import { WelcomeSection } from '@/components/booking';
 import { Navbar } from '@/components/Navbar';
-import styles from './layout.module.css';
 
 interface PhaseLayoutProps {
   children: React.ReactNode;
@@ -11,10 +10,10 @@ interface PhaseLayoutProps {
 
 export default function PhaseLayout({ children }: PhaseLayoutProps) {
   return (
-    <div className={styles.container}>
+    <div className="min-h-screen bg-[#F4F7FA]">
       <Navbar />
       <WelcomeSection />
-      <div className={styles.content}>{children}</div>
+      <div className="max-w-3xl mx-auto px-4 py-8">{children}</div>
     </div>
   );
 }

@@ -99,9 +99,75 @@ export const createFlightSlice = (
       ? updates.toLocation.value
       : (updates.toLocation as string | null);
 
+    // Get the flight type from localStorage if available
+    let selectedType = updates.selectedType || state.selectedType;
+    if (typeof window !== 'undefined') {
+      const flightSelectionState = localStorage.getItem('flightSelectionState');
+      if (flightSelectionState) {
+        try {
+          const { selectedType: storedType } = JSON.parse(flightSelectionState);
+          if (storedType) {
+            selectedType = storedType;
+          }
+        } catch (error) {
+          console.error('Error parsing flight selection state:', error);
+        }
+      }
+    }
+
+    // Handle flight type and segments properly during rehydration
+    let updatedSegments = updates.flightSegments || state.flightSegments;
+
+    if (
+      selectedType === 'multi' &&
+      (!updatedSegments || updatedSegments.length < 2)
+    ) {
+      // Ensure we have at least 2 segments for multi-city
+      const existingFlights = updates.selectedFlights || state.selectedFlights;
+      if (existingFlights && existingFlights.length > 1) {
+        // Create segments from existing flights
+        updatedSegments = existingFlights.map((flight) => ({
+          fromLocation: {
+            value: flight.departureCity,
+            label: flight.departureCity,
+            description: flight.departureAirport,
+            city: flight.departureCity,
+            dropdownLabel: `${flight.departureAirport} (${flight.departureCity})`,
+          },
+          toLocation: {
+            value: flight.arrivalCity,
+            label: flight.arrivalCity,
+            description: flight.arrivalAirport,
+            city: flight.arrivalCity,
+            dropdownLabel: `${flight.arrivalAirport} (${flight.arrivalCity})`,
+          },
+          date: flight.date ? new Date(flight.date) : null,
+          selectedFlight: flight,
+        }));
+      } else {
+        // Initialize with empty segments
+        updatedSegments = [
+          {
+            fromLocation: null,
+            toLocation: null,
+            date: null,
+            selectedFlight: null,
+          },
+          {
+            fromLocation: null,
+            toLocation: null,
+            date: null,
+            selectedFlight: null,
+          },
+        ];
+      }
+    }
+
     const newState = {
       ...state,
       ...updates,
+      selectedType,
+      flightSegments: updatedSegments,
       fromLocation: fromLocationValue,
       toLocation: toLocationValue,
       _lastUpdate: Date.now(),
@@ -139,9 +205,25 @@ export const createFlightSlice = (
     }));
   },
 
-  setSelectedType: (type) => {
+  setSelectedType: (type: 'direct' | 'multi') => {
     const state = get();
     if (state.selectedType === type) return;
+
+    // Save flight type to localStorage
+    if (typeof window !== 'undefined') {
+      const flightSelectionState = localStorage.getItem('flightSelectionState');
+      const currentState = flightSelectionState
+        ? JSON.parse(flightSelectionState)
+        : {};
+      localStorage.setItem(
+        'flightSelectionState',
+        JSON.stringify({
+          ...currentState,
+          selectedType: type,
+          timestamp: Date.now(),
+        })
+      );
+    }
 
     const newState = {
       ...state,
@@ -164,69 +246,57 @@ export const createFlightSlice = (
         ? [newState.directFlight.selectedFlight]
         : [];
     } else {
-      // Initialize with 2 segments in multi mode
-      newState.flightSegments = [
-        {
-          fromLocation: state.directFlight.fromLocation,
-          toLocation: state.directFlight.toLocation,
-          date: state.directFlight.date,
-          selectedFlight: state.directFlight.selectedFlight,
-        },
-        {
-          fromLocation: null,
-          toLocation: null,
-          date: null,
-          selectedFlight: null,
-        },
-      ];
-      newState.currentSegmentIndex = 0;
-      newState.selectedFlight = state.directFlight.selectedFlight;
-      newState.selectedFlights = state.directFlight.selectedFlight
-        ? [state.directFlight.selectedFlight]
-        : [];
-    }
-
-    if (state.currentPhase === 1) {
-      const isValid = validateFlightSelection(newState);
-      newState.validationState = {
-        ...state.validationState,
-        isFlightValid: isValid,
-        stepValidation: {
-          ...state.validationState.stepValidation,
-          1: isValid,
-        },
-      };
-
-      newState.completedSteps = isValid
-        ? Array.from(new Set([...state.completedSteps, 1])).sort(
-            (a, b) => a - b
-          )
-        : state.completedSteps.filter((step) => step !== 1);
-    }
-
-    set((state) => {
-      const updatedState = {
-        ...newState,
-      };
-      const isValid = validateFlightSelection(updatedState);
-      return {
-        ...updatedState,
-        validationState: {
-          ...state.validationState,
-          isFlightValid: isValid,
-          stepValidation: {
-            ...state.validationState.stepValidation,
-            [state.currentPhase]: isValid,
+      // For multi-city mode
+      const existingFlights = state.selectedFlights;
+      if (existingFlights.length > 1) {
+        // If we have multiple flights selected, use them to create segments
+        newState.flightSegments = existingFlights.map((flight) => ({
+          fromLocation: {
+            value: flight.departureCity,
+            label: flight.departureCity,
+            description: flight.departureAirport,
+            city: flight.departureCity,
+            dropdownLabel: `${flight.departureAirport} (${flight.departureCity})`,
           },
-          [state.currentPhase]: isValid,
-        },
-        completedSteps: isValid
-          ? Array.from(
-              new Set([...state.completedSteps, state.currentPhase])
-            ).sort((a, b) => a - b)
-          : state.completedSteps.filter((step) => step !== state.currentPhase),
-      };
-    });
+          toLocation: {
+            value: flight.arrivalCity,
+            label: flight.arrivalCity,
+            description: flight.arrivalAirport,
+            city: flight.arrivalCity,
+            dropdownLabel: `${flight.arrivalAirport} (${flight.arrivalCity})`,
+          },
+          date: flight.date ? new Date(flight.date) : null,
+          selectedFlight: flight,
+        }));
+      } else {
+        // Initialize with 2 segments in multi mode
+        newState.flightSegments = [
+          {
+            fromLocation: state.directFlight.fromLocation,
+            toLocation: state.directFlight.toLocation,
+            date: state.directFlight.date,
+            selectedFlight: state.directFlight.selectedFlight,
+          },
+          {
+            fromLocation: null,
+            toLocation: null,
+            date: null,
+            selectedFlight: null,
+          },
+        ];
+      }
+      newState.currentSegmentIndex = 0;
+      newState.selectedFlight =
+        existingFlights[0] || state.directFlight.selectedFlight;
+      newState.selectedFlights =
+        existingFlights.length > 0
+          ? existingFlights
+          : state.directFlight.selectedFlight
+            ? [state.directFlight.selectedFlight]
+            : [];
+    }
+
+    set(() => newState);
   },
 
   setDirectFlight: (directFlight: Partial<FlightSegment>) => {

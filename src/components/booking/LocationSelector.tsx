@@ -31,8 +31,12 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
     }
 
     try {
+      // If the term is exactly 3 characters and matches an IATA code format,
+      // we want to prioritize exact matches
+      const isExactIataCode = term.length === 3 && /^[A-Z]{3}$/.test(term);
+
       const response = await fetch(
-        `/api/searchairports?${new URLSearchParams({
+        `/api/searchairportsbyterm?${new URLSearchParams({
           term,
           lang: 'en',
         })}`
@@ -45,13 +49,27 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
       const data = await response.json();
       const airports = data.data || [];
 
-      return airports.map((airport: Airport) => ({
+      // Map the airports to LocationData format
+      const mappedAirports = airports.map((airport: Airport) => ({
         value: airport.iata_code,
         label: airport.iata_code,
         description: airport.city || '',
         city: airport.city || '',
         dropdownLabel: `${airport.name} (${airport.iata_code})`,
       }));
+
+      // If we have an exact IATA code match and it's in the results,
+      // select it automatically
+      if (isExactIataCode) {
+        const exactMatch = mappedAirports.find(
+          (airport: { value: string }) => airport.value === term
+        );
+        if (exactMatch) {
+          return [exactMatch];
+        }
+      }
+
+      return mappedAirports;
     } catch (error) {
       console.error('Error searching airports:', error);
       return [];

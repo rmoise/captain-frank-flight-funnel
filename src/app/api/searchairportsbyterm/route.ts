@@ -32,7 +32,7 @@ const API_BASE_URL =
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const term = searchParams.get('term')?.toLowerCase();
+    const term = searchParams.get('term')?.toUpperCase();
     const lang = searchParams.get('lang') || 'en';
 
     console.log('Airport search request:', { term, lang });
@@ -129,6 +129,16 @@ export async function GET(request: Request) {
       lat: airport.lat || airport.latitude || 0,
       lng: airport.lng || airport.longitude || 0,
     }));
+
+    // If the search term is exactly 3 characters and matches an IATA code format,
+    // prioritize exact matches by putting them first in the results
+    if (term.length === 3 && /^[A-Z]{3}$/.test(term)) {
+      formattedAirports.sort((a, b) => {
+        if (a.iata_code === term) return -1;
+        if (b.iata_code === term) return 1;
+        return 0;
+      });
+    }
 
     return NextResponse.json<ApiResponse>({
       data: formattedAirports,

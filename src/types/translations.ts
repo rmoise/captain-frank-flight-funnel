@@ -44,4 +44,35 @@ export interface Translations {
       };
     };
   };
+  flightSelector: {
+    labels: {
+      from: string;
+      to: string;
+      departureDate: string;
+      searchFlights: string;
+      availableFlights: string;
+      selectPreferred: string;
+      searchByFlightNumber: string;
+      searching: string;
+      tryAdjusting: string;
+      noFlightsFound: string;
+      noMatchingFlights: string;
+      noFlightsFoundCriteria: string;
+      flightsFound: string;
+    };
+    errors: {
+      departBeforeArrival: string;
+      minConnectionTime: string;
+      maxConnectionTime: string;
+      connectionTime: string;
+      invalidConnectionTime: string;
+    };
+    table: {
+      flight: string;
+      date: string;
+      departure: string;
+      arrival: string;
+      duration: string;
+    };
+  };
 }

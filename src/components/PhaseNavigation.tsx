@@ -47,12 +47,23 @@ export const PhaseNavigation: React.FC<PhaseNavigationProps> = () => {
   // Update current phase based on URL
   useEffect(() => {
     if (pathname && typeof pathname === 'string') {
-      const phase = getPhaseFromUrl(pathname);
+      // Remove language prefix before looking up phase
+      const basePath = pathname.replace(/^\/[a-z]{2}\//, '');
+      const phase =
+        basePath === '/phases/claim-success' ||
+        basePath === '/phases/claim-rejected'
+          ? 5
+          : getPhaseFromUrl(pathname);
       setCurrentPhase(phase);
     }
   }, [pathname, setCurrentPhase]);
 
-  const currentPhase = pathname ? getPhaseFromUrl(pathname) : 1;
+  const currentPhase = pathname
+    ? pathname.includes('/phases/claim-success') ||
+      pathname.includes('/phases/claim-rejected')
+      ? 5
+      : getPhaseFromUrl(pathname)
+    : 1;
 
   const isPhaseAccessible = React.useCallback(
     (phaseNumber: number) => {

@@ -1,5 +1,5 @@
 import { Handler, HandlerEvent } from '@netlify/functions';
-import { EvaluationResult, EvaluationRequest } from './types';
+import { EvaluationRequest } from './types';
 
 const API_BASE_URL =
   'https://secure.captain-frank.net/api/services/euflightclaim';

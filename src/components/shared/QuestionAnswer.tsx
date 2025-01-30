@@ -4,16 +4,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import type { Question } from '@/types/experience';
 import { MoneyInput } from '@/components/MoneyInput';
-import { FlightSelector } from '@/components/booking/FlightSelector';
-import type { Flight } from '@/types/store';
 import { CustomDateInput } from '@/components/shared/CustomDateInput';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { useStore } from '@/lib/state/store';
 import { useTranslation } from '@/hooks/useTranslation';
-import type { ValidationStep } from '@/lib/state/types';
+import type { ValidationStateSteps } from '@/lib/state/store';
 import { format, parseISO, isValid } from 'date-fns';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
+import { ModularFlightSelector } from '@/components/booking/ModularFlightSelector';
 
 export interface QuestionAnswerProps {
   question: Question;
@@ -21,7 +20,6 @@ export interface QuestionAnswerProps {
   onSelect: (questionId: string, value: string) => void;
   currentStep: number;
   totalSteps: number;
-  initialSelectedFlight?: Flight | Flight[] | null;
   hideProgress?: boolean;
 }
 
@@ -31,7 +29,6 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
   onSelect,
   currentStep,
   totalSteps,
-  initialSelectedFlight = null,
   hideProgress = false,
 }) => {
   const { t } = useTranslation();
@@ -258,35 +255,11 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
       case 'flight_selector':
         return (
           <>
-            <FlightSelector
-              onSelect={
-                question.id === 'alternative_flight_airline_expense' ||
-                question.id === 'alternative_flight_own_expense'
-                  ? () => void 0
-                  : (flight) => {
-                      if (flight) {
-                        // Debounce the state update to prevent infinite loops
-                        setTimeout(() => {
-                          onSelect(
-                            question.id,
-                            Array.isArray(flight)
-                              ? flight.map((f) => f.id).join(',')
-                              : flight.id
-                          );
-                        }, 0);
-                      }
-                    }
-              }
-              initialSelectedFlight={
-                Array.isArray(initialSelectedFlight)
-                  ? initialSelectedFlight[0]
-                  : initialSelectedFlight
-              }
+            <ModularFlightSelector
               showFlightSearch={true}
               showFlightDetails={true}
-              showResults={true}
-              onInteract={() => {}}
               currentPhase={4}
+              disabled={false}
               stepNumber={
                 question.id === 'alternative_flight_airline_expense' ||
                 question.id === 'alternative_flight_own_expense'
@@ -305,32 +278,49 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
                           ? currentStep + 1
                           : 1;
 
-                      if (typeof state === 'function') {
-                        const newState = state({} as Record<number, boolean>);
-                        updateValidationState({
-                          stepValidation: {
-                            [stepNumber]: newState[stepNumber] || false,
-                            ...Object.fromEntries(
-                              [1, 2, 3, 4, 5]
-                                .filter((n) => n !== stepNumber)
-                                .map((n) => [n, false])
-                            ),
-                          } as Record<ValidationStep, boolean>,
-                        });
-                      } else {
-                        updateValidationState({
-                          stepValidation: {
-                            [stepNumber]: state[stepNumber] || false,
-                            ...Object.fromEntries(
-                              [1, 2, 3, 4, 5]
-                                .filter((n) => n !== stepNumber)
-                                .map((n) => [n, false])
-                            ),
-                          } as Record<ValidationStep, boolean>,
-                        });
+                      const validationSteps: ValidationStateSteps[] = [
+                        1, 2, 3, 4, 5,
+                      ];
+                      const stepValidation = Object.fromEntries(
+                        validationSteps.map((n) => [
+                          n,
+                          n === stepNumber
+                            ? typeof state === 'function'
+                              ? state({})[stepNumber] || false
+                              : state[stepNumber] || false
+                            : false,
+                        ])
+                      ) as Record<ValidationStateSteps, boolean>;
+                      const stepInteraction = Object.fromEntries(
+                        validationSteps.map((n) => [n, n === stepNumber])
+                      ) as Record<ValidationStateSteps, boolean>;
+
+                      updateValidationState({
+                        stepValidation,
+                        stepInteraction,
+                        _timestamp: Date.now(),
+                      });
+                    }
+              }
+              onSelect={
+                question.id === 'alternative_flight_airline_expense' ||
+                question.id === 'alternative_flight_own_expense'
+                  ? () => void 0
+                  : (flight) => {
+                      if (flight) {
+                        // Debounce the state update to prevent infinite loops
+                        setTimeout(() => {
+                          onSelect(
+                            question.id,
+                            Array.isArray(flight)
+                              ? flight.map((f) => f.id).join(',')
+                              : flight.id
+                          );
+                        }, 0);
                       }
                     }
               }
+              onInteract={() => {}}
             />
             {question.relatedQuestions?.map((relatedQ) => (
               <div key={relatedQ.id} className="mt-24 pt-12 pb-12 mb-12">

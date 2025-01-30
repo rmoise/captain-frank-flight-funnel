@@ -7,21 +7,21 @@ const PHASE_PATHS = {
   2: '/phases/compensation-estimate',
   3: '/phases/flight-details',
   4: '/phases/trip-experience',
-  5: '/phases/agreement',
-  success: '/phases/claim-success',
-  rejected: '/phases/claim-rejected',
-  submitted: '/phases/claim-submitted',
+  5: '/phases/claim-success',
+  'claim-rejected': '/phases/claim-rejected',
+  6: '/phases/agreement',
+  7: '/phases/claim-submitted',
 } as const;
 
-const PATH_TO_PHASE: { [key: string]: number | string } = {
+const PATH_TO_PHASE: { [key: string]: number } = {
   '/phases/initial-assessment': 1,
   '/phases/compensation-estimate': 2,
   '/phases/flight-details': 3,
   '/phases/trip-experience': 4,
-  '/phases/agreement': 5,
-  '/phases/claim-success': 'success',
-  '/phases/claim-rejected': 'rejected',
-  '/phases/claim-submitted': 'submitted',
+  '/phases/claim-success': 5,
+  '/phases/claim-rejected': 5,
+  '/phases/agreement': 6,
+  '/phases/claim-submitted': 7,
 };
 
 export type PhaseType = keyof typeof PHASE_PATHS;

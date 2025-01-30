@@ -29,22 +29,6 @@ export function ContinueButton({
     async (e: React.MouseEvent<HTMLButtonElement>) => {
       console.log('=== Continue Button Click ===');
       console.log('Button State:', { disabled, isLoading });
-      console.log('Event:', e);
-
-      // Prevent any form submission and event propagation
-      e.preventDefault();
-      e.stopPropagation();
-
-      // Find any parent form and prevent its submission
-      const form = (e.target as HTMLElement).closest('form');
-      if (form) {
-        form.onsubmit = (e) => {
-          e.preventDefault();
-          return false;
-        };
-      }
-
-      console.log('Default prevented');
 
       if (disabled || isLoading) {
         return;

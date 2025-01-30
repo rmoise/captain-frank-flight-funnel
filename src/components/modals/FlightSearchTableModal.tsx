@@ -16,23 +16,33 @@ export default function FlightSearchTableModal({
   flights,
   onFlightSelect,
 }: FlightSearchTableModalProps) {
+  const dialogTitleId = React.useId();
+  const dialogDescriptionId = React.useId();
+
   return (
     <Dialog.Root open={isOpen} onOpenChange={onClose}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/50" />
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex items-center justify-center min-h-screen p-4">
-            <Dialog.Content className="relative bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[80vh] overflow-hidden">
-              <Dialog.Title className="text-2xl font-semibold text-gray-800 p-6 border-b">
+            <Dialog.Content
+              className="relative bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[80vh] overflow-hidden"
+              aria-labelledby={dialogTitleId}
+              aria-describedby={dialogDescriptionId}
+            >
+              <Dialog.Title
+                id={dialogTitleId}
+                className="text-2xl font-semibold text-gray-800 p-6 border-b"
+              >
                 Select Your Flight
               </Dialog.Title>
-              <Dialog.Description className="sr-only">
+              <Dialog.Description id={dialogDescriptionId}>
                 A table of available flights matching your search criteria. Each
                 row shows flight number, departure, arrival, and status details.
               </Dialog.Description>
               <Dialog.Close
                 className="absolute top-6 right-6 text-gray-500 hover:text-gray-700"
-                aria-label="Close"
+                aria-label="Close dialog"
               >
                 <XMarkIcon className="w-6 h-6" />
               </Dialog.Close>

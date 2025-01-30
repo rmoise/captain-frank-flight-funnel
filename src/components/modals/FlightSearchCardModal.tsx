@@ -16,24 +16,34 @@ export default function FlightSearchCardModal({
   flights,
   onFlightSelect,
 }: FlightSearchCardModalProps) {
+  const dialogTitleId = React.useId();
+  const dialogDescriptionId = React.useId();
+
   return (
     <Dialog.Root open={isOpen} onOpenChange={onClose}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/50" />
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex items-center justify-center min-h-screen p-4">
-            <Dialog.Content className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-              <Dialog.Title className="text-2xl font-semibold text-gray-900 p-6">
+            <Dialog.Content
+              className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+              aria-labelledby={dialogTitleId}
+              aria-describedby={dialogDescriptionId}
+            >
+              <Dialog.Title
+                id={dialogTitleId}
+                className="text-2xl font-semibold text-gray-900 p-6"
+              >
                 Available Flights
               </Dialog.Title>
-              <Dialog.Description className="sr-only">
+              <Dialog.Description id={dialogDescriptionId}>
                 A list of available flights matching your search criteria. Each
                 flight shows airline, flight number, departure and arrival
                 details.
               </Dialog.Description>
               <Dialog.Close
                 className="absolute top-6 right-6 text-gray-500 hover:text-gray-700"
-                aria-label="Close"
+                aria-label="Close dialog"
               >
                 <XMarkIcon className="w-6 h-6" />
               </Dialog.Close>

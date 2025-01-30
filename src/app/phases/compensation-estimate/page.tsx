@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore, getLanguageAwareUrl } from '@/lib/state/store';
+import { useFlightStore } from '@/lib/state/flightStore';
 import { PhaseGuard } from '@/components/shared/PhaseGuard';
 import { SpeechBubble } from '@/components/SpeechBubble';
 import { ContinueButton } from '@/components/shared/ContinueButton';
@@ -10,6 +11,7 @@ import { BackButton } from '@/components/shared/BackButton';
 import { PhaseNavigation } from '@/components/PhaseNavigation';
 import type { LocationData } from '@/types/store';
 import { useTranslation } from '@/hooks/useTranslation';
+import type { FlightSegment } from '@/lib/state/store';
 
 type RouteInfo = {
   departureCity: string;
@@ -21,6 +23,8 @@ type RouteInfo = {
 export default function CompensationEstimatePage() {
   const router = useRouter();
   const { t, lang } = useTranslation();
+  const flightStore = useFlightStore();
+
   const {
     personalDetails,
     fromLocation,
@@ -41,32 +45,283 @@ export default function CompensationEstimatePage() {
     flightSegments,
     currentPhase,
     completedPhases,
+    setSelectedFlights,
+    updateValidationState,
   } = useStore();
 
   const [mounted, setMounted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null);
+  const isInitialized = useRef(false);
+  const initializationLock = useRef(false);
 
   useEffect(() => {
-    setMounted(true);
-    setCurrentPhase(2);
-    completePhase(1);
+    if (isInitialized.current || initializationLock.current) return;
+    initializationLock.current = true;
 
-    // Debug log the state
-    console.log('Flight State:', {
-      selectedType,
-      directFlight,
-      flightSegments,
-      selectedFlights,
+    const initializePhase = async () => {
+      try {
+        // First ensure we're in the correct phase
+        await setCurrentPhase(2);
+
+        // Get initial state
+        const currentState = useStore.getState();
+        console.log('=== Compensation Estimate Page Initialization ===', {
+          bookingNumber: currentState.bookingNumber,
+          selectedFlights: currentState.selectedFlights.length,
+          flightStoreFlights: flightStore.selectedFlights.length,
+          mainStoreState: {
+            selectedType: currentState.selectedType,
+            directFlight: currentState.directFlight
+              ? {
+                  selectedFlight: currentState.directFlight.selectedFlight,
+                  fromLocation: currentState.directFlight.fromLocation,
+                  toLocation: currentState.directFlight.toLocation,
+                }
+              : null,
+            flightSegments: currentState.flightSegments?.length || 0,
+          },
+        });
+
+        // First try to restore from phase 1
+        const phase1Data = localStorage.getItem('phase1FlightData');
+        if (phase1Data) {
+          try {
+            const parsedPhase1Data = JSON.parse(phase1Data);
+            if (
+              parsedPhase1Data.timestamp &&
+              Date.now() - parsedPhase1Data.timestamp < 300000
+            ) {
+              // Use phase 1 data as fallback
+              const stateToUse = {
+                selectedFlights: parsedPhase1Data.selectedFlights || [],
+                flightSegments: parsedPhase1Data.flightSegments || [],
+                directFlight: parsedPhase1Data.directFlight || null,
+                selectedType: parsedPhase1Data.selectedType || 'direct',
+                fromLocation: parsedPhase1Data.fromLocation || null,
+                toLocation: parsedPhase1Data.toLocation || null,
+                timestamp: Date.now(),
+              };
+
+              // Save as phase 2 data
+              localStorage.setItem(
+                'phase2FlightData',
+                JSON.stringify(stateToUse)
+              );
+            }
+          } catch (error) {
+            console.error('Error restoring phase 1 data:', error);
+          }
+        }
+
+        // Then try phase 2 data
+        const storedFlightData = localStorage.getItem('phase2FlightData');
+        if (storedFlightData) {
+          try {
+            const parsedData = JSON.parse(storedFlightData);
+            const timestamp = parsedData.timestamp || Date.now();
+            const isDataFresh = Date.now() - timestamp < 300000; // 5 minutes
+
+            if (isDataFresh) {
+              console.log(
+                '=== Restoring fresh flight data from localStorage ===',
+                {
+                  ...parsedData,
+                  directFlightDetails: parsedData.directFlight
+                    ? {
+                        selectedFlight: parsedData.directFlight.selectedFlight,
+                        fromLocation: parsedData.directFlight.fromLocation,
+                        toLocation: parsedData.directFlight.toLocation,
+                      }
+                    : null,
+                  selectedFlightsCount: parsedData.selectedFlights?.length || 0,
+                }
+              );
+
+              // Prepare all state updates
+              const stateUpdates = [];
+
+              // Update flight selections if available
+              if (parsedData.selectedFlights?.length > 0) {
+                stateUpdates.push(
+                  flightStore.setSelectedFlights(parsedData.selectedFlights),
+                  flightStore.setOriginalFlights(parsedData.selectedFlights),
+                  setSelectedFlights(parsedData.selectedFlights)
+                );
+              }
+
+              // Update flight segments if available
+              if (parsedData.flightSegments?.length > 0) {
+                const processedSegments = parsedData.flightSegments.map(
+                  (segment: FlightSegment) => ({
+                    ...segment,
+                    fromLocation: segment.fromLocation || null,
+                    toLocation: segment.toLocation || null,
+                    date: segment.date ? new Date(segment.date) : null,
+                    selectedFlight: segment.selectedFlight || null,
+                  })
+                );
+
+                stateUpdates.push(
+                  new Promise<void>((resolve) => {
+                    useStore.setState((state) => ({
+                      ...state,
+                      flightSegments: processedSegments,
+                    }));
+                    resolve();
+                  })
+                );
+              }
+
+              // Update direct flight if available
+              if (parsedData.directFlight?.selectedFlight) {
+                stateUpdates.push(
+                  new Promise<void>((resolve) => {
+                    useStore.setState((state) => ({
+                      ...state,
+                      directFlight: {
+                        ...parsedData.directFlight,
+                        fromLocation: parsedData.directFlight.fromLocation,
+                        toLocation: parsedData.directFlight.toLocation,
+                      },
+                    }));
+                    resolve();
+                  })
+                );
+              }
+
+              // Execute all updates atomically
+              await Promise.all(stateUpdates);
+
+              // Update validation state after all updates
+              const updatedState = useStore.getState();
+              const isFlightValid = validateFlightData(updatedState);
+
+              updateValidationState({
+                ...updatedState.validationState,
+                isFlightValid,
+                stepValidation: {
+                  ...updatedState.validationState.stepValidation,
+                  2: isFlightValid,
+                },
+                2: isFlightValid,
+                _timestamp: Date.now(),
+              });
+
+              setMounted(true);
+              isInitialized.current = true;
+              return;
+            }
+          } catch (error) {
+            console.error('Error restoring flight data:', error);
+          }
+        }
+
+        // If we get here, use current state
+        const updatedState = useStore.getState();
+        console.log('=== Using store state ===', {
+          selectedType: updatedState.selectedType,
+          directFlight: updatedState.directFlight
+            ? {
+                selectedFlight: updatedState.directFlight.selectedFlight,
+                fromLocation: updatedState.directFlight.fromLocation,
+                toLocation: updatedState.directFlight.toLocation,
+              }
+            : null,
+          flightSegments: updatedState.flightSegments?.length || 0,
+        });
+
+        // Save current state
+        const stateToSave = {
+          selectedFlights: updatedState.selectedFlights || [],
+          directFlight: updatedState.directFlight
+            ? {
+                selectedFlight: updatedState.directFlight.selectedFlight,
+                fromLocation: updatedState.directFlight.fromLocation,
+                toLocation: updatedState.directFlight.toLocation,
+              }
+            : null,
+          selectedType: updatedState.selectedType,
+          flightSegments: updatedState.flightSegments || [],
+          fromLocation:
+            updatedState.directFlight?.fromLocation ||
+            updatedState.flightSegments?.[0]?.fromLocation ||
+            null,
+          toLocation:
+            updatedState.directFlight?.toLocation ||
+            updatedState.flightSegments?.[0]?.toLocation ||
+            null,
+          timestamp: Date.now(),
+        };
+
+        localStorage.setItem('phase2FlightData', JSON.stringify(stateToSave));
+
+        const isFlightValid = validateFlightData(updatedState);
+        updateValidationState({
+          ...updatedState.validationState,
+          isFlightValid,
+          stepValidation: {
+            ...updatedState.validationState.stepValidation,
+            2: isFlightValid,
+          },
+          2: isFlightValid,
+          _timestamp: Date.now(),
+        });
+
+        setMounted(true);
+        isInitialized.current = true;
+      } finally {
+        initializationLock.current = false;
+      }
+    };
+
+    initializePhase().catch((error) => {
+      console.error('Error during phase initialization:', error);
+      initializationLock.current = false;
     });
   }, [
+    isInitialized,
+    flightStore,
+    setSelectedFlights,
     setCurrentPhase,
-    completePhase,
-    selectedType,
-    directFlight,
-    flightSegments,
-    selectedFlights,
+    updateValidationState,
   ]);
+
+  // Helper function to validate flight data
+  const validateFlightData = (state: any) => {
+    if (state.selectedType === 'direct') {
+      const hasValidDirectFlight =
+        state.directFlight &&
+        state.directFlight.fromLocation &&
+        state.directFlight.toLocation;
+
+      const hasValidSelectedFlights =
+        state.selectedFlights &&
+        state.selectedFlights.length > 0 &&
+        state.selectedFlights.every(
+          (flight: any) =>
+            flight &&
+            flight.airline &&
+            flight.flightNumber &&
+            flight.departureCity &&
+            flight.arrivalCity &&
+            flight.date
+        );
+
+      return hasValidDirectFlight || hasValidSelectedFlights;
+    } else {
+      return (
+        state.flightSegments?.length > 0 &&
+        state.flightSegments.every(
+          (segment: any) =>
+            segment &&
+            segment.fromLocation &&
+            segment.toLocation &&
+            segment.selectedFlight
+        )
+      );
+    }
+  };
 
   useEffect(() => {
     if (!fromLocation || !toLocation) return;
@@ -95,7 +350,6 @@ export default function CompensationEstimatePage() {
 
   useEffect(() => {
     const calculateCompensation = async () => {
-      // Check if we need to recalculate
       if (
         !shouldRecalculateCompensation() &&
         compensationCache.amount !== null
@@ -110,12 +364,10 @@ export default function CompensationEstimatePage() {
       try {
         let flightData;
 
-        // For multi-segment flights, use first and last segments
         if (selectedType === 'multi' && flightSegments?.length > 0) {
           const firstSegment = flightSegments[0];
           const lastSegment = flightSegments[flightSegments.length - 1];
 
-          // Get IATA codes from locations (they must be selected to get here)
           const from_iata = firstSegment.fromLocation?.value;
           const to_iata = lastSegment.toLocation?.value;
 
@@ -127,9 +379,7 @@ export default function CompensationEstimatePage() {
             departure: from_iata,
             arrival: to_iata,
           };
-        }
-        // For direct flights, try selected flight first, then locations
-        else if (selectedType === 'direct') {
+        } else if (selectedType === 'direct') {
           if (selectedFlights?.length > 0) {
             const validFlights = selectedFlights.filter(
               (flight) => flight !== null
@@ -137,9 +387,7 @@ export default function CompensationEstimatePage() {
             if (validFlights.length > 0) {
               flightData = validFlights[0];
             }
-          }
-          // If no selected flight, try using locations from directFlight
-          else if (
+          } else if (
             directFlight?.fromLocation?.value &&
             directFlight?.toLocation?.value
           ) {
@@ -148,9 +396,7 @@ export default function CompensationEstimatePage() {
               arrival: directFlight.toLocation.value,
             };
           }
-        }
-        // If no valid data yet, use routeInfo as last resort
-        if (!flightData && routeInfo) {
+        } else if (routeInfo) {
           flightData = {
             departure: routeInfo.departure,
             arrival: routeInfo.arrival,
@@ -188,7 +434,6 @@ export default function CompensationEstimatePage() {
           throw new Error('No compensation amount available');
         }
 
-        // Cache the compensation data
         useStore.getState().setCompensationCache({
           amount: data.amount,
           flightData: {
@@ -228,7 +473,6 @@ export default function CompensationEstimatePage() {
       }
     };
 
-    // Calculate compensation if we have enough data for either case
     const hasMultiSegmentData =
       selectedType === 'multi' &&
       flightSegments?.length > 0 &&
@@ -261,15 +505,138 @@ export default function CompensationEstimatePage() {
     setIsLoading(true);
 
     try {
-      await completePhase(2);
-      await setCurrentPhase(3);
-      const nextPhaseUrl = '/phases/flight-details';
-      if (!nextPhaseUrl) {
-        throw new Error('Invalid next phase URL');
+      // Get latest state
+      const currentState = useStore.getState();
+      console.log('=== Starting Phase Transition ===', {
+        selectedType: currentState.selectedType,
+        directFlight: currentState.directFlight,
+        selectedFlights: currentState.selectedFlights?.length || 0,
+        flightSegments: currentState.flightSegments?.length || 0,
+      });
+
+      // Phase 2 validation - only check for locations
+      const isValid =
+        currentState.selectedType === 'multi'
+          ? currentState.flightSegments.length >= 2 &&
+            currentState.flightSegments.every(
+              (segment) => segment.fromLocation && segment.toLocation
+            )
+          : !!(
+              currentState.directFlight?.fromLocation &&
+              currentState.directFlight?.toLocation
+            );
+
+      if (!isValid) {
+        console.error('Invalid flight data state during transition');
+        return;
       }
-      await router.push(getLanguageAwareUrl(nextPhaseUrl, lang));
+
+      // Step 1: Prepare complete state data
+      const completeStateData = {
+        selectedType: currentState.selectedType,
+        flightSegments:
+          currentState.flightSegments?.map((segment) => ({
+            fromLocation: segment.fromLocation || null,
+            toLocation: segment.toLocation || null,
+            date: segment.date ? new Date(segment.date) : null,
+            selectedFlight: segment.selectedFlight || null,
+          })) || [],
+        directFlight: currentState.directFlight
+          ? {
+              selectedFlight: currentState.directFlight.selectedFlight || null,
+              fromLocation: currentState.directFlight.fromLocation || null,
+              toLocation: currentState.directFlight.toLocation || null,
+              date: currentState.directFlight.date
+                ? new Date(currentState.directFlight.date)
+                : null,
+            }
+          : null,
+        selectedFlights:
+          currentState.selectedFlights?.filter((f) => f !== null) || [],
+        validationState: {
+          ...currentState.validationState,
+          isFlightValid: true,
+          stepValidation: {
+            ...currentState.validationState.stepValidation,
+            2: true,
+          },
+          2: true,
+          _timestamp: Date.now(),
+        },
+        fromLocation:
+          currentState.directFlight?.fromLocation ||
+          currentState.flightSegments?.[0]?.fromLocation ||
+          null,
+        toLocation:
+          currentState.directFlight?.toLocation ||
+          currentState.flightSegments?.[0]?.toLocation ||
+          null,
+        timestamp: Date.now(),
+      };
+
+      // Step 2: Save state to localStorage before any updates
+      localStorage.setItem(
+        'phase2FlightData',
+        JSON.stringify(completeStateData)
+      );
+
+      // Ensure we have at least 2 segments for multi-city in phase 3
+      const phase3StateData = {
+        ...completeStateData,
+        flightSegments:
+          completeStateData.selectedType === 'multi'
+            ? completeStateData.flightSegments.length >= 2
+              ? completeStateData.flightSegments
+              : [
+                  ...completeStateData.flightSegments,
+                  {
+                    fromLocation: null,
+                    toLocation: null,
+                    selectedFlight: null,
+                    date: null,
+                  },
+                ]
+            : completeStateData.flightSegments,
+        timestamp: Date.now(),
+      };
+
+      localStorage.setItem('phase3FlightData', JSON.stringify(phase3StateData));
+
+      // Step 3: Update flight store
+      if (completeStateData.selectedFlights.length > 0) {
+        await flightStore.setSelectedFlights(completeStateData.selectedFlights);
+        await flightStore.setOriginalFlights(completeStateData.selectedFlights);
+      }
+
+      // Step 4: Update main store
+      await new Promise<void>((resolve) => {
+        useStore.setState((state) => ({
+          ...state,
+          selectedType: completeStateData.selectedType,
+          flightSegments: phase3StateData.flightSegments, // Use phase3 segments
+          directFlight: completeStateData.directFlight || undefined,
+          selectedFlights: completeStateData.selectedFlights,
+          validationState: completeStateData.validationState,
+        }));
+        resolve();
+      });
+
+      // Step 5: Complete current phase
+      await completePhase(2);
+
+      console.log('=== Phase Transition Complete ===', {
+        selectedType: completeStateData.selectedType,
+        directFlight: completeStateData.directFlight,
+        selectedFlights: completeStateData.selectedFlights.length,
+        flightSegments: completeStateData.flightSegments.length,
+      });
+
+      // Step 6: Set next phase and navigate
+      await setCurrentPhase(3);
+      router.push(getLanguageAwareUrl('/phases/flight-details', lang));
     } catch (error) {
-      setCurrentPhase(2);
+      console.error('Error during phase transition:', error);
+      await setCurrentPhase(2);
     } finally {
       setIsLoading(false);
     }
@@ -277,9 +644,7 @@ export default function CompensationEstimatePage() {
 
   const handleBack = async () => {
     const previousUrl = '/phases/initial-assessment';
-    // First update the current phase to the previous phase
     await setCurrentPhase(1);
-    // Then navigate to the previous URL with language parameter
     router.push(getLanguageAwareUrl(previousUrl, lang));
   };
 
@@ -335,7 +700,6 @@ export default function CompensationEstimatePage() {
                             departure: directFlight?.selectedFlight?.departure,
                           };
 
-                          // Extract city name from dropdown label (e.g. "Berlin Brandenburg Airport (BER)" -> "Berlin")
                           const fullCityFromLabel = fromCityData.dropdownLabel
                             ? fromCityData.dropdownLabel
                                 .split('(')[0]
@@ -375,7 +739,6 @@ export default function CompensationEstimatePage() {
                             arrival: directFlight?.selectedFlight?.arrival,
                           };
 
-                          // Extract city name from dropdown label (e.g. "Munich International Airport (MUC)" -> "Munich")
                           const fullCityFromLabel = toCityData.dropdownLabel
                             ? toCityData.dropdownLabel
                                 .split('(')[0]
@@ -403,7 +766,6 @@ export default function CompensationEstimatePage() {
                       const toLocation = segment.toLocation as LocationData;
                       const selectedFlight = segment.selectedFlight;
 
-                      // Extract full city names with detailed logging
                       const departureCityData = {
                         selectedFlightCity: selectedFlight?.departureCity,
                         locationDesc: fromLocation?.description,
@@ -420,7 +782,6 @@ export default function CompensationEstimatePage() {
                         arrival: selectedFlight?.arrival,
                       };
 
-                      // Extract city name from dropdown label (e.g. "Berlin Brandenburg Airport (BER)" -> "Berlin")
                       const departureCityFromLabel =
                         departureCityData.dropdownLabel
                           ? departureCityData.dropdownLabel

@@ -45,6 +45,10 @@ export interface Flight {
   scheduledArrivalTime?: string;
   bookingReference?: string;
   connection?: string;
+  fromLocation?: Location | null;
+  toLocation?: Location | null;
+  dep_city?: string;
+  arr_city?: string;
 }
 
 export type FlightType = {

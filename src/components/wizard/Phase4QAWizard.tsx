@@ -13,6 +13,7 @@ import { Question } from '../../types/experience';
 import { QuestionAnswer } from '../shared/QuestionAnswer';
 import type { Flight } from '../../types/store';
 import { usePhase4Store } from '@/lib/state/phase4Store';
+import { useFlightStore } from '@/lib/state/flightStore';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
 import { qaWizardConfig } from '@/config/qaWizard';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -129,6 +130,26 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
   // Handle selection of an answer
   const handleSelect = useCallback(
     (questionId: string, value: string | number | boolean) => {
+      console.log('=== Phase4QAWizard - handleSelect ENTRY ===', {
+        questionId,
+        value,
+        currentSelectedFlights: phase4Store.selectedFlights.map((f) => ({
+          id: f.id,
+          flightNumber: f.flightNumber,
+          date: f.date,
+          departureCity: f.departureCity,
+          arrivalCity: f.arrivalCity,
+        })),
+        originalFlights: useFlightStore.getState().originalFlights.map((f) => ({
+          id: f.id,
+          flightNumber: f.flightNumber,
+          date: f.date,
+          departureCity: f.departureCity,
+          arrivalCity: f.arrivalCity,
+        })),
+        timestamp: new Date().toISOString(),
+      });
+
       // Special handling for informed date questions
       if (
         questionId === 'informed_date' ||
@@ -151,7 +172,36 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
           travelStatusStepInteraction: phase4Store.travelStatusStepInteraction,
           _lastUpdate: Date.now(),
         });
+
+        console.log(
+          '=== Phase4QAWizard - handleSelect (Informed Date) EXIT ===',
+          {
+            questionId,
+            value,
+            timestamp: new Date().toISOString(),
+          }
+        );
         return;
+      }
+
+      // For travel status changes, log the state
+      if (questionId === 'travel_status') {
+        console.log('=== Phase4QAWizard - Travel Status Change ===', {
+          oldStatus: phase4Store.travelStatusAnswers.find(
+            (a) => a.questionId === 'travel_status'
+          )?.value,
+          newStatus: value,
+          requiresAlternativeFlights:
+            value === 'provided' || value === 'took_alternative_own',
+          currentSelectedFlights: phase4Store.selectedFlights.map((f) => ({
+            id: f.id,
+            flightNumber: f.flightNumber,
+            date: f.date,
+            departureCity: f.departureCity,
+            arrivalCity: f.arrivalCity,
+          })),
+          timestamp: new Date().toISOString(),
+        });
       }
 
       // For other answers, proceed with normal handling
@@ -159,6 +209,19 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
         questionId,
         value,
         shouldValidate: false,
+      });
+
+      console.log('=== Phase4QAWizard - handleSelect EXIT ===', {
+        questionId,
+        value,
+        currentSelectedFlights: phase4Store.selectedFlights.map((f) => ({
+          id: f.id,
+          flightNumber: f.flightNumber,
+          date: f.date,
+          departureCity: f.departureCity,
+          arrivalCity: f.arrivalCity,
+        })),
+        timestamp: new Date().toISOString(),
       });
     },
     [phase4Store]
@@ -300,6 +363,7 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
 
     // Preserve existing flight type or default to 'direct'
     const currentFlightType = phase4Store.selectedType || 'direct';
+    const currentSelectedFlights = phase4Store.selectedFlights;
 
     // Reset state based on wizard type and ensure UI cleanup
     if (wizardType === 'travel_status') {
@@ -311,19 +375,9 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
         travelStatusStepValidation: {},
         travelStatusStepInteraction: {},
         lastAnsweredQuestion: null,
-        selectedFlights: [],
-        selectedFlight: undefined,
-        flightSegments: [],
-        fromLocation: undefined,
-        toLocation: undefined,
-        selectedDate: undefined,
         selectedType: currentFlightType,
-        directFlight: {
-          fromLocation: null,
-          toLocation: null,
-          date: null,
-          selectedFlight: null,
-        },
+        // Preserve selected flights and related data
+        selectedFlights: currentSelectedFlights,
         _lastUpdate: Date.now(),
       });
     } else {
@@ -335,19 +389,9 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
         informedDateStepValidation: {},
         informedDateStepInteraction: {},
         lastAnsweredQuestion: null,
-        selectedFlights: [],
-        selectedFlight: undefined,
-        flightSegments: [],
-        fromLocation: undefined,
-        toLocation: undefined,
-        selectedDate: undefined,
         selectedType: currentFlightType,
-        directFlight: {
-          fromLocation: null,
-          toLocation: null,
-          date: null,
-          selectedFlight: null,
-        },
+        // Preserve selected flights and related data
+        selectedFlights: currentSelectedFlights,
         _lastUpdate: Date.now(),
       });
     }
@@ -368,7 +412,7 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
         },
       },
     });
-  }, [phase4Store, wizardType, currentStep, setCurrentStep]);
+  }, [currentStep, phase4Store, wizardType]);
 
   // Get success state
   const successState = useMemo(() => {
@@ -518,7 +562,6 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
                 onSelect={handleSelect}
                 currentStep={currentStep + 1}
                 totalSteps={visibleQuestions.length}
-                initialSelectedFlight={selectedFlight}
               />
               <div className="flex justify-between mt-6">
                 <div>

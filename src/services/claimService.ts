@@ -54,6 +54,7 @@ export interface OrderClaimResponse {
     recommendation_guid: string;
   };
   message?: string;
+  error?: string;
 }
 
 export class ClaimService {
@@ -106,14 +107,10 @@ export class ClaimService {
       originalFlights: originalFlights.map((f) => ({
         id: f.id,
         flightNumber: f.flightNumber,
-        departureCity: f.departureCity,
-        arrivalCity: f.arrivalCity,
       })),
       selectedFlights: selectedFlights.map((f) => ({
         id: f.id,
         flightNumber: f.flightNumber,
-        departureCity: f.departureCity,
-        arrivalCity: f.arrivalCity,
       })),
     });
 
@@ -122,34 +119,25 @@ export class ClaimService {
       (a) => a.questionId === 'travel_status'
     )?.value;
 
+    // Ensure all flights have valid IDs and flight numbers
+    const validOriginalFlights = originalFlights.filter(
+      (f): f is Flight => f !== null && Boolean(f.id) && Boolean(f.flightNumber)
+    );
+
+    const validSelectedFlights = selectedFlights.filter(
+      (f): f is Flight => f !== null && Boolean(f.id) && Boolean(f.flightNumber)
+    );
+
     // For multi-city trips, we need to include all booked flights
-    const journey_booked_flightids = selectedFlights
-      .filter(
-        (f): f is Flight =>
-          f !== null && (typeof f.id === 'string' || typeof f.id === 'number')
-      )
-      .map((f) => String(f.id));
+    const journey_booked_flightids = validOriginalFlights.map((f) =>
+      String(f.id)
+    );
 
     // For multi-city trips, ensure we maintain the correct order of flight IDs
     const journey_fact_flightids =
       journeyFactType === 'provided'
-        ? selectedFlights
-            .filter(
-              (f): f is Flight =>
-                f !== null &&
-                (typeof f.id === 'string' || typeof f.id === 'number')
-            )
-            .map((f) => String(f.id))
+        ? validSelectedFlights.map((f) => String(f.id))
         : [];
-
-    // Validate that we have all required flight IDs
-    if (journey_booked_flightids.length === 0) {
-      throw new Error('No valid flight IDs found in selected flights');
-    }
-
-    if (journeyFactType === 'provided' && journey_fact_flightids.length === 0) {
-      throw new Error('No valid flight IDs found in selected flights');
-    }
 
     // Log the request details for debugging
     console.log('=== Building Evaluate Request - Output ===', {
@@ -157,7 +145,26 @@ export class ClaimService {
       journey_fact_flightids,
       journeyFactType,
       travelStatus,
+      validOriginalFlights: validOriginalFlights.map((f) => f.flightNumber),
+      validSelectedFlights: validSelectedFlights.map((f) => f.flightNumber),
     });
+
+    // Validate that we have all required flight IDs
+    if (journey_booked_flightids.length === 0) {
+      console.error(
+        'No valid flight IDs found in original flights',
+        originalFlights
+      );
+      throw new Error('No valid flight IDs found in original flights');
+    }
+
+    if (journeyFactType === 'provided' && journey_fact_flightids.length === 0) {
+      console.error(
+        'No valid flight IDs found in selected flights',
+        selectedFlights
+      );
+      throw new Error('No valid flight IDs found in selected flights');
+    }
 
     return {
       journey_booked_flightids,
@@ -170,6 +177,7 @@ export class ClaimService {
   }
 
   private static lastEvaluateResponse: EvaluateClaimResponse | null = null;
+  private static lastPersonalDetails: PassengerDetails | null = null;
 
   private static getStoredEvaluationResponse(): EvaluateClaimResponse | null {
     const stored = sessionStorage.getItem('claim_evaluation_response');
@@ -185,7 +193,7 @@ export class ClaimService {
     }
   }
 
-  private static setStoredEvaluationResponse(
+  public static setStoredEvaluationResponse(
     response: EvaluateClaimResponse
   ): void {
     console.log('Storing evaluation response:', response);
@@ -211,6 +219,37 @@ export class ClaimService {
     return response;
   }
 
+  private static getStoredPersonalDetails(): PassengerDetails | null {
+    const stored = sessionStorage.getItem('claim_personal_details');
+    console.log('Getting stored personal details:', stored);
+    if (!stored) return null;
+    try {
+      const details = JSON.parse(stored) as PassengerDetails;
+      console.log('Successfully parsed stored personal details:', details);
+      return details;
+    } catch (error) {
+      console.error('Error parsing stored personal details:', error);
+      return null;
+    }
+  }
+
+  public static setStoredPersonalDetails(details: PassengerDetails): void {
+    console.log('Storing personal details:', details);
+    sessionStorage.setItem('claim_personal_details', JSON.stringify(details));
+    this.lastPersonalDetails = details;
+  }
+
+  public static getLastPersonalDetails(): PassengerDetails {
+    console.log('Getting last personal details...');
+    console.log('In-memory details:', this.lastPersonalDetails);
+    const details = this.lastPersonalDetails || this.getStoredPersonalDetails();
+    console.log('Final details:', details);
+    if (!details) {
+      throw new Error('No personal details available');
+    }
+    return details;
+  }
+
   private static buildOrderRequest(
     originalFlights: Flight[],
     selectedFlights: Flight[],
@@ -223,44 +262,39 @@ export class ClaimService {
     privacyAccepted: boolean,
     marketingAccepted: boolean
   ): OrderClaimRequest {
-    // Log input data for debugging
-    console.log('=== Building Order Request - Input ===', {
-      originalFlights: originalFlights.map((f) => ({
-        id: f.id,
-        flightNumber: f.flightNumber,
-        departureCity: f.departureCity,
-        arrivalCity: f.arrivalCity,
-      })),
-      selectedFlights: selectedFlights.map((f) => ({
-        id: f.id,
-        flightNumber: f.flightNumber,
-        departureCity: f.departureCity,
-        arrivalCity: f.arrivalCity,
-      })),
-    });
+    // Get the stored evaluation response
+    const evaluationResponse = this.getLastEvaluationResponse();
+    if (!evaluationResponse) {
+      throw new Error('No evaluation response available');
+    }
 
-    // Use the stored evaluation response
-    const evaluateResponse = this.getLastEvaluationResponse();
-
-    // Log the flight IDs being used
-    console.log(
-      '=== Building Order Request - Using Flight IDs from Evaluation ===',
-      {
-        journey_booked_flightids: evaluateResponse.journey_booked_flightids,
-        journey_fact_flightids: evaluateResponse.journey_fact_flightids,
-        journey_fact_type: evaluateResponse.journey_fact_type,
-        travel_status: evaluateResponse.travel_status,
+    // Try to get booking number from phase 3 state if not provided
+    let finalBookingNumber = bookingNumber;
+    try {
+      if (!finalBookingNumber) {
+        const phase3State = localStorage.getItem('phase3State');
+        if (phase3State) {
+          const parsedState = JSON.parse(phase3State);
+          finalBookingNumber = parsedState.bookingNumber;
+        }
       }
-    );
+    } catch (error) {
+      console.error('Error getting booking number from phase 3 state:', error);
+    }
 
-    // Build the order request using the stored evaluation response
+    if (!finalBookingNumber) {
+      throw new Error('No booking number available');
+    }
+
+    // Build the order request with only required fields
     return {
-      journey_booked_flightids: evaluateResponse.journey_booked_flightids,
-      journey_fact_flightids: evaluateResponse.journey_fact_flightids,
-      journey_fact_type: evaluateResponse.journey_fact_type,
-      travel_status: evaluateResponse.travel_status,
-      information_received_at: evaluateResponse.information_received_at,
-      journey_booked_pnr: bookingNumber,
+      journey_booked_flightids: evaluationResponse.journey_booked_flightids,
+      journey_fact_flightids: evaluationResponse.journey_fact_flightids,
+      information_received_at: evaluationResponse.information_received_at,
+      journey_booked_pnr: finalBookingNumber,
+      journey_fact_type: evaluationResponse.journey_fact_type,
+      guid: evaluationResponse.guid,
+      recommendation_guid: evaluationResponse.recommendation_guid,
       owner_salutation: this.mapSalutationToBackend(personalDetails.salutation),
       owner_firstname: personalDetails.firstName,
       owner_lastname: personalDetails.lastName,

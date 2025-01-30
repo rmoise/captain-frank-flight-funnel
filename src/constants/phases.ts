@@ -29,8 +29,13 @@ export const PHASES = (t: Translations): Phase[] => [
   },
   {
     id: 5,
-    name: t.phases.names.agreement,
+    name: t.phases.names.claimStatus,
     steps: [9],
+  },
+  {
+    id: 6,
+    name: t.phases.names.agreement,
+    steps: [10],
   },
 ];
 

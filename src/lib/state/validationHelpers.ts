@@ -17,12 +17,32 @@ export const validateFlightSelection = (
     return state.isFlightValid;
   }
 
+  console.log('=== Validating Flight Selection ===', {
+    selectedType,
+    currentPhase,
+    segmentCount: flightSegments.length,
+  });
+
   const isLocationValid = (loc: LocationLike | null | string): boolean => {
+    // During initialization in phase 3, be more lenient
+    if (currentPhase === 3 && !loc) {
+      return true;
+    }
     if (!loc) return false;
     if (typeof loc === 'string') {
       return loc.trim().length === 3;
     }
     return typeof loc.value === 'string' && loc.value.trim().length === 3;
+  };
+
+  // Helper function to normalize city names
+  const normalizeCity = (city: string): string => {
+    if (!city) return '';
+    return city
+      .toLowerCase()
+      .replace(/\s*\([^)]*\)/g, '') // Remove airport codes in parentheses
+      .replace(/\s+/g, ' ') // Normalize whitespace
+      .trim();
   };
 
   // Base validation for all phases
@@ -33,8 +53,8 @@ export const validateFlightSelection = (
     const toLocationValid = isLocationValid(state.directFlight.toLocation);
     const distinctLocations =
       fromLocationValid && toLocationValid
-        ? state.directFlight.fromLocation?.value !==
-          state.directFlight.toLocation?.value
+        ? normalizeCity(state.directFlight.fromLocation?.value || '') !==
+          normalizeCity(state.directFlight.toLocation?.value || '')
         : false;
 
     // Base validation (locations)
@@ -57,37 +77,8 @@ export const validateFlightSelection = (
         const distinct =
           fromValid &&
           toValid &&
-          segment.fromLocation?.value !== segment.toLocation?.value;
-
-        // Check connection with previous segment
-        if (index > 0) {
-          const prevSegment = flightSegments[index - 1];
-          if (!prevSegment.toLocation || !segment.fromLocation) return false;
-
-          // Check city connections
-          const prevCity = prevSegment.toLocation.value.toLowerCase();
-          const currentCity = segment.fromLocation.value.toLowerCase();
-          if (prevCity !== currentCity) return false;
-
-          // Check dates and times if in phase 3 or above
-          if (currentPhase >= 3) {
-            if (!prevSegment.selectedFlight || !segment.selectedFlight)
-              return false;
-
-            const prevArrivalTime = new Date(
-              `${prevSegment.selectedFlight.date}T${prevSegment.selectedFlight.arrivalTime}:00.000Z`
-            );
-            const currentDepartureTime = new Date(
-              `${segment.selectedFlight.date}T${segment.selectedFlight.departureTime}:00.000Z`
-            );
-
-            // Check if there's at least 30 minutes between flights
-            const timeDiff =
-              (currentDepartureTime.getTime() - prevArrivalTime.getTime()) /
-              60000;
-            if (timeDiff < 30) return false;
-          }
-        }
+          normalizeCity(segment.fromLocation?.value || '') !==
+            normalizeCity(segment.toLocation?.value || '');
 
         // Base validation (locations)
         let segmentValid = fromValid && toValid && distinct;
@@ -97,6 +88,80 @@ export const validateFlightSelection = (
           const hasDate = !!segment.date;
           const hasSelectedFlight = !!segment.selectedFlight;
           segmentValid = segmentValid && hasDate && hasSelectedFlight;
+
+          // Skip further validation if basic requirements not met
+          if (!segmentValid) {
+            console.log(`Segment ${index} missing required data in phase 3:`, {
+              hasDate,
+              hasSelectedFlight,
+              fromValid,
+              toValid,
+              distinct,
+            });
+            return false;
+          }
+        }
+
+        // Check connection with previous segment
+        if (index > 0) {
+          const prevSegment = flightSegments[index - 1];
+
+          // In phase 3, require both segments to have selected flights
+          if (
+            currentPhase >= 3 &&
+            (!prevSegment.selectedFlight || !segment.selectedFlight)
+          ) {
+            console.log(
+              `Segment ${index} or previous segment missing flight data in phase 3`
+            );
+            return false;
+          }
+
+          // Only check connections if both segments have flights
+          if (prevSegment.selectedFlight && segment.selectedFlight) {
+            // Check city connections using normalized city names
+            const prevCity = normalizeCity(
+              prevSegment.selectedFlight.arrivalCity || ''
+            );
+            const currentCity = normalizeCity(
+              segment.selectedFlight.departureCity || ''
+            );
+
+            if (prevCity !== currentCity) {
+              console.log('City connection validation failed:', {
+                prevCity,
+                currentCity,
+                prevFlight: prevSegment.selectedFlight,
+                currentFlight: segment.selectedFlight,
+                segmentIndex: index,
+              });
+              return false;
+            }
+
+            // Check dates and times if in phase 3 or above
+            if (currentPhase >= 3 && prevSegment.date && segment.date) {
+              const prevArrivalTime = new Date(
+                `${prevSegment.selectedFlight.date}T${prevSegment.selectedFlight.arrivalTime}:00.000Z`
+              );
+              const currentDepartureTime = new Date(
+                `${segment.selectedFlight.date}T${segment.selectedFlight.departureTime}:00.000Z`
+              );
+
+              // Check if there's at least 30 minutes between flights
+              const timeDiff =
+                (currentDepartureTime.getTime() - prevArrivalTime.getTime()) /
+                60000;
+              if (timeDiff < 30) {
+                console.log('Time difference validation failed:', {
+                  timeDiff,
+                  prevArrivalTime,
+                  currentDepartureTime,
+                  segmentIndex: index,
+                });
+                return false;
+              }
+            }
+          }
         }
 
         return segmentValid;
@@ -106,6 +171,32 @@ export const validateFlightSelection = (
   // Update last validation timestamp and cache result
   state._lastValidation = state._lastUpdate;
   state.isFlightValid = isValid;
+
+  // Set validation states for phase 3
+  if (currentPhase === 3) {
+    state.validationState = {
+      ...state.validationState,
+      isFlightValid: isValid,
+      3: isValid, // Only set phase 3 validation
+      stepValidation: {
+        ...state.validationState.stepValidation,
+        3: isValid, // Only set phase 3 step validation
+      },
+    };
+  }
+
+  console.log('=== Flight Selection Validation Result ===', {
+    isValid,
+    selectedType,
+    currentPhase,
+    segments: flightSegments.map((segment) => ({
+      from: segment.fromLocation?.value,
+      to: segment.toLocation?.value,
+      date: segment.date,
+      hasSelectedFlight: !!segment.selectedFlight,
+    })),
+  });
+
   return isValid;
 };
 

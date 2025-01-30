@@ -294,6 +294,7 @@ export const en: Translations = {
       tripExperience: 'Trip Experience',
       claimStatus: 'Claim Status',
       agreement: 'Agreement',
+      claimSuccess: 'Claim Success',
     },
     compensationEstimate: {
       title: 'Compensation Estimate',
