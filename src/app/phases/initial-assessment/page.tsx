@@ -113,6 +113,7 @@ export default function InitialAssessment() {
     completedPhases,
     wizardSuccessStates,
     batchUpdateWizardState,
+    setCurrentPhase,
   } = mainStore;
 
   const { autoTransition, activeAccordion } = useAccordion();
@@ -1200,32 +1201,175 @@ export default function InitialAssessment() {
   const steps = useMemo(() => createSteps(), [createSteps]);
 
   // Handle continue button click
-  const handleContinue = useCallback(async () => {
+  const handleContinue = async () => {
     if (isLoading) return;
     setIsLoading(true);
+
     try {
-      await completePhase(1);
-      router.push(getLanguageAwareUrl(PHASE_TO_URL[2], lang));
+      // Get latest state
+      const currentState = useStore.getState();
+
+      // Sync the state with the current flight data
+      const flightLocations = document.querySelector('[data-flight-locations]');
+      const fromLocationStr =
+        flightLocations?.getAttribute('data-from-location');
+      const toLocationStr = flightLocations?.getAttribute('data-to-location');
+
+      console.log('=== DOM Location Data ===', {
+        fromLocationStr,
+        toLocationStr,
+      });
+
+      // Parse location data
+      let fromLocation = null;
+      let toLocation = null;
+      try {
+        if (fromLocationStr) fromLocation = JSON.parse(fromLocationStr);
+        if (toLocationStr) toLocation = JSON.parse(toLocationStr);
+      } catch (error) {
+        console.error('Failed to parse location data:', error);
+        return;
+      }
+
+      // Update the store with the latest flight data
+      if (fromLocation && toLocation) {
+        useStore.setState({
+          fromLocation: fromLocationStr,
+          toLocation: toLocationStr,
+          directFlight: {
+            ...currentState.directFlight,
+            fromLocation,
+            toLocation,
+          },
+        });
+      }
+
+      // Get the updated state
+      const updatedState = useStore.getState();
+      console.log('=== Starting Phase Transition ===', {
+        selectedType: updatedState.selectedType,
+        directFlight: updatedState.directFlight,
+        selectedFlights: updatedState.selectedFlights?.length || 0,
+        flightSegments: updatedState.flightSegments?.length || 0,
+        validationState: updatedState.validationState,
+      });
+
+      // Log initial state before any processing
+      console.log('=== Initial State Before Processing ===', {
+        selectedType: updatedState.selectedType,
+        fromLocation: updatedState.fromLocation,
+        toLocation: updatedState.toLocation,
+        directFlight: updatedState.directFlight,
+        flightSegments: updatedState.flightSegments,
+      });
+
+      // Phase 2 validation - check for parsed location data
+      const isValid =
+        updatedState.selectedType === 'multi'
+          ? updatedState.flightSegments.length >= 2 &&
+            updatedState.flightSegments.every(
+              (segment) => segment.fromLocation && segment.toLocation
+            )
+          : updatedState.selectedType === 'direct' &&
+            fromLocation?.value &&
+            toLocation?.value;
+
+      console.log('=== Phase Transition Validation ===', {
+        isValid,
+        selectedType: updatedState.selectedType,
+        fromLocation: fromLocation?.value,
+        toLocation: toLocation?.value,
+        flightSegmentsCount: updatedState.flightSegments?.length,
+      });
+
+      if (!isValid) {
+        console.error('Invalid flight data state during transition');
+        return;
+      }
+
+      // Step 1: Prepare complete state data
+      const completeStateData = {
+        selectedType: updatedState.selectedType,
+        flightSegments:
+          updatedState.flightSegments?.map((segment) => ({
+            fromLocation: segment.fromLocation,
+            toLocation: segment.toLocation,
+            date: segment.date,
+            selectedFlight: segment.selectedFlight,
+          })) || [],
+        directFlight: updatedState.directFlight
+          ? {
+              fromLocation: updatedState.fromLocation,
+              toLocation: updatedState.toLocation,
+              date: updatedState.directFlight.date,
+              selectedFlight: updatedState.directFlight.selectedFlight,
+            }
+          : null,
+        fromLocation: updatedState.fromLocation,
+        toLocation: updatedState.toLocation,
+        validationState: updatedState.validationState,
+      };
+
+      console.log('=== Complete State Data Before Save ===', {
+        completeStateData,
+        fromLocation: updatedState.fromLocation,
+        toLocation: updatedState.toLocation,
+      });
+
+      // Save state to localStorage
+      try {
+        localStorage.setItem(
+          'flightSelectionState',
+          JSON.stringify(completeStateData)
+        );
+        console.log('Successfully saved state to localStorage');
+      } catch (error) {
+        console.error('Failed to save state to localStorage:', error);
+        return;
+      }
+
+      // Proceed with phase transition
+      console.log('=== Proceeding with phase transition ===');
+
+      // Transition to next phase
+      setCurrentPhase(2);
+      router.push('/phases/compensation-estimate');
     } catch (error) {
-      console.error('Error in handleContinue:', error);
+      console.error('Error during phase transition:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [completePhase, router, isLoading, lang]);
+  };
 
   const renderStepContent = (step: Step) => {
     if (step.component === ModularFlightSelector) {
       const props = step.props as FlightSelectorProps;
+      const currentState = useStore.getState();
+      const fromLocationData =
+        currentState.directFlight?.fromLocation || currentState.fromLocation;
+      const toLocationData =
+        currentState.directFlight?.toLocation || currentState.toLocation;
+
       return (
-        <ModularFlightSelector
-          onSelect={props.onSelect}
-          onInteract={props.onInteract}
-          showFlightSearch={props.showFlightSearch}
-          showFlightDetails={props.showFlightDetails}
-          currentPhase={props.currentPhase}
-          stepNumber={props.stepNumber}
-          setValidationState={props.setValidationState}
-        />
+        <div
+          data-flight-locations
+          data-from-location={
+            fromLocationData ? JSON.stringify(fromLocationData) : null
+          }
+          data-to-location={
+            toLocationData ? JSON.stringify(toLocationData) : null
+          }
+        >
+          <ModularFlightSelector
+            onSelect={props.onSelect}
+            onInteract={props.onInteract}
+            showFlightSearch={props.showFlightSearch}
+            showFlightDetails={props.showFlightDetails}
+            currentPhase={props.currentPhase}
+            stepNumber={props.stepNumber}
+            setValidationState={props.setValidationState}
+          />
+        </div>
       );
     }
     if (step.component === QAWizardWrapper) {
