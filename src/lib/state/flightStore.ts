@@ -6,16 +6,19 @@ interface FlightStore {
   // Core flight data
   originalFlights: Flight[];
   selectedFlights: Flight[];
+  selectedDate: string | null;
 
   // Actions
   setOriginalFlights: (flights: Flight[]) => void;
   setSelectedFlights: (flights: Flight[]) => void;
+  setSelectedDate: (date: string | null) => void;
   resetFlights: () => void;
 }
 
 interface FlightState {
   originalFlights: Flight[];
   selectedFlights: Flight[];
+  selectedDate: string | null;
 }
 
 const STORAGE_KEY = 'flight-store';
@@ -23,6 +26,7 @@ const STORAGE_KEY = 'flight-store';
 const initialState: FlightState = {
   originalFlights: [],
   selectedFlights: [],
+  selectedDate: null,
 };
 
 export const useFlightStore = create<FlightStore>()(
@@ -64,20 +68,69 @@ export const useFlightStore = create<FlightStore>()(
           timestamp: new Date().toISOString(),
         });
 
+        // Store complete flight data in localStorage
         if (typeof window !== 'undefined') {
+          // Get the current date from the first flight if available
+          const date = flights[0]?.date || null;
+
+          // Determine flight type based on number of flights
+          const flightType = flights.length > 1 ? 'multi' : 'direct';
+
+          // Update localStorage with flight selection state
           localStorage.setItem(
             'flightSelectionState',
             JSON.stringify({
-              selectedFlights: flights,
+              selectedFlights: flights.map((flight) => ({
+                ...flight,
+                date: flight.date || date || '', // Ensure date is never null
+              })),
+              selectedDate: date,
+              selectedType: flightType, // Save the flight type
               timestamp: Date.now(),
               isExplicitSelection: true,
+            })
+          );
+
+          // Update both the flights and date in the store
+          set((state) => ({
+            ...state,
+            selectedFlights: flights.map((flight) => ({
+              ...flight,
+              date: flight.date || date || '', // Ensure date is never null
+            })) as Flight[],
+            selectedDate: date,
+          }));
+        } else {
+          set((state) => ({
+            ...state,
+            selectedFlights: flights,
+          }));
+        }
+      },
+
+      setSelectedDate: (date: string | null) => {
+        console.log('=== FlightStore - setSelectedDate ===', {
+          date,
+          timestamp: new Date().toISOString(),
+        });
+
+        if (typeof window !== 'undefined') {
+          const currentState = JSON.parse(
+            localStorage.getItem('flightSelectionState') || '{}'
+          );
+          localStorage.setItem(
+            'flightSelectionState',
+            JSON.stringify({
+              ...currentState,
+              selectedDate: date,
+              timestamp: Date.now(),
             })
           );
         }
 
         set((state) => ({
           ...state,
-          selectedFlights: flights,
+          selectedDate: date,
         }));
       },
 
@@ -89,6 +142,29 @@ export const useFlightStore = create<FlightStore>()(
           localStorage.removeItem('flightSelectionState');
         }
         set(initialState);
+      },
+
+      onRehydrateStorage: () => (state: FlightStore | undefined) => {
+        // Get stored flight selection state
+        const flightSelectionState = JSON.parse(
+          localStorage.getItem('flightSelectionState') || '{}'
+        );
+
+        console.log('=== FlightStore - Rehydrated ===', {
+          originalFlights: state?.originalFlights?.length || 0,
+          selectedFlights: state?.selectedFlights?.length || 0,
+          selectedDate: state?.selectedDate,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Return updated state if needed
+        if (state) {
+          return {
+            ...state,
+            selectedFlights: flightSelectionState.selectedFlights || [],
+            selectedDate: flightSelectionState.selectedDate || null,
+          };
+        }
       },
     }),
     {
@@ -106,30 +182,9 @@ export const useFlightStore = create<FlightStore>()(
       partialize: (state) => ({
         originalFlights: state.originalFlights,
         selectedFlights: state.selectedFlights,
+        selectedDate: state.selectedDate,
       }),
       version: 1,
-      onRehydrateStorage: () => (state) => {
-        if (state) {
-          const selectionState = localStorage.getItem('flightSelectionState');
-          if (selectionState) {
-            try {
-              const { selectedFlights, isExplicitSelection } =
-                JSON.parse(selectionState);
-              if (isExplicitSelection) {
-                state.selectedFlights = selectedFlights;
-              }
-            } catch (error) {
-              console.error('Error parsing flight selection state:', error);
-            }
-          }
-
-          console.log('=== FlightStore - Rehydrated ===', {
-            originalFlights: state.originalFlights?.length || 0,
-            selectedFlights: state.selectedFlights?.length || 0,
-            timestamp: new Date().toISOString(),
-          });
-        }
-      },
     }
   )
 );

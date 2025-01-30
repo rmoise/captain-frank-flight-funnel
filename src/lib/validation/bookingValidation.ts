@@ -1,12 +1,30 @@
 import type { ValidationResult } from '@/types/validation';
 
 export const validateBookingNumber = (
-  bookingNumber: string
+  bookingNumber: string | undefined | null
 ): ValidationResult => {
   const errors: string[] = [];
 
+  // Handle empty/undefined values
+  if (!bookingNumber) {
+    errors.push('Booking number is required');
+    return {
+      isValid: false,
+      errors,
+    };
+  }
+
   // Trim the booking number
   const trimmedBookingNumber = bookingNumber.trim();
+
+  // Check if empty after trimming
+  if (trimmedBookingNumber.length === 0) {
+    errors.push('Booking number is required');
+    return {
+      isValid: false,
+      errors,
+    };
+  }
 
   // Check minimum length
   if (trimmedBookingNumber.length < 6) {

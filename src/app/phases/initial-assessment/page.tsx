@@ -12,7 +12,7 @@ import { SpeechBubble } from '@/components/SpeechBubble';
 import type { Question } from '@/types/experience';
 import { useRouter } from 'next/navigation';
 import { pushToDataLayer } from '@/utils/gtm';
-import { useStore, PHASE_TO_URL, getLanguageAwareUrl } from '@/lib/state/store';
+import { useStore } from '@/lib/state/store';
 import type { StoreStateValues, ValidationStateSteps } from '@/lib/state/store';
 import { PhaseNavigation } from '@/components/PhaseNavigation';
 import { ContinueButton } from '@/components/shared/ContinueButton';
@@ -22,7 +22,6 @@ import { useAccordion } from '@/components/shared/AccordionContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import type { FlightSelectorProps } from '@/components/booking/ModularFlightSelector/types';
 import { useFlightStore } from '@/lib/state/flightStore';
-import { validateTerms } from '@/lib/validation/termsValidation';
 
 interface LocationData {
   value: string;
@@ -72,7 +71,7 @@ type Step = {
 };
 
 export default function InitialAssessment() {
-  const { t, lang } = useTranslation();
+  const { t } = useTranslation();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -102,16 +101,13 @@ export default function InitialAssessment() {
     setPrivacyAccepted,
     setMarketingAccepted,
     setSelectedFlights,
-    completePhase,
     markWizardComplete,
-    validateQAWizard,
     isStepValid,
     canProceedToNextPhase,
     completedSteps,
     updateValidationState,
     currentPhase,
     completedPhases,
-    wizardSuccessStates,
     batchUpdateWizardState,
     setCurrentPhase,
   } = mainStore;
@@ -120,33 +116,37 @@ export default function InitialAssessment() {
 
   const handleAutoTransition = useCallback(
     (currentStepId: string): string | null => {
-      console.log('InitialAssessment - handleAutoTransition:', {
-        currentStepId,
-        currentStepNumber: parseInt(currentStepId),
-        isCurrentStepValid: isStepValid(
-          parseInt(currentStepId) as ValidationStateSteps
-        ),
-        isStep3Valid: isStepValid(3),
-        validationState,
+      const currentStepNumber = parseInt(currentStepId) as ValidationStateSteps;
+
+      // Check if the step is valid and has been interacted with
+      const isCurrentStepValid =
+        validationState.stepValidation[currentStepNumber];
+      const hasInteracted = validationState.stepInteraction[currentStepNumber];
+
+      console.log('=== Step Validation Check ===', {
+        currentStep: currentStepNumber,
+        isValid: isCurrentStepValid,
+        hasInteracted,
+        validationState: validationState.stepValidation,
+        timestamp: new Date().toISOString(),
       });
 
-      // Only proceed if current step is valid
-      if (!isStepValid(parseInt(currentStepId) as ValidationStateSteps)) {
-        console.log('Current step not valid, skipping transition');
-        return null;
+      // Only transition if the step is valid and has been interacted with
+      if (isCurrentStepValid && hasInteracted) {
+        const nextStepNumber = currentStepNumber + 1;
+        if (nextStepNumber <= 4) {
+          console.log('=== Auto Transitioning to Step ===', {
+            from: currentStepNumber,
+            to: nextStepNumber,
+            timestamp: new Date().toISOString(),
+          });
+          return nextStepNumber.toString();
+        }
       }
 
-      // Return next step if current step is valid
-      const nextStepNumber = parseInt(currentStepId) + 1;
-      if (nextStepNumber <= 4) {
-        console.log('Transitioning to next step:', nextStepNumber);
-        return nextStepNumber.toString();
-      }
-
-      console.log('No next step available');
       return null;
     },
-    [isStepValid, validationState]
+    [validationState]
   );
 
   // Update flight selection handler
@@ -160,7 +160,6 @@ export default function InitialAssessment() {
       const flights = Array.isArray(flight) ? flight : [flight];
       setSelectedFlights(flights);
 
-      // Update the store with flight locations
       if (flights.length > 0) {
         const firstFlight = flights[0];
         const fromLocation = {
@@ -192,44 +191,15 @@ export default function InitialAssessment() {
             date: new Date(firstFlight.date),
             selectedFlight: firstFlight,
           };
-          console.log('=== Setting Direct Flight Data ===', {
-            directFlightData,
-            timestamp: new Date().toISOString(),
-          });
           mainStore.setDirectFlight(directFlightData);
-        } else {
-          mainStore.setSelectedType('multi');
-          const flightSegments = flights.map((f) => {
-            const segFromLocation = {
-              value: f.departureCity,
-              label: f.departureCity,
-              city: f.departureCity,
-              description: f.departureAirport || f.departureCity,
-              dropdownLabel: `${f.departureAirport || f.departureCity} (${f.departureCity})`,
-            };
-            const segToLocation = {
-              value: f.arrivalCity,
-              label: f.arrivalCity,
-              city: f.arrivalCity,
-              description: f.arrivalAirport || f.arrivalCity,
-              dropdownLabel: `${f.arrivalAirport || f.arrivalCity} (${f.arrivalCity})`,
-            };
-            return {
-              fromLocation: segFromLocation,
-              toLocation: segToLocation,
-              date: new Date(f.date),
-              selectedFlight: f,
-            };
-          });
-          console.log('=== Setting Flight Segments ===', {
-            flightSegments,
-            timestamp: new Date().toISOString(),
-          });
-          mainStore.setFlightSegments(flightSegments);
         }
 
-        // Force update validation state
+        // Force immediate re-render for summary update
+        setMounted((prev) => !prev);
+
+        // Update validation state for step 1
         updateValidationState({
+          ...validationState,
           stepValidation: {
             ...validationState.stepValidation,
             1: true,
@@ -241,49 +211,142 @@ export default function InitialAssessment() {
           isFlightValid: true,
           _timestamp: Date.now(),
         });
+
+        // After validation is updated, transition to next step
+        setTimeout(() => {
+          autoTransition('1', true, true);
+        }, 500);
       }
-
-      setInteractedSteps((prev) => [...new Set([...prev, 1])]);
-      setMounted((prev) => !prev);
-
-      console.log('=== handleFlightSelect END ===', {
-        selectedFlights: flights,
-        fromLocation: mainStore.fromLocation,
-        toLocation: mainStore.toLocation,
-        directFlight: mainStore.directFlight,
-        timestamp: new Date().toISOString(),
-      });
     },
     [
       setSelectedFlights,
-      setInteractedSteps,
       mainStore,
-      validationState,
       updateValidationState,
+      validationState,
+      autoTransition,
+      setMounted,
     ]
   );
 
-  // Add effect to update validation state when flight is selected
-  useEffect(() => {
-    if (selectedFlights.length > 0) {
-      console.log('=== Updating validation state after flight selection ===', {
-        selectedFlights,
-        timestamp: new Date().toISOString(),
-      });
+  // Handle QA wizard completion
+  const handleComplete = useCallback(
+    (answers: Answer[]) => {
+      setWizardAnswers(answers);
+      markWizardComplete('initial_assessment');
 
+      // Update validation state for step 2
       updateValidationState({
+        ...validationState,
         stepValidation: {
           ...validationState.stepValidation,
-          1: true,
+          2: true,
         },
         stepInteraction: {
           ...validationState.stepInteraction,
-          1: true,
+          2: true,
         },
+        isWizardValid: true,
         _timestamp: Date.now(),
       });
-    }
-  }, [selectedFlights, updateValidationState]);
+
+      // After validation is updated, transition to next step
+      setTimeout(() => {
+        const accordionContext = (window as any).__accordionContext;
+        if (accordionContext?.setActiveAccordion) {
+          accordionContext.setActiveAccordion('3');
+        }
+      }, 500);
+    },
+    [
+      setWizardAnswers,
+      markWizardComplete,
+      updateValidationState,
+      validationState,
+    ]
+  );
+
+  // Handle personal details completion
+  const handlePersonalDetailsComplete = useCallback(
+    (details: PassengerDetails) => {
+      if (!details) return;
+
+      setPersonalDetails(details);
+
+      // Update validation state for step 3
+      updateValidationState({
+        ...validationState,
+        stepValidation: {
+          ...validationState.stepValidation,
+          3: true,
+        },
+        stepInteraction: {
+          ...validationState.stepInteraction,
+          3: true,
+        },
+        isPersonalValid: true,
+        _timestamp: Date.now(),
+      });
+
+      // After validation is updated, transition to next step
+      setTimeout(() => {
+        const accordionContext = (window as any).__accordionContext;
+        if (accordionContext?.setActiveAccordion) {
+          accordionContext.setActiveAccordion('4');
+        }
+      }, 500);
+    },
+    [setPersonalDetails, updateValidationState, validationState]
+  );
+
+  // Handle terms acceptance
+  const handleTermsChange = useCallback(
+    (field: string) => (checked: boolean) => {
+      let newTermsAccepted = termsAccepted;
+      let newPrivacyAccepted = privacyAccepted;
+
+      switch (field) {
+        case 'hasAcceptedTerms':
+          setTermsAccepted(checked);
+          newTermsAccepted = checked;
+          break;
+        case 'hasAcceptedPrivacy':
+          setPrivacyAccepted(checked);
+          newPrivacyAccepted = checked;
+          break;
+        case 'hasAcceptedMarketing':
+          setMarketingAccepted(checked);
+          break;
+      }
+
+      const validationResult = {
+        isValid: newTermsAccepted && newPrivacyAccepted,
+      };
+
+      // Update validation state for step 4
+      updateValidationState({
+        ...validationState,
+        stepValidation: {
+          ...validationState.stepValidation,
+          4: validationResult.isValid,
+        },
+        stepInteraction: {
+          ...validationState.stepInteraction,
+          4: true,
+        },
+        isTermsValid: validationResult.isValid,
+        _timestamp: Date.now(),
+      });
+    },
+    [
+      termsAccepted,
+      privacyAccepted,
+      setTermsAccepted,
+      setPrivacyAccepted,
+      setMarketingAccepted,
+      updateValidationState,
+      validationState,
+    ]
+  );
 
   // Save validation state and completed steps when they change
   useEffect(() => {
@@ -640,233 +703,9 @@ export default function InitialAssessment() {
     isStepValid,
   ]);
 
-  // QA Wizard completion handler
-  const handleComplete = useCallback(
-    (answers: Answer[]) => {
-      console.log('QA Wizard completed:', {
-        answers,
-        currentValidation: validationState.stepValidation,
-      });
-
-      // Get the last answer and its associated option to determine success message
-      const lastAnswer = answers[answers.length - 1];
-      const question = wizardQuestions.find(
-        (q) => q.id === lastAnswer?.questionId
-      );
-      const selectedOption = question?.options?.find(
-        (o) => o.value === lastAnswer?.value
-      );
-      const showConfetti = selectedOption?.showConfetti || false;
-
-      // Store the answers and mark as submitted
-      setWizardAnswers(answers);
-      markWizardComplete('initial_assessment');
-      validateQAWizard();
-      setInteractedSteps((prev) => [...new Set([...prev, 2])]);
-
-      // Update validation state and success message
-      batchUpdateWizardState({
-        wizardAnswers: answers,
-        validationState: {
-          ...validationState,
-          isWizardValid: true,
-          isWizardSubmitted: true,
-          stepValidation: {
-            ...validationState.stepValidation,
-            2: true,
-          },
-          stepInteraction: {
-            ...validationState.stepInteraction,
-            2: true,
-          },
-          2: true,
-          _timestamp: Date.now(),
-        },
-        wizardSuccessStates: {
-          ...wizardSuccessStates,
-          phase1: {
-            showing: true,
-            message: showConfetti
-              ? t.wizard.success.goodChance
-              : t.wizard.success.answersSaved,
-          },
-        },
-        _lastUpdate: Date.now(),
-      });
-
-      // Save the confetti state separately in localStorage
-      localStorage.setItem('qa1SuccessState', JSON.stringify({ showConfetti }));
-
-      // Force a transition after validation is updated
-      setTimeout(() => {
-        autoTransition('2', true, true);
-      }, 500);
-    },
-    [
-      setWizardAnswers,
-      markWizardComplete,
-      validateQAWizard,
-      wizardQuestions,
-      wizardSuccessStates,
-      batchUpdateWizardState,
-      autoTransition,
-      setInteractedSteps,
-      validationState,
-      t.wizard.success,
-    ]
-  );
-
-  // Add effect to restore success state on mount
-  useEffect(() => {
-    if (!mounted || isInitialized) return;
-
-    try {
-      const savedSuccessState = localStorage.getItem('qa1SuccessState');
-      if (savedSuccessState) {
-        const { showConfetti } = JSON.parse(savedSuccessState);
-        const currentSuccessState = mainStore.wizardSuccessStates?.phase1;
-
-        // Only update if the state is different
-        if (!currentSuccessState?.showing) {
-          batchUpdateWizardState({
-            wizardSuccessStates: {
-              ...wizardSuccessStates,
-              phase1: {
-                showing: true,
-                message: showConfetti
-                  ? t.wizard.success.goodChance
-                  : t.wizard.success.answersSaved,
-              },
-            },
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Error restoring QA1 success state:', error);
-    }
-  }, [mounted, isInitialized, mainStore.wizardSuccessStates?.phase1?.showing]);
-
   useEffect(() => {
     pushToDataLayer({ step_position: 1 });
   }, []);
-
-  const handlePersonalDetailsComplete = useCallback(
-    (details: PassengerDetails | null) => {
-      if (!details) return;
-
-      // Single update for validation state and personal details
-      updateValidationState({
-        ...validationState,
-        isPersonalValid: true,
-        stepValidation: {
-          ...validationState.stepValidation,
-          3: true,
-        },
-        stepInteraction: {
-          ...validationState.stepInteraction,
-          3: true,
-        },
-        3: true,
-        _timestamp: Date.now(),
-      });
-
-      // Set personal details
-      setPersonalDetails(details);
-
-      // Use requestAnimationFrame for transition
-      requestAnimationFrame(() => {
-        autoTransition('3', true, true);
-      });
-    },
-    [updateValidationState, setPersonalDetails, validationState, autoTransition]
-  );
-
-  const handleTermsChange = useCallback(
-    (
-      field: 'hasAcceptedTerms' | 'hasAcceptedPrivacy' | 'hasAcceptedMarketing'
-    ) =>
-      (checked: boolean) => {
-        let newTermsAccepted = termsAccepted;
-        let newPrivacyAccepted = privacyAccepted;
-
-        switch (field) {
-          case 'hasAcceptedTerms':
-            newTermsAccepted = checked;
-            setTermsAccepted(checked);
-            break;
-          case 'hasAcceptedPrivacy':
-            newPrivacyAccepted = checked;
-            setPrivacyAccepted(checked);
-            break;
-          case 'hasAcceptedMarketing':
-            setMarketingAccepted(checked);
-            break;
-        }
-
-        setInteractedSteps((prev) => [...new Set([...prev, 4])]);
-
-        // Use the new validation system
-        const validationResult = validateTerms(
-          newTermsAccepted && newPrivacyAccepted
-        );
-
-        // Create a consistent validation state update
-        const validationUpdate = {
-          ...validationState,
-          isTermsValid: validationResult.isValid,
-          stepValidation: {
-            ...validationState.stepValidation,
-            4: validationResult.isValid,
-          },
-          stepInteraction: {
-            ...validationState.stepInteraction,
-            4: true,
-          },
-          errors: validationResult.errors,
-          _timestamp: Date.now(),
-          4: validationResult.isValid,
-        };
-
-        // Update validation state
-        updateValidationState(validationUpdate);
-
-        // Save state to localStorage
-        const currentState = {
-          ...useStore.getState(),
-          validationState: validationUpdate,
-          _timestamp: Date.now(),
-        };
-
-        localStorage.setItem('phase1State', JSON.stringify(currentState));
-
-        // Log validation update for debugging
-        console.log('=== Terms Validation Update ===', {
-          field,
-          checked,
-          validationResult,
-          validationState: validationUpdate,
-          timestamp: new Date().toISOString(),
-        });
-
-        // Force a transition after validation is updated if valid
-        if (validationResult.isValid) {
-          setTimeout(() => {
-            autoTransition('4', true, false);
-          }, 100);
-        }
-      },
-    [
-      termsAccepted,
-      privacyAccepted,
-      setTermsAccepted,
-      setPrivacyAccepted,
-      setMarketingAccepted,
-      setInteractedSteps,
-      updateValidationState,
-      validationState,
-      autoTransition,
-    ]
-  );
 
   // Define steps configuration
   const createSteps = useCallback(() => {
@@ -953,36 +792,55 @@ export default function InitialAssessment() {
 
           // For direct flights
           if (state.selectedType === 'direct') {
-            // Try to get locations from store first
-            let fromLocation = state.fromLocation;
-            let toLocation = state.toLocation;
+            console.log('=== Direct flight locations ===', {
+              fromLocation: state.fromLocation,
+              toLocation: state.toLocation,
+              directFlight: state.directFlight,
+              timestamp: new Date().toISOString(),
+            });
 
-            // If not in store, try to get from directFlight
-            if ((!fromLocation || !toLocation) && state.directFlight) {
-              fromLocation = JSON.stringify(state.directFlight.fromLocation);
-              toLocation = JSON.stringify(state.directFlight.toLocation);
+            // Try to get locations from different sources
+            let fromLocation = state.directFlight?.fromLocation;
+            let toLocation = state.directFlight?.toLocation;
+
+            // If not in directFlight, try parsing from state
+            if (!fromLocation && state.fromLocation) {
+              try {
+                fromLocation =
+                  typeof state.fromLocation === 'string'
+                    ? JSON.parse(state.fromLocation)
+                    : state.fromLocation;
+              } catch (e) {
+                console.error('Failed to parse fromLocation:', e);
+              }
             }
 
-            console.log('=== Direct Flight Locations ===', {
+            if (!toLocation && state.toLocation) {
+              try {
+                toLocation =
+                  typeof state.toLocation === 'string'
+                    ? JSON.parse(state.toLocation)
+                    : state.toLocation;
+              } catch (e) {
+                console.error('Failed to parse toLocation:', e);
+              }
+            }
+
+            console.log('=== Parsed locations ===', {
               fromLocation,
               toLocation,
               timestamp: new Date().toISOString(),
             });
 
-            if (!fromLocation || !toLocation) {
-              console.log('=== Missing locations for direct flight ===');
-              return '';
-            }
-
-            const fromLabel = getLocationLabel(fromLocation);
-            const toLabel = getLocationLabel(toLocation);
+            const fromLabel = fromLocation?.label || fromLocation?.value;
+            const toLabel = toLocation?.label || toLocation?.value;
 
             if (!fromLabel || !toLabel) {
-              console.log('=== Failed to get location labels ===', {
-                fromLocation,
-                toLocation,
+              console.log('=== Missing location labels ===', {
                 fromLabel,
                 toLabel,
+                fromLocation,
+                toLocation,
                 timestamp: new Date().toISOString(),
               });
               return '';
@@ -1047,7 +905,7 @@ export default function InitialAssessment() {
           console.log('=== No valid flight configuration found ===');
           return '';
         },
-        shouldStayOpen: false,
+        shouldStayOpen: true,
         isOpenByDefault: isFirstVisit,
       },
       {
@@ -1085,7 +943,7 @@ export default function InitialAssessment() {
               )
             : '';
         },
-        shouldStayOpen: false,
+        shouldStayOpen: true,
         isOpenByDefault: false,
       },
       {
@@ -1125,7 +983,7 @@ export default function InitialAssessment() {
 
           return parts.join(' • ');
         },
-        shouldStayOpen: false,
+        shouldStayOpen: true,
         isOpenByDefault: false,
       },
       {
@@ -1173,7 +1031,7 @@ export default function InitialAssessment() {
           if (!state.termsAccepted || !state.privacyAccepted) return '';
           return t.phases.initialAssessment.summary.termsAccepted;
         },
-        shouldStayOpen: false,
+        shouldStayOpen: true,
         isOpenByDefault: false,
       },
     ];

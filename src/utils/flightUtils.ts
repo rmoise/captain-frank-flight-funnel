@@ -13,13 +13,85 @@ export function getConnectionTimeInfo(
   t: Translations
 ): ConnectionTimeInfo {
   try {
-    // Create dates using scheduled times
-    const prevArrivalTime = parseISO(
-      `${prevFlight.date}T${prevFlight.scheduledArrivalTime || prevFlight.arrivalTime}:00.000Z`
+    // Log raw input data
+    console.log('=== Connection Time Validation - Raw Input ===', {
+      prevFlight: {
+        date: prevFlight.date,
+        arrivalTime: prevFlight.arrivalTime,
+        flightNumber: prevFlight.flightNumber,
+      },
+      nextFlight: {
+        date: nextFlight.date,
+        departureTime: nextFlight.departureTime,
+        flightNumber: nextFlight.flightNumber,
+      },
+    });
+
+    // Parse arrival and departure times
+    const [prevArrHours, prevArrMinutes] = prevFlight.arrivalTime
+      .split(':')
+      .map(Number);
+    const [nextDepHours, nextDepMinutes] = nextFlight.departureTime
+      .split(':')
+      .map(Number);
+
+    // Create dates preserving the exact dates from the flights
+    const prevDate = parseISO(prevFlight.date);
+    const nextDate = parseISO(nextFlight.date);
+
+    // Create date objects in UTC to avoid timezone shifts
+    const prevArrivalTime = new Date(
+      Date.UTC(
+        prevDate.getFullYear(),
+        prevDate.getMonth(),
+        prevDate.getDate(),
+        prevArrHours,
+        prevArrMinutes,
+        0
+      )
     );
-    const nextDepartureTime = parseISO(
-      `${nextFlight.date}T${nextFlight.scheduledDepartureTime || nextFlight.departureTime}:00.000Z`
+
+    const nextDepartureTime = new Date(
+      Date.UTC(
+        nextDate.getFullYear(),
+        nextDate.getMonth(),
+        nextDate.getDate(),
+        nextDepHours,
+        nextDepMinutes,
+        0
+      )
     );
+
+    console.log('=== Connection Time Validation - Final Times ===', {
+      prevArrivalTime: prevArrivalTime.toISOString(),
+      nextDepartureTime: nextDepartureTime.toISOString(),
+      prevFlightNumber: prevFlight.flightNumber,
+      nextFlightNumber: nextFlight.flightNumber,
+      raw: {
+        prev: {
+          date: prevFlight.date,
+          time: prevFlight.arrivalTime,
+          components: {
+            year: prevDate.getFullYear(),
+            month: prevDate.getMonth() + 1,
+            day: prevDate.getDate(),
+            hours: prevArrHours,
+            minutes: prevArrMinutes,
+          },
+        },
+        next: {
+          date: nextFlight.date,
+          time: nextFlight.departureTime,
+          components: {
+            year: nextDate.getFullYear(),
+            month: nextDate.getMonth() + 1,
+            day: nextDate.getDate(),
+            hours: nextDepHours,
+            minutes: nextDepMinutes,
+          },
+        },
+      },
+    });
 
     // Calculate time difference in minutes
     const diffInMinutes = Math.floor(
@@ -29,6 +101,14 @@ export function getConnectionTimeInfo(
     // Format time difference
     const hours = Math.floor(Math.abs(diffInMinutes) / 60);
     const minutes = Math.abs(diffInMinutes) % 60;
+
+    console.log('=== Connection Time Validation - Time Difference ===', {
+      diffInMinutes,
+      hours,
+      minutes,
+      maxAllowed: 48 * 60,
+      isValid: diffInMinutes >= 30 && diffInMinutes <= 48 * 60,
+    });
 
     // Validate connection time
     if (diffInMinutes < 0) {

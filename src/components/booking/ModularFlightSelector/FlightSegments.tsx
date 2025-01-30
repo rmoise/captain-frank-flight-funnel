@@ -156,6 +156,16 @@ const transformRawFlight = (
 ): Flight | null => {
   if (!rawFlight.id) return null;
 
+  console.log('=== transformRawFlight - Input ===', {
+    rawFlight: {
+      id: rawFlight.id,
+      flightNumber: rawFlight.flightnumber_iata,
+      depTime: rawFlight.dep_time_sched,
+      arrTime: rawFlight.arr_time_sched,
+    },
+    formattedDate,
+  });
+
   const duration = calculateDuration(
     rawFlight.dep_time_sched,
     rawFlight.arr_time_sched
@@ -169,7 +179,8 @@ const transformRawFlight = (
   const departureCity = rawFlight.dep_city || rawFlight.dep_iata;
   const arrivalCity = rawFlight.arr_city || rawFlight.arr_iata;
 
-  return {
+  // Always use the search date (formattedDate) instead of any date from the API
+  const flight = {
     id: rawFlight.id.toString(), // Convert number to string
     flightNumber: rawFlight.flightnumber_iata,
     airline,
@@ -181,7 +192,7 @@ const transformRawFlight = (
     arrival: rawFlight.arr_iata,
     duration: duration || '0h 0m',
     stops: 0,
-    date: formattedDate,
+    date: formattedDate, // Use the search date
     price: 0,
     aircraft: rawFlight.aircraft_type || 'Unknown',
     class: 'economy',
@@ -198,6 +209,18 @@ const transformRawFlight = (
       : null,
     arrivalDelay: rawFlight.arr_delay_min,
   };
+
+  console.log('=== transformRawFlight - Output ===', {
+    flight: {
+      id: flight.id,
+      flightNumber: flight.flightNumber,
+      date: flight.date,
+      departureTime: flight.departureTime,
+      arrivalTime: flight.arrivalTime,
+    },
+  });
+
+  return flight;
 };
 
 // Helper function to validate flight object
@@ -1128,24 +1151,86 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
         if (index > 0) {
           const previousSegment = store.flightSegments[index - 1];
           if (previousSegment?.selectedFlight) {
-            const previousArrivalTime = parseISO(
-              `${previousSegment.selectedFlight.date}T${previousSegment.selectedFlight.arrivalTime}:00.000Z`
-            );
-
             // Filter flights that depart at least 30 minutes after previous flight arrives
             // and within 48 hours of the previous flight's arrival
             validFlights = validFlights.filter((flight: Flight) => {
-              const departureTime = parseISO(
-                `${flight.date}T${flight.departureTime}:00.000Z`
+              // Create UTC date objects for accurate time comparison
+              const prevFlight = previousSegment.selectedFlight;
+              if (!prevFlight) return false;
+
+              // Use the search date for both flights
+              const searchDate = parseISO(formattedDate);
+              const [prevHours, prevMinutes] = prevFlight.arrivalTime
+                .split(':')
+                .map(Number);
+              const previousArrivalTime = new Date(
+                Date.UTC(
+                  searchDate.getFullYear(),
+                  searchDate.getMonth(),
+                  searchDate.getDate(),
+                  prevHours,
+                  prevMinutes,
+                  0
+                )
               );
+
+              const [depHours, depMinutes] = flight.departureTime
+                .split(':')
+                .map(Number);
+              const departureTime = new Date(
+                Date.UTC(
+                  searchDate.getFullYear(),
+                  searchDate.getMonth(),
+                  searchDate.getDate(),
+                  depHours,
+                  depMinutes,
+                  0
+                )
+              );
+
+              // Handle overnight flights by adding 24 hours if departure is before arrival
+              if (departureTime < previousArrivalTime) {
+                departureTime.setUTCDate(departureTime.getUTCDate() + 1);
+              }
+
               const timeDiff =
                 departureTime.getTime() - previousArrivalTime.getTime();
               const timeDiffMinutes = timeDiff / 60000; // Convert to minutes
 
+              console.log('=== Flight Time Comparison ===', {
+                searchDate: formattedDate,
+                prevFlight: {
+                  date: prevFlight.date,
+                  time: prevFlight.arrivalTime,
+                  utc: previousArrivalTime.toISOString(),
+                  raw: {
+                    year: searchDate.getFullYear(),
+                    month: searchDate.getMonth() + 1,
+                    day: searchDate.getDate(),
+                    hours: prevHours,
+                    minutes: prevMinutes,
+                  },
+                },
+                nextFlight: {
+                  date: flight.date,
+                  time: flight.departureTime,
+                  utc: departureTime.toISOString(),
+                  raw: {
+                    year: searchDate.getFullYear(),
+                    month: searchDate.getMonth() + 1,
+                    day: searchDate.getDate(),
+                    hours: depHours,
+                    minutes: depMinutes,
+                  },
+                },
+                timeDiffMinutes,
+                isValid: timeDiffMinutes >= 30 && timeDiffMinutes <= 2880,
+              });
+
               // Allow flights that depart:
               // 1. At least 30 minutes after previous arrival
-              // 2. Within 48 hours of previous arrival
-              return timeDiffMinutes >= 30 && timeDiffMinutes <= 48 * 60;
+              // 2. Within 48 hours (2880 minutes) of previous arrival
+              return timeDiffMinutes >= 30 && timeDiffMinutes <= 2880;
             });
           }
         }
@@ -1395,6 +1480,7 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
                     onDelete={() => handleFlightDelete(0)}
                     isMultiCity={false}
                     showConnectionInfo={false}
+                    currentPhase={currentPhase}
                   />
                 )
               ) : (
@@ -1412,6 +1498,7 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
                             onDelete={() => handleFlightDelete(index)}
                             isMultiCity={true}
                             showConnectionInfo={index > 0}
+                            currentPhase={currentPhase}
                           />
                           {index < store.flightSegments.length - 1 && (
                             <div className="h-4 border-l-2 border-dashed border-gray-300 ml-6" />

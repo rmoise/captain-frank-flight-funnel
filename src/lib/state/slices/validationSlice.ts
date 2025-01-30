@@ -64,11 +64,11 @@ export interface ValidationStore extends StoreState {
 }
 
 export const initialValidationState: ValidationState = {
-  1: true,
-  2: true,
-  3: true,
-  4: true,
-  5: true,
+  1: false,
+  2: false,
+  3: false,
+  4: false,
+  5: false,
   isFlightValid: false,
   isWizardValid: false,
   isPersonalValid: false,
@@ -84,11 +84,11 @@ export const initialValidationState: ValidationState = {
     5: false,
   },
   stepInteraction: {
-    1: true,
-    2: true,
-    3: true,
-    4: true,
-    5: true,
+    1: false,
+    2: false,
+    3: false,
+    4: false,
+    5: false,
   },
   questionValidation: {},
   errors: {

@@ -1,4 +1,5 @@
 import type { Flight, LocationData } from '@/types/store';
+import { parseISO, isValid, parse } from 'date-fns';
 
 export interface FlightSegment {
   fromLocation: LocationData | null;
@@ -59,6 +60,43 @@ const hasCircularRoute = (segments: FlightSegment[]): boolean => {
   return cities.size !== segments.length;
 };
 
+// Helper function to parse date string in multiple formats
+const parseFlexibleDate = (dateStr: string): Date | null => {
+  try {
+    // Try YYYY-MM-DD format first
+    let date = parseISO(dateStr);
+    if (isValid(date)) {
+      // Create a UTC date at noon to avoid timezone issues
+      return new Date(
+        Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0)
+      );
+    }
+
+    // Try DD MMM YYYY format
+    date = parse(dateStr, 'dd MMM yyyy', new Date());
+    if (isValid(date)) {
+      // Create a UTC date at noon to avoid timezone issues
+      return new Date(
+        Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0)
+      );
+    }
+
+    // Try to parse from raw date string
+    date = new Date(dateStr);
+    if (isValid(date)) {
+      // Create a UTC date at noon to avoid timezone issues
+      return new Date(
+        Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0)
+      );
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error parsing date:', error);
+    return null;
+  }
+};
+
 // Validate connection between two flights
 export const validateFlightConnection = (
   prevFlight: Flight,
@@ -78,29 +116,135 @@ export const validateFlightConnection = (
 
   // For Phase 3+, validate connection times with improved messaging
   if (phase >= 3) {
-    const prevArrivalTime = new Date(
-      `${prevFlight.date}T${prevFlight.arrivalTime}:00.000Z`
-    );
-    const nextDepartureTime = new Date(
-      `${nextFlight.date}T${nextFlight.departureTime}:00.000Z`
-    );
+    console.log('=== validateFlightConnection - Raw Input ===', {
+      prevFlight: {
+        id: prevFlight.id,
+        flightNumber: prevFlight.flightNumber,
+        date: prevFlight.date,
+        arrivalTime: prevFlight.arrivalTime,
+        arrivalCity: prevFlight.arrivalCity,
+      },
+      nextFlight: {
+        id: nextFlight.id,
+        flightNumber: nextFlight.flightNumber,
+        date: nextFlight.date,
+        departureTime: nextFlight.departureTime,
+        departureCity: nextFlight.departureCity,
+      },
+      phase,
+    });
 
-    const timeDiff =
-      (nextDepartureTime.getTime() - prevArrivalTime.getTime()) / 60000;
+    try {
+      // Parse arrival and departure times
+      const [prevArrHours, prevArrMinutes] = prevFlight.arrivalTime
+        .split(':')
+        .map(Number);
+      const [nextDepHours, nextDepMinutes] = nextFlight.departureTime
+        .split(':')
+        .map(Number);
 
-    if (timeDiff < 30) {
-      return {
-        isValid: false,
-        error: `Connection time too short: You need at least 30 minutes to make this connection. Current connection time is ${Math.round(timeDiff)} minutes.`,
-        timeDifferenceMinutes: timeDiff,
+      // Parse both dates
+      const prevDate = parseFlexibleDate(prevFlight.date);
+      const nextDate = parseFlexibleDate(nextFlight.date);
+
+      if (!prevDate || !isValid(prevDate) || !nextDate || !isValid(nextDate)) {
+        console.error('Invalid dates:', {
+          prevDate: prevFlight.date,
+          nextDate: nextFlight.date,
+          parsedPrev: prevDate?.toISOString(),
+          parsedNext: nextDate?.toISOString(),
+        });
+        throw new Error('Invalid dates');
+      }
+
+      console.log('=== validateFlightConnection - Date Parts ===', {
+        prevInput: prevFlight.date,
+        nextInput: nextFlight.date,
+        parsedPrev: prevDate.toISOString(),
+        parsedNext: nextDate.toISOString(),
+        times: {
+          prevArrival: { hours: prevArrHours, minutes: prevArrMinutes },
+          nextDeparture: { hours: nextDepHours, minutes: nextDepMinutes },
+        },
+      });
+
+      // Create date objects in UTC using the respective dates
+      const prevArrivalTime = new Date(
+        Date.UTC(
+          prevDate.getUTCFullYear(),
+          prevDate.getUTCMonth(),
+          prevDate.getUTCDate(),
+          prevArrHours,
+          prevArrMinutes,
+          0
+        )
+      );
+
+      const nextDepartureTime = new Date(
+        Date.UTC(
+          nextDate.getUTCFullYear(),
+          nextDate.getUTCMonth(),
+          nextDate.getUTCDate(),
+          nextDepHours,
+          nextDepMinutes,
+          0
+        )
+      );
+
+      const timeDiff = nextDepartureTime.getTime() - prevArrivalTime.getTime();
+      const timeDiffMinutes = timeDiff / 60000; // Convert to minutes
+      const timeDiffHours = timeDiffMinutes / 60; // Convert to hours
+
+      console.log('=== validateFlightConnection - Time Calculation ===', {
+        prevArrivalTime: prevArrivalTime.toISOString(),
+        nextDepartureTime: nextDepartureTime.toISOString(),
+        timeDiff: {
+          milliseconds: timeDiff,
+          minutes: timeDiffMinutes,
+          hours: timeDiffHours,
+        },
+        isValid: timeDiffMinutes >= 30 && timeDiffMinutes <= 48 * 60,
+      });
+
+      if (timeDiffMinutes < 30) {
+        const result = {
+          isValid: false,
+          error: `Connection time too short: You need at least 30 minutes to make this connection. Current connection time is ${Math.round(timeDiffMinutes)} minutes.`,
+          timeDifferenceMinutes: timeDiffMinutes,
+        };
+        console.log(
+          '=== validateFlightConnection - Result (Too Short) ===',
+          result
+        );
+        return result;
+      }
+
+      if (timeDiffMinutes > 48 * 60) {
+        const result = {
+          isValid: false,
+          error: `Connection time too long: Maximum layover time is 48 hours. Current layover is ${Math.round(timeDiffHours)} hours.`,
+          timeDifferenceMinutes: timeDiffMinutes,
+        };
+        console.log(
+          '=== validateFlightConnection - Result (Too Long) ===',
+          result
+        );
+        return result;
+      }
+
+      const result = {
+        isValid: true,
+        timeDifferenceMinutes: timeDiffMinutes,
+        error: `Connection time: ${Math.round(timeDiffMinutes)} minutes`,
       };
-    }
-
-    if (timeDiff > 48 * 60) {
+      console.log('=== validateFlightConnection - Result (Valid) ===', result);
+      return result;
+    } catch (error) {
+      console.error('Error validating flight connection:', error);
       return {
         isValid: false,
-        error: `Connection time too long: Maximum layover time is 48 hours. Current layover is ${Math.round(timeDiff / 60)} hours.`,
-        timeDifferenceMinutes: timeDiff,
+        error: 'Invalid date or time format',
+        timeDifferenceMinutes: 0,
       };
     }
   }

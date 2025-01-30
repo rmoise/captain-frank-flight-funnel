@@ -45,6 +45,7 @@ export interface FlightPreviewCardProps {
   onDelete: (index: number) => void;
   isMultiCity: boolean;
   showConnectionInfo: boolean;
+  currentPhase?: number;
 }
 
 export interface ConnectionInfo {

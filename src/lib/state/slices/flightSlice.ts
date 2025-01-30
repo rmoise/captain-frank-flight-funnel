@@ -455,46 +455,32 @@ export const createFlightSlice = (
 
   setSelectedFlights: (flights: Flight[]) =>
     set((state) => {
-      // Skip update if nothing has changed
-      if (JSON.stringify(state.selectedFlights) === JSON.stringify(flights)) {
-        return state;
-      }
-
-      // Filter out any null flights and ensure type safety
-      const validFlights = flights.filter(
-        (flight): flight is Flight =>
-          flight !== null && typeof flight === 'object' && 'id' in flight
-      );
-
-      // For multi-city flights, ensure we maintain segment order
-      let cleanedFlights = validFlights;
-      if (state.selectedType === 'multi') {
-        // Create a map of flights by departure city to maintain order
-        const flightsByDeparture = new Map<string, Flight>();
-        validFlights.forEach((flight) => {
-          flightsByDeparture.set(flight.departureCity.toLowerCase(), flight);
-        });
-
-        // Build ordered flight list based on segments
-        cleanedFlights = state.flightSegments
-          .map((segment) => {
-            if (!segment.fromLocation) return null;
-            return (
-              flightsByDeparture.get(
-                segment.fromLocation.value.toLowerCase()
-              ) || null
-            );
-          })
-          .filter((f): f is Flight => f !== null);
-      } else {
-        // For direct flights, just take the first valid flight
-        cleanedFlights = validFlights.slice(0, 1);
-      }
+      // Clean and validate flights
+      const cleanedFlights = flights.filter((flight): flight is Flight => {
+        if (!flight) return false;
+        return (
+          typeof flight.id === 'string' &&
+          typeof flight.flightNumber === 'string' &&
+          typeof flight.airline === 'string' &&
+          typeof flight.departureCity === 'string' &&
+          typeof flight.arrivalCity === 'string' &&
+          typeof flight.departureTime === 'string' &&
+          typeof flight.arrivalTime === 'string' &&
+          typeof flight.departure === 'string' &&
+          typeof flight.arrival === 'string' &&
+          typeof flight.duration === 'string' &&
+          typeof flight.date === 'string'
+        );
+      });
 
       // Update segments based on selected flights
       const updatedSegments = state.flightSegments.map((segment, index) => {
         const matchingFlight = cleanedFlights[index];
         if (!matchingFlight) return segment;
+
+        // Convert the date string to a Date object, preserving the exact date
+        const flightDate = new Date(matchingFlight.date);
+        flightDate.setHours(12, 0, 0, 0); // Set to noon to avoid timezone issues
 
         return {
           ...segment,
@@ -502,12 +488,18 @@ export const createFlightSlice = (
           fromLocation: {
             value: matchingFlight.departureCity,
             label: matchingFlight.departureCity,
+            description:
+              matchingFlight.departureAirport || matchingFlight.departureCity,
+            city: matchingFlight.departureCity,
           },
           toLocation: {
             value: matchingFlight.arrivalCity,
             label: matchingFlight.arrivalCity,
+            description:
+              matchingFlight.arrivalAirport || matchingFlight.arrivalCity,
+            city: matchingFlight.arrivalCity,
           },
-          date: matchingFlight.date ? new Date(matchingFlight.date) : null,
+          date: flightDate,
         };
       });
 

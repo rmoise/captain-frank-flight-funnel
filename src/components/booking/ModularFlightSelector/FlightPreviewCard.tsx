@@ -2,10 +2,11 @@ import React from 'react';
 import { PiAirplaneTakeoff } from 'react-icons/pi';
 import { PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { useStore } from '../../../lib/state/store';
+import { useFlightStore } from '../../../lib/state/flightStore';
 import { formatSafeDate } from '../../../utils/dateUtils';
 import { useTranslation } from '../../../hooks/useTranslation';
 import type { FlightPreviewCardProps } from './types';
-import { getConnectionTimeInfo } from '../../../utils/flightUtils';
+import { validateFlightConnection } from '../../../lib/validation/flightValidation';
 
 export const FlightPreviewCard: React.FC<FlightPreviewCardProps> = React.memo(
   ({
@@ -15,16 +16,89 @@ export const FlightPreviewCard: React.FC<FlightPreviewCardProps> = React.memo(
     onDelete,
     isMultiCity = false,
     showConnectionInfo = false,
+    currentPhase = 4,
   }) => {
     const { t } = useTranslation();
     const mainStore = useStore();
+    const flightStore = useFlightStore();
+
+    // Get the previous flight from the flight store's selected flights
     const prevFlight = showConnectionInfo
-      ? mainStore.flightSegments[index - 1]?.selectedFlight
+      ? flightStore.selectedFlights[index - 1]
       : null;
+
+    // Get the dates from the store for both flights
+    const prevDate = showConnectionInfo
+      ? mainStore.flightSegments[index - 1]?.date
+        ? formatSafeDate(mainStore.flightSegments[index - 1]?.date)
+        : formatSafeDate(new Date(prevFlight?.date || ''))
+      : null;
+    const nextDate = mainStore.flightSegments[index]?.date
+      ? formatSafeDate(mainStore.flightSegments[index]?.date)
+      : formatSafeDate(new Date(flight.date));
+
+    // Create copies of the flights with their correct dates
+    const validationFlights = {
+      prev: prevFlight
+        ? {
+            ...prevFlight,
+            date: prevDate || formatSafeDate(new Date(prevFlight.date)), // Ensure date is in correct format
+          }
+        : null,
+      next: {
+        ...flight,
+        date: nextDate,
+      },
+    };
+
+    console.log('=== FlightPreviewCard - Connection Info Input ===', {
+      prevFlight: validationFlights.prev
+        ? {
+            id: validationFlights.prev.id,
+            flightNumber: validationFlights.prev.flightNumber,
+            date: validationFlights.prev.date,
+            arrivalTime: validationFlights.prev.arrivalTime,
+            arrivalCity: validationFlights.prev.arrivalCity,
+          }
+        : null,
+      nextFlight: {
+        id: validationFlights.next.id,
+        flightNumber: validationFlights.next.flightNumber,
+        date: validationFlights.next.date,
+        departureTime: validationFlights.next.departureTime,
+        departureCity: validationFlights.next.departureCity,
+      },
+      showConnectionInfo,
+      currentPhase,
+      prevStoreDate: prevDate,
+      nextStoreDate: nextDate,
+      rawFlightDate: flight.date,
+      prevRawFlightDate: prevFlight?.date,
+      storeSegment: mainStore.flightSegments[index - 1],
+      flightStoreFlights: flightStore.selectedFlights,
+    });
+
     const connectionInfo =
-      prevFlight && flight
-        ? getConnectionTimeInfo(prevFlight, flight, t)
+      validationFlights.prev && validationFlights.next
+        ? validateFlightConnection(
+            validationFlights.prev,
+            validationFlights.next,
+            currentPhase
+          )
         : null;
+
+    console.log('=== FlightPreviewCard - Connection Info Result ===', {
+      connectionInfo,
+      timestamp: new Date().toISOString(),
+    });
+
+    const formatConnectionTime = (minutes: number) => {
+      const hours = Math.floor(minutes / 60);
+      const remainingMinutes = minutes % 60;
+      return t.flightSelector.errors.connectionTime
+        .replace('{hours}', hours.toString())
+        .replace('{minutes}', remainingMinutes.toString());
+    };
 
     return (
       <div className="w-full text-left p-4 bg-white border border-gray-200 rounded-lg hover:border-[#F54538] hover:shadow-lg transition-all">
@@ -97,7 +171,12 @@ export const FlightPreviewCard: React.FC<FlightPreviewCardProps> = React.memo(
                   connectionInfo.isValid ? 'text-gray-500' : 'text-red-500'
                 }`}
               >
-                {connectionInfo.message}
+                {connectionInfo.isValid
+                  ? formatConnectionTime(
+                      connectionInfo.timeDifferenceMinutes || 0
+                    )
+                  : connectionInfo.error ||
+                    t.flightSelector.errors.noValidConnecting}
               </p>
             </div>
           )}
@@ -187,7 +266,12 @@ export const FlightPreviewCard: React.FC<FlightPreviewCardProps> = React.memo(
                     d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
-                {connectionInfo.message}
+                {connectionInfo.isValid
+                  ? formatConnectionTime(
+                      connectionInfo.timeDifferenceMinutes || 0
+                    )
+                  : connectionInfo.error ||
+                    t.flightSelector.errors.noValidConnecting}
               </p>
             </div>
           )}
