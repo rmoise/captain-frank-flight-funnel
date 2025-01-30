@@ -25,33 +25,49 @@
   included_files = ["netlify/functions/**/*"]
 
 [[redirects]]
+  from = "/:lang/.netlify/functions/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/:lang/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/:lang/api/searchairportsbyterm"
+  to = "/.netlify/functions/searchAirports"
+  status = 200
+
+[[redirects]]
+  from = "/:lang/api/searchflightsbyfromiatatoiatadatenumber"
+  to = "/.netlify/functions/searchFlights"
+  status = 200
+
+[[redirects]]
+  from = "/:lang/api/calculatecompensationbyfromiatatoiata"
+  to = "/.netlify/functions/calculateCompensation"
+  status = 200
+
+[[redirects]]
+  from = "/:lang/api/evaluateeuflightclaim"
+  to = "/.netlify/functions/evaluateeuflightclaim"
+  status = 200
+
+[[redirects]]
+  from = "/:lang/api/ordereuflightclaim"
+  to = "/.netlify/functions/ordereuflightclaim"
+  status = 200
+
+# Fallback redirects for non-language-prefixed routes
+[[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
 
 [[redirects]]
-  from = "/api/searchairportsbyterm"
-  to = "/.netlify/functions/searchAirports"
-  status = 200
-
-[[redirects]]
-  from = "/api/searchflightsbyfromiatatoiatadatenumber"
-  to = "/.netlify/functions/searchFlights"
-  status = 200
-
-[[redirects]]
-  from = "/api/calculatecompensationbyfromiatatoiata"
-  to = "/.netlify/functions/calculateCompensation"
-  status = 200
-
-[[redirects]]
-  from = "/api/evaluateeuflightclaim"
-  to = "/.netlify/functions/evaluateeuflightclaim"
-  status = 200
-
-[[redirects]]
-  from = "/api/ordereuflightclaim"
-  to = "/.netlify/functions/ordereuflightclaim"
+  from = "/.netlify/functions/*"
+  to = "/.netlify/functions/:splat"
   status = 200
 
 [[plugins]]

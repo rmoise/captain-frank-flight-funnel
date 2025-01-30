@@ -5,10 +5,28 @@ const API_BASE_URL =
   'https://secure.captain-frank.net/api/services/euflightclaim';
 
 const handler: Handler = async (event: HandlerEvent) => {
+  // Add CORS headers
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Content-Type': 'application/json',
+  };
+
+  // Handle preflight requests
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 204,
+      headers,
+      body: '',
+    };
+  }
+
   if (event.httpMethod !== 'GET') {
     return {
       statusCode: 405,
-      body: 'Method Not Allowed',
+      headers,
+      body: JSON.stringify({ error: 'Method Not Allowed' }),
     };
   }
 
@@ -16,6 +34,7 @@ const handler: Handler = async (event: HandlerEvent) => {
   if (!term) {
     return {
       statusCode: 400,
+      headers,
       body: JSON.stringify({ error: 'Search term is required' }),
     };
   }
@@ -42,6 +61,7 @@ const handler: Handler = async (event: HandlerEvent) => {
       });
       return {
         statusCode: response.status,
+        headers,
         body: JSON.stringify({
           error: `API Error: ${response.status} ${response.statusText}`,
           details: responseText,
@@ -57,6 +77,7 @@ const handler: Handler = async (event: HandlerEvent) => {
       console.error('Failed to parse API response:', parseError);
       return {
         statusCode: 500,
+        headers,
         body: JSON.stringify({
           error: 'Invalid JSON response from API',
           details: responseText,
@@ -69,15 +90,14 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     return {
       statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify(airports),
     };
   } catch (error) {
     console.error('Error searching airports:', error);
     return {
       statusCode: 500,
+      headers,
       body: JSON.stringify({
         error: 'Internal Server Error',
         message: error instanceof Error ? error.message : 'Unknown error',
