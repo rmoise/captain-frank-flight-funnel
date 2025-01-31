@@ -9,7 +9,9 @@ import React, {
 
 interface AccordionContextType {
   openAccordions: Set<string>;
-  setOpenAccordions: (ids: Set<string>) => void;
+  setOpenAccordions: (
+    value: Set<string> | ((prev: Set<string>) => Set<string>)
+  ) => void;
   autoTransition: (id: string, isValid: boolean) => void;
   activeAccordion: string | null;
   setActiveAccordion: (id: string | null) => void;
