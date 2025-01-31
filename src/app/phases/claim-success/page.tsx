@@ -1,7 +1,7 @@
 'use client';
 
 import React, { Suspense, useEffect, useCallback } from 'react';
-import { useRouter, useSearchParams, useParams } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { useStore } from '@/lib/state/store';
 import type { PassengerDetails } from '@/types/store';
 import { SpeechBubble } from '@/components/SpeechBubble';
@@ -17,10 +17,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { StoreState, StoreActions } from '@/lib/state/store';
 import { ClaimService } from '@/services/claimService';
 
-// Helper function to get language-aware URL
-const getLanguageAwareUrl = (url: string, lang: string) => {
-  return lang === 'de' ? `/de${url}` : url;
-};
+const CLAIM_SUCCESS_PHASE = 5;
 
 // Update store type to include new fields
 type ExtendedStore = StoreState &
@@ -31,14 +28,13 @@ type ExtendedStore = StoreState &
   };
 
 function ClaimSuccessContent() {
-  const searchParams = useSearchParams();
   const router = useRouter();
   const params = useParams();
   const lang = params?.lang?.toString() || '';
   const store = useStore() as ExtendedStore;
   const mountedRef = React.useRef(true);
   const initializedRef = React.useRef(false);
-  const CLAIM_SUCCESS_PHASE = 5;
+  const isUpdatingRef = React.useRef(false);
 
   const { completedPhases, compensationAmount, isStepValid, wizardAnswers } =
     store;
@@ -99,7 +95,37 @@ function ClaimSuccessContent() {
 
         const { amount, provision } = evaluationResult.contract;
 
-        // Set phase state first
+        // Set initial state once with all necessary updates
+        const initialValidationState = {
+          ...store.validationState,
+          isFlightValid: true,
+          isWizardValid: true,
+          isTermsValid: store.validationState?.isTermsValid || false,
+          isSignatureValid: store.validationState?.isSignatureValid || false,
+          isPersonalValid: store.validationState?.isPersonalValid || false,
+          stepValidation: {
+            ...store.validationState?.stepValidation,
+            1: store.validationState?.isPersonalValid || false,
+            2: true,
+            3: true,
+            4: true,
+            5: true,
+          },
+          stepInteraction: {
+            ...store.validationState?.stepInteraction,
+            1: store.validationState?.isPersonalValid || false,
+          },
+          1: store.validationState?.isPersonalValid || false,
+          2: true,
+          3: true,
+          4: true,
+          5: true,
+          _timestamp: Date.now(),
+        };
+
+        // Get existing personal details
+        const existingPersonalDetails = store.personalDetails || null;
+
         useStore.setState({
           phase: CLAIM_SUCCESS_PHASE,
           currentPhase: CLAIM_SUCCESS_PHASE,
@@ -115,42 +141,38 @@ function ClaimSuccessContent() {
           phasesCompletedViaContinue: Array.from(
             new Set([...store.phasesCompletedViaContinue, 1, 2, 3, 4])
           ),
-          validationState: {
-            ...store.validationState,
-            isFlightValid: true,
-            isWizardValid: true,
-            isTermsValid: store.validationState?.isTermsValid || false,
-            isSignatureValid: store.validationState?.isSignatureValid || false,
-            isPersonalValid: false,
-            stepValidation: {
-              ...store.validationState?.stepValidation,
-              1: false,
-              2: true,
-              3: true,
-              4: true,
-              5: true,
-            },
-            stepInteraction: {
-              ...store.validationState?.stepInteraction,
-              1: false,
-            },
-            1: false,
-            2: true,
-            3: true,
-            4: true,
-            5: true,
-          },
+          validationState: initialValidationState,
+          personalDetails: existingPersonalDetails,
         } as Partial<StoreState & StoreActions>);
 
-        // Subscribe to store changes to force phase 5
-        const unsubscribe = useStore.subscribe((state) => {
-          if (state.currentPhase !== CLAIM_SUCCESS_PHASE) {
-            console.log('Forcing phase back to 5');
-            useStore.setState({
-              phase: CLAIM_SUCCESS_PHASE,
-              currentPhase: CLAIM_SUCCESS_PHASE,
-              _preventPhaseChange: true,
-            } as Partial<StoreState & StoreActions>);
+        // Subscribe to store changes with update guard
+        const unsubscribe = useStore.subscribe((state: ExtendedStore) => {
+          if (
+            !isUpdatingRef.current &&
+            state._isClaimSuccess &&
+            state.currentPhase !== CLAIM_SUCCESS_PHASE &&
+            !state._preventPhaseChange
+          ) {
+            try {
+              isUpdatingRef.current = true;
+              useStore.setState({
+                phase: CLAIM_SUCCESS_PHASE,
+                currentPhase: CLAIM_SUCCESS_PHASE,
+                _preventPhaseChange: true,
+                validationState: {
+                  ...state.validationState,
+                  isPersonalValid:
+                    state.validationState?.isPersonalValid || false,
+                  stepValidation: {
+                    ...state.validationState?.stepValidation,
+                    1: state.validationState?.isPersonalValid || false,
+                  },
+                  _timestamp: Date.now(),
+                },
+              } as Partial<StoreState & StoreActions>);
+            } finally {
+              isUpdatingRef.current = false;
+            }
           }
         });
 
@@ -175,8 +197,7 @@ function ClaimSuccessContent() {
           if (mountedRef.current) {
             useStore.setState({
               _isClaimSuccess: false,
-              phase: CLAIM_SUCCESS_PHASE,
-              currentPhase: CLAIM_SUCCESS_PHASE,
+              _preventPhaseChange: false,
             } as Partial<StoreState & StoreActions>);
           }
         };
@@ -218,25 +239,51 @@ function ClaimSuccessContent() {
   // Handle personal details updates
   const handlePersonalDetailsComplete = useCallback(
     (details: PassengerDetails | null) => {
-      if (details) {
-        // Store in main store and update validation state
+      if (!details || isUpdatingRef.current) {
+        return;
+      }
+
+      try {
+        isUpdatingRef.current = true;
+
+        // Get current state
+        const currentState = useStore.getState() as ExtendedStore;
+        const currentValidationState = currentState.validationState || {};
+
+        // Only update if the details have actually changed
+        const currentDetails = currentState.personalDetails;
+        if (JSON.stringify(currentDetails) === JSON.stringify(details)) {
+          return;
+        }
+
+        // Update store with new validation state
         useStore.setState({
           personalDetails: details,
           validationState: {
-            ...store.validationState,
+            ...currentValidationState,
             isPersonalValid: true,
             stepValidation: {
-              ...store.validationState?.stepValidation,
+              ...currentValidationState.stepValidation,
+              1: true,
+            },
+            stepInteraction: {
+              ...currentValidationState.stepInteraction,
               1: true,
             },
             1: true,
+            _timestamp: Date.now(),
           },
         });
-        // Store in ClaimService for order request
-        ClaimService.setStoredPersonalDetails(details);
+
+        // Track step completion
+        if (!interactedSteps.includes(1)) {
+          setInteractedSteps([...interactedSteps, 1]);
+        }
+      } finally {
+        isUpdatingRef.current = false;
       }
     },
-    []
+    [interactedSteps]
   );
 
   const formatAmount = (amount: number, currency: string) => {
@@ -459,15 +506,11 @@ function ClaimSuccessContent() {
 }
 
 export default function ClaimSuccessPage() {
-  const hideLoading = useStore((state) => state.hideLoading);
-
-  useEffect(() => {
-    hideLoading();
-  }, [hideLoading]);
-
   return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <ClaimSuccessContent />
-    </Suspense>
+    <PhaseGuard phase={CLAIM_SUCCESS_PHASE}>
+      <Suspense fallback={null}>
+        <ClaimSuccessContent />
+      </Suspense>
+    </PhaseGuard>
   );
 }

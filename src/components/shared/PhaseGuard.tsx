@@ -58,30 +58,42 @@ export function PhaseGuard({ phase, children }: PhaseGuardProps) {
 
     // Check if we're in claim success mode
     const isClaimSuccess = store._isClaimSuccess;
+    const preventPhaseChange = store._preventPhaseChange;
+
+    // If we're in claim success mode and this is phase 5, always allow access
+    // and prevent phase changes
     if (isClaimSuccess && phase === 5) {
       setIsPhaseAccessible(true);
+      if (!preventPhaseChange) {
+        useStore.setState({
+          currentPhase: 5,
+          _preventPhaseChange: true,
+        } as Partial<StoreState & StoreActions>);
+      }
       return;
     }
 
     // For phase 5, check specific requirements
     const isPhase5Accessible =
       phase === 5 &&
+      !isClaimSuccess && // Only check these requirements if not in claim success mode
       completedPhases.includes(4) &&
       completedSteps.includes(2) &&
       completedSteps.includes(3) &&
-      store.validationState.stepValidation[2] &&
-      store.validationState.stepValidation[3] &&
+      store.validationState?.stepValidation?.[2] &&
+      store.validationState?.stepValidation?.[3] &&
       store.phasesCompletedViaContinue.includes(4);
 
-    // For other phases
-    const isCurrentPhase = phase === currentPhase;
+    // For other phases, only allow access if not in claim success mode
+    const isCurrentPhase = !isClaimSuccess && phase === currentPhase;
     const highestCompletedPhase = Math.max(...completedPhases, currentPhase);
-    const isWithinCompletedPhases = phase <= highestCompletedPhase;
+    const isWithinCompletedPhases =
+      !isClaimSuccess && phase <= highestCompletedPhase;
     const isPreviousPhaseCompletedViaContinue =
       phase >= 2 ? store.phasesCompletedViaContinue.includes(phase - 1) : true;
 
-    // Allow back navigation to previous phases
-    const isBackNavigation = phase < currentPhase;
+    // Allow back navigation to previous phases only if not in claim success mode
+    const isBackNavigation = !isClaimSuccess && phase < currentPhase;
 
     const accessible =
       isPhase5Accessible ||

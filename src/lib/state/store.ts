@@ -468,6 +468,9 @@ export interface StoreState {
   validationState: ValidationState;
   // ... existing code ...
   bookingReference: string; // Add this line
+  _preventPhaseChange: boolean;
+  _isClaimSuccess: boolean;
+  _lastUpdate: number;
 }
 
 // Export ValidationStateSteps type
@@ -516,7 +519,7 @@ export interface FlightSlice {
   selectedFlight: Flight | null;
   flightDetails: Flight | null;
   delayDuration: number | null;
-  _lastUpdate?: number;
+  _lastUpdate: number;
 }
 
 export type WizardStepKey =
@@ -702,6 +705,8 @@ export interface StoreActions {
     force?: boolean,
     skipValidation?: boolean
   ) => void;
+  setPreventPhaseChange: (prevent: boolean) => void;
+  setIsClaimSuccess: (isClaimSuccess: boolean) => void;
 }
 
 // Define CompensationCache type
@@ -764,12 +769,14 @@ export interface StoreState
   completedWizards: Record<string, boolean>;
   signature: string;
   hasSignature: boolean;
-  _lastUpdate?: number;
+  _lastUpdate: number;
   _lastPersist?: number;
   _lastPersistedState?: string;
   isLoading: boolean;
   validationState: ValidationState;
   bookingReference: string; // Add this line
+  _preventPhaseChange: boolean;
+  _isClaimSuccess: boolean;
 }
 
 // Initial state
@@ -889,6 +896,8 @@ const initialState: StoreState = {
   loading: false,
   errorMessage: null,
   errorMessages: {},
+  _preventPhaseChange: false,
+  _isClaimSuccess: false,
 };
 
 // URL mappings
@@ -1610,8 +1619,21 @@ export const useStore = create<StoreState & StoreActions>()(
       },
 
       setCurrentPhase: (phase: number) => {
+        const state = get();
+
+        // If in claim success mode and phase change is prevented, do nothing
+        if (state._isClaimSuccess && state._preventPhaseChange && phase !== 5) {
+          console.log('=== Phase Change Prevented (Claim Success Mode) ===', {
+            currentPhase: state.currentPhase,
+            attemptedPhase: phase,
+            _isClaimSuccess: state._isClaimSuccess,
+            _preventPhaseChange: state._preventPhaseChange,
+          });
+          return;
+        }
+
         console.log('=== Starting Phase Transition ===', {
-          from: get().currentPhase,
+          from: state.currentPhase,
           to: phase,
         });
 
@@ -1623,6 +1645,8 @@ export const useStore = create<StoreState & StoreActions>()(
             validationState: state.validationState,
             personalDetails: state.personalDetails,
             compensationAmount: state.compensationAmount,
+            _isClaimSuccess: state._isClaimSuccess,
+            _preventPhaseChange: state._preventPhaseChange,
           };
 
           console.log('=== Current State Before Transition ===', currentState);
@@ -1636,6 +1660,8 @@ export const useStore = create<StoreState & StoreActions>()(
                 JSON.stringify({
                   selectedType: state.selectedType,
                   flightSegments: state.flightSegments,
+                  _isClaimSuccess: state._isClaimSuccess,
+                  _preventPhaseChange: state._preventPhaseChange,
                 })
               );
               console.log('=== Saved State to LocalStorage ===');
@@ -1644,10 +1670,17 @@ export const useStore = create<StoreState & StoreActions>()(
             }
           }
 
+          // If in claim success mode and transitioning to phase 5, ensure flags are set
           const newState = {
             ...state,
             currentPhase: phase,
             _lastUpdate: Date.now(),
+            ...(phase === 5 && state._isClaimSuccess
+              ? {
+                  _preventPhaseChange: true,
+                  _isClaimSuccess: true,
+                }
+              : {}),
           };
 
           console.log('=== New State After Transition ===', {
@@ -1655,6 +1688,8 @@ export const useStore = create<StoreState & StoreActions>()(
             selectedType: newState.selectedType,
             flightSegments: newState.flightSegments,
             validationState: newState.validationState,
+            _isClaimSuccess: newState._isClaimSuccess,
+            _preventPhaseChange: newState._preventPhaseChange,
           });
 
           return newState;
@@ -3311,6 +3346,10 @@ export const useStore = create<StoreState & StoreActions>()(
           }
         }
       },
+      setPreventPhaseChange: (prevent: boolean) =>
+        set({ _preventPhaseChange: prevent }),
+      setIsClaimSuccess: (isClaimSuccess: boolean) =>
+        set({ _isClaimSuccess: isClaimSuccess }),
     }),
     {
       name: 'flight-storage',

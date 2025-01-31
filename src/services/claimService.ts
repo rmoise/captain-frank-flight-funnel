@@ -288,13 +288,36 @@ export class ClaimService {
       throw new Error('No booking number available');
     }
 
+    // Get journey fact type from travel status
+    const journeyFactType = this.getJourneyFactType(travelStatusAnswers);
+
+    // Ensure all flights have valid IDs
+    const validOriginalFlights = originalFlights.filter(
+      (f): f is Flight => f !== null && Boolean(f.id) && Boolean(f.flightNumber)
+    );
+
+    const validSelectedFlights = selectedFlights.filter(
+      (f): f is Flight => f !== null && Boolean(f.id) && Boolean(f.flightNumber)
+    );
+
+    // Get flight IDs based on journey fact type
+    const journey_booked_flightids = validOriginalFlights.map((f) =>
+      String(f.id)
+    );
+    const journey_fact_flightids =
+      journeyFactType === 'provided'
+        ? validSelectedFlights.map((f) => String(f.id))
+        : journeyFactType === 'self'
+          ? validOriginalFlights.map((f) => String(f.id))
+          : [];
+
     // Build the order request with only required fields
     return {
-      journey_booked_flightids: evaluationResponse.journey_booked_flightids,
-      journey_fact_flightids: evaluationResponse.journey_fact_flightids,
+      journey_booked_flightids,
+      journey_fact_flightids,
       information_received_at: evaluationResponse.information_received_at,
       journey_booked_pnr: finalBookingNumber,
-      journey_fact_type: evaluationResponse.journey_fact_type,
+      journey_fact_type: journeyFactType,
       guid: evaluationResponse.guid,
       recommendation_guid: evaluationResponse.recommendation_guid,
       owner_salutation: this.mapSalutationToBackend(personalDetails.salutation),
