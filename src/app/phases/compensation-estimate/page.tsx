@@ -289,6 +289,12 @@ export default function CompensationEstimatePage() {
 
   // Helper function to validate flight data
   const validateFlightData = (state: any) => {
+    // Add default value and type check for selectedType
+    if (!state || typeof state.selectedType === 'undefined') {
+      console.error('Invalid state or missing selectedType:', state);
+      throw new Error('Keine Flugdetails verfügbar');
+    }
+
     if (state.selectedType === 'direct') {
       const hasValidDirectFlight =
         state.directFlight &&
@@ -309,7 +315,7 @@ export default function CompensationEstimatePage() {
         );
 
       return hasValidDirectFlight || hasValidSelectedFlights;
-    } else {
+    } else if (state.selectedType === 'multi') {
       return (
         state.flightSegments?.length > 0 &&
         state.flightSegments.every(
@@ -321,6 +327,10 @@ export default function CompensationEstimatePage() {
         )
       );
     }
+
+    // If selectedType is neither 'direct' nor 'multi', throw error
+    console.error('Invalid selectedType:', state.selectedType);
+    throw new Error('Keine Flugdetails verfügbar');
   };
 
   useEffect(() => {
@@ -348,134 +358,70 @@ export default function CompensationEstimatePage() {
     } catch (error) {}
   }, [fromLocation, toLocation]);
 
-  useEffect(() => {
-    const calculateCompensation = async () => {
-      console.log('=== Calculating Compensation ===', {
-        selectedType,
-        directFlight,
-        flightSegments,
-        selectedFlights,
-        routeInfo,
-      });
+  const calculateCompensation = async () => {
+    setCompensationLoading(true);
+    setCompensationError(null);
 
-      // First try to get location data
-      let currentFromIata, currentToIata;
-
-      if (selectedType === 'direct') {
-        try {
-          // First try to get location from directFlight
-          let fromLocationData = directFlight?.fromLocation;
-          let toLocationData = directFlight?.toLocation;
-
-          // If not in directFlight, try parsing from stored location
-          if (!fromLocationData && fromLocation) {
-            fromLocationData =
-              typeof fromLocation === 'string'
-                ? JSON.parse(fromLocation)
-                : fromLocation;
-          }
-          if (!toLocationData && toLocation) {
-            toLocationData =
-              typeof toLocation === 'string'
-                ? JSON.parse(toLocation)
-                : toLocation;
-          }
-
-          currentFromIata = fromLocationData?.value;
-          currentToIata = toLocationData?.value;
-        } catch (error) {
-          console.error('Error parsing location data:', error);
-        }
-      } else {
-        // Multi-segment flight
-        currentFromIata = flightSegments[0]?.fromLocation?.value;
-        currentToIata =
-          flightSegments[flightSegments.length - 1]?.toLocation?.value;
+    try {
+      // Get current store state
+      const currentState = useStore.getState();
+      if (!currentState) {
+        throw new Error('Keine Flugdetails verfügbar');
       }
 
-      // Check if we have a valid cache for these locations
+      // Validate selectedType first
       if (
-        !shouldRecalculateCompensation() &&
-        compensationCache.amount !== null &&
-        compensationCache.flightData &&
-        currentFromIata &&
-        currentToIata
+        !currentState.selectedType ||
+        !['direct', 'multi'].includes(currentState.selectedType)
       ) {
-        // For direct flights, check if the cached locations match
-        if (
-          selectedType === 'direct' &&
-          compensationCache.flightData.directFlight
-        ) {
-          const cachedFromIata =
-            compensationCache.flightData.directFlight.fromLocation?.value;
-          const cachedToIata =
-            compensationCache.flightData.directFlight.toLocation?.value;
-
-          if (
-            cachedFromIata === currentFromIata &&
-            cachedToIata === currentToIata
-          ) {
-            console.log('=== Using Cached Compensation (Direct) ===', {
-              amount: compensationCache.amount,
-              fromIata: cachedFromIata,
-              toIata: cachedToIata,
-            });
-            setCompensationAmount(compensationCache.amount);
-            return;
-          }
-        }
-
-        // For multi-segment flights, check if the cached locations match
-        if (
-          selectedType === 'multi' &&
-          compensationCache.flightData.flightSegments.length > 0
-        ) {
-          const cachedFromIata =
-            compensationCache.flightData.flightSegments[0]?.fromLocation?.value;
-          const cachedToIata =
-            compensationCache.flightData.flightSegments[
-              compensationCache.flightData.flightSegments.length - 1
-            ]?.toLocation?.value;
-
-          if (
-            cachedFromIata === currentFromIata &&
-            cachedToIata === currentToIata
-          ) {
-            console.log('=== Using Cached Compensation (Multi) ===', {
-              amount: compensationCache.amount,
-              fromIata: cachedFromIata,
-              toIata: cachedToIata,
-            });
-            setCompensationAmount(compensationCache.amount);
-            return;
-          }
-        }
+        console.error('Invalid selectedType:', currentState.selectedType);
+        throw new Error('Keine Flugdetails verfügbar');
       }
 
-      setCompensationLoading(true);
-      setCompensationError(null);
+      let flightData;
+      try {
+        flightData = validateFlightData(currentState);
+      } catch (validationError) {
+        console.error('Validation error:', validationError);
+        setCompensationError(validationError.message);
+        setCompensationLoading(false);
+        return;
+      }
+
+      // Extract IATA codes based on flight type
+      let fromIata, toIata;
+
+      if (
+        currentState.selectedType === 'multi' &&
+        currentState.flightSegments?.length > 0
+      ) {
+        // For multi-segment flights, use first and last segment
+        const firstSegment = currentState.flightSegments[0];
+        const lastSegment =
+          currentState.flightSegments[currentState.flightSegments.length - 1];
+
+        fromIata = firstSegment?.fromLocation?.value;
+        toIata = lastSegment?.toLocation?.value;
+
+        console.log('=== Multi-segment IATA codes ===', { fromIata, toIata });
+      } else if (currentState.selectedType === 'direct') {
+        // For direct flights
+        fromIata = currentState.directFlight?.fromLocation?.value;
+        toIata = currentState.directFlight?.toLocation?.value;
+
+        console.log('=== Direct flight IATA codes ===', { fromIata, toIata });
+      }
+
+      // Ensure we have valid IATA codes before making the API call
+      if (!fromIata || !toIata) {
+        console.error('Missing IATA codes:', { fromIata, toIata });
+        throw new Error('Keine gültigen Flughafencodes gefunden');
+      }
 
       try {
-        if (!currentFromIata || !currentToIata) {
-          throw new Error(
-            'Missing origin or destination for compensation calculation'
-          );
-        }
-
-        const flightData = {
-          from_iata: currentFromIata,
-          to_iata: currentToIata,
-          date:
-            selectedType === 'direct'
-              ? directFlight?.date
-              : flightSegments[0]?.date,
-        };
-
-        console.log('=== Calculating New Compensation ===', flightData);
-
         const queryParams = new URLSearchParams({
-          from_iata: flightData.from_iata,
-          to_iata: flightData.to_iata,
+          from_iata: fromIata,
+          to_iata: toIata,
         });
 
         const response = await fetch(
@@ -489,38 +435,41 @@ export default function CompensationEstimatePage() {
         );
 
         if (!response.ok) {
-          throw new Error('Failed to calculate compensation');
+          throw new Error('Fehler bei der Berechnung der Entschädigung');
         }
 
         const data = await response.json();
 
         if (data.amount === 0 || data.amount === null) {
-          throw new Error('No compensation amount available');
+          throw new Error('Keine Entschädigung verfügbar');
         }
 
+        // Update cache and state
         useStore.getState().setCompensationCache({
           amount: data.amount,
           flightData: {
-            selectedType,
+            selectedType: currentState.selectedType,
             directFlight:
-              selectedType === 'direct'
+              currentState.selectedType === 'direct'
                 ? {
-                    fromLocation: directFlight?.fromLocation || null,
-                    toLocation: directFlight?.toLocation || null,
-                    date: directFlight?.date || null,
-                    selectedFlight: directFlight?.selectedFlight || null,
+                    fromLocation:
+                      currentState.directFlight?.fromLocation || null,
+                    toLocation: currentState.directFlight?.toLocation || null,
+                    date: currentState.directFlight?.date || null,
+                    selectedFlight:
+                      currentState.directFlight?.selectedFlight || null,
                   }
                 : null,
             flightSegments:
-              selectedType === 'multi'
-                ? flightSegments.map((segment) => ({
+              currentState.selectedType === 'multi'
+                ? currentState.flightSegments.map((segment) => ({
                     fromLocation: segment.fromLocation,
                     toLocation: segment.toLocation,
                     date: segment.date,
                     selectedFlight: segment.selectedFlight,
                   }))
                 : [],
-            selectedFlights,
+            selectedFlights: currentState.selectedFlights || [],
           },
         });
 
@@ -528,15 +477,20 @@ export default function CompensationEstimatePage() {
       } catch (error) {
         console.error('Error calculating compensation:', error);
         setCompensationError(
-          error instanceof Error
-            ? error.message
-            : 'Failed to calculate compensation'
+          error instanceof Error ? error.message : 'Fehler bei der Berechnung'
         );
-      } finally {
-        setCompensationLoading(false);
       }
-    };
+    } catch (error) {
+      console.error('Error in compensation calculation:', error);
+      setCompensationError(
+        error instanceof Error ? error.message : 'Fehler bei der Berechnung'
+      );
+    } finally {
+      setCompensationLoading(false);
+    }
+  };
 
+  useEffect(() => {
     const hasMultiSegmentData =
       selectedType === 'multi' &&
       flightSegments?.length > 0 &&
@@ -578,20 +532,56 @@ export default function CompensationEstimatePage() {
         flightSegments: currentState.flightSegments?.length || 0,
       });
 
-      // Phase 2 validation - only check for locations
-      const isValid =
-        currentState.selectedType === 'multi'
-          ? currentState.flightSegments.length >= 2 &&
-            currentState.flightSegments.every(
-              (segment) => segment.fromLocation && segment.toLocation
-            )
-          : !!(
-              currentState.directFlight?.fromLocation &&
-              currentState.directFlight?.toLocation
+      // Enhanced validation for phase 2
+      const validateTransition = () => {
+        if (currentState.selectedType === 'multi') {
+          if (
+            !currentState.flightSegments ||
+            currentState.flightSegments.length < 2
+          ) {
+            throw new Error(
+              t.phases.compensationEstimate.errors.minimumSegments
             );
+          }
 
-      if (!isValid) {
-        console.error('Invalid flight data state during transition');
+          const missingLocations = currentState.flightSegments.find(
+            (segment) => !segment.fromLocation || !segment.toLocation
+          );
+
+          if (missingLocations) {
+            throw new Error(
+              t.phases.compensationEstimate.errors.missingLocations
+            );
+          }
+        } else {
+          if (
+            !currentState.directFlight?.fromLocation ||
+            !currentState.directFlight?.toLocation
+          ) {
+            throw new Error(
+              t.phases.compensationEstimate.errors.missingDirectLocations
+            );
+          }
+        }
+
+        if (!compensationAmount) {
+          throw new Error(
+            t.phases.compensationEstimate.errors.missingCompensation
+          );
+        }
+
+        return true;
+      };
+
+      try {
+        // Validate before proceeding
+        validateTransition();
+      } catch (error) {
+        console.error('Validation error during phase transition:', error);
+        setCompensationError(
+          error instanceof Error ? error.message : 'Validation failed'
+        );
+        setIsLoading(false);
         return;
       }
 
