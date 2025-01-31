@@ -467,6 +467,7 @@ export interface StoreState {
   // ... existing code ...
   validationState: ValidationState;
   // ... existing code ...
+  bookingReference: string; // Add this line
 }
 
 // Export ValidationStateSteps type
@@ -768,6 +769,7 @@ export interface StoreState
   _lastPersistedState?: string;
   isLoading: boolean;
   validationState: ValidationState;
+  bookingReference: string; // Add this line
 }
 
 // Initial state
@@ -790,6 +792,7 @@ const initialState: StoreState = {
   selectedFlight: null,
   flightDetails: null,
   delayDuration: null,
+  bookingReference: '', // Add this line
 
   // Wizard related
   wizardAnswers: [],

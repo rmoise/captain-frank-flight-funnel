@@ -1,7 +1,7 @@
 'use client';
 
 import React, { Suspense, useEffect, useCallback } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import { useStore } from '@/lib/state/store';
 import type { PassengerDetails } from '@/types/store';
 import { SpeechBubble } from '@/components/SpeechBubble';
@@ -17,27 +17,33 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { StoreState, StoreActions } from '@/lib/state/store';
 import { ClaimService } from '@/services/claimService';
 
-// Extend the store state type properly
+// Helper function to get language-aware URL
+const getLanguageAwareUrl = (url: string, lang: string) => {
+  return lang === 'de' ? `/de${url}` : url;
+};
+
+// Update store type to include new fields
 type ExtendedStore = StoreState &
   StoreActions & {
     _isClaimSuccess?: boolean;
     _preventPhaseChange?: boolean;
+    provisionPercentage?: number;
   };
 
 function ClaimSuccessContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const {
-    completedPhases,
-    setCurrentPhase,
-    completePhase,
-    setPersonalDetails,
-    compensationAmount,
-    isStepValid,
-    wizardAnswers,
-  } = useStore();
+  const router = useRouter();
+  const params = useParams();
+  const lang = params?.lang?.toString() || '';
+  const store = useStore() as ExtendedStore;
+  const mountedRef = React.useRef(true);
+  const initializedRef = React.useRef(false);
+  const CLAIM_SUCCESS_PHASE = 5;
 
-  const { t, lang } = useTranslation();
+  const { completedPhases, compensationAmount, isStepValid, wizardAnswers } =
+    store;
+
+  const { t } = useTranslation();
   const [claimDetails, setClaimDetails] = React.useState({
     amount: 0,
     currency: 'EUR',
@@ -50,6 +56,7 @@ function ClaimSuccessContent() {
   const [error, setError] = React.useState<string | null>(null);
   const [openSteps, setOpenSteps] = React.useState<number[]>([1]);
   const [interactedSteps, setInteractedSteps] = React.useState<number[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
 
   // Initialize answers from wizard answers
   useEffect(() => {
@@ -59,128 +66,177 @@ function ClaimSuccessContent() {
 
   // Initialize phase and claim details
   React.useEffect(() => {
-    const CLAIM_SUCCESS_PHASE = 5;
+    if (!mountedRef.current || initializedRef.current) {
+      return;
+    }
 
     const initializeState = async () => {
       try {
-        // Get URL parameters
-        const urlAmount = searchParams?.get('amount');
-        const urlProvision = searchParams?.get('provision');
+        // Get evaluation result from ClaimService
+        let evaluationResult;
+        try {
+          evaluationResult = ClaimService.getLastEvaluationResponse();
+          console.log('Retrieved evaluation result:', evaluationResult);
+        } catch (error) {
+          console.error('Error getting evaluation response:', error);
+          if (mountedRef.current) {
+            router.replace(`/${lang}/phases/compensation-estimate`);
+          }
+          return;
+        }
 
-        // Set phase immediately to ensure rendering
+        if (
+          !evaluationResult ||
+          !evaluationResult.contract ||
+          evaluationResult.status !== 'accept'
+        ) {
+          console.error('Invalid evaluation result:', evaluationResult);
+          if (mountedRef.current) {
+            router.replace(`/${lang}/phases/compensation-estimate`);
+          }
+          return;
+        }
+
+        const { amount, provision } = evaluationResult.contract;
+
+        // Set phase state first
         useStore.setState({
+          phase: CLAIM_SUCCESS_PHASE,
           currentPhase: CLAIM_SUCCESS_PHASE,
           _preventPhaseChange: true,
           _isClaimSuccess: true,
+          compensationAmount: amount,
+          provisionPercentage: provision,
+          bookingReference:
+            evaluationResult.journey_booked_flightids?.[0] || '',
           completedPhases: Array.from(
-            new Set([...useStore.getState().completedPhases, 1, 2, 3, 4])
+            new Set([...store.completedPhases, 1, 2, 3, 4, CLAIM_SUCCESS_PHASE])
           ),
           phasesCompletedViaContinue: Array.from(
-            new Set([
-              ...useStore.getState().phasesCompletedViaContinue,
-              1,
-              2,
-              3,
-              4,
-            ])
+            new Set([...store.phasesCompletedViaContinue, 1, 2, 3, 4])
           ),
           validationState: {
-            ...useStore.getState().validationState,
+            ...store.validationState,
             isFlightValid: true,
             isWizardValid: true,
-            isTermsValid:
-              useStore.getState().validationState?.isTermsValid || false,
-            isSignatureValid:
-              useStore.getState().validationState?.isSignatureValid || false,
+            isTermsValid: store.validationState?.isTermsValid || false,
+            isSignatureValid: store.validationState?.isSignatureValid || false,
             isPersonalValid: false,
             stepValidation: {
-              ...useStore.getState().validationState.stepValidation,
-              1: true,
+              ...store.validationState?.stepValidation,
+              1: false,
               2: true,
               3: true,
               4: true,
               5: true,
             },
             stepInteraction: {
-              ...useStore.getState().validationState.stepInteraction,
+              ...store.validationState?.stepInteraction,
               1: false,
             },
-            1: true,
+            1: false,
             2: true,
             3: true,
             4: true,
             5: true,
           },
-        } as Partial<ExtendedStore>);
+        } as Partial<StoreState & StoreActions>);
 
         // Subscribe to store changes to force phase 5
         const unsubscribe = useStore.subscribe((state) => {
-          if (
-            state.currentPhase !== CLAIM_SUCCESS_PHASE &&
-            (state as ExtendedStore)._isClaimSuccess
-          ) {
+          if (state.currentPhase !== CLAIM_SUCCESS_PHASE) {
             console.log('Forcing phase back to 5');
             useStore.setState({
+              phase: CLAIM_SUCCESS_PHASE,
               currentPhase: CLAIM_SUCCESS_PHASE,
               _preventPhaseChange: true,
-              completedPhases: Array.from(
-                new Set([...useStore.getState().completedPhases, 1, 2, 3, 4])
-              ),
-              phasesCompletedViaContinue: Array.from(
-                new Set([
-                  ...useStore.getState().phasesCompletedViaContinue,
-                  1,
-                  2,
-                  3,
-                  4,
-                ])
-              ),
-            } as Partial<ExtendedStore>);
+            } as Partial<StoreState & StoreActions>);
           }
         });
 
-        // Initialize claim details from URL parameters
-        const amount = urlAmount ? Number(urlAmount) : compensationAmount || 0;
-        const currency = searchParams?.get('currency') || 'EUR';
-        const provision = urlProvision ? String(urlProvision) : '';
-
-        setClaimDetails({
-          amount,
-          currency,
-          provision,
-          bookingReference: searchParams?.get('bookingRef') || '',
-          departureAirport: searchParams?.get('depAirport') || '',
-          arrivalAirport: searchParams?.get('arrAirport') || '',
-          scheduledDepartureTime: searchParams?.get('depTime') || '',
-        });
+        // Then update local state if component is still mounted
+        if (mountedRef.current) {
+          setClaimDetails({
+            amount,
+            currency: 'EUR',
+            provision: provision?.toString() || '',
+            bookingReference:
+              evaluationResult.journey_booked_flightids?.[0] || '',
+            departureAirport: '',
+            arrivalAirport: '',
+            scheduledDepartureTime: '',
+          });
+          setIsLoading(false);
+          initializedRef.current = true;
+        }
 
         return () => {
           unsubscribe();
-          useStore.setState({
-            _preventPhaseChange: false,
-            _isClaimSuccess: false,
-          } as Partial<ExtendedStore>);
+          if (mountedRef.current) {
+            useStore.setState({
+              _isClaimSuccess: false,
+              phase: CLAIM_SUCCESS_PHASE,
+              currentPhase: CLAIM_SUCCESS_PHASE,
+            } as Partial<StoreState & StoreActions>);
+          }
         };
       } catch (error) {
         console.error('Error initializing claim success page:', error);
-        setError('Failed to initialize claim success page');
+        if (mountedRef.current) {
+          setError(
+            'Failed to initialize claim success page. Please try again.'
+          );
+          setIsLoading(false);
+          initializedRef.current = true;
+        }
       }
     };
 
+    // Initialize state immediately
     initializeState();
-  }, [searchParams, router, lang]);
+
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [router, lang, store.completedPhases, store.phasesCompletedViaContinue]);
+
+  // Add debug logging
+  React.useEffect(() => {
+    console.log('Claim Success Page State:', {
+      isLoading,
+      error,
+      claimDetails,
+      storeState: {
+        currentPhase: store.currentPhase,
+        completedPhases: store.completedPhases,
+        compensationAmount: store.compensationAmount,
+        isStepValid: isStepValid(1),
+      },
+    });
+  }, [isLoading, error, claimDetails, store, isStepValid]);
 
   // Handle personal details updates
   const handlePersonalDetailsComplete = useCallback(
     (details: PassengerDetails | null) => {
       if (details) {
-        // Store in main store
-        setPersonalDetails(details);
+        // Store in main store and update validation state
+        useStore.setState({
+          personalDetails: details,
+          validationState: {
+            ...store.validationState,
+            isPersonalValid: true,
+            stepValidation: {
+              ...store.validationState?.stepValidation,
+              1: true,
+            },
+            1: true,
+          },
+        });
         // Store in ClaimService for order request
         ClaimService.setStoredPersonalDetails(details);
       }
     },
-    [setPersonalDetails]
+    []
   );
 
   const formatAmount = (amount: number, currency: string) => {
@@ -214,12 +270,27 @@ function ClaimSuccessContent() {
       // Complete all required phases
       [1, 2, 3, 4, 5].forEach((phase) => {
         console.log(`Completing phase ${phase}`);
-        completePhase(phase);
+        useStore.setState({
+          currentPhase: phase,
+          completedPhases: Array.from(
+            new Set([...useStore.getState().completedPhases, phase])
+          ),
+          phasesCompletedViaContinue: Array.from(
+            new Set([...useStore.getState().phasesCompletedViaContinue, phase])
+          ),
+          validationState: {
+            ...useStore.getState().validationState,
+            stepValidation: {
+              ...useStore.getState().validationState.stepValidation,
+              [phase]: true,
+            },
+            stepInteraction: {
+              ...useStore.getState().validationState.stepInteraction,
+              [phase]: false,
+            },
+          },
+        });
       });
-
-      // Set current phase to 6
-      console.log('Setting current phase to 6');
-      setCurrentPhase(6);
 
       // Update localStorage with completed phases
       const updatedCompletedPhases = [...completedPhases, 1, 2, 3, 4, 5];
@@ -249,16 +320,7 @@ function ClaimSuccessContent() {
       );
     }
     console.log('=== End Handle Continue ===');
-  }, [
-    setCurrentPhase,
-    completePhase,
-    isStepValid,
-    interactedSteps,
-    completedPhases,
-    lang,
-    router,
-    setError,
-  ]);
+  }, [isStepValid, interactedSteps, completedPhases, lang, router, setError]);
 
   useEffect(() => {
     pushToDataLayer({
@@ -272,12 +334,15 @@ function ClaimSuccessContent() {
       <div className="min-h-screen flex flex-col bg-[#f5f7fa]">
         <PhaseNavigation currentPhase={5} completedPhases={completedPhases} />
         <main className="flex-grow max-w-3xl mx-auto px-4 pt-8 pb-24">
-          {error ? (
+          {isLoading ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#F54538]"></div>
+            </div>
+          ) : error ? (
             <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
               <p className="text-red-700">{error}</p>
               <BackButton
                 onClick={() => {
-                  // Always navigate back to trip experience
                   router.replace(`/${lang}/phases/trip-experience`);
                 }}
                 text={t.phases.claimSuccess.navigation.back}
@@ -375,7 +440,6 @@ function ClaimSuccessContent() {
               <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
                 <BackButton
                   onClick={() => {
-                    // Always navigate back to trip experience
                     router.replace(`/${lang}/phases/trip-experience`);
                   }}
                   text={t.phases.claimSuccess.navigation.back}

@@ -342,9 +342,10 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
         const data = await response.json();
         const airports = Array.isArray(data) ? data : data.data || [];
 
-        // Map airports to the expected format with proper labels
-        const mappedAirports = airports.map(
-          (airport: Airport): AirportResult => {
+        // Filter out airports without IATA codes and map to the expected format
+        const mappedAirports = airports
+          .filter((airport: Airport) => airport.iata_code)
+          .map((airport: Airport): AirportResult => {
             return {
               value: airport.iata_code,
               label: airport.iata_code,
@@ -352,8 +353,7 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
               dropdownLabel: `${airport.name} (${airport.iata_code})`,
               name: airport.name,
             };
-          }
-        );
+          });
 
         // Sort results by relevance
         const sortedAirports = mappedAirports.sort(

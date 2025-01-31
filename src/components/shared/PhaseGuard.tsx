@@ -2,12 +2,24 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useStore, PHASE_TO_URL } from '@/lib/state/store';
+import {
+  useStore,
+  StoreState,
+  StoreActions,
+  PHASE_TO_URL,
+} from '@/lib/state/store';
 
 interface PhaseGuardProps {
   phase: number;
   children: React.ReactNode;
 }
+
+// Extend store type to include claim success flags
+type ExtendedStore = StoreState &
+  StoreActions & {
+    _isClaimSuccess?: boolean;
+    _preventPhaseChange?: boolean;
+  };
 
 export function PhaseGuard({ phase, children }: PhaseGuardProps) {
   const router = useRouter();
@@ -42,7 +54,14 @@ export function PhaseGuard({ phase, children }: PhaseGuardProps) {
       return;
     }
 
-    const store = useStore.getState();
+    const store = useStore.getState() as ExtendedStore;
+
+    // Check if we're in claim success mode
+    const isClaimSuccess = store._isClaimSuccess;
+    if (isClaimSuccess && phase === 5) {
+      setIsPhaseAccessible(true);
+      return;
+    }
 
     // For phase 5, check specific requirements
     const isPhase5Accessible =
@@ -77,11 +96,12 @@ export function PhaseGuard({ phase, children }: PhaseGuardProps) {
       isCurrentPhase,
       isWithinCompletedPhases,
       isPreviousPhaseCompletedViaContinue,
+      isClaimSuccess,
       accessible,
     });
 
     // Only redirect if we're definitely sure the phase is not accessible
-    if (!accessible && isInitialized && currentPhase > 1) {
+    if (!accessible && isInitialized && currentPhase > 1 && !isClaimSuccess) {
       const redirectUrl = PHASE_TO_URL[currentPhase];
       if (redirectUrl) {
         const currentPath = window.location.pathname;

@@ -806,8 +806,8 @@ export default function TripExperiencePage() {
       // Get the next URL based on evaluation result
       const isAccepted = evaluationResult.status === 'accept';
       const nextUrl = isAccepted
-        ? '/phases/claim-success'
-        : '/phases/claim-rejected';
+        ? `/${lang}/phases/claim-success`
+        : `/${lang}/phases/claim-rejected`;
 
       // Save final validation state
       const finalValidationState = {
