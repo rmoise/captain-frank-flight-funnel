@@ -114,6 +114,8 @@ export class EvaluateService {
       journey_fact_flightids:
         journeyFactType === 'provided'
           ? uniqueSelectedFlights.map((f) => String(f.id))
+          : journeyFactType === 'self'
+          ? uniqueOriginalFlights.map((f) => String(f.id))
           : [],
       information_received_at: informedDate,
       travel_status: travelStatus,

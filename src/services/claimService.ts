@@ -137,7 +137,9 @@ export class ClaimService {
     const journey_fact_flightids =
       journeyFactType === 'provided'
         ? validSelectedFlights.map((f) => String(f.id))
-        : [];
+        : journeyFactType === 'self'
+          ? validOriginalFlights.map((f) => String(f.id))
+          : [];
 
     // Log the request details for debugging
     console.log('=== Building Evaluate Request - Output ===', {
