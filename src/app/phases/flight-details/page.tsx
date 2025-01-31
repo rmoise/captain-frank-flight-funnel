@@ -570,21 +570,35 @@ export default function FlightDetailsPage() {
     try {
       // Save the complete flight data to localStorage before transitioning
       const flightData = {
-        selectedFlights,
+        selectedFlights: selectedFlights.map((flight) => ({
+          ...flight,
+          // Keep the original date format (YYYY-MM-DD)
+          date: flight.date,
+        })),
         flightSegments: flightSegments.map((segment) => ({
           ...segment,
-          date: segment.date ? formatDateForDisplay(segment.date) : null,
-          selectedFlight: segment.selectedFlight,
+          // Keep the original date format (YYYY-MM-DD)
+          date: segment.date,
+          selectedFlight: segment.selectedFlight
+            ? {
+                ...segment.selectedFlight,
+                date: segment.selectedFlight.date,
+              }
+            : null,
           fromLocation: segment.fromLocation,
           toLocation: segment.toLocation,
         })),
         directFlight: directFlight
           ? {
               ...directFlight,
-              date: directFlight.date
-                ? formatDateForDisplay(directFlight.date)
+              // Keep the original date format (YYYY-MM-DD)
+              date: directFlight.date,
+              selectedFlight: directFlight.selectedFlight
+                ? {
+                    ...directFlight.selectedFlight,
+                    date: directFlight.selectedFlight.date,
+                  }
                 : null,
-              selectedFlight: directFlight.selectedFlight,
               fromLocation: directFlight.fromLocation,
               toLocation: directFlight.toLocation,
             }

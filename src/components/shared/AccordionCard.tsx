@@ -53,6 +53,10 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
   const wasManualRef = React.useRef(false);
   const defaultOpenHandledRef = React.useRef(false);
 
+  // Track form interaction
+  const [isInteractingWithForm, setIsInteractingWithForm] =
+    React.useState(false);
+
   // Track when manual transitions occur
   useEffect(() => {
     if (isManualTransition) {
@@ -81,10 +85,23 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
   useEffect(() => {
     // Only trigger auto-transition if the step is valid, completed, and currently open
     const isStepValid = isValid && isCompleted;
+    console.log('=== AccordionCard Auto-transition Check ===', {
+      stepId,
+      isStepValid,
+      isValid,
+      isCompleted,
+      activeAccordion,
+      isTransitioning,
+      wasManual: wasManualRef.current,
+      isInteractingWithForm,
+      timestamp: new Date().toISOString(),
+    });
+
     if (!isStepValid) return;
     if (!activeAccordion || activeAccordion !== stepId) return;
     if (isTransitioning) return;
     if (wasManualRef.current) return;
+    if (isInteractingWithForm) return; // Prevent auto-transition while interacting with form
 
     // Check if this was a manual reopening
     const manualOpenTime = sessionStorage.getItem(
@@ -94,22 +111,42 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
       const timeSinceManualOpen = Date.now() - parseInt(manualOpenTime);
       // If manually opened within the last 2 seconds, skip auto-transition
       if (timeSinceManualOpen < 2000) {
+        console.log('=== Skipping Auto-transition (Recent Manual Open) ===', {
+          stepId,
+          timeSinceManualOpen,
+          timestamp: new Date().toISOString(),
+        });
         return;
       }
     }
 
     const delay = isQA ? 2000 : 1000;
+    console.log('=== Setting Auto-transition Timer ===', {
+      stepId,
+      delay,
+      isQA,
+      timestamp: new Date().toISOString(),
+    });
+
     const timer = setTimeout(() => {
-      if (activeAccordion === stepId) {
-        console.log('AccordionCard - Auto transitioning:', {
+      if (activeAccordion === stepId && !isInteractingWithForm) {
+        console.log('=== Executing Auto-transition ===', {
           stepId,
           isValid,
           isCompleted,
           isQA,
           delay,
+          isInteractingWithForm,
           currentTime: new Date().toISOString(),
         });
         autoTransition(stepId, true, isQA);
+      } else {
+        console.log('=== Auto-transition Cancelled ===', {
+          stepId,
+          activeAccordion,
+          isInteractingWithForm,
+          timestamp: new Date().toISOString(),
+        });
       }
     }, delay);
 
@@ -122,6 +159,7 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
     isQA,
     autoTransition,
     isTransitioning,
+    isInteractingWithForm,
   ]);
 
   const currentIsOpen =
@@ -132,16 +170,23 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
     if (e?.target) {
       const target = e.target as HTMLElement;
 
-      // Prevent toggle if interacting with input fields
+      // Prevent toggle if interacting with input fields or their wrappers
       if (
         target.tagName.toLowerCase() === 'input' ||
         target.tagName.toLowerCase() === 'select' ||
+        target.tagName.toLowerCase() === 'textarea' ||
         target.closest('input') ||
         target.closest('select') ||
+        target.closest('textarea') ||
         target.closest('[role="combobox"]') ||
         target.closest('[role="listbox"]') ||
-        target.closest('[role="searchbox"]')
+        target.closest('[role="searchbox"]') ||
+        target.closest('[role="textbox"]') ||
+        target.closest('.form-field') ||
+        target.closest('.input-wrapper') ||
+        target.closest('label')
       ) {
+        e.preventDefault();
         e.stopPropagation();
         return;
       }
@@ -149,6 +194,8 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
       // Check if click is within header
       const header = target.closest('.accordion-header');
       if (!header) {
+        e.preventDefault();
+        e.stopPropagation();
         return;
       }
     }
@@ -201,6 +248,11 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
     <div
       className={`bg-white rounded-lg transition-all duration-500 ${className}`}
       data-step={stepId}
+      onFocus={() => setIsInteractingWithForm(true)}
+      onBlur={() => {
+        // Add a small delay before setting to false to ensure we don't transition too quickly
+        setTimeout(() => setIsInteractingWithForm(false), 500);
+      }}
     >
       <div className="accordion-header">
         <button

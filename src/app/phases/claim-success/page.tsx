@@ -390,7 +390,13 @@ function ClaimSuccessContent() {
               <p className="text-red-700">{error}</p>
               <BackButton
                 onClick={() => {
-                  router.replace(`/${lang}/phases/trip-experience`);
+                  // Set phase back to 4 before navigation
+                  useStore.setState({
+                    currentPhase: 4,
+                    _isClaimSuccess: false,
+                    _preventPhaseChange: false,
+                  } as Partial<StoreState & StoreActions>);
+                  router.push(`/${lang}/phases/trip-experience`);
                 }}
                 text={t.phases.claimSuccess.navigation.back}
               />
@@ -487,7 +493,13 @@ function ClaimSuccessContent() {
               <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
                 <BackButton
                   onClick={() => {
-                    router.replace(`/${lang}/phases/trip-experience`);
+                    // Set phase back to 4 before navigation
+                    useStore.setState({
+                      currentPhase: 4,
+                      _isClaimSuccess: false,
+                      _preventPhaseChange: false,
+                    } as Partial<StoreState & StoreActions>);
+                    router.push(`/${lang}/phases/trip-experience`);
                   }}
                   text={t.phases.claimSuccess.navigation.back}
                 />

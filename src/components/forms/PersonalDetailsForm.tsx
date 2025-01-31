@@ -165,6 +165,9 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
 
   // Handle initial load validation
   useEffect(() => {
+    // Skip if already validated
+    if (validationState._timestamp) return;
+
     // Skip validation entirely on mount if no stored details or all values are empty
     if (
       !storedDetails ||
@@ -184,6 +187,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
         isPersonalValid: false,
         [stepId]: false,
         fieldErrors: {},
+        _timestamp: Date.now(),
       });
       return;
     }
@@ -211,35 +215,46 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
     const store = useStore.getState();
     const currentValidation = store.validationState;
 
-    // Update validation state to reflect completed state
-    const newValidationState = {
-      ...currentValidation,
-      stepValidation: {
-        ...currentValidation.stepValidation,
+    // Only update if validation state has changed
+    if (currentValidation.stepValidation[stepId] !== hasAllRequiredFields) {
+      // Update validation state to reflect completed state
+      const newValidationState = {
+        ...currentValidation,
+        stepValidation: {
+          ...currentValidation.stepValidation,
+          [stepId]: hasAllRequiredFields,
+        },
+        stepInteraction: {
+          ...currentValidation.stepInteraction,
+          [stepId]: hasAllRequiredFields,
+        },
+        isPersonalValid: hasAllRequiredFields,
         [stepId]: hasAllRequiredFields,
-      },
-      stepInteraction: {
-        ...currentValidation.stepInteraction,
-        [stepId]: hasAllRequiredFields, // Only mark as interacted if all required fields are present
-      },
-      isPersonalValid: hasAllRequiredFields,
-      [stepId]: hasAllRequiredFields,
-      fieldErrors: hasAllRequiredFields ? {} : currentValidation.fieldErrors,
-    };
+        fieldErrors: hasAllRequiredFields ? {} : currentValidation.fieldErrors,
+        _timestamp: Date.now(),
+      };
 
-    store.updateValidationState(newValidationState);
+      store.updateValidationState(newValidationState);
 
-    // If all required fields are present, call onComplete
-    if (hasAllRequiredFields) {
-      onComplete(storedDetails);
+      // If all required fields are present, call onComplete
+      if (hasAllRequiredFields) {
+        onComplete(storedDetails);
+      }
+
+      // Mark as interacted if we have all required fields
+      if (!interactionRef.current && onInteract && hasAllRequiredFields) {
+        interactionRef.current = true;
+        onInteract();
+      }
     }
-
-    // Mark as interacted if we have all required fields
-    if (!interactionRef.current && onInteract && hasAllRequiredFields) {
-      interactionRef.current = true;
-      onInteract();
-    }
-  }, [storedDetails, isClaimSuccess, onComplete, onInteract, stepId]);
+  }, [
+    storedDetails,
+    isClaimSuccess,
+    onComplete,
+    onInteract,
+    stepId,
+    validationState._timestamp,
+  ]);
 
   // Memoize the input change handler
   const handleInputChange = useCallback(
@@ -279,35 +294,62 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
               ]
             : ['firstName', 'lastName', 'email'];
 
-          const hasAllRequiredFields = requiredFields.every((field) =>
-            newDetails[field as keyof PassengerDetails]?.trim()
-          );
+          // Email validation
+          const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+          const isEmailValid =
+            field === 'email' ? emailRegex.test(value) : true;
 
-          // Update validation state
-          const newValidationState = {
-            ...currentValidation,
-            stepValidation: {
-              ...currentValidation.stepValidation,
+          const hasAllRequiredFields = requiredFields.every((field) => {
+            const fieldValue =
+              newDetails[field as keyof PassengerDetails]?.trim();
+            if (field === 'email') {
+              return fieldValue && emailRegex.test(fieldValue);
+            }
+            return !!fieldValue;
+          });
+
+          // Only update validation state if it has changed
+          const shouldUpdate =
+            currentValidation.stepValidation[stepId] !== hasAllRequiredFields ||
+            currentValidation.fieldErrors[field] !==
+              (field === 'email' && value.trim()
+                ? !isEmailValid
+                  ? 'Please enter a valid email address'
+                  : ''
+                : value.trim()
+                  ? ''
+                  : 'This field is required');
+
+          if (shouldUpdate) {
+            // Update validation state
+            const newValidationState = {
+              ...currentValidation,
+              stepValidation: {
+                ...currentValidation.stepValidation,
+                [stepId]: hasAllRequiredFields,
+              },
+              stepInteraction: {
+                ...currentValidation.stepInteraction,
+                [stepId]: true,
+              },
               [stepId]: hasAllRequiredFields,
-            },
-            stepInteraction: {
-              ...currentValidation.stepInteraction,
-              [stepId]: true,
-            },
-            [stepId]: hasAllRequiredFields,
-            isPersonalValid: hasAllRequiredFields,
-            fieldErrors: hasAllRequiredFields
-              ? {}
-              : {
-                  ...currentValidation.fieldErrors,
-                  [field]: value.trim() ? '' : 'This field is required',
-                },
-          };
+              isPersonalValid: hasAllRequiredFields,
+              fieldErrors: {
+                ...currentValidation.fieldErrors,
+                [field]:
+                  field === 'email' && value.trim()
+                    ? !isEmailValid
+                      ? 'Please enter a valid email address'
+                      : ''
+                    : value.trim()
+                      ? ''
+                      : 'This field is required',
+              },
+              _timestamp: Date.now(),
+            };
 
-          store.updateValidationState(newValidationState);
-        } else {
-          // If no interaction yet, just update the details without validation
-          setPersonalDetails(newDetails);
+            store.updateValidationState(newValidationState);
+          }
         }
       }
     },

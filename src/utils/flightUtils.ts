@@ -40,6 +40,7 @@ export function getConnectionTimeInfo(
     const nextDate = parseISO(nextFlight.date);
 
     // Create date objects in UTC to avoid timezone shifts
+    // Add timezone offset to ensure consistent local time comparison
     const prevArrivalTime = new Date(
       Date.UTC(
         prevDate.getFullYear(),
@@ -48,7 +49,8 @@ export function getConnectionTimeInfo(
         prevArrHours,
         prevArrMinutes,
         0
-      )
+      ) +
+        prevDate.getTimezoneOffset() * 60 * 1000
     );
 
     const nextDepartureTime = new Date(
@@ -59,7 +61,8 @@ export function getConnectionTimeInfo(
         nextDepHours,
         nextDepMinutes,
         0
-      )
+      ) +
+        nextDate.getTimezoneOffset() * 60 * 1000
     );
 
     console.log('=== Connection Time Validation - Final Times ===', {
@@ -77,6 +80,7 @@ export function getConnectionTimeInfo(
             day: prevDate.getDate(),
             hours: prevArrHours,
             minutes: prevArrMinutes,
+            timezoneOffset: prevDate.getTimezoneOffset(),
           },
         },
         next: {
@@ -88,12 +92,13 @@ export function getConnectionTimeInfo(
             day: nextDate.getDate(),
             hours: nextDepHours,
             minutes: nextDepMinutes,
+            timezoneOffset: nextDate.getTimezoneOffset(),
           },
         },
       },
     });
 
-    // Calculate time difference in minutes
+    // Calculate time difference in minutes, ensuring we're comparing in the same timezone
     const diffInMinutes = Math.floor(
       (nextDepartureTime.getTime() - prevArrivalTime.getTime()) / (1000 * 60)
     );
@@ -108,6 +113,8 @@ export function getConnectionTimeInfo(
       minutes,
       maxAllowed: 48 * 60,
       isValid: diffInMinutes >= 30 && diffInMinutes <= 48 * 60,
+      prevArrivalLocalTime: prevArrivalTime.toLocaleString(),
+      nextDepartureLocalTime: nextDepartureTime.toLocaleString(),
     });
 
     // Validate connection time

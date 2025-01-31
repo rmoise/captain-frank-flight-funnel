@@ -803,6 +803,7 @@ export default function AgreementPage() {
                     details={
                       t.phases.agreement.termsAndConditions.marketingDetails
                     }
+                    required={false}
                   />
                 </div>
               </div>

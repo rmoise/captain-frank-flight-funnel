@@ -768,23 +768,35 @@ export default function CompensationEstimatePage() {
                               directFlight?.fromLocation as LocationData
                             )?.city,
                             departure: directFlight?.selectedFlight?.departure,
+                            value: (directFlight?.fromLocation as LocationData)
+                              ?.value,
                           };
 
-                          const fullCityFromLabel = fromCityData.dropdownLabel
-                            ? fromCityData.dropdownLabel
-                                .split('(')[0]
-                                .trim()
-                                .split(' ')[0]
-                            : null;
+                          console.log('=== From City Data ===', fromCityData);
 
-                          const cityName =
-                            fullCityFromLabel ||
-                            fromCityData.locationDesc ||
-                            fromCityData.selectedFlightCity ||
-                            fromCityData.locationCity ||
-                            fromCityData.departure ||
-                            t.phases.compensationEstimate.flightSummary
-                              .noFlightDetails;
+                          // Extract city name from airport description
+                          const extractCityName = (desc: string) => {
+                            if (!desc) return null;
+                            // Remove "International Airport" and similar suffixes
+                            return desc
+                              .replace(/ International Airport| Airport/g, '')
+                              .trim();
+                          };
+
+                          // Try to get city name from description first if it exists
+                          const cityName = fromCityData.locationDesc
+                            ? extractCityName(fromCityData.locationDesc)
+                            : fromCityData.dropdownLabel
+                              ? extractCityName(
+                                  fromCityData.dropdownLabel
+                                    .split('(')[0]
+                                    .trim()
+                                )
+                              : fromCityData.selectedFlightCity ||
+                                fromCityData.locationCity ||
+                                fromCityData.departure ||
+                                t.phases.compensationEstimate.flightSummary
+                                  .noFlightDetails;
 
                           return <p className="font-medium">{cityName}</p>;
                         })()}
@@ -807,23 +819,33 @@ export default function CompensationEstimatePage() {
                               directFlight?.toLocation as LocationData
                             )?.city,
                             arrival: directFlight?.selectedFlight?.arrival,
+                            value: (directFlight?.toLocation as LocationData)
+                              ?.value,
                           };
 
-                          const fullCityFromLabel = toCityData.dropdownLabel
-                            ? toCityData.dropdownLabel
-                                .split('(')[0]
-                                .trim()
-                                .split(' ')[0]
-                            : null;
+                          console.log('=== To City Data ===', toCityData);
 
-                          const cityName =
-                            fullCityFromLabel ||
-                            toCityData.locationDesc ||
-                            toCityData.selectedFlightCity ||
-                            toCityData.locationCity ||
-                            toCityData.arrival ||
-                            t.phases.compensationEstimate.flightSummary
-                              .noFlightDetails;
+                          // Extract city name from airport description
+                          const extractCityName = (desc: string) => {
+                            if (!desc) return null;
+                            // Remove "International Airport" and similar suffixes
+                            return desc
+                              .replace(/ International Airport| Airport/g, '')
+                              .trim();
+                          };
+
+                          // Try to get city name from description first if it exists
+                          const cityName = toCityData.locationDesc
+                            ? extractCityName(toCityData.locationDesc)
+                            : toCityData.dropdownLabel
+                              ? extractCityName(
+                                  toCityData.dropdownLabel.split('(')[0].trim()
+                                )
+                              : toCityData.selectedFlightCity ||
+                                toCityData.locationCity ||
+                                toCityData.arrival ||
+                                t.phases.compensationEstimate.flightSummary
+                                  .noFlightDetails;
 
                           return <p className="font-medium">{cityName}</p>;
                         })()}
@@ -842,6 +864,7 @@ export default function CompensationEstimatePage() {
                         dropdownLabel: fromLocation?.dropdownLabel,
                         locationCity: fromLocation?.city,
                         departure: selectedFlight?.departure,
+                        value: fromLocation?.value,
                       };
 
                       const arrivalCityData = {
@@ -850,40 +873,49 @@ export default function CompensationEstimatePage() {
                         dropdownLabel: toLocation?.dropdownLabel,
                         locationCity: toLocation?.city,
                         arrival: selectedFlight?.arrival,
+                        value: toLocation?.value,
                       };
 
-                      const departureCityFromLabel =
-                        departureCityData.dropdownLabel
-                          ? departureCityData.dropdownLabel
-                              .split('(')[0]
-                              .trim()
-                              .split(' ')[0]
-                          : null;
+                      console.log('=== Multi Segment City Data ===', {
+                        departureCityData,
+                        arrivalCityData,
+                      });
 
-                      const arrivalCityFromLabel = arrivalCityData.dropdownLabel
-                        ? arrivalCityData.dropdownLabel
-                            .split('(')[0]
-                            .trim()
-                            .split(' ')[0]
-                        : null;
+                      // Extract city name from airport description
+                      const extractCityName = (desc: string) => {
+                        if (!desc) return null;
+                        // Remove "International Airport" and similar suffixes
+                        return desc
+                          .replace(/ International Airport| Airport/g, '')
+                          .trim();
+                      };
 
-                      const departureCity =
-                        departureCityFromLabel ||
-                        departureCityData.locationDesc ||
-                        departureCityData.selectedFlightCity ||
-                        departureCityData.locationCity ||
-                        departureCityData.departure ||
-                        t.phases.compensationEstimate.flightSummary
-                          .noFlightDetails;
+                      // Try to get city name from description first if it exists
+                      const departureCity = departureCityData.locationDesc
+                        ? extractCityName(departureCityData.locationDesc)
+                        : departureCityData.dropdownLabel
+                          ? extractCityName(
+                              departureCityData.dropdownLabel
+                                .split('(')[0]
+                                .trim()
+                            )
+                          : departureCityData.selectedFlightCity ||
+                            departureCityData.locationCity ||
+                            departureCityData.departure ||
+                            t.phases.compensationEstimate.flightSummary
+                              .noFlightDetails;
 
-                      const arrivalCity =
-                        arrivalCityFromLabel ||
-                        arrivalCityData.locationDesc ||
-                        arrivalCityData.selectedFlightCity ||
-                        arrivalCityData.locationCity ||
-                        arrivalCityData.arrival ||
-                        t.phases.compensationEstimate.flightSummary
-                          .noFlightDetails;
+                      const arrivalCity = arrivalCityData.locationDesc
+                        ? extractCityName(arrivalCityData.locationDesc)
+                        : arrivalCityData.dropdownLabel
+                          ? extractCityName(
+                              arrivalCityData.dropdownLabel.split('(')[0].trim()
+                            )
+                          : arrivalCityData.selectedFlightCity ||
+                            arrivalCityData.locationCity ||
+                            arrivalCityData.arrival ||
+                            t.phases.compensationEstimate.flightSummary
+                              .noFlightDetails;
 
                       return (
                         <div
