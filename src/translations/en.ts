@@ -137,7 +137,7 @@ export const en: Translations = {
   },
   phases: {
     initialAssessment: {
-      title: 'Initial Assessment',
+      title: 'Tell us about your flight',
       description: "Let's assess your flight claim",
       flightDetails: 'Flight Details',
       bookingNumber: 'Booking Number',
