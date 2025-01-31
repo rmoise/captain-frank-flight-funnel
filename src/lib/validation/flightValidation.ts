@@ -168,7 +168,7 @@ export const validateFlightConnection = (
         },
       });
 
-      // Create date objects in UTC using the respective dates
+      // Create date objects in UTC for both flights
       const prevArrivalTime = new Date(
         Date.UTC(
           prevDate.getUTCFullYear(),
@@ -190,6 +190,11 @@ export const validateFlightConnection = (
           0
         )
       );
+
+      // Handle overnight connections by adding 24 hours if departure is before arrival
+      if (nextDepartureTime < prevArrivalTime) {
+        nextDepartureTime.setUTCDate(nextDepartureTime.getUTCDate() + 1);
+      }
 
       const timeDiff = nextDepartureTime.getTime() - prevArrivalTime.getTime();
       const timeDiffMinutes = timeDiff / 60000; // Convert to minutes

@@ -117,7 +117,7 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
       }
 
       // Toggle the accordion
-      setOpenAccordions((prev) => {
+      setOpenAccordions((prev: Set<string>) => {
         const newSet = new Set(prev);
         if (currentIsOpen) {
           newSet.delete(stepId);

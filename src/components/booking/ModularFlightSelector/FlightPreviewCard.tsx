@@ -27,27 +27,17 @@ export const FlightPreviewCard: React.FC<FlightPreviewCardProps> = React.memo(
       ? flightStore.selectedFlights[index - 1]
       : null;
 
-    // Get the dates from the store for both flights
-    const prevDate = showConnectionInfo
-      ? mainStore.flightSegments[index - 1]?.date
-        ? formatSafeDate(mainStore.flightSegments[index - 1]?.date)
-        : formatSafeDate(new Date(prevFlight?.date || ''))
-      : null;
-    const nextDate = mainStore.flightSegments[index]?.date
-      ? formatSafeDate(mainStore.flightSegments[index]?.date)
-      : formatSafeDate(new Date(flight.date));
-
     // Create copies of the flights with their correct dates
     const validationFlights = {
       prev: prevFlight
         ? {
             ...prevFlight,
-            date: prevDate || formatSafeDate(new Date(prevFlight.date)), // Ensure date is in correct format
+            date: prevFlight.date, // Use raw flight date
           }
         : null,
       next: {
         ...flight,
-        date: nextDate,
+        date: flight.date, // Use raw flight date
       },
     };
 
@@ -70,11 +60,8 @@ export const FlightPreviewCard: React.FC<FlightPreviewCardProps> = React.memo(
       },
       showConnectionInfo,
       currentPhase,
-      prevStoreDate: prevDate,
-      nextStoreDate: nextDate,
       rawFlightDate: flight.date,
       prevRawFlightDate: prevFlight?.date,
-      storeSegment: mainStore.flightSegments[index - 1],
       flightStoreFlights: flightStore.selectedFlights,
     });
 
