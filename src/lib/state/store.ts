@@ -1641,7 +1641,22 @@ export const useStore = create<StoreState & StoreActions>()(
           // Save current state before transition
           const currentState = {
             selectedType: state.selectedType,
-            flightSegments: state.flightSegments,
+            flightSegments: state.flightSegments.map((segment) => ({
+              ...segment,
+              fromLocation: segment.fromLocation,
+              toLocation: segment.toLocation,
+              date: segment.date,
+              selectedFlight: segment.selectedFlight,
+            })),
+            directFlight: state.directFlight
+              ? {
+                  ...state.directFlight,
+                  fromLocation: state.directFlight.fromLocation,
+                  toLocation: state.directFlight.toLocation,
+                  date: state.directFlight.date,
+                  selectedFlight: state.directFlight.selectedFlight,
+                }
+              : null,
             validationState: state.validationState,
             personalDetails: state.personalDetails,
             compensationAmount: state.compensationAmount,
@@ -1659,7 +1674,8 @@ export const useStore = create<StoreState & StoreActions>()(
                 'flightSelectionState',
                 JSON.stringify({
                   selectedType: state.selectedType,
-                  flightSegments: state.flightSegments,
+                  flightSegments: currentState.flightSegments,
+                  directFlight: currentState.directFlight,
                   _isClaimSuccess: state._isClaimSuccess,
                   _preventPhaseChange: state._preventPhaseChange,
                 })
@@ -1978,7 +1994,7 @@ export const useStore = create<StoreState & StoreActions>()(
           // Create new state with both location updates
           const newState = {
             ...state,
-            fromLocation: location,
+            fromLocation: parsedLocation, // Store the full location object
             directFlight: {
               ...state.directFlight,
               fromLocation: parsedLocation,
@@ -2043,7 +2059,7 @@ export const useStore = create<StoreState & StoreActions>()(
           // Create new state with both location updates
           const newState = {
             ...state,
-            toLocation: location,
+            toLocation: parsedLocation, // Store the full location object
             directFlight: {
               ...state.directFlight,
               toLocation: parsedLocation,
@@ -2051,7 +2067,6 @@ export const useStore = create<StoreState & StoreActions>()(
           };
 
           // Run validation with the new state
-
           const isValid = validateFlightSelection(newState);
 
           // Update validation state

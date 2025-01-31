@@ -163,10 +163,6 @@ const transformRawFlight = (
       flightNumber: rawFlight.flightnumber_iata,
       depTime: rawFlight.dep_time_sched,
       arrTime: rawFlight.arr_time_sched,
-      dep_city: rawFlight.dep_city,
-      arr_city: rawFlight.arr_city,
-      dep_iata: rawFlight.dep_iata,
-      arr_iata: rawFlight.arr_iata,
     },
     formattedDate,
   });
@@ -181,19 +177,8 @@ const transformRawFlight = (
 
   // Get city information from the API response
   // If city is not provided, use the IATA code
-  // Ensure we have valid city data by checking for non-empty strings
-  const departureCity = (rawFlight.dep_city || rawFlight.dep_iata || '').trim();
-  const arrivalCity = (rawFlight.arr_city || rawFlight.arr_iata || '').trim();
-
-  // Return null if we don't have valid city data
-  if (!departureCity || !arrivalCity) {
-    console.error('Missing city data:', {
-      departureCity,
-      arrivalCity,
-      rawFlight,
-    });
-    return null;
-  }
+  const departureCity = rawFlight.dep_city || rawFlight.dep_iata;
+  const arrivalCity = rawFlight.arr_city || rawFlight.arr_iata;
 
   // Always use the search date (formattedDate) instead of any date from the API
   const flight = {
@@ -233,8 +218,6 @@ const transformRawFlight = (
       date: flight.date,
       departureTime: flight.departureTime,
       arrivalTime: flight.arrivalTime,
-      departureCity: flight.departureCity,
-      arrivalCity: flight.arrivalCity,
     },
   });
 
@@ -245,54 +228,19 @@ const transformRawFlight = (
 const isValidFlight = (flight: unknown): flight is Flight => {
   if (!flight || typeof flight !== 'object') return false;
   const f = flight as Flight;
-
-  // Check required string fields are present and non-empty
-  const requiredFields: Array<keyof Flight> = [
-    'id',
-    'flightNumber',
-    'airline',
-    'departureCity',
-    'arrivalCity',
-    'departureTime',
-    'arrivalTime',
-    'departure',
-    'arrival',
-    'duration',
-    'date',
-  ];
-
-  const hasValidStringFields = requiredFields.every(
-    (field) =>
-      typeof f[field] === 'string' && f[field].toString().trim().length > 0
+  return (
+    typeof f.id === 'string' &&
+    typeof f.flightNumber === 'string' &&
+    typeof f.airline === 'string' &&
+    typeof f.departureCity === 'string' &&
+    typeof f.arrivalCity === 'string' &&
+    typeof f.departureTime === 'string' &&
+    typeof f.arrivalTime === 'string' &&
+    typeof f.departure === 'string' &&
+    typeof f.arrival === 'string' &&
+    typeof f.duration === 'string' &&
+    typeof f.date === 'string'
   );
-
-  if (!hasValidStringFields) {
-    console.error(
-      'Flight validation failed - missing or empty required fields:',
-      {
-        flight: f,
-        invalidFields: requiredFields.filter(
-          (field) =>
-            typeof f[field] !== 'string' || !f[field].toString().trim().length
-        ),
-      }
-    );
-    return false;
-  }
-
-  // Additional validation for city data
-  if (f.departureCity.trim() === f.arrivalCity.trim()) {
-    console.error(
-      'Flight validation failed - departure and arrival cities are the same:',
-      {
-        departureCity: f.departureCity,
-        arrivalCity: f.arrivalCity,
-      }
-    );
-    return false;
-  }
-
-  return true;
 };
 
 // Helper function to safely parse date string
@@ -335,36 +283,6 @@ const safeParseDateString = (dateStr: string | Date): Date | undefined => {
     console.error('Error parsing date:', error);
     return undefined;
   }
-};
-
-// Helper function to normalize city names for comparison
-const normalizeCity = (city: string): string => {
-  return city
-    .toLowerCase()
-    .replace(/\s*\([^)]*\)/g, '') // Remove anything in parentheses including the parentheses
-    .replace(/[^a-z\s]/g, '') // Remove any non-letter characters except spaces
-    .trim();
-};
-
-// Helper function to get city name from location data
-const getCityFromLocation = (location: LocationData | null): string => {
-  if (!location) return '';
-  return (
-    location.city ||
-    location.description ||
-    location.label ||
-    location.value ||
-    ''
-  );
-};
-
-// Helper function to get city name from flight data
-const getCityFromFlight = (
-  flight: Flight | null,
-  field: 'departure' | 'arrival'
-): string => {
-  if (!flight) return '';
-  return field === 'departure' ? flight.departureCity : flight.arrivalCity;
 };
 
 export const FlightSegments: React.FC<FlightSegmentsProps> = ({
@@ -569,21 +487,14 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
       ) {
         const previousSegment = newSegments[index - 1];
         if (previousSegment.selectedFlight) {
-          const prevArrivalCity = normalizeCity(
-            getCityFromFlight(previousSegment.selectedFlight, 'arrival')
-          );
-          const newDepartureCity = normalizeCity(getCityFromLocation(location));
+          const prevArrivalCity = previousSegment.selectedFlight.arrivalCity;
+          const newDepartureCity =
+            location.city || location.description || location.label;
 
-          if (prevArrivalCity !== newDepartureCity) {
-            console.error('City connection validation failed:', {
-              previousArrivalCity: prevArrivalCity,
-              newDepartureCity: newDepartureCity,
-              rawPrevCity: getCityFromFlight(
-                previousSegment.selectedFlight,
-                'arrival'
-              ),
-              rawNewCity: getCityFromLocation(location),
-            });
+          if (
+            prevArrivalCity.toLowerCase() !== newDepartureCity.toLowerCase()
+          ) {
+            // Don't update if cities don't match
             return;
           }
         }
@@ -666,14 +577,19 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
                 if (!prevSegment.toLocation || !segment.fromLocation)
                   return false;
 
-                const prevCity = normalizeCity(
-                  getCityFromLocation(prevSegment.toLocation)
-                );
-                const currentCity = normalizeCity(
-                  getCityFromLocation(segment.fromLocation)
-                );
+                const prevCity =
+                  prevSegment.toLocation.city ||
+                  prevSegment.toLocation.description ||
+                  prevSegment.toLocation.label;
+                const currentCity =
+                  segment.fromLocation.city ||
+                  segment.fromLocation.description ||
+                  segment.fromLocation.label;
 
-                return hasLocations && prevCity === currentCity;
+                return (
+                  hasLocations &&
+                  prevCity.toLowerCase() === currentCity.toLowerCase()
+                );
               })
             : !!(
                 newSegments[index].fromLocation && newSegments[index].toLocation

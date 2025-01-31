@@ -117,8 +117,8 @@ export default function InitialAssessment() {
   // Update flight selection handler
   const handleFlightSelect = useCallback(
     (flight: Flight | Flight[]) => {
-      console.log('=== handleFlightSelect START ===', {
-        flight,
+      console.log('=== DEBUG: handleFlightSelect START ===', {
+        flight: Array.isArray(flight) ? flight[0] : flight,
         timestamp: new Date().toISOString(),
       });
 
@@ -143,9 +143,15 @@ export default function InitialAssessment() {
           dropdownLabel: `${firstFlight.arrivalAirport || firstFlight.arrivalCity} (${firstFlight.arrivalCity})`,
         };
 
+        console.log('=== DEBUG: Setting Location Data ===', {
+          fromLocation,
+          toLocation,
+          timestamp: new Date().toISOString(),
+        });
+
         // Set locations in store
-        mainStore.setFromLocation(JSON.stringify(fromLocation));
-        mainStore.setToLocation(JSON.stringify(toLocation));
+        mainStore.setFromLocation(fromLocation);
+        mainStore.setToLocation(toLocation);
 
         // Set direct flight data
         if (flights.length === 1) {
@@ -156,6 +162,10 @@ export default function InitialAssessment() {
             date: new Date(firstFlight.date),
             selectedFlight: firstFlight,
           };
+          console.log('=== DEBUG: Setting Direct Flight Data ===', {
+            directFlightData,
+            timestamp: new Date().toISOString(),
+          });
           mainStore.setDirectFlight(directFlightData);
         }
 
@@ -1066,6 +1076,18 @@ export default function InitialAssessment() {
     try {
       // Get latest state
       const currentState = useStore.getState();
+      console.log('=== DEBUG: handleContinue Current State ===', {
+        fromLocation: currentState.fromLocation,
+        toLocation: currentState.toLocation,
+        directFlight: currentState.directFlight
+          ? {
+              fromLocation: currentState.directFlight.fromLocation,
+              toLocation: currentState.directFlight.toLocation,
+            }
+          : null,
+        selectedType: currentState.selectedType,
+        timestamp: new Date().toISOString(),
+      });
 
       // Parse location data from state first
       let fromLocation = null;
@@ -1092,6 +1114,12 @@ export default function InitialAssessment() {
               : currentState.toLocation;
         }
 
+        console.log('=== DEBUG: Parsed Location Data ===', {
+          fromLocation,
+          toLocation,
+          timestamp: new Date().toISOString(),
+        });
+
         // Fallback to DOM data if needed
         if (!fromLocation || !toLocation) {
           const flightLocations = document.querySelector(
@@ -1104,6 +1132,12 @@ export default function InitialAssessment() {
 
           if (fromLocationStr) fromLocation = JSON.parse(fromLocationStr);
           if (toLocationStr) toLocation = JSON.parse(toLocationStr);
+
+          console.log('=== DEBUG: DOM Location Data ===', {
+            fromLocation,
+            toLocation,
+            timestamp: new Date().toISOString(),
+          });
         }
       } catch (error) {
         console.error('Failed to parse location data:', error);
