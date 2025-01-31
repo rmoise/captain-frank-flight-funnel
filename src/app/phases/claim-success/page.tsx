@@ -256,21 +256,56 @@ function ClaimSuccessContent() {
           return;
         }
 
+        // Validate all required fields for claim success
+        const requiredFields = [
+          'salutation',
+          'firstName',
+          'lastName',
+          'email',
+          'phone',
+          'address',
+          'postalCode',
+          'city',
+          'country',
+        ];
+
+        // Check if all required fields are present and not empty
+        const isValid = requiredFields.every(
+          (field) => !!details[field as keyof PassengerDetails]?.trim()
+        );
+
+        // Email validation
+        const emailRegex = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
+        const isEmailValid = emailRegex.test(details.email || '');
+
+        // Generate field errors
+        const fieldErrors: Record<string, string> = {};
+        requiredFields.forEach((field) => {
+          if (!details[field as keyof PassengerDetails]?.trim()) {
+            fieldErrors[field] = 'This field is required';
+          }
+        });
+
+        if (!isEmailValid && details.email?.trim()) {
+          fieldErrors.email = 'Please enter a valid email address';
+        }
+
         // Update store with new validation state
         useStore.setState({
           personalDetails: details,
           validationState: {
             ...currentValidationState,
-            isPersonalValid: true,
+            isPersonalValid: isValid && isEmailValid,
             stepValidation: {
               ...currentValidationState.stepValidation,
-              1: true,
+              1: isValid && isEmailValid,
             },
             stepInteraction: {
               ...currentValidationState.stepInteraction,
               1: true,
             },
-            1: true,
+            1: isValid && isEmailValid,
+            fieldErrors,
             _timestamp: Date.now(),
           },
         });

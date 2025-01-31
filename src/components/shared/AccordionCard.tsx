@@ -9,14 +9,18 @@ export interface AccordionCardProps {
   isCompleted: boolean;
   className?: string;
   eyebrow?: string;
-  // Kept for future use in accordion card headers
-  /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
+  /**
+   * @deprecated This prop is reserved for future use in accordion card headers
+   */
   subtitle?: string;
   summary?: string;
   hasInteracted?: boolean;
   stepId: string;
   isValid?: boolean;
   shouldStayOpen?: boolean;
+  /**
+   * @deprecated This prop is reserved for future Q&A functionality
+   */
   isQA?: boolean;
   isOpen?: boolean;
   onToggle?: () => void;
@@ -29,12 +33,14 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
   isCompleted,
   className = '',
   eyebrow,
+  /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
   subtitle,
   summary,
   hasInteracted = false,
   stepId,
   isValid = false,
   shouldStayOpen = false,
+  /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
   isQA = false,
   isOpen,
   onToggle,

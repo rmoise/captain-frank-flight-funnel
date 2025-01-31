@@ -297,12 +297,11 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
   const mainStore = useStore();
   const phase4Store = usePhase4Store();
   const flightStore = useFlightStore();
-  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchResults, setSearchResults] = useState<Flight[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState<number>(0);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   // Get validation function
   const { validate } = useFlightValidation({
@@ -785,7 +784,7 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
       const formattedFlight = {
         ...flight,
         id: flight.id,
-        date: flight.date || selectedDate || '',
+        date: flight.date || '',
       };
 
       // Update segments
@@ -888,15 +887,7 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
       validate();
       onInteract();
     },
-    [
-      currentPhase,
-      phase4Store,
-      mainStore,
-      flightStore,
-      selectedDate,
-      validate,
-      onInteract,
-    ]
+    [currentPhase, phase4Store, mainStore, flightStore, validate, onInteract]
   );
 
   const handleSearchFlights = useCallback(

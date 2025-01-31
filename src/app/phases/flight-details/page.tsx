@@ -101,6 +101,38 @@ export default function FlightDetailsPage() {
         // First ensure we're in phase 3
         await setCurrentPhase(3);
 
+        // Try to restore booking number from various sources
+        let restoredBookingNumber = '';
+
+        // First try phase 3 specific data
+        const phase3Data = localStorage.getItem('phase3FlightData');
+        if (phase3Data) {
+          const parsedData = JSON.parse(phase3Data);
+          if (parsedData.bookingNumber) {
+            restoredBookingNumber = parsedData.bookingNumber;
+          }
+        }
+
+        // If not found, try phase 2 data
+        if (!restoredBookingNumber) {
+          const phase2Data = localStorage.getItem('phase2State');
+          if (phase2Data) {
+            const parsedData = JSON.parse(phase2Data);
+            if (parsedData.bookingNumber) {
+              restoredBookingNumber = parsedData.bookingNumber;
+            }
+          }
+        }
+
+        // If still not found, try the main store's current value
+        if (!restoredBookingNumber) {
+          restoredBookingNumber = useStore.getState().bookingNumber || '';
+        }
+
+        // Update both local state and store state with the restored booking number
+        setLocalBookingNumber(restoredBookingNumber);
+        setStoreBookingNumber(restoredBookingNumber);
+
         // Check if we're coming from a previous phase
         const phase2State = localStorage.getItem('phase2State');
         const isComingFromPreviousPhase =
@@ -121,25 +153,15 @@ export default function FlightDetailsPage() {
             if (isDataFresh) {
               restoredData = parsedData;
 
-              // First, immediately set the selected type and booking number
+              // First, immediately set the selected type
               if (
                 parsedData.selectedType === 'multi' ||
                 parsedData.selectedType === 'direct'
               ) {
-                const storedBookingNumber = parsedData.bookingNumber || '';
-                console.log('=== Restoring Booking Number ===', {
-                  storedBookingNumber,
-                  timestamp: new Date().toISOString(),
-                });
-
-                // Update both local state and store state for booking number
-                setLocalBookingNumber(storedBookingNumber);
-                setStoreBookingNumber(storedBookingNumber);
-
                 useStore.setState((state) => ({
                   ...state,
                   selectedType: parsedData.selectedType,
-                  bookingNumber: storedBookingNumber,
+                  bookingNumber: restoredBookingNumber, // Use the restored booking number
                 }));
               }
 
@@ -195,7 +217,7 @@ export default function FlightDetailsPage() {
                         toLocation: parsedData.directFlight.toLocation || null,
                       }
                     : null,
-                  bookingNumber: parsedData.bookingNumber || '',
+                  bookingNumber: restoredBookingNumber,
                 }));
                 resolve();
               });
@@ -608,7 +630,17 @@ export default function FlightDetailsPage() {
         validationState,
         timestamp: Date.now(),
       };
+
+      // Save to both phase 3 and phase 4 storage to ensure data persistence
       localStorage.setItem('phase3FlightData', JSON.stringify(flightData));
+      localStorage.setItem('phase4FlightData', JSON.stringify(flightData));
+
+      // Also save to phase state
+      const phaseState = {
+        ...flightData,
+        currentPhase: 3,
+      };
+      localStorage.setItem('phase3State', JSON.stringify(phaseState));
 
       // Store the selected flights from phase 3 as original flights for comparison in phase 4
       // But don't set them as selected flights for phase 4
@@ -628,17 +660,17 @@ export default function FlightDetailsPage() {
     }
   }, [
     canContinue,
-    completePhase,
-    setCurrentPhase,
-    router,
-    lang,
     selectedFlights,
-    flightStore,
     flightSegments,
     directFlight,
     selectedType,
     bookingNumber,
     validationState,
+    flightStore,
+    completePhase,
+    setCurrentPhase,
+    router,
+    lang,
   ]);
 
   const handleInteraction = useCallback(
