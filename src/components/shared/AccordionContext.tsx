@@ -24,16 +24,26 @@ export const useAccordion = () => useContext(AccordionContext);
 export const AccordionProvider: React.FC<{
   children: React.ReactNode;
   initialActiveAccordion?: string | null;
-}> = ({ children, initialActiveAccordion = null }) => {
+  onAutoTransition?: (currentStepId: string) => string | null;
+}> = ({ children, initialActiveAccordion = null, onAutoTransition }) => {
   const [openAccordions, setOpenAccordions] = useState<Set<string>>(
     new Set(initialActiveAccordion ? [initialActiveAccordion] : [])
   );
 
-  const autoTransition = useCallback((id: string, isValid: boolean) => {
-    if (isValid) {
-      setOpenAccordions((prev) => new Set([...prev, id]));
-    }
-  }, []);
+  const autoTransition = useCallback(
+    (id: string, isValid: boolean) => {
+      if (isValid) {
+        setOpenAccordions((prev) => new Set([...prev, id]));
+        if (onAutoTransition) {
+          const nextStep = onAutoTransition(id);
+          if (nextStep) {
+            setOpenAccordions((prev) => new Set([...prev, nextStep]));
+          }
+        }
+      }
+    },
+    [onAutoTransition]
+  );
 
   const value = useMemo(
     () => ({
