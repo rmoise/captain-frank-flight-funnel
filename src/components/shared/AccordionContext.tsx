@@ -11,12 +11,16 @@ interface AccordionContextType {
   openAccordions: Set<string>;
   setOpenAccordions: (ids: Set<string>) => void;
   autoTransition: (id: string, isValid: boolean) => void;
+  activeAccordion: string | null;
+  setActiveAccordion: (id: string | null) => void;
 }
 
 const AccordionContext = createContext<AccordionContextType>({
   openAccordions: new Set(),
   setOpenAccordions: () => {},
   autoTransition: () => {},
+  activeAccordion: null,
+  setActiveAccordion: () => {},
 });
 
 export const useAccordion = () => useContext(AccordionContext);
@@ -29,6 +33,9 @@ export const AccordionProvider: React.FC<{
   const [openAccordions, setOpenAccordions] = useState<Set<string>>(
     new Set(initialActiveAccordion ? [initialActiveAccordion] : [])
   );
+  const [activeAccordion, setActiveAccordion] = useState<string | null>(
+    initialActiveAccordion
+  );
 
   const autoTransition = useCallback(
     (id: string, isValid: boolean) => {
@@ -38,6 +45,7 @@ export const AccordionProvider: React.FC<{
           const nextStep = onAutoTransition(id);
           if (nextStep) {
             setOpenAccordions((prev) => new Set([...prev, nextStep]));
+            setActiveAccordion(nextStep);
           }
         }
       }
@@ -50,8 +58,10 @@ export const AccordionProvider: React.FC<{
       openAccordions,
       setOpenAccordions,
       autoTransition,
+      activeAccordion,
+      setActiveAccordion,
     }),
-    [openAccordions, autoTransition]
+    [openAccordions, autoTransition, activeAccordion]
   );
 
   // Expose context to window for debugging
