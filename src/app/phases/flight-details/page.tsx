@@ -127,6 +127,10 @@ export default function FlightDetailsPage() {
                 parsedData.selectedType === 'direct'
               ) {
                 const storedBookingNumber = parsedData.bookingNumber || '';
+                console.log('=== Restoring Booking Number ===', {
+                  storedBookingNumber,
+                  timestamp: new Date().toISOString(),
+                });
 
                 // Update both local state and store state for booking number
                 setLocalBookingNumber(storedBookingNumber);

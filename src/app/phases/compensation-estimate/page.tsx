@@ -663,6 +663,7 @@ export default function CompensationEstimatePage() {
             : completeStateData.flightSegments,
         compensationAmount: useStore.getState().compensationAmount,
         compensationCache: useStore.getState().compensationCache,
+        bookingNumber: useStore.getState().bookingNumber,
         timestamp: Date.now(),
       };
 
@@ -685,6 +686,7 @@ export default function CompensationEstimatePage() {
           validationState: completeStateData.validationState,
           compensationAmount: phase3StateData.compensationAmount,
           compensationCache: phase3StateData.compensationCache,
+          bookingNumber: phase3StateData.bookingNumber,
         }));
         resolve();
       });
