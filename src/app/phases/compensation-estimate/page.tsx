@@ -378,14 +378,16 @@ export default function CompensationEstimatePage() {
         throw new Error('Keine Flugdetails verfügbar');
       }
 
-      let flightData;
+      // Validate flight data
       try {
-        flightData = validateFlightData(currentState);
+        validateFlightData(currentState);
+        setCompensationError(null);
       } catch (validationError) {
-        console.error('Validation error:', validationError);
-        setCompensationError(validationError.message);
-        setCompensationLoading(false);
-        return;
+        if (validationError instanceof Error) {
+          setCompensationError(validationError.message);
+        } else {
+          setCompensationError('An unknown error occurred during validation');
+        }
       }
 
       // Extract IATA codes based on flight type
@@ -540,7 +542,7 @@ export default function CompensationEstimatePage() {
             currentState.flightSegments.length < 2
           ) {
             throw new Error(
-              t.phases.compensationEstimate.errors.minimumSegments
+              t.phases.compensationEstimate.flightSummary.noFlightDetails
             );
           }
 
@@ -550,7 +552,7 @@ export default function CompensationEstimatePage() {
 
           if (missingLocations) {
             throw new Error(
-              t.phases.compensationEstimate.errors.missingLocations
+              t.phases.compensationEstimate.flightSummary.noFlightDetails
             );
           }
         } else {
@@ -559,14 +561,14 @@ export default function CompensationEstimatePage() {
             !currentState.directFlight?.toLocation
           ) {
             throw new Error(
-              t.phases.compensationEstimate.errors.missingDirectLocations
+              t.phases.compensationEstimate.flightSummary.noFlightDetails
             );
           }
         }
 
         if (!compensationAmount) {
           throw new Error(
-            t.phases.compensationEstimate.errors.missingCompensation
+            t.phases.compensationEstimate.estimatedCompensation.calculating
           );
         }
 
@@ -706,6 +708,20 @@ export default function CompensationEstimatePage() {
     const previousUrl = '/phases/initial-assessment';
     await setCurrentPhase(1);
     router.push(getLanguageAwareUrl(previousUrl, lang));
+  };
+
+  // Update error handling in the component
+  const getErrorMessage = (error: string): string => {
+    switch (error) {
+      case 'MINIMUM_SEGMENTS':
+      case 'MISSING_LOCATIONS':
+      case 'MISSING_DIRECT_LOCATIONS':
+        return t.phases.compensationEstimate.flightSummary.noFlightDetails;
+      case 'MISSING_COMPENSATION':
+        return t.phases.compensationEstimate.estimatedCompensation.calculating;
+      default:
+        return error;
+    }
   };
 
   if (!mounted) {
@@ -966,6 +982,11 @@ export default function CompensationEstimatePage() {
               <p className="text-gray-600 mt-2">
                 {t.phases.compensationEstimate.estimatedCompensation.disclaimer}
               </p>
+              {compensationError && (
+                <div className="text-red-500 mt-4">
+                  {getErrorMessage(compensationError)}
+                </div>
+              )}
             </div>
 
             <div className="bg-white rounded-lg shadow-sm p-6">
