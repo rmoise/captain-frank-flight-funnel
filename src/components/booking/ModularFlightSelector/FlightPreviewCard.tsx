@@ -1,7 +1,6 @@
 import React from 'react';
 import { PiAirplaneTakeoff } from 'react-icons/pi';
 import { PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
-import { useStore } from '../../../lib/state/store';
 import { useFlightStore } from '../../../lib/state/flightStore';
 import { formatSafeDate } from '../../../utils/dateUtils';
 import { useTranslation } from '../../../hooks/useTranslation';
@@ -19,7 +18,6 @@ export const FlightPreviewCard: React.FC<FlightPreviewCardProps> = React.memo(
     currentPhase = 4,
   }) => {
     const { t } = useTranslation();
-    const mainStore = useStore();
     const flightStore = useFlightStore();
 
     // Get the previous flight from the flight store's selected flights
