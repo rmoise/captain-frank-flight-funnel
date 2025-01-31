@@ -298,7 +298,8 @@ export const en: Translations = {
     },
     compensationEstimate: {
       title: 'Compensation Estimate',
-      description: 'Review your estimated compensation',
+      description:
+        'There is a good chance that you are entitled to compensation! Let me help you. Completely risk-free: I only receive a success fee of 30% (incl. VAT) if I am successful.',
       flightSummary: {
         title: 'Flight Summary',
         passenger: 'Passenger',

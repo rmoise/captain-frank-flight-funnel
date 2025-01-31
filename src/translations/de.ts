@@ -309,7 +309,8 @@ export const de: Translations = {
     },
     compensationEstimate: {
       title: 'Entschädigungsschätzung',
-      description: 'Überprüfen Sie Ihre geschätzte Entschädigung',
+      description:
+        'Es gibt eine gute Chance, dass du Anspruch auf eine Entschädigung hast! Lass mich dir helfen. Komplett risikofrei: Ich erhalte nur eine Erfolgsprovision von 30% (inkl. MwSt.), wenn ich erfolgreich bin.',
       flightSummary: {
         title: 'Flugzusammenfassung',
         passenger: 'Passagier',
