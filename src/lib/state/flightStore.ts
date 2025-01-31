@@ -76,34 +76,55 @@ export const useFlightStore = create<FlightStore>()(
           // Determine flight type based on number of flights
           const flightType = flights.length > 1 ? 'multi' : 'direct';
 
+          // Ensure all flights have dates
+          const flightsWithDates = flights.map((flight) => ({
+            ...flight,
+            date: flight.date || date || '', // Ensure date is never null
+          }));
+
           // Update localStorage with flight selection state
           localStorage.setItem(
             'flightSelectionState',
             JSON.stringify({
-              selectedFlights: flights.map((flight) => ({
-                ...flight,
-                date: flight.date || date || '', // Ensure date is never null
-              })),
+              selectedFlights: flightsWithDates,
               selectedDate: date,
-              selectedType: flightType, // Save the flight type
+              selectedType: flightType,
               timestamp: Date.now(),
               isExplicitSelection: true,
             })
           );
 
+          // Also update phase-specific storage
+          const currentPhase = localStorage.getItem('currentPhase');
+          if (currentPhase) {
+            const phaseKey = `phase${currentPhase}FlightData`;
+            const existingData = localStorage.getItem(phaseKey);
+            const phaseData = existingData ? JSON.parse(existingData) : {};
+
+            localStorage.setItem(
+              phaseKey,
+              JSON.stringify({
+                ...phaseData,
+                selectedFlights: flightsWithDates,
+                selectedDate: date,
+                selectedType: flightType,
+                timestamp: Date.now(),
+              })
+            );
+          }
+
           // Update both the flights and date in the store
           set((state) => ({
             ...state,
-            selectedFlights: flights.map((flight) => ({
-              ...flight,
-              date: flight.date || date || '', // Ensure date is never null
-            })) as Flight[],
+            selectedFlights: flightsWithDates,
             selectedDate: date,
+            _lastUpdate: Date.now(),
           }));
         } else {
           set((state) => ({
             ...state,
             selectedFlights: flights,
+            _lastUpdate: Date.now(),
           }));
         }
       },

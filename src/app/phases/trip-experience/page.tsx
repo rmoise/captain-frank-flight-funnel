@@ -366,27 +366,83 @@ export default function TripExperiencePage() {
     },
   ];
 
-  // Handle step completion - now only updates validation on submit
+  // Add validation for alternative flight selection
+  const validateAlternativeFlight = useCallback(
+    (selectedFlight: Flight) => {
+      // Get original flight from flightStore
+      const originalFlight = flightStore.originalFlights[0];
+
+      // Compare flights
+      const flightComparison = [
+        {
+          originalFlight: {
+            id: originalFlight.id,
+            flightNumber: originalFlight.flightNumber,
+            date: originalFlight.date,
+          },
+          selectedFlight: {
+            id: selectedFlight.id,
+            flightNumber: selectedFlight.flightNumber,
+            date: selectedFlight.date,
+          },
+          isIdentical: originalFlight.id === selectedFlight.id,
+        },
+      ];
+
+      // Check if selected flight is different
+      if (flightComparison[0].isIdentical) {
+        console.log('=== Trip Experience - Validation Error ===', {
+          error: 'Selected flights must be different from original flights',
+          flightComparison,
+          timestamp: new Date().toISOString(),
+        });
+        return false;
+      }
+
+      return true;
+    },
+    [flightStore.originalFlights]
+  );
+
+  // Update handleTripExperienceComplete to use validation
   const handleTripExperienceComplete = useCallback(() => {
+    // Validate selected flight is different from original
+    if (
+      flightStore.selectedFlights.length > 0 &&
+      !validateAlternativeFlight(flightStore.selectedFlights[0])
+    ) {
+      return;
+    }
+
     // Update validation state
     const newValidationState = {
       travelStatusStepValidation: {
         ...travelStatusStepValidation,
-        isValid: true,
+        2: true,
       },
       travelStatusStepInteraction: {
         ...travelStatusStepInteraction,
-        isComplete: true,
+        2: true,
       },
       travelStatusShowingSuccess: true,
       travelStatusIsValid: true,
+      isTripExperienceValid: true,
+      _timestamp: Date.now(),
     };
 
     updateValidationState(newValidationState);
+
+    // Force the transition to step 3
+    const accordionContext = (window as any).__accordionContext;
+    if (accordionContext?.setOpenAccordions) {
+      accordionContext.setOpenAccordions(new Set(['1', '2', '3']));
+    }
   }, [
     updateValidationState,
     travelStatusStepValidation,
     travelStatusStepInteraction,
+    flightStore.selectedFlights,
+    validateAlternativeFlight,
   ]);
 
   const handleInformedDateComplete = useCallback(() => {
@@ -495,12 +551,16 @@ export default function TripExperiencePage() {
         validationStates,
       });
 
+      // If we're on step 1 and it's valid, go to step 2
+      if (currentStepId === '1') {
+        return '2';
+      }
+
       // If we're on step 2 (trip experience) and it's valid, go to step 3 (informed date)
       if (
         currentStepId === '2' &&
         travelStatusStepValidation[2] &&
-        validationStates.isTripExperienceValid &&
-        !validationStates.isFullyCompleted
+        validationStates.isTripExperienceValid
       ) {
         return '3';
       }
@@ -516,7 +576,7 @@ export default function TripExperiencePage() {
 
       return null;
     },
-    [travelStatusStepValidation, validationStates]
+    [travelStatusStepValidation, informedDateStepValidation, validationStates]
   );
 
   // Add logging to track validation state updates

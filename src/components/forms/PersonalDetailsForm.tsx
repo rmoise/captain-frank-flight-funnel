@@ -308,6 +308,11 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
             return !!fieldValue;
           });
 
+          // Call onComplete immediately if all fields are valid
+          if (hasAllRequiredFields) {
+            onComplete(newDetails);
+          }
+
           // Only update validation state if it has changed
           const shouldUpdate =
             currentValidation.stepValidation[stepId] !== hasAllRequiredFields ||
@@ -353,7 +358,14 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
         }
       }
     },
-    [storedDetails, setPersonalDetails, onInteract, stepId, isClaimSuccess]
+    [
+      storedDetails,
+      setPersonalDetails,
+      onInteract,
+      stepId,
+      isClaimSuccess,
+      onComplete,
+    ]
   );
 
   return (

@@ -29,7 +29,6 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
   isCompleted,
   className = '',
   eyebrow,
-  /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
   subtitle,
   summary,
   hasInteracted = false,
@@ -41,129 +40,32 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
   onToggle,
   isOpenByDefault = false,
 }) => {
-  const {
-    activeAccordion,
-    setActiveAccordion,
-    autoTransition,
-    isManualTransition,
-    isTransitioning,
-  } = useAccordion();
-
-  // Track manual transitions
-  const wasManualRef = React.useRef(false);
-  const defaultOpenHandledRef = React.useRef(false);
+  const { openAccordions, setOpenAccordions, autoTransition } = useAccordion();
 
   // Track form interaction
   const [isInteractingWithForm, setIsInteractingWithForm] =
     React.useState(false);
-
-  // Track when manual transitions occur
-  useEffect(() => {
-    if (isManualTransition) {
-      wasManualRef.current = true;
-      sessionStorage.setItem(`step_${stepId}_interacted`, 'true');
-      const timer = setTimeout(() => {
-        wasManualRef.current = false;
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [isManualTransition, stepId]);
 
   // Handle default open state only once on mount
   useEffect(() => {
     // Only handle default opening on first visit
     const hasVisited = localStorage.getItem('hasVisitedInitialAssessment');
     if (!hasVisited && (stepId === '1' || isOpenByDefault)) {
-      setActiveAccordion(stepId);
-      defaultOpenHandledRef.current = true;
-    } else {
-      defaultOpenHandledRef.current = true;
+      setOpenAccordions(new Set([stepId]));
     }
-  }, [stepId, setActiveAccordion, isOpenByDefault]);
+  }, [stepId, setOpenAccordions, isOpenByDefault]);
 
   // Handle auto-transition when step becomes valid and completed
   useEffect(() => {
-    // Only trigger auto-transition if the step is valid, completed, and currently open
-    const isStepValid = isValid && isCompleted;
-    console.log('=== AccordionCard Auto-transition Check ===', {
-      stepId,
-      isStepValid,
-      isValid,
-      isCompleted,
-      activeAccordion,
-      isTransitioning,
-      wasManual: wasManualRef.current,
-      isInteractingWithForm,
-      timestamp: new Date().toISOString(),
-    });
+    if (!isValid || !isCompleted || isInteractingWithForm) return;
 
-    if (!isStepValid) return;
-    if (!activeAccordion || activeAccordion !== stepId) return;
-    if (isTransitioning) return;
-    if (wasManualRef.current) return;
-    if (isInteractingWithForm) return; // Prevent auto-transition while interacting with form
-
-    // Check if this was a manual reopening
-    const manualOpenTime = sessionStorage.getItem(
-      `step_${stepId}_manual_open_time`
-    );
-    if (manualOpenTime) {
-      const timeSinceManualOpen = Date.now() - parseInt(manualOpenTime);
-      // If manually opened within the last 2 seconds, skip auto-transition
-      if (timeSinceManualOpen < 2000) {
-        console.log('=== Skipping Auto-transition (Recent Manual Open) ===', {
-          stepId,
-          timeSinceManualOpen,
-          timestamp: new Date().toISOString(),
-        });
-        return;
-      }
-    }
-
-    const delay = isQA ? 2000 : 1000;
-    console.log('=== Setting Auto-transition Timer ===', {
-      stepId,
-      delay,
-      isQA,
-      timestamp: new Date().toISOString(),
-    });
-
-    const timer = setTimeout(() => {
-      if (activeAccordion === stepId && !isInteractingWithForm) {
-        console.log('=== Executing Auto-transition ===', {
-          stepId,
-          isValid,
-          isCompleted,
-          isQA,
-          delay,
-          isInteractingWithForm,
-          currentTime: new Date().toISOString(),
-        });
-        autoTransition(stepId, true, isQA);
-      } else {
-        console.log('=== Auto-transition Cancelled ===', {
-          stepId,
-          activeAccordion,
-          isInteractingWithForm,
-          timestamp: new Date().toISOString(),
-        });
-      }
-    }, delay);
-
-    return () => clearTimeout(timer);
-  }, [
-    isValid,
-    isCompleted,
-    stepId,
-    activeAccordion,
-    isQA,
-    autoTransition,
-    isTransitioning,
-    isInteractingWithForm,
-  ]);
+    // Immediately transition to next step
+    const nextStepId = (parseInt(stepId) + 1).toString();
+    autoTransition(nextStepId, true);
+  }, [isValid, isCompleted, stepId, autoTransition, isInteractingWithForm]);
 
   const currentIsOpen =
-    isOpen !== undefined ? isOpen : activeAccordion === stepId;
+    isOpen !== undefined ? isOpen : openAccordions.has(stepId);
 
   const toggleAccordion = (e?: React.MouseEvent) => {
     // Only allow toggle from within the header
@@ -209,19 +111,15 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
       }
 
       // Toggle the accordion
-      setActiveAccordion(currentIsOpen ? null : stepId);
-      wasManualRef.current = true;
-
-      // For completed steps, set a longer manual flag duration
-      if (isCompleted) {
-        setTimeout(() => {
-          wasManualRef.current = false;
-        }, 2000);
-      } else {
-        setTimeout(() => {
-          wasManualRef.current = false;
-        }, 1000);
-      }
+      setOpenAccordions((prev) => {
+        const newSet = new Set(prev);
+        if (currentIsOpen) {
+          newSet.delete(stepId);
+        } else {
+          newSet.add(stepId);
+        }
+        return newSet;
+      });
     }
   };
 

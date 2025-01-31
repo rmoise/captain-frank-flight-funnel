@@ -112,42 +112,7 @@ export default function InitialAssessment() {
     setCurrentPhase,
   } = mainStore;
 
-  const { autoTransition, activeAccordion } = useAccordion();
-
-  const handleAutoTransition = useCallback(
-    (currentStepId: string): string | null => {
-      const currentStepNumber = parseInt(currentStepId) as ValidationStateSteps;
-
-      // Check if the step is valid and has been interacted with
-      const isCurrentStepValid =
-        validationState.stepValidation[currentStepNumber];
-      const hasInteracted = validationState.stepInteraction[currentStepNumber];
-
-      console.log('=== Step Validation Check ===', {
-        currentStep: currentStepNumber,
-        isValid: isCurrentStepValid,
-        hasInteracted,
-        validationState: validationState.stepValidation,
-        timestamp: new Date().toISOString(),
-      });
-
-      // Only transition if the step is valid and has been interacted with
-      if (isCurrentStepValid && hasInteracted) {
-        const nextStepNumber = currentStepNumber + 1;
-        if (nextStepNumber <= 4) {
-          console.log('=== Auto Transitioning to Step ===', {
-            from: currentStepNumber,
-            to: nextStepNumber,
-            timestamp: new Date().toISOString(),
-          });
-          return nextStepNumber.toString();
-        }
-      }
-
-      return null;
-    },
-    [validationState]
-  );
+  const { activeAccordion } = useAccordion();
 
   // Update flight selection handler
   const handleFlightSelect = useCallback(
@@ -211,11 +176,6 @@ export default function InitialAssessment() {
           isFlightValid: true,
           _timestamp: Date.now(),
         });
-
-        // After validation is updated, transition to next step
-        setTimeout(() => {
-          autoTransition('1', true, true);
-        }, 500);
       }
     },
     [
@@ -223,7 +183,6 @@ export default function InitialAssessment() {
       mainStore,
       updateValidationState,
       validationState,
-      autoTransition,
       setMounted,
     ]
   );
@@ -231,6 +190,12 @@ export default function InitialAssessment() {
   // Handle QA wizard completion
   const handleComplete = useCallback(
     (answers: Answer[]) => {
+      // Immediately open step 3 before any state updates
+      const accordionContext = (window as any).__accordionContext;
+      if (accordionContext?.setOpenAccordions) {
+        accordionContext.setOpenAccordions(new Set(['1', '2', '3']));
+      }
+
       setWizardAnswers(answers);
       markWizardComplete('initial_assessment');
 
@@ -246,22 +211,19 @@ export default function InitialAssessment() {
           2: true,
         },
         isWizardValid: true,
+        isWizardSubmitted: true,
         _timestamp: Date.now(),
       });
 
-      // After validation is updated, transition to next step
-      setTimeout(() => {
-        const accordionContext = (window as any).__accordionContext;
-        if (accordionContext?.setActiveAccordion) {
-          accordionContext.setActiveAccordion('3');
-        }
-      }, 500);
+      // Set interacted steps
+      setInteractedSteps((prev) => [...new Set([...prev, 2])]);
     },
     [
       setWizardAnswers,
       markWizardComplete,
       updateValidationState,
       validationState,
+      setInteractedSteps,
     ]
   );
 
@@ -269,6 +231,12 @@ export default function InitialAssessment() {
   const handlePersonalDetailsComplete = useCallback(
     (details: PassengerDetails) => {
       if (!details) return;
+
+      // Immediately open step 4 before any state updates
+      const accordionContext = (window as any).__accordionContext;
+      if (accordionContext?.setOpenAccordions) {
+        accordionContext.setOpenAccordions(new Set(['1', '2', '3', '4']));
+      }
 
       setPersonalDetails(details);
 
@@ -287,15 +255,15 @@ export default function InitialAssessment() {
         _timestamp: Date.now(),
       });
 
-      // After validation is updated, transition to next step
-      setTimeout(() => {
-        const accordionContext = (window as any).__accordionContext;
-        if (accordionContext?.setActiveAccordion) {
-          accordionContext.setActiveAccordion('4');
-        }
-      }, 500);
+      // Set interacted steps
+      setInteractedSteps((prev) => [...new Set([...prev, 3])]);
     },
-    [setPersonalDetails, updateValidationState, validationState]
+    [
+      setPersonalDetails,
+      updateValidationState,
+      validationState,
+      setInteractedSteps,
+    ]
   );
 
   // Handle terms acceptance
@@ -336,6 +304,9 @@ export default function InitialAssessment() {
         isTermsValid: validationResult.isValid,
         _timestamp: Date.now(),
       });
+
+      // Set interacted steps
+      setInteractedSteps((prev) => [...new Set([...prev, 4])]);
     },
     [
       termsAccepted,
@@ -345,6 +316,7 @@ export default function InitialAssessment() {
       setMarketingAccepted,
       updateValidationState,
       validationState,
+      setInteractedSteps,
     ]
   );
 
@@ -984,7 +956,7 @@ export default function InitialAssessment() {
         props: {
           onComplete: handlePersonalDetailsComplete,
           onInteract: () => {
-            // No-op - interaction is handled in onComplete
+            setInteractedSteps((prev) => [...new Set([...prev, 3])]);
           },
           isClaimSuccess: false,
           showAdditionalFields: false,
@@ -1078,7 +1050,6 @@ export default function InitialAssessment() {
     setInteractedSteps,
     handleComplete,
     updateValidationState,
-    autoTransition,
     validationState,
     t,
     wizardQuestions,
@@ -1271,10 +1242,7 @@ export default function InitialAssessment() {
   }
 
   return (
-    <AccordionProvider
-      onAutoTransition={handleAutoTransition}
-      initialActiveAccordion={initialAccordion}
-    >
+    <AccordionProvider initialActiveAccordion={initialAccordion}>
       <div className="max-w-5xl mx-auto px-4 py-8">
         <PhaseNavigation
           currentPhase={currentPhase}

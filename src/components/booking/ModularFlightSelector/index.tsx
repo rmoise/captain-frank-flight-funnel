@@ -66,7 +66,7 @@ export const ModularFlightSelector: React.FC<FlightSelectorProps> = ({
   useEffect(() => {
     if (mainStore?.validationState?.stepValidation?.[1] && stepNumber === 1) {
       setTimeout(() => {
-        autoTransition('1', true, false);
+        autoTransition('2', true);
       }, 100);
     }
   }, [mainStore?.validationState?.stepValidation, stepNumber, autoTransition]);
@@ -126,8 +126,9 @@ export const ModularFlightSelector: React.FC<FlightSelectorProps> = ({
               },
             ];
 
-      // Clear all stores
+      // Clear all stores in a synchronized way
       if (currentPhase === 4) {
+        // First update phase4Store
         phase4Store.batchUpdate({
           selectedFlight: null,
           selectedFlights: [],
@@ -135,17 +136,43 @@ export const ModularFlightSelector: React.FC<FlightSelectorProps> = ({
           toLocation: null,
           flightSegments: newSegments,
           selectedType: type,
+          _lastUpdate: Date.now(),
         });
-        flightStore.setSelectedFlights([]);
       } else {
         if (!mainStore?.batchUpdateWizardState) return;
 
+        // First update mainStore
         mainStore.batchUpdateWizardState({
           selectedType: type,
           flightSegments: newSegments,
           selectedFlight: null,
           selectedFlights: [],
+          _lastUpdate: Date.now(),
         });
+      }
+
+      // Then update flightStore to ensure synchronization
+      flightStore.setSelectedFlights([]);
+
+      // Update localStorage to reflect the type change
+      if (typeof window !== 'undefined') {
+        const currentPhaseStr = localStorage.getItem('currentPhase');
+        if (currentPhaseStr) {
+          const phaseKey = `phase${currentPhaseStr}FlightData`;
+          const existingData = localStorage.getItem(phaseKey);
+          const phaseData = existingData ? JSON.parse(existingData) : {};
+
+          localStorage.setItem(
+            phaseKey,
+            JSON.stringify({
+              ...phaseData,
+              selectedType: type,
+              flightSegments: newSegments,
+              selectedFlights: [],
+              timestamp: Date.now(),
+            })
+          );
+        }
       }
 
       // Trigger validation
