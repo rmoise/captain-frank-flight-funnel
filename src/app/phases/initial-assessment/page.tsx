@@ -22,11 +22,7 @@ import { useAccordion } from '@/components/shared/AccordionContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import type { FlightSelectorProps } from '@/components/booking/ModularFlightSelector/types';
 import { useFlightStore } from '@/lib/state/flightStore';
-
-interface LocationData {
-  value: string;
-  label: string;
-}
+import type { LocationData } from '@/types/store';
 
 interface QAWizardProps {
   questions: Question[];
@@ -150,8 +146,8 @@ export default function InitialAssessment() {
         });
 
         // Set locations in store
-        mainStore.setFromLocation(fromLocation);
-        mainStore.setToLocation(toLocation);
+        mainStore.setFromLocation(JSON.stringify(fromLocation));
+        mainStore.setToLocation(JSON.stringify(toLocation));
 
         // Set direct flight data
         if (flights.length === 1) {

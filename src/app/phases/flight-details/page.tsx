@@ -19,7 +19,7 @@ import { PhaseGuard } from '@/components/shared/PhaseGuard';
 import { ModularFlightSelector } from '@/components/booking/ModularFlightSelector';
 import { accordionConfig } from '@/config/accordion';
 import { getLanguageAwareUrl } from '@/lib/state/store';
-import type { Flight, FlightSegmentData } from '@/types/store';
+import type { Flight } from '@/types/store';
 import { ContinueButton } from '@/components/shared/ContinueButton';
 import { BackButton } from '@/components/shared/BackButton';
 import { XMarkIcon } from '@heroicons/react/24/outline';
@@ -154,7 +154,7 @@ export default function FlightDetailsPage() {
 
           // Process flight segments with location preservation
           const flightSegmentsToUse = (sourceData.flightSegments || []).map(
-            (segment, index) => {
+            (segment: any, index: number) => {
               // Try to get location data from all available sources
               const phase2Segment = phase2Data?.flightSegments?.[index];
               const phase1Segment = phase1Data?.flightSegments?.[index];
@@ -210,7 +210,7 @@ export default function FlightDetailsPage() {
           // Process selected flights
           if (sourceData.selectedFlights?.length > 0) {
             const processedFlights = sourceData.selectedFlights.map(
-              (flight) => ({
+              (flight: Flight) => ({
                 ...flight,
                 date: flight.date || null,
                 departureCity: flight.departureCity,
