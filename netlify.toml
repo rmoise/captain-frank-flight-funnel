@@ -4,7 +4,7 @@
   functions = "netlify/functions"
 
 [build.environment]
-  NODE_VERSION = "20"
+  NODE_VERSION = "18.x"
   NEXT_USE_NETLIFY_EDGE = "true"
   NEXT_FORCE_EDGE_IMAGES = "true"
 
@@ -14,7 +14,7 @@
   port = 8888
   autoLaunch = true
   command = "npm run dev"
-  publish = "public"
+  publish = ".next"
   functions = "netlify/functions"
   NODE_ENV = "development"
   watch = true
@@ -22,6 +22,7 @@
 
 [functions]
   node_bundler = "esbuild"
+  external_node_modules = ["axios"]
   included_files = ["netlify/functions/**/*"]
 
 [[redirects]]

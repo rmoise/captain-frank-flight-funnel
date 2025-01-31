@@ -1,5 +1,4 @@
 import { Handler, HandlerEvent } from '@netlify/functions';
-import { v4 as uuidv4 } from 'uuid';
 
 const API_BASE_URL =
   'https://secure.captain-frank.net/api/services/euflightclaim';

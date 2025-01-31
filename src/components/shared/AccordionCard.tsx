@@ -7,7 +7,6 @@ export interface AccordionCardProps {
   title: string;
   children: React.ReactNode;
   isCompleted: boolean;
-  isOpenByDefault?: boolean;
   className?: string;
   eyebrow?: string;
   // Kept for future use in accordion card headers
@@ -21,13 +20,13 @@ export interface AccordionCardProps {
   isQA?: boolean;
   isOpen?: boolean;
   onToggle?: () => void;
+  isOpenByDefault?: boolean;
 }
 
 export const AccordionCard: React.FC<AccordionCardProps> = ({
   title,
   children,
   isCompleted,
-  isOpenByDefault = false,
   className = '',
   eyebrow,
   /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
@@ -40,12 +39,14 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
   isQA = false,
   isOpen,
   onToggle,
+  isOpenByDefault = false,
 }) => {
   const {
     activeAccordion,
     setActiveAccordion,
     autoTransition,
     isManualTransition,
+    isTransitioning,
   } = useAccordion();
 
   // Track manual transitions
@@ -56,39 +57,46 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
   useEffect(() => {
     if (isManualTransition) {
       wasManualRef.current = true;
+      sessionStorage.setItem(`step_${stepId}_interacted`, 'true');
       const timer = setTimeout(() => {
         wasManualRef.current = false;
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [isManualTransition]);
+  }, [isManualTransition, stepId]);
 
   // Handle default open state only once on mount
   useEffect(() => {
-    if (
-      isOpenByDefault &&
-      !activeAccordion &&
-      !isManualTransition &&
-      !defaultOpenHandledRef.current
-    ) {
+    // Only handle default opening on first visit
+    const hasVisited = localStorage.getItem('hasVisitedInitialAssessment');
+    if (!hasVisited && (stepId === '1' || isOpenByDefault)) {
       setActiveAccordion(stepId);
       defaultOpenHandledRef.current = true;
+    } else {
+      defaultOpenHandledRef.current = true;
     }
-  }, [
-    isOpenByDefault,
-    activeAccordion,
-    setActiveAccordion,
-    stepId,
-    isManualTransition,
-  ]);
+  }, [stepId, setActiveAccordion, isOpenByDefault]);
 
   // Handle auto-transition when step becomes valid and completed
   useEffect(() => {
-    // Check both validation and completion state
+    // Only trigger auto-transition if the step is valid, completed, and currently open
     const isStepValid = isValid && isCompleted;
     if (!isStepValid) return;
     if (!activeAccordion || activeAccordion !== stepId) return;
-    if (wasManualRef.current || shouldStayOpen) return;
+    if (isTransitioning) return;
+    if (wasManualRef.current) return;
+
+    // Check if this was a manual reopening
+    const manualOpenTime = sessionStorage.getItem(
+      `step_${stepId}_manual_open_time`
+    );
+    if (manualOpenTime) {
+      const timeSinceManualOpen = Date.now() - parseInt(manualOpenTime);
+      // If manually opened within the last 2 seconds, skip auto-transition
+      if (timeSinceManualOpen < 2000) {
+        return;
+      }
+    }
 
     const delay = isQA ? 2000 : 1000;
     const timer = setTimeout(() => {
@@ -111,9 +119,9 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
     isCompleted,
     stepId,
     activeAccordion,
-    shouldStayOpen,
     isQA,
     autoTransition,
+    isTransitioning,
   ]);
 
   const currentIsOpen =
@@ -147,13 +155,26 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
 
     if (onToggle) {
       onToggle();
-    } else if (!shouldStayOpen) {
+    } else {
+      // Don't close if shouldStayOpen is true and accordion is already open
+      if (shouldStayOpen && currentIsOpen) {
+        return;
+      }
+
+      // Toggle the accordion
       setActiveAccordion(currentIsOpen ? null : stepId);
       wasManualRef.current = true;
 
-      setTimeout(() => {
-        wasManualRef.current = false;
-      }, 1000);
+      // For completed steps, set a longer manual flag duration
+      if (isCompleted) {
+        setTimeout(() => {
+          wasManualRef.current = false;
+        }, 2000);
+      } else {
+        setTimeout(() => {
+          wasManualRef.current = false;
+        }, 1000);
+      }
     }
   };
 

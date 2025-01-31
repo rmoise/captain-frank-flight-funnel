@@ -353,17 +353,26 @@ export default function InitialAssessment() {
     if (mounted && validationState._timestamp) {
       try {
         // Save validation state
+        const stateToSave = {
+          validationState,
+          completedSteps,
+          wizardAnswers,
+          wizardSuccessStates: mainStore.wizardSuccessStates,
+          isWizardSubmitted: validationState.isWizardSubmitted,
+          isWizardValid: validationState.isWizardValid,
+          wizardIsCompleted: mainStore.wizardIsCompleted,
+          wizardSuccessMessage: mainStore.wizardSuccessMessage,
+          timestamp: validationState._timestamp,
+        };
+
+        console.log('=== Saving State to LocalStorage ===', {
+          stateToSave,
+          timestamp: new Date().toISOString(),
+        });
+
         localStorage.setItem(
           'initialAssessmentValidation',
-          JSON.stringify({
-            validationState,
-            completedSteps,
-            wizardAnswers,
-            wizardSuccessStates: mainStore.wizardSuccessStates,
-            isWizardSubmitted: validationState.isWizardSubmitted,
-            isWizardValid: validationState.isWizardValid,
-            timestamp: validationState._timestamp,
-          })
+          JSON.stringify(stateToSave)
         );
       } catch (error) {
         console.error('Error saving state to localStorage:', error);
@@ -375,6 +384,8 @@ export default function InitialAssessment() {
     completedSteps,
     wizardAnswers,
     mainStore.wizardSuccessStates,
+    mainStore.wizardIsCompleted,
+    mainStore.wizardSuccessMessage,
   ]);
 
   // Initialize state
@@ -417,6 +428,10 @@ export default function InitialAssessment() {
         if (savedValidationState) {
           try {
             const parsedValidation = JSON.parse(savedValidationState);
+            console.log('=== Found Saved Validation State ===', {
+              parsedValidation,
+              timestamp: new Date().toISOString(),
+            });
 
             // Restore wizard state if it exists
             if (parsedValidation.wizardAnswers) {
@@ -428,8 +443,21 @@ export default function InitialAssessment() {
 
             // Restore wizard success states if they exist
             if (parsedValidation.wizardSuccessStates) {
+              console.log('=== Restoring Wizard Success States ===', {
+                states: parsedValidation.wizardSuccessStates,
+                isWizardCompleted: parsedValidation.wizardIsCompleted,
+                successMessage: parsedValidation.wizardSuccessMessage,
+                timestamp: new Date().toISOString(),
+              });
+
               batchUpdateWizardState({
                 wizardSuccessStates: parsedValidation.wizardSuccessStates,
+                wizardIsCompleted: parsedValidation.wizardIsCompleted || false,
+                wizardSuccessMessage:
+                  parsedValidation.wizardSuccessMessage || '',
+                wizardIsValid: parsedValidation.isWizardValid || false,
+                wizardShowingSuccess:
+                  parsedValidation.wizardIsCompleted || false,
               });
             }
 
@@ -450,6 +478,8 @@ export default function InitialAssessment() {
               wizardSuccessStates: parsedValidation.wizardSuccessStates,
               isWizardSubmitted: parsedValidation.isWizardSubmitted,
               isWizardValid: parsedValidation.isWizardValid,
+              wizardIsCompleted: parsedValidation.wizardIsCompleted,
+              wizardSuccessMessage: parsedValidation.wizardSuccessMessage,
               timestamp: new Date().toISOString(),
             });
           } catch (error) {
@@ -669,7 +699,6 @@ export default function InitialAssessment() {
         isValid={isCurrentStepValid}
         summary={summary}
         shouldStayOpen={false}
-        isOpenByDefault={isFirstVisit && step.id === 1}
         className={accordionConfig.padding.wrapper}
         eyebrow={t.phases.initialAssessment.step.replace(
           '{number}',
@@ -1067,61 +1096,72 @@ export default function InitialAssessment() {
       // Get latest state
       const currentState = useStore.getState();
 
-      // Sync the state with the current flight data
-      const flightLocations = document.querySelector('[data-flight-locations]');
-      const fromLocationStr =
-        flightLocations?.getAttribute('data-from-location');
-      const toLocationStr = flightLocations?.getAttribute('data-to-location');
-
-      console.log('=== DOM Location Data ===', {
-        fromLocationStr,
-        toLocationStr,
-      });
-
-      // Parse location data
+      // Parse location data from state first
       let fromLocation = null;
       let toLocation = null;
+
       try {
-        if (fromLocationStr) fromLocation = JSON.parse(fromLocationStr);
-        if (toLocationStr) toLocation = JSON.parse(toLocationStr);
+        // First try to get from directFlight
+        if (
+          currentState.directFlight?.fromLocation &&
+          currentState.directFlight?.toLocation
+        ) {
+          fromLocation = currentState.directFlight.fromLocation;
+          toLocation = currentState.directFlight.toLocation;
+        }
+        // Then try to parse from state strings
+        else if (currentState.fromLocation && currentState.toLocation) {
+          fromLocation =
+            typeof currentState.fromLocation === 'string'
+              ? JSON.parse(currentState.fromLocation)
+              : currentState.fromLocation;
+          toLocation =
+            typeof currentState.toLocation === 'string'
+              ? JSON.parse(currentState.toLocation)
+              : currentState.toLocation;
+        }
+
+        // Fallback to DOM data if needed
+        if (!fromLocation || !toLocation) {
+          const flightLocations = document.querySelector(
+            '[data-flight-locations]'
+          );
+          const fromLocationStr =
+            flightLocations?.getAttribute('data-from-location');
+          const toLocationStr =
+            flightLocations?.getAttribute('data-to-location');
+
+          if (fromLocationStr) fromLocation = JSON.parse(fromLocationStr);
+          if (toLocationStr) toLocation = JSON.parse(toLocationStr);
+        }
       } catch (error) {
         console.error('Failed to parse location data:', error);
+        setIsLoading(false);
         return;
       }
 
-      // Update the store with the latest flight data
-      if (fromLocation && toLocation) {
-        useStore.setState({
-          fromLocation: fromLocationStr,
-          toLocation: toLocationStr,
-          directFlight: {
-            ...currentState.directFlight,
-            fromLocation,
-            toLocation,
-          },
-        });
+      // Validate parsed data
+      if (!fromLocation?.value || !toLocation?.value) {
+        console.error('Invalid location data:', { fromLocation, toLocation });
+        setIsLoading(false);
+        return;
       }
+
+      // Update the store with the validated location data
+      useStore.setState({
+        fromLocation: JSON.stringify(fromLocation),
+        toLocation: JSON.stringify(toLocation),
+        directFlight: {
+          ...currentState.directFlight,
+          fromLocation,
+          toLocation,
+        },
+      });
 
       // Get the updated state
       const updatedState = useStore.getState();
-      console.log('=== Starting Phase Transition ===', {
-        selectedType: updatedState.selectedType,
-        directFlight: updatedState.directFlight,
-        selectedFlights: updatedState.selectedFlights?.length || 0,
-        flightSegments: updatedState.flightSegments?.length || 0,
-        validationState: updatedState.validationState,
-      });
 
-      // Log initial state before any processing
-      console.log('=== Initial State Before Processing ===', {
-        selectedType: updatedState.selectedType,
-        fromLocation: updatedState.fromLocation,
-        toLocation: updatedState.toLocation,
-        directFlight: updatedState.directFlight,
-        flightSegments: updatedState.flightSegments,
-      });
-
-      // Phase 2 validation - check for parsed location data
+      // Phase 2 validation
       const isValid =
         updatedState.selectedType === 'multi'
           ? updatedState.flightSegments.length >= 2 &&
@@ -1132,20 +1172,13 @@ export default function InitialAssessment() {
             fromLocation?.value &&
             toLocation?.value;
 
-      console.log('=== Phase Transition Validation ===', {
-        isValid,
-        selectedType: updatedState.selectedType,
-        fromLocation: fromLocation?.value,
-        toLocation: toLocation?.value,
-        flightSegmentsCount: updatedState.flightSegments?.length,
-      });
-
       if (!isValid) {
         console.error('Invalid flight data state during transition');
+        setIsLoading(false);
         return;
       }
 
-      // Step 1: Prepare complete state data
+      // Prepare complete state data
       const completeStateData = {
         selectedType: updatedState.selectedType,
         flightSegments:
@@ -1155,24 +1188,16 @@ export default function InitialAssessment() {
             date: segment.date,
             selectedFlight: segment.selectedFlight,
           })) || [],
-        directFlight: updatedState.directFlight
-          ? {
-              fromLocation: updatedState.fromLocation,
-              toLocation: updatedState.toLocation,
-              date: updatedState.directFlight.date,
-              selectedFlight: updatedState.directFlight.selectedFlight,
-            }
-          : null,
-        fromLocation: updatedState.fromLocation,
-        toLocation: updatedState.toLocation,
+        directFlight: {
+          fromLocation,
+          toLocation,
+          date: updatedState.directFlight?.date,
+          selectedFlight: updatedState.directFlight?.selectedFlight,
+        },
+        fromLocation: JSON.stringify(fromLocation),
+        toLocation: JSON.stringify(toLocation),
         validationState: updatedState.validationState,
       };
-
-      console.log('=== Complete State Data Before Save ===', {
-        completeStateData,
-        fromLocation: updatedState.fromLocation,
-        toLocation: updatedState.toLocation,
-      });
 
       // Save state to localStorage
       try {
@@ -1183,13 +1208,11 @@ export default function InitialAssessment() {
         console.log('Successfully saved state to localStorage');
       } catch (error) {
         console.error('Failed to save state to localStorage:', error);
+        setIsLoading(false);
         return;
       }
 
       // Proceed with phase transition
-      console.log('=== Proceeding with phase transition ===');
-
-      // Transition to next phase
       setCurrentPhase(2);
       router.push('/phases/compensation-estimate');
     } catch (error) {

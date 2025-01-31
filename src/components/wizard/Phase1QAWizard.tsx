@@ -3,6 +3,7 @@
 declare global {
   interface Window {
     __wizardSuccessTimeout?: NodeJS.Timeout;
+    __wizardTransitionTimeout?: NodeJS.Timeout;
   }
 }
 
@@ -48,11 +49,11 @@ export const Phase1QAWizard: React.FC<Phase1QAWizardProps> = ({
   const successMessage = useStore(
     (state: StoreWithActions) => state.wizardSuccessMessage
   );
-  const validateAndUpdateStep = useStore(
-    (state: StoreWithActions) => state.validateAndUpdateStep
-  );
   const batchUpdateWizardState = useStore(
     (state: StoreWithActions) => state.batchUpdateWizardState
+  );
+  const validationState = useStore(
+    (state: StoreWithActions) => state.validationState
   );
 
   // Get wizard type
@@ -67,16 +68,29 @@ export const Phase1QAWizard: React.FC<Phase1QAWizardProps> = ({
 
   // Get success state for this wizard
   const successState = useMemo(() => {
+    console.log('=== Success State Determination START ===', {
+      isCompleted,
+      isValid,
+      successMessage,
+      instanceAnswers,
+      timestamp: new Date().toISOString(),
+    });
+
     const showing = isCompleted;
     const storedMessage = successMessage;
 
     // If we have a stored message, use it
     if (showing && storedMessage) {
+      console.log('=== Using Stored Success Message ===', {
+        showing,
+        message: storedMessage,
+        timestamp: new Date().toISOString(),
+      });
       return { showing, message: storedMessage };
     }
 
     // Otherwise calculate based on answers
-    if (!isValid) {
+    if (!isValid || !instanceAnswers || instanceAnswers.length === 0) {
       return { showing: false, message: '' };
     }
 
@@ -86,6 +100,14 @@ export const Phase1QAWizard: React.FC<Phase1QAWizardProps> = ({
     // Find the question and selected option
     const question = questions.find((q) => q.id === lastAnswer.questionId);
     const option = question?.options?.find((o) => o.value === lastAnswer.value);
+
+    console.log('=== Calculating Success Message ===', {
+      lastAnswer,
+      questionId: question?.id,
+      optionValue: option?.value,
+      showConfetti: option?.showConfetti,
+      timestamp: new Date().toISOString(),
+    });
 
     const message = option?.showConfetti
       ? t.wizard.success.goodChance
@@ -189,6 +211,13 @@ export const Phase1QAWizard: React.FC<Phase1QAWizardProps> = ({
   // Handle answer selection
   const handleSelect = useCallback(
     (questionId: string, value: string) => {
+      console.log('=== Answer Selection START ===', {
+        questionId,
+        value,
+        currentAnswers: instanceAnswers,
+        timestamp: new Date().toISOString(),
+      });
+
       // Get current answers
       const currentAnswers = [...instanceAnswers];
       const answerIndex = currentAnswers.findIndex(
@@ -208,6 +237,12 @@ export const Phase1QAWizard: React.FC<Phase1QAWizardProps> = ({
         currentAnswers.push(newAnswer);
       }
 
+      console.log('=== Answer Selection UPDATE ===', {
+        newAnswer,
+        updatedAnswers: currentAnswers,
+        timestamp: new Date().toISOString(),
+      });
+
       // Update wizard state
       batchUpdateWizardState({
         wizardAnswers: currentAnswers,
@@ -217,16 +252,16 @@ export const Phase1QAWizard: React.FC<Phase1QAWizardProps> = ({
     [instanceAnswers, batchUpdateWizardState]
   );
 
-  // Handle going to next step
-  const goToNext = useCallback(() => {
-    if (!currentQuestion) return;
+  // Handle QA wizard completion
+  const handleComplete = useCallback(
+    (answers: Answer[]) => {
+      console.log('=== QA Wizard Complete START ===', {
+        answers,
+        timestamp: new Date().toISOString(),
+      });
 
-    const nextStep = currentStep + 1;
-    const isLastStep = nextStep >= visibleQuestions.length;
-
-    if (isLastStep) {
-      // Determine success message based on answers
-      const lastAnswer = instanceAnswers[instanceAnswers.length - 1];
+      // Find the last answer and determine success message
+      const lastAnswer = answers[answers.length - 1];
       const question = questions.find((q) => q.id === lastAnswer?.questionId);
       const option = question?.options?.find(
         (o) => o.value === lastAnswer?.value
@@ -235,45 +270,108 @@ export const Phase1QAWizard: React.FC<Phase1QAWizardProps> = ({
         ? t.wizard.success.goodChance
         : t.wizard.success.answersSaved;
 
-      // Update wizard state
-      batchUpdateWizardState({
-        wizardIsValid: true,
-        wizardIsCompleted: true,
-        wizardSuccessMessage: successMessage,
-        lastAnsweredQuestion: lastAnswer.questionId,
+      console.log('=== Success Message Determination ===', {
+        lastAnswer,
+        questionId: question?.id,
+        optionValue: option?.value,
+        showConfetti: option?.showConfetti,
+        successMessage,
+        timestamp: new Date().toISOString(),
       });
 
-      // Call onComplete callback after a delay
-      window.setTimeout(() => {
-        if (onComplete) {
-          onComplete(instanceAnswers);
-        }
+      // First update the wizard state to show success
+      batchUpdateWizardState({
+        wizardAnswers: answers,
+        wizardIsCompleted: true,
+        wizardIsValid: true,
+        wizardSuccessMessage: successMessage,
+        validationState: {
+          ...validationState,
+          stepValidation: {
+            ...validationState.stepValidation,
+            2: true,
+          },
+          stepInteraction: {
+            ...validationState.stepInteraction,
+            2: true,
+          },
+          isWizardValid: true,
+          isWizardSubmitted: true,
+          _timestamp: Date.now(),
+        },
+      });
 
-        // Force auto-transition after a longer delay
-        window.setTimeout(() => {
-          validateAndUpdateStep(2 as ValidationStateSteps, true);
-        }, 2000); // Increased delay to ensure success message is visible
-      }, 1000);
-    } else {
-      // Move to next question without validation
+      console.log('=== QA Wizard Complete - State Updated ===', {
+        successMessage,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Clear any existing timeouts
+      if (window.__wizardSuccessTimeout) {
+        clearTimeout(window.__wizardSuccessTimeout);
+      }
+      if (window.__wizardTransitionTimeout) {
+        clearTimeout(window.__wizardTransitionTimeout);
+      }
+
+      // Set timeout for onComplete callback
+      window.__wizardSuccessTimeout = setTimeout(() => {
+        console.log('=== Success State Timeout - Calling onComplete ===', {
+          timestamp: new Date().toISOString(),
+        });
+
+        // Call onComplete callback
+        onComplete?.(answers);
+
+        // Set another timeout for accordion transition
+        window.__wizardTransitionTimeout = setTimeout(() => {
+          console.log('=== Success State Timeout - Transitioning ===', {
+            timestamp: new Date().toISOString(),
+          });
+
+          // Transition to next step after delay
+          const accordionContext = (window as any).__accordionContext;
+          if (accordionContext?.setActiveAccordion) {
+            accordionContext.setActiveAccordion('3');
+          }
+        }, 1000); // Additional 1 second after onComplete
+      }, 2000); // 2 seconds to show success state
+
+      console.log('=== QA Wizard Complete END ===', {
+        timestamp: new Date().toISOString(),
+      });
+    },
+    [
+      batchUpdateWizardState,
+      onComplete,
+      validationState,
+      questions,
+      t.wizard.success,
+    ]
+  );
+
+  // Handle going to next step
+  const goToNext = useCallback(() => {
+    if (currentStep < visibleQuestions.length - 1) {
+      // Move to next question
       batchUpdateWizardState({
         wizardCurrentSteps: {
           ...wizardCurrentSteps,
-          [wizardType]: nextStep,
+          [wizardType]: currentStep + 1,
         },
       });
+    } else {
+      // Complete the wizard
+      handleComplete(instanceAnswers);
     }
   }, [
-    currentQuestion,
     currentStep,
     visibleQuestions.length,
-    questions,
-    t.wizard.success,
-    instanceAnswers,
-    onComplete,
     wizardCurrentSteps,
-    validateAndUpdateStep,
+    wizardType,
     batchUpdateWizardState,
+    handleComplete,
+    instanceAnswers,
   ]);
 
   // Handle going back
@@ -299,29 +397,92 @@ export const Phase1QAWizard: React.FC<Phase1QAWizardProps> = ({
       wizardIsValid: false,
       wizardAnswers: [],
       lastAnsweredQuestion: null,
+      wizardSuccessMessage: '',
+      validationState: {
+        ...validationState,
+        stepValidation: {
+          1: false,
+          2: false,
+          3: false,
+          4: false,
+          5: false,
+        },
+        stepInteraction: {
+          1: false,
+          2: false,
+          3: false,
+          4: false,
+          5: false,
+        },
+        isWizardValid: false,
+        isWizardSubmitted: false,
+        _timestamp: Date.now(),
+      },
     });
-  }, [wizardCurrentSteps, batchUpdateWizardState]);
-
-  // Update button text
-  const backButtonText = t.wizard.navigation.back;
-  const nextButtonText = t.wizard.navigation.next;
-  const backToQuestionsText = t.wizard.success.backToQuestions;
-  const processingText = t.wizard.success.processing;
+  }, [wizardCurrentSteps, batchUpdateWizardState, validationState]);
 
   // Get success icon based on last answer
-  const getSuccessIcon = useMemo(() => {
-    const lastAnswer = instanceAnswers[instanceAnswers.length - 1];
-    if (!lastAnswer) return null;
+  const getSuccessIcon = useCallback(() => {
+    console.log('=== Success Icon Determination START ===', {
+      answers: instanceAnswers,
+      totalAnswers: instanceAnswers.length,
+      timestamp: new Date().toISOString(),
+    });
 
-    // Find the question and selected option
-    const question = questions.find((q) => q.id === lastAnswer.questionId);
-    const option = question?.options?.find((o) => o.value === lastAnswer.value);
-
-    if (option?.showConfetti) {
-      return <span className={qaWizardConfig.success.icon.emoji}>🎉</span>;
+    if (!instanceAnswers || instanceAnswers.length === 0) {
+      console.log('=== No Answers Found ===', {
+        timestamp: new Date().toISOString(),
+      });
+      return <CheckCircleIcon className={qaWizardConfig.success.icon.check} />;
     }
 
-    return <CheckCircleIcon className={qaWizardConfig.success.icon.check} />;
+    // Find the relevant answer based on issue type
+    const issueType = instanceAnswers.find(
+      (a) => a.questionId === 'issue_type'
+    )?.value;
+    let relevantAnswer;
+
+    if (issueType === 'delay') {
+      relevantAnswer = instanceAnswers.find(
+        (a) => a.questionId === 'delay_duration'
+      );
+    } else if (issueType === 'cancel') {
+      relevantAnswer = instanceAnswers.find(
+        (a) => a.questionId === 'cancellation_notice'
+      );
+    }
+
+    console.log('=== Found Relevant Answer ===', {
+      issueType,
+      relevantAnswer,
+      timestamp: new Date().toISOString(),
+    });
+
+    if (!relevantAnswer) {
+      console.log('=== No Relevant Answer Found ===', {
+        timestamp: new Date().toISOString(),
+      });
+      return <CheckCircleIcon className={qaWizardConfig.success.icon.check} />;
+    }
+
+    // Find the question and selected option
+    const question = questions.find((q) => q.id === relevantAnswer.questionId);
+    const option = question?.options?.find(
+      (o) => o.value === relevantAnswer.value
+    );
+
+    console.log('=== Found Question and Option ===', {
+      questionId: question?.id,
+      optionValue: option?.value,
+      showConfetti: option?.showConfetti,
+      timestamp: new Date().toISOString(),
+    });
+
+    return option?.showConfetti ? (
+      <span className={qaWizardConfig.success.icon.emoji}>🎉</span>
+    ) : (
+      <CheckCircleIcon className={qaWizardConfig.success.icon.check} />
+    );
   }, [instanceAnswers, questions]);
 
   // Early return for no questions
@@ -353,7 +514,7 @@ export const Phase1QAWizard: React.FC<Phase1QAWizardProps> = ({
                 transition={{ delay: 0.1, duration: 0.2 }}
                 className="w-16 h-16 flex items-center justify-center text-[64px]"
               >
-                {getSuccessIcon}
+                {getSuccessIcon()}
               </motion.div>
               <motion.div
                 initial={{ opacity: 0 }}
@@ -365,14 +526,16 @@ export const Phase1QAWizard: React.FC<Phase1QAWizardProps> = ({
                 <h2 className="text-2xl font-bold text-gray-900">
                   {successState.message}
                 </h2>
-                <p className="text-sm text-gray-500">{processingText}</p>
+                <p className="text-sm text-gray-500">
+                  {t.wizard.success.processing}
+                </p>
                 <motion.button
                   onClick={handleBackToQuestions}
                   className="mt-6 px-6 py-2 text-[#F54538] border border-[#F54538] rounded-md hover:bg-red-50"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                 >
-                  {backToQuestionsText}
+                  {t.wizard.success.backToQuestions}
                 </motion.button>
               </motion.div>
             </div>
@@ -403,19 +566,19 @@ export const Phase1QAWizard: React.FC<Phase1QAWizardProps> = ({
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                     >
-                      {backButtonText}
+                      {t.wizard.navigation.back}
                     </motion.button>
                   )}
                 </div>
                 <div>
                   <motion.button
                     onClick={goToNext}
-                    className={`px-4 py-2 bg-[#F54538] text-white rounded-md hover:bg-[#E03F33]`}
+                    className="px-4 py-2 bg-[#F54538] text-white rounded-md hover:bg-[#E03F33]"
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                   >
                     {currentStep < visibleQuestions.length - 1
-                      ? nextButtonText
+                      ? t.wizard.navigation.next
                       : t.common.submit}
                   </motion.button>
                 </div>
