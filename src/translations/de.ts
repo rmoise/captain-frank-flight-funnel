@@ -149,7 +149,7 @@ export const de: Translations = {
       description: 'Lassen Sie uns Ihren Flugschaden bewerten',
       flightDetails: 'Flugdaten',
       bookingNumber: 'Buchungsnummer',
-      whatHappened: 'Wie ist deine tatsächliche Reise verlaufen?',
+      whatHappened: 'Was ist mit deinem Flug passiert?',
       personalDetails: {
         title: 'Persönliche Angaben',
         subtitle:

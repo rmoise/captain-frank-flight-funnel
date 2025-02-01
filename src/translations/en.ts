@@ -141,7 +141,7 @@ export const en: Translations = {
       description: "Let's assess your flight claim",
       flightDetails: 'Flight Details',
       bookingNumber: 'Booking Number',
-      whatHappened: 'How did your actual journey go?',
+      whatHappened: 'What happened to your flight?',
       personalDetails: {
         title: 'Personal Details',
         subtitle:
