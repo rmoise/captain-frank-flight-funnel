@@ -120,16 +120,17 @@ export const FlightSearchBottomSheet: React.FC<
               <p className="text-gray-500 mb-6">
                 {t.flightSelector.labels.tryAdjusting}
               </p>
-              {currentPhase !== 1 && process.env.NODE_ENV === 'development' && (
-                <SecondaryButton
-                  onClick={() => {
-                    onClose();
-                    setIsFlightNotListedOpen(true);
-                  }}
-                >
-                  {t.flightSelector.flightNotListed.button}
-                </SecondaryButton>
-              )}
+              {currentPhase !== 1 &&
+                process.env.NEXT_PUBLIC_ENV === 'development' && (
+                  <SecondaryButton
+                    onClick={() => {
+                      onClose();
+                      setIsFlightNotListedOpen(true);
+                    }}
+                  >
+                    {t.flightSelector.flightNotListed.button}
+                  </SecondaryButton>
+                )}
             </div>
           ) : filteredFlights.length === 0 ? (
             <div className="text-center py-12">
@@ -146,28 +147,32 @@ export const FlightSearchBottomSheet: React.FC<
                   ? t.flightSelector.labels.noFlightsFoundCriteria
                   : t.flightSelector.labels.tryAdjusting}
               </p>
-              {currentPhase !== 1 && process.env.NODE_ENV === 'development' && (
-                <SecondaryButton
-                  onClick={() => {
-                    onClose();
-                    setIsFlightNotListedOpen(true);
-                  }}
-                >
-                  {t.flightSelector.flightNotListed.button}
-                </SecondaryButton>
-              )}
+              {currentPhase !== 1 &&
+                process.env.NEXT_PUBLIC_ENV === 'development' && (
+                  <SecondaryButton
+                    onClick={() => {
+                      onClose();
+                      setIsFlightNotListedOpen(true);
+                    }}
+                  >
+                    {t.flightSelector.flightNotListed.button}
+                  </SecondaryButton>
+                )}
             </div>
           ) : (
             <>
               <div className="px-6 py-2 border-b border-gray-200 bg-white">
                 <div className="flex items-center justify-between">
                   <h3 className="text-base font-medium text-gray-900">
-                    {t.flightSelector.labels.flightsFound
-                      .replace('{count}', filteredFlights.length.toString())
-                      .replace(
-                        '{count, plural, one {Flug} other {Flüge}}',
-                        filteredFlights.length === 1 ? 'Flug' : 'Flüge'
-                      )}
+                    {`${filteredFlights.length} ${
+                      t.flightSelector.labels.flightsFound.includes('Flight')
+                        ? filteredFlights.length === 1
+                          ? 'Flight'
+                          : 'Flights'
+                        : filteredFlights.length === 1
+                          ? 'Flug'
+                          : 'Flüge'
+                    } ${t.flightSelector.labels.flightsFound.includes('found') ? 'found' : 'gefunden'}`}
                   </h3>
                   <div className="flex items-center gap-2">
                     <button

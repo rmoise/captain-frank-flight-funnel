@@ -141,7 +141,7 @@ export const en: Translations = {
       description: "Let's assess your flight claim",
       flightDetails: 'Flight Details',
       bookingNumber: 'Booking Number',
-      whatHappened: 'What happened with your flight?',
+      whatHappened: 'How did your actual journey go?',
       personalDetails: {
         title: 'Personal Details',
         subtitle:
@@ -179,7 +179,7 @@ export const en: Translations = {
         "Let's gather some details about your trip experience. This will help us better understand your situation.",
       steps: {
         travelStatus: {
-          title: 'What happened to your flight?',
+          title: 'How did your actual journey go?',
           eyebrow: 'Step 1',
           summary: 'Your travel status has been recorded',
           questions: {
@@ -204,8 +204,7 @@ export const en: Translations = {
               title: 'How much did you pay for your ticket?',
             },
             alternativeFlightAirlineExpense: {
-              title:
-                'Please search for the alternative flight provided by the airline.',
+              title: 'Please enter all the flights you actually flew',
               label: 'Alternative Flight',
             },
             alternativeFlightOwnExpense: {

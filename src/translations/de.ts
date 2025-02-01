@@ -147,9 +147,9 @@ export const de: Translations = {
     initialAssessment: {
       title: 'Erzähle uns von deinem Flug',
       description: 'Lassen Sie uns Ihren Flugschaden bewerten',
-      flightDetails: 'Ihre Flugdaten',
+      flightDetails: 'Flugdaten',
       bookingNumber: 'Buchungsnummer',
-      whatHappened: 'Was ist mit deinem Flug passiert?',
+      whatHappened: 'Wie ist deine tatsächliche Reise verlaufen?',
       personalDetails: {
         title: 'Persönliche Angaben',
         subtitle:
@@ -190,7 +190,7 @@ export const de: Translations = {
         'Lass uns über deine Reiseerfahrung sprechen. Das hilft uns zu verstehen, was passiert ist und wie wir dir helfen können.',
       steps: {
         travelStatus: {
-          title: 'Was ist mit deinem Flug passiert?',
+          title: 'Wie ist deine tatsächliche Reise verlaufen?',
           eyebrow: 'Schritt 1',
           summary: 'Ihr Reisestatus wurde erfasst',
           questions: {
@@ -216,7 +216,7 @@ export const de: Translations = {
             },
             alternativeFlightAirlineExpense: {
               title:
-                'Bitte suche nach dem alternativen Flug, der von der Fluggesellschaft bereitgestellt wurde.',
+                'Bitte gebe all deine Flüge an, die du tatsächlich geflogen bist',
               label: 'Alternative Flight',
             },
             alternativeFlightOwnExpense: {

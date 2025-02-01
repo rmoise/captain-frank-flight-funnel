@@ -305,6 +305,7 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
   const [activeIndex, setActiveIndex] = useState<number>(0);
 
   const handleFlightNotListed = () => {
+    if (process.env.NEXT_PUBLIC_ENV !== 'development') return;
     setIsBottomSheetOpen(false);
     setIsFlightNotListedOpen(true);
   };
