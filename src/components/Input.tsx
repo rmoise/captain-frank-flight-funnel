@@ -16,6 +16,7 @@ interface InputProps {
   maxLength?: number;
   suggestionsVisible?: boolean;
   placeholder?: string;
+  name?: string;
 }
 
 export const Input: React.FC<InputProps> = ({
@@ -33,6 +34,7 @@ export const Input: React.FC<InputProps> = ({
   maxLength,
   suggestionsVisible = false,
   placeholder,
+  name,
 }) => {
   const [isFieldFocused, setIsFieldFocused] = useState(isFocused);
   const [isTouched, setIsTouched] = useState(false);
@@ -113,6 +115,7 @@ export const Input: React.FC<InputProps> = ({
           placeholder={placeholder}
           maxLength={maxLength}
           aria-label={label}
+          name={name}
           aria-invalid={showError || showRequiredError}
           aria-describedby={
             showError || showRequiredError ? `${label}-error` : undefined

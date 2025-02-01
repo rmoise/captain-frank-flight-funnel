@@ -9,14 +9,17 @@ import {
 } from '@heroicons/react/24/outline';
 import { PiAirplaneTakeoff } from 'react-icons/pi';
 import { format, parseISO } from 'date-fns';
+import { SecondaryButton } from '@/components/shared/SecondaryButton';
 
-interface FlightSearchBottomSheetProps {
+export interface FlightSearchBottomSheetProps {
   isOpen: boolean;
   onClose: () => void;
   onSelect: (flight: Flight) => void;
   searchResults: Flight[];
   isSearching?: boolean;
   errorMessage?: string | null;
+  setIsFlightNotListedOpen: (isOpen: boolean) => void;
+  currentPhase?: number;
 }
 
 // Helper function to safely format date for display
@@ -40,6 +43,8 @@ export const FlightSearchBottomSheet: React.FC<
   searchResults,
   isSearching = false,
   errorMessage = null,
+  setIsFlightNotListedOpen,
+  currentPhase,
 }) => {
   const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState('');
@@ -87,7 +92,7 @@ export const FlightSearchBottomSheet: React.FC<
                     placeholder={t.flightSelector.labels.searchByFlightNumber}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full h-12 px-3 pl-10 pr-10 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F54538] focus:border-transparent transition-colors"
+                    className="w-full h-12 px-3 pl-10 pr-10 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                   />
                   <MagnifyingGlassIcon className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
@@ -115,6 +120,16 @@ export const FlightSearchBottomSheet: React.FC<
               <p className="text-gray-500 mb-6">
                 {t.flightSelector.labels.tryAdjusting}
               </p>
+              {currentPhase !== 1 && process.env.NODE_ENV === 'development' && (
+                <SecondaryButton
+                  onClick={() => {
+                    onClose();
+                    setIsFlightNotListedOpen(true);
+                  }}
+                >
+                  {t.flightSelector.flightNotListed.button}
+                </SecondaryButton>
+              )}
             </div>
           ) : filteredFlights.length === 0 ? (
             <div className="text-center py-12">
@@ -131,6 +146,16 @@ export const FlightSearchBottomSheet: React.FC<
                   ? t.flightSelector.labels.noFlightsFoundCriteria
                   : t.flightSelector.labels.tryAdjusting}
               </p>
+              {currentPhase !== 1 && process.env.NODE_ENV === 'development' && (
+                <SecondaryButton
+                  onClick={() => {
+                    onClose();
+                    setIsFlightNotListedOpen(true);
+                  }}
+                >
+                  {t.flightSelector.flightNotListed.button}
+                </SecondaryButton>
+              )}
             </div>
           ) : (
             <>

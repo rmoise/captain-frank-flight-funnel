@@ -37,6 +37,11 @@ export const PHASES = (t: Translations): Phase[] => [
     name: t.phases.names.agreement,
     steps: [10],
   },
+  {
+    id: 7,
+    name: t.phases.names.claimSubmitted,
+    steps: [11],
+  },
 ];
 
-export const TOTAL_PHASES = 6;
+export const TOTAL_PHASES = 7;

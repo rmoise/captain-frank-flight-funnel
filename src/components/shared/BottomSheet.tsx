@@ -1,32 +1,33 @@
-import React, { Fragment } from 'react';
+import React, { useEffect } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
-import { XMarkIcon } from '@heroicons/react/24/outline';
+import { Fragment } from 'react';
 
 interface BottomSheetProps {
   isOpen: boolean;
   onClose: () => void;
-  title?: string;
   children: React.ReactNode;
 }
 
 export const BottomSheet: React.FC<BottomSheetProps> = ({
   isOpen,
   onClose,
-  title,
   children,
 }) => {
-  const dialogTitleId = React.useId();
-  const dialogDescriptionId = React.useId();
+  // Prevent body scroll when sheet is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
 
   return (
     <Transition.Root show={isOpen} as={Fragment}>
-      <Dialog
-        as="div"
-        className="relative z-50"
-        onClose={onClose}
-        aria-labelledby={dialogTitleId}
-        aria-describedby={dialogDescriptionId}
-      >
+      <Dialog as="div" className="relative z-50" onClose={onClose}>
         <Transition.Child
           as={Fragment}
           enter="ease-out duration-300"
@@ -44,43 +45,14 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
             <Transition.Child
               as={Fragment}
               enter="ease-out duration-300"
-              enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-              enterTo="opacity-100 translate-y-0 sm:scale-100"
+              enterFrom="opacity-0 translate-y-full"
+              enterTo="opacity-100 translate-y-0"
               leave="ease-in duration-200"
-              leaveFrom="opacity-100 translate-y-0 sm:scale-100"
-              leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+              leaveFrom="opacity-100 translate-y-0"
+              leaveTo="opacity-0 translate-y-full"
             >
-              <Dialog.Panel className="relative transform overflow-hidden rounded-t-2xl sm:rounded-2xl bg-white text-left shadow-xl transition-all w-full sm:max-w-2xl">
-                <div className="absolute right-0 top-0 pr-4 pt-4 sm:block">
-                  <button
-                    type="button"
-                    className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-[#F54538] focus:ring-offset-2"
-                    onClick={onClose}
-                    aria-label="Close dialog"
-                  >
-                    <span className="sr-only">Close</span>
-                    <XMarkIcon className="h-6 w-6" aria-hidden="true" />
-                  </button>
-                </div>
-                {title && (
-                  <div className="px-6 pt-6 pb-4">
-                    <Dialog.Title
-                      as="h3"
-                      id={dialogTitleId}
-                      className="text-lg font-medium leading-6 text-gray-900"
-                    >
-                      {title}
-                    </Dialog.Title>
-                  </div>
-                )}
-                <Dialog.Description
-                  id={dialogDescriptionId}
-                  className="sr-only"
-                >
-                  A bottom sheet dialog that slides up from the bottom of the
-                  screen
-                </Dialog.Description>
-                <div className="max-h-[80vh] overflow-y-auto">{children}</div>
+              <Dialog.Panel className="relative transform overflow-hidden rounded-t-xl bg-white text-left shadow-xl transition-all w-full sm:max-w-2xl">
+                {children}
               </Dialog.Panel>
             </Transition.Child>
           </div>

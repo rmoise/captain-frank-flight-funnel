@@ -24,6 +24,8 @@ interface DirectFlightProps {
   searchResults: Flight[];
   isSearching?: boolean;
   disabled?: boolean;
+  setIsFlightNotListedOpen: (isOpen: boolean) => void;
+  currentPhase?: number;
 }
 
 export const DirectFlight: React.FC<DirectFlightProps> = ({
@@ -40,6 +42,8 @@ export const DirectFlight: React.FC<DirectFlightProps> = ({
   searchResults,
   isSearching = false,
   disabled = false,
+  setIsFlightNotListedOpen,
+  currentPhase,
 }) => {
   const { t } = useTranslation();
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
@@ -116,6 +120,8 @@ export const DirectFlight: React.FC<DirectFlightProps> = ({
         onSelect={onFlightSelect}
         searchResults={searchResults}
         isSearching={isSearching}
+        setIsFlightNotListedOpen={setIsFlightNotListedOpen}
+        currentPhase={currentPhase}
       />
     </div>
   );

@@ -471,6 +471,7 @@ export interface StoreState {
   _preventPhaseChange: boolean;
   _isClaimSuccess: boolean;
   _lastUpdate: number;
+  claimId: string | null;
 }
 
 // Export ValidationStateSteps type
@@ -707,6 +708,7 @@ export interface StoreActions {
   ) => void;
   setPreventPhaseChange: (prevent: boolean) => void;
   setIsClaimSuccess: (isClaimSuccess: boolean) => void;
+  setClaimId: (claimId: string) => void;
 }
 
 // Define CompensationCache type
@@ -777,6 +779,7 @@ export interface StoreState
   bookingReference: string; // Add this line
   _preventPhaseChange: boolean;
   _isClaimSuccess: boolean;
+  claimId: string | null;
 }
 
 // Initial state
@@ -898,6 +901,7 @@ const initialState: StoreState = {
   errorMessages: {},
   _preventPhaseChange: false,
   _isClaimSuccess: false,
+  claimId: null,
 };
 
 // URL mappings
@@ -912,6 +916,8 @@ export const URL_TO_PHASE: Record<string, number> = {
   '/[lang]/phases/trip-experience': 4,
   '/phases/agreement': 5,
   '/[lang]/phases/agreement': 5,
+  '/phases/claim-submitted': 7,
+  '/[lang]/phases/claim-submitted': 7,
 };
 
 export const PHASE_TO_URL: Record<number, string> = {
@@ -920,6 +926,7 @@ export const PHASE_TO_URL: Record<number, string> = {
   3: '/phases/flight-details',
   4: '/phases/trip-experience',
   5: '/phases/agreement',
+  7: '/phases/claim-submitted',
 };
 
 // Add language-aware URL helpers
@@ -3365,6 +3372,7 @@ export const useStore = create<StoreState & StoreActions>()(
         set({ _preventPhaseChange: prevent }),
       setIsClaimSuccess: (isClaimSuccess: boolean) =>
         set({ _isClaimSuccess: isClaimSuccess }),
+      setClaimId: (claimId: string) => set({ claimId }),
     }),
     {
       name: 'flight-storage',
@@ -3450,6 +3458,7 @@ export const useStore = create<StoreState & StoreActions>()(
               }
             : null,
         },
+        claimId: state.claimId,
       }),
     }
   )

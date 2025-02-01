@@ -22,7 +22,6 @@ export async function POST(request: Request) {
       city: data.owner_city,
       country: data.owner_country,
     });
-    console.log('Marketing Status:', data.owner_marketable_status);
     console.log('Contract Acceptance:', {
       tac: data.contract_tac,
       dp: data.contract_dp,
@@ -44,7 +43,6 @@ export async function POST(request: Request) {
       'owner_city',
       'owner_country',
       'owner_email',
-      'owner_marketable_status',
       'contract_signature',
       'contract_tac',
       'contract_dp',
@@ -109,7 +107,6 @@ export async function POST(request: Request) {
           owner_country: data.owner_country,
           owner_email: data.owner_email,
           owner_phone: data.owner_phone || '',
-          owner_marketable_status: data.owner_marketable_status,
           contract_signature: formatSignature(data.contract_signature),
           contract_tac: data.contract_tac,
           contract_dp: data.contract_dp,

@@ -20,6 +20,21 @@ export interface FlightSelectorTranslations {
     noFlightsFoundCriteria: string;
     flightsFound: string;
   };
+  flightNotListed: {
+    button: string;
+    title: string;
+    description: string;
+    form: {
+      firstName: string;
+      lastName: string;
+      email: string;
+      description: string;
+      submit: string;
+      submitting: string;
+      success: string;
+      characterCount: string;
+    };
+  };
   errors: {
     noValidConnecting: string;
     noFlightsRoute: string;
@@ -142,6 +157,11 @@ export interface Translations {
     noResults: string;
     required: string;
     enterMinChars: string;
+  };
+  share: {
+    title: string;
+    description: string;
+    copy: string;
   };
   salutation: {
     label: string;
@@ -321,6 +341,7 @@ export interface Translations {
       claimStatus: string;
       agreement: string;
       claimSuccess: string;
+      claimSubmitted: string;
     };
     compensationEstimate: {
       title: string;
@@ -466,6 +487,36 @@ export interface Translations {
         continue: string;
       };
       speechBubble: string;
+    };
+    documentUpload: {
+      title: string;
+      description: string;
+      speechBubble: string;
+      bookingConfirmation: {
+        title: string;
+        description: string;
+      };
+      cancellationNotification: {
+        title: string;
+        description: string;
+      };
+      sharing: {
+        title: string;
+        description: string;
+        copy: string;
+      };
+      upload: string;
+      remove: string;
+      errors: {
+        noBookingConfirmation: string;
+        uploadFailed: string;
+      };
+      navigation: {
+        back: string;
+        continue: string;
+        checkAnotherFlight: string;
+      };
+      submit: string;
     };
   };
   flightSelector: FlightSelectorTranslations;

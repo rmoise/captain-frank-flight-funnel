@@ -60,6 +60,11 @@
   to = "/.netlify/functions/ordereuflightclaim"
   status = 200
 
+[[redirects]]
+  from = "/:lang/api/submitflightnotlisted"
+  to = "/.netlify/functions/submitFlightNotListed"
+  status = 200
+
 # Fallback redirects for non-language-prefixed routes
 [[redirects]]
   from = "/api/*"

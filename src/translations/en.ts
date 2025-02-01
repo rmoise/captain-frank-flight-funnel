@@ -295,6 +295,7 @@ export const en: Translations = {
       claimStatus: 'Claim Status',
       agreement: 'Agreement',
       claimSuccess: 'Claim Success',
+      claimSubmitted: 'Claim Submitted',
     },
     compensationEstimate: {
       title: 'Compensation Estimate',
@@ -377,10 +378,10 @@ export const en: Translations = {
       },
     },
     claimSubmitted: {
-      title: 'Claim Submitted',
+      title: 'Claim Submitted!',
       thankYou: 'Thank you, {firstName}!',
       description:
-        'Your claim has been successfully submitted. We will review your case and get back to you as soon as possible.',
+        'Your claim has been successfully submitted. If you have any documents ready, you can optionally provide them now. You can also share the claim with any fellow passengers.',
       emailConfirmation:
         'You will receive a confirmation email at {email} with your claim details.',
       support:
@@ -460,6 +461,40 @@ export const en: Translations = {
       },
       speechBubble: 'Please provide additional details about your flight.',
     },
+    documentUpload: {
+      title: 'Upload Documents',
+      description:
+        'Please provide the necessary documentation to support your claim.',
+      speechBubble:
+        'Please upload your booking confirmation and any notification from the airline regarding the flight cancellation.',
+      bookingConfirmation: {
+        title: 'Booking Confirmation',
+        description: 'Upload your booking confirmation or e-ticket (optional)',
+      },
+      cancellationNotification: {
+        title: 'Cancellation Notification',
+        description:
+          'Upload any notification from the airline about the flight cancellation (optional)',
+      },
+      sharing: {
+        title: 'Share Your Claim',
+        description:
+          'Share this link with fellow passengers to help them claim their compensation too.',
+        copy: 'Copy Link',
+      },
+      upload: 'Upload File',
+      submit: 'Submit',
+      remove: 'Remove File',
+      errors: {
+        noBookingConfirmation: 'Please upload your booking confirmation',
+        uploadFailed: 'Failed to upload documents. Please try again.',
+      },
+      navigation: {
+        back: 'Back',
+        continue: 'Continue',
+        checkAnotherFlight: 'Check Another Flight',
+      },
+    },
   },
   flightSelector: {
     types: {
@@ -484,6 +519,24 @@ export const en: Translations = {
         "We couldn't find any flights matching your criteria.",
       flightsFound:
         '{count} {count, plural, one {Flight} other {Flights}} found',
+    },
+    flightNotListed: {
+      button: 'Flight Not Listed?',
+      title: 'Flight Not Listed?',
+      description:
+        "Check your search details (departure, destination, and date). If it's still missing, let us know below. We'll add it, notify you by email, and you can continue your request.",
+      form: {
+        firstName: 'First Name',
+        lastName: 'Last Name',
+        email: 'Email',
+        description:
+          'Please provide details about your flight (e.g., airline, flight number, route, date)',
+        submit: 'Submit',
+        submitting: 'Submitting...',
+        success:
+          'Thank you! We have received your flight details and will contact you soon.',
+        characterCount: '{count} / {max}',
+      },
     },
     errors: {
       noValidConnecting:
@@ -535,5 +588,11 @@ export const en: Translations = {
     minConnectionTime: 'Connection time must be at least 30 minutes',
     maxConnectionTime: 'Connection time must be less than 48 hours',
     connectionTime: 'Connection time: {hours}h {minutes}m',
+  },
+  share: {
+    title: 'Share Claim',
+    description:
+      'Share this link with fellow passengers so they can claim their compensation too.',
+    copy: 'Copy Link',
   },
 };

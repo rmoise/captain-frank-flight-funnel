@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { AutocompleteInput } from '@/components/shared/AutocompleteInput';
 import { CustomDateInput } from '@/components/shared/CustomDateInput';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -292,6 +292,7 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
   onInteract = () => {},
   stepNumber,
   setValidationState,
+  setIsFlightNotListedOpen,
 }) => {
   const { t } = useTranslation();
   const mainStore = useStore();
@@ -302,6 +303,28 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
   const [searchError, setSearchError] = useState<string | null>(null);
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState<number>(0);
+
+  const handleFlightNotListed = () => {
+    setIsBottomSheetOpen(false);
+    setIsFlightNotListedOpen(true);
+  };
+
+  // Effect to handle form closing
+  useEffect(() => {
+    const handleFormClose = (e: CustomEvent) => {
+      if (e.detail?.fromSearchSheet) {
+        setIsBottomSheetOpen(true);
+      }
+    };
+
+    window.addEventListener('form-closed', handleFormClose as EventListener);
+    return () => {
+      window.removeEventListener(
+        'form-closed',
+        handleFormClose as EventListener
+      );
+    };
+  }, []);
 
   // Get validation function
   const { validate } = useFlightValidation({
@@ -1298,14 +1321,13 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
 
               <FlightSearchBottomSheet
                 isOpen={isBottomSheetOpen}
-                onClose={() => {
-                  setIsBottomSheetOpen(false);
-                  setSearchResults([]);
-                }}
+                onClose={() => setIsBottomSheetOpen(false)}
                 onSelect={(flight) => handleFlightSelect(flight, activeIndex)}
                 searchResults={searchResults}
                 isSearching={searchLoading}
                 errorMessage={searchError}
+                setIsFlightNotListedOpen={handleFlightNotListed}
+                currentPhase={currentPhase}
               />
             </>
           )}

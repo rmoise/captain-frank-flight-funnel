@@ -36,6 +36,7 @@ export interface FlightSegmentsProps {
     updater: (prev: Record<number, boolean>) => Record<number, boolean>
   ) => void;
   onSelect?: (flight: Flight) => void;
+  setIsFlightNotListedOpen: (isOpen: boolean) => void;
 }
 
 export interface FlightPreviewCardProps {

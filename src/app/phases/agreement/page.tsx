@@ -428,8 +428,7 @@ export default function AgreementPage() {
         finalBookingNumber,
         signatureRef.current?.toDataURL() || '',
         termsAccepted,
-        privacyAccepted,
-        marketingAccepted
+        privacyAccepted
       );
 
       // Log the order result for debugging
@@ -589,8 +588,7 @@ export default function AgreementPage() {
         finalBookingNumber,
         signatureRef.current?.toDataURL() || '',
         termsAccepted,
-        privacyAccepted,
-        marketingAccepted
+        privacyAccepted
       );
 
       // Log the order result for debugging

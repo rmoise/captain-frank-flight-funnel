@@ -42,7 +42,10 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
       shouldScaleBackground={false}
     >
       <Sheet.Portal>
-        <Sheet.Overlay className="fixed inset-0 bg-black/50 z-[9998]" />
+        <Sheet.Overlay
+          className="fixed inset-0 bg-black/50 z-[9998] cursor-pointer"
+          onClick={() => onClose()}
+        />
         <Sheet.Content
           className="fixed bottom-0 left-0 right-0 z-[9999] flex flex-col rounded-t-[20px] bg-white focus:outline-none"
           style={{

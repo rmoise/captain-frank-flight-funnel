@@ -30,6 +30,8 @@ interface MultiCityFlightProps {
   searchResults: Flight[];
   isSearching?: boolean;
   disabled?: boolean;
+  setIsFlightNotListedOpen: (isOpen: boolean) => void;
+  currentPhase?: number;
 }
 
 export const MultiCityFlight: React.FC<MultiCityFlightProps> = ({
@@ -41,6 +43,8 @@ export const MultiCityFlight: React.FC<MultiCityFlightProps> = ({
   searchResults,
   isSearching = false,
   disabled = false,
+  setIsFlightNotListedOpen,
+  currentPhase,
 }) => {
   const { t } = useTranslation();
   const [activeSearchIndex, setActiveSearchIndex] = useState<number | null>(
@@ -194,6 +198,8 @@ export const MultiCityFlight: React.FC<MultiCityFlightProps> = ({
         searchResults={searchResults}
         isSearching={isSearching}
         errorMessage={searchError}
+        setIsFlightNotListedOpen={setIsFlightNotListedOpen}
+        currentPhase={currentPhase}
       />
     </div>
   );

@@ -17,6 +17,12 @@ export const de: Translations = {
     required: 'Pflichtfeld',
     enterMinChars: 'Bitte geben Sie mindestens 3 Zeichen ein',
   },
+  share: {
+    title: 'Anspruch teilen',
+    description:
+      'Teilen Sie diesen Link mit Mitreisenden, damit auch sie ihre Entschädigung beantragen können.',
+    copy: 'Link kopieren',
+  },
   salutation: {
     label: 'Anrede',
     mr: 'Herr',
@@ -302,10 +308,11 @@ export const de: Translations = {
       initialAssessment: 'Erste Einschätzung',
       summary: 'Zusammenfassung',
       flightDetails: 'Flugdetails',
-      tripExperience: 'Reiseerlebnis',
+      tripExperience: 'Reiseerfahrung',
       claimStatus: 'Antragsstatus',
       agreement: 'Vereinbarung',
-      claimSuccess: 'Anspruch erfolgreich',
+      claimSuccess: 'Antrag erfolgreich',
+      claimSubmitted: 'Antrag eingereicht',
     },
     compensationEstimate: {
       title: 'Entschädigungsschätzung',
@@ -455,10 +462,10 @@ export const de: Translations = {
       speechBubble: 'Bitte gib uns zusätzliche Details zu deinem Flug.',
     },
     claimSubmitted: {
-      title: 'Antrag eingereicht',
+      title: 'Antrag eingereicht!',
       thankYou: 'Vielen Dank, {firstName}!',
       description:
-        'Dein Antrag wurde erfolgreich eingereicht. Wir werden deinen Fall prüfen und uns schnellstmöglich bei dir melden.',
+        'Dein Antrag wurde erfolgreich eingereicht. Wenn du bereits Dokumente zur Hand hast, kannst du sie jetzt optional hochladen. Du kannst den Anspruch auch mit deinen Mitreisenden teilen.',
       emailConfirmation:
         'Du erhältst eine Bestätigungs-E-Mail an {email} mit deinen Antragsdetails.',
       support:
@@ -469,6 +476,42 @@ export const de: Translations = {
         contact:
           'Unser Team wird sich bei dir melden, falls wir zusätzliche Informationen benötigen',
         updates: 'Du erhältst Updates zum Status deines Antrags per E-Mail',
+      },
+    },
+    documentUpload: {
+      title: 'Dokumente hochladen',
+      description:
+        'Bitte laden Sie die erforderlichen Unterlagen zur Unterstützung Ihres Antrags hoch.',
+      speechBubble:
+        'Bitte laden Sie Ihre Buchungsbestätigung und eventuelle Benachrichtigungen der Fluggesellschaft über die Flugannullierung hoch.',
+      bookingConfirmation: {
+        title: 'Buchungsbestätigung',
+        description:
+          'Laden Sie Ihre Buchungsbestätigung oder E-Ticket hoch (optional)',
+      },
+      cancellationNotification: {
+        title: 'Stornierungsbenachrichtigung',
+        description:
+          'Laden Sie eventuelle Benachrichtigungen der Fluggesellschaft über die Flugannullierung hoch (optional)',
+      },
+      sharing: {
+        title: 'Anspruch teilen',
+        description:
+          'Teilen Sie diesen Link mit Mitreisenden, damit auch sie ihre Entschädigung beantragen können.',
+        copy: 'Link kopieren',
+      },
+      upload: 'Datei hochladen',
+      submit: 'Absenden',
+      remove: 'Datei entfernen',
+      errors: {
+        noBookingConfirmation: 'Bitte laden Sie Ihre Buchungsbestätigung hoch',
+        uploadFailed:
+          'Dokumente konnten nicht hochgeladen werden. Bitte versuchen Sie es erneut.',
+      },
+      navigation: {
+        back: 'Zurück',
+        continue: 'Weiter',
+        checkAnotherFlight: 'Weiteren Flug prüfen',
       },
     },
   },
@@ -495,6 +538,24 @@ export const de: Translations = {
         'Wir konnten keine Flüge finden, die Ihren Kriterien entsprechen.',
       flightsFound:
         '{count} {count, plural, one {Flug} other {Flüge}} gefunden',
+    },
+    flightNotListed: {
+      button: 'Flug nicht aufgeführt?',
+      title: 'Flug nicht aufgeführt?',
+      description:
+        'Überprüfen Sie Ihre Suchdetails (Abflug, Ziel und Datum). Falls der Flug immer noch fehlt, teilen Sie uns dies unten mit. Wir fügen ihn hinzu, benachrichtigen Sie per E-Mail und Sie können Ihre Anfrage fortsetzen.',
+      form: {
+        firstName: 'Vorname',
+        lastName: 'Nachname',
+        email: 'E-Mail',
+        description:
+          'Bitte geben Sie Details zu Ihrem Flug an (z.B. Fluggesellschaft, Flugnummer, Route, Datum)',
+        submit: 'Absenden',
+        submitting: 'Wird gesendet...',
+        success:
+          'Vielen Dank! Wir haben Ihre Flugdaten erhalten und werden uns in Kürze bei Ihnen melden.',
+        characterCount: '{count} / {max}',
+      },
     },
     errors: {
       noValidConnecting:

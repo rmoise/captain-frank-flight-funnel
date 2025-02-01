@@ -48,7 +48,9 @@ export function PhaseGuard({ phase, children }: PhaseGuardProps) {
 
     // Check if phase check should be bypassed
     const shouldBypassCheck =
-      searchParams?.get('bypass_phase_check') === 'true' || phase === 6;
+      searchParams?.get('bypass_phase_check') === 'true' ||
+      phase === 6 ||
+      phase === 7;
     if (shouldBypassCheck) {
       setIsPhaseAccessible(true);
       return;
@@ -143,7 +145,9 @@ export function PhaseGuard({ phase, children }: PhaseGuardProps) {
 
   // Check if phase check should be bypassed
   const shouldBypassCheck =
-    searchParams?.get('bypass_phase_check') === 'true' || phase === 6;
+    searchParams?.get('bypass_phase_check') === 'true' ||
+    phase === 6 ||
+    phase === 7;
   if (shouldBypassCheck) {
     return <>{children}</>;
   }

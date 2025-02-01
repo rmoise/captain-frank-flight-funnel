@@ -212,7 +212,7 @@ export const CustomDateInput = forwardRef<
           ref={ref}
           className={`peer w-full h-14 px-3 pl-10 pr-10 border ${
             !isValidDate ? 'border-red-500' : 'border-gray-300'
-          } rounded-xl focus:outline-none focus:ring-2 focus:ring-[#F54538] focus:border-transparent bg-white text-[#4B616D]`}
+          } rounded-xl focus:outline-none focus:border-2 focus:border-blue-500 bg-white text-[#4B616D] hover:border-blue-500`}
           placeholder={placeholder}
           autoComplete="off"
           autoCorrect="off"

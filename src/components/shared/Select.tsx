@@ -111,7 +111,7 @@ export const Select: React.FC<SelectProps> = ({
         ? 'border-2 border-blue-500'
         : error && isTouched
           ? 'border border-[#F54538]'
-          : 'border border-[#e0e1e4] hover:border-blue-500'
+          : 'border border-gray-300 hover:border-blue-500'
     }
   `;
 

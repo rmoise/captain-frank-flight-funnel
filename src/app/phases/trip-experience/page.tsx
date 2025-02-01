@@ -635,54 +635,14 @@ export default function TripExperiencePage() {
         timestamp: new Date().toISOString(),
       });
 
-      // Only validate alternative flights if travel status requires it
+      // Only validate that flights are selected if travel status requires it
       if (
         travelStatus === 'provided' ||
         travelStatus === 'took_alternative_own'
       ) {
-        // Compare each selected flight with original flights
-        const flightComparison = selectedFlights.map(
-          (selectedFlight, index) => {
-            const originalFlight = originalFlights[index];
-            const isIdentical =
-              originalFlight &&
-              (selectedFlight.id === originalFlight.id ||
-                (selectedFlight.flightNumber === originalFlight.flightNumber &&
-                  selectedFlight.date === originalFlight.date));
-
-            return {
-              selectedFlight: {
-                id: selectedFlight.id,
-                flightNumber: selectedFlight.flightNumber,
-                date: selectedFlight.date,
-              },
-              originalFlight: originalFlight
-                ? {
-                    id: originalFlight.id,
-                    flightNumber: originalFlight.flightNumber,
-                    date: originalFlight.date,
-                  }
-                : null,
-              isIdentical,
-            };
-          }
-        );
-
-        console.log('=== Trip Experience - Flight Comparison ===', {
-          flightComparison,
-          hasNewFlights: flightComparison.some((comp) => !comp.isIdentical),
-          timestamp: new Date().toISOString(),
-        });
-
-        // If any flights are identical, throw error
-        if (flightComparison.some((comp) => comp.isIdentical)) {
-          console.error('=== Trip Experience - Validation Error ===', {
-            error: 'Selected flights must be different from original flights',
-            flightComparison,
-            timestamp: new Date().toISOString(),
-          });
+        if (selectedFlights.length === 0) {
           throw new Error(
-            'Please select different flights for your alternative travel'
+            'Please select your alternative flights before continuing'
           );
         }
       } else {
@@ -797,23 +757,6 @@ export default function TripExperiencePage() {
         if (validSelectedFlights.length === 0) {
           throw new Error(
             'Please select your alternative flights before continuing'
-          );
-        }
-
-        // Validate that selected flights are different from original flights
-        const hasIdenticalFlights = validSelectedFlights.some(
-          (selectedFlight) =>
-            validOriginalFlights.some(
-              (originalFlight) =>
-                originalFlight.id === selectedFlight.id ||
-                (originalFlight.flightNumber === selectedFlight.flightNumber &&
-                  originalFlight.date === selectedFlight.date)
-            )
-        );
-
-        if (hasIdenticalFlights) {
-          throw new Error(
-            'Alternative flights must be different from your original flights'
           );
         }
       }

@@ -24,7 +24,6 @@ export interface OrderClaimRequest extends EvaluateClaimRequest {
   owner_country: string;
   owner_email: string;
   owner_phone: string;
-  owner_marketable_status: boolean;
   contract_signature: string;
   contract_tac: boolean;
   contract_dp: boolean;
@@ -261,8 +260,7 @@ export class ClaimService {
     bookingNumber: string,
     signature: string,
     termsAccepted: boolean,
-    privacyAccepted: boolean,
-    marketingAccepted: boolean
+    privacyAccepted: boolean
   ): OrderClaimRequest {
     // Get the stored evaluation response
     const evaluationResponse = this.getLastEvaluationResponse();
@@ -330,7 +328,6 @@ export class ClaimService {
       owner_country: personalDetails.country || '',
       owner_email: personalDetails.email,
       owner_phone: personalDetails.phone || '',
-      owner_marketable_status: marketingAccepted,
       contract_signature: signature,
       contract_tac: termsAccepted,
       contract_dp: privacyAccepted,
@@ -399,8 +396,7 @@ export class ClaimService {
     bookingNumber: string,
     signature: string,
     termsAccepted: boolean,
-    privacyAccepted: boolean,
-    marketingAccepted: boolean
+    privacyAccepted: boolean
   ): Promise<OrderClaimResponse> {
     console.log('=== Ordering Claim ===', {
       originalFlights: originalFlights.map((f) => ({
@@ -417,7 +413,6 @@ export class ClaimService {
       bookingNumber,
       termsAccepted,
       privacyAccepted,
-      marketingAccepted,
     });
 
     const request = this.buildOrderRequest(
@@ -429,8 +424,7 @@ export class ClaimService {
       bookingNumber,
       signature,
       termsAccepted,
-      privacyAccepted,
-      marketingAccepted
+      privacyAccepted
     );
 
     try {

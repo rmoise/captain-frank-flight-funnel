@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useStore } from '@/lib/state/store';
 import { usePhase4Store } from '@/lib/state/phase4Store';
 import { useFlightStore } from '@/lib/state/flightStore';
@@ -9,6 +9,12 @@ import { useFlightValidation } from '@/hooks/useFlightValidation';
 import type { FlightSelectorProps } from './types';
 import type { Translations } from '@/translations/types';
 import { useAccordion } from '@/components/shared/AccordionContext';
+import {
+  FlightNotListedForm,
+  FlightNotListedData,
+} from '../FlightNotListedForm';
+import { SlideSheet } from '@/components/shared/SlideSheet';
+import { SecondaryButton } from '@/components/shared/SecondaryButton';
 
 type FlightType = 'direct' | 'multi';
 
@@ -27,8 +33,8 @@ const getFlightTypes = (translations: Translations | null) => {
 };
 
 export const ModularFlightSelector: React.FC<FlightSelectorProps> = ({
-  showFlightSearch,
-  showFlightDetails,
+  showFlightSearch = false,
+  showFlightDetails = false,
   currentPhase,
   disabled,
   stepNumber,
@@ -41,6 +47,8 @@ export const ModularFlightSelector: React.FC<FlightSelectorProps> = ({
   const flightStore = useFlightStore();
   const { t } = useTranslation();
   const { autoTransition } = useAccordion();
+  const [isFlightNotListedOpen, setIsFlightNotListedOpen] = useState(false);
+  const [isFromSearchSheet, setIsFromSearchSheet] = useState(false);
 
   // Get current segments and type from the appropriate store
   const segments =
@@ -184,6 +192,42 @@ export const ModularFlightSelector: React.FC<FlightSelectorProps> = ({
     [currentPhase, mainStore, phase4Store, flightStore, validate, onInteract]
   );
 
+  const handleFlightNotListedSubmit = (data: FlightNotListedData) => {
+    try {
+      const subject = 'Flight Not Listed Request';
+      const body = `
+First Name: ${data.firstName}
+Last Name: ${data.lastName}
+Email: ${data.email}
+Salutation: ${data.salutation}
+
+Flight Details:
+${data.description}
+      `;
+
+      const mailtoLink = `mailto:cashflight@captain-frank.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      window.location.href = mailtoLink;
+
+      setIsFlightNotListedOpen(false);
+      if (isFromSearchSheet) {
+        window.dispatchEvent(
+          new CustomEvent('form-closed', { detail: { fromSearchSheet: true } })
+        );
+      }
+    } catch (error) {
+      console.error('Error handling flight not listed submission:', error);
+    }
+  };
+
+  const handleFormClose = () => {
+    setIsFlightNotListedOpen(false);
+    if (isFromSearchSheet) {
+      window.dispatchEvent(
+        new CustomEvent('form-closed', { detail: { fromSearchSheet: true } })
+      );
+    }
+  };
+
   // Early return if stores are not initialized
   if (currentPhase === 4 && !phase4Store) return null;
   if (currentPhase !== 4 && !mainStore?.batchUpdateWizardState) return null;
@@ -208,7 +252,32 @@ export const ModularFlightSelector: React.FC<FlightSelectorProps> = ({
         setValidationState={setValidationState}
         onSelect={onSelect}
         onInteract={onInteract}
+        setIsFlightNotListedOpen={(isOpen) => {
+          setIsFromSearchSheet(true);
+          setIsFlightNotListedOpen(isOpen);
+        }}
       />
+      {currentPhase !== 1 && (
+        <div className="flex gap-4 justify-end">
+          <SecondaryButton
+            onClick={() => {
+              setIsFromSearchSheet(false);
+              setIsFlightNotListedOpen(true);
+            }}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-xl text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {t.flightSelector.flightNotListed.button}
+          </SecondaryButton>
+        </div>
+      )}
+
+      <SlideSheet
+        isOpen={isFlightNotListedOpen}
+        onClose={handleFormClose}
+        title={t.flightSelector.flightNotListed.title}
+      >
+        <FlightNotListedForm onSubmit={handleFlightNotListedSubmit} />
+      </SlideSheet>
     </div>
   );
 };
