@@ -1064,161 +1064,196 @@ export default function InitialAssessment() {
   // Define steps with memoization
   const steps = useMemo(() => createSteps(), [createSteps]);
 
-  // Handle continue button click
+  const validateLocationData = (location: any) => {
+    if (!location) {
+      console.debug('Location validation failed: location is null/undefined');
+      return null;
+    }
+
+    try {
+      // If it's already an object with the required properties, return it
+      if (typeof location === 'object' && location.value) {
+        console.debug(
+          'Location validation passed: already valid object',
+          location
+        );
+        return location;
+      }
+
+      // If it's a string, try to parse it
+      if (typeof location === 'string') {
+        const parsedLocation = JSON.parse(location);
+        if (parsedLocation?.value) {
+          console.debug(
+            'Location validation passed: parsed from string',
+            parsedLocation
+          );
+          return parsedLocation;
+        }
+      }
+
+      console.debug('Location validation failed: invalid format', location);
+      return null;
+    } catch (e) {
+      console.error('Location validation error:', e, 'for location:', location);
+      return null;
+    }
+  };
+
+  const prepareFlightData = (currentState: any) => {
+    console.debug('Preparing flight data for state:', {
+      type: currentState.selectedType,
+      hasSegments: Boolean(currentState.flightSegments?.length),
+      hasDirect: Boolean(currentState.directFlight),
+    });
+
+    // Handle multi-segment flights
+    if (
+      currentState.selectedType === 'multi' &&
+      currentState.flightSegments?.length > 0
+    ) {
+      const firstSegment = currentState.flightSegments[0];
+      const lastSegment =
+        currentState.flightSegments[currentState.flightSegments.length - 1];
+
+      const fromLocation = validateLocationData(firstSegment?.fromLocation);
+      const toLocation = validateLocationData(lastSegment?.toLocation);
+
+      console.debug('Multi-segment validation results:', {
+        fromLocation,
+        toLocation,
+        firstSegment,
+        lastSegment,
+      });
+
+      // Preserve all segment data while validating locations
+      const validatedSegments = currentState.flightSegments.map(
+        (segment: any) => ({
+          ...segment,
+          fromLocation: validateLocationData(segment.fromLocation),
+          toLocation: validateLocationData(segment.toLocation),
+        })
+      );
+
+      return {
+        fromLocation,
+        toLocation,
+        flightSegments: validatedSegments,
+        selectedType: 'multi' as 'multi',
+        directFlight: undefined,
+        selectedFlights: currentState.selectedFlights,
+        flightData: currentState.flightData,
+      };
+    }
+
+    // Handle direct flights
+    if (currentState.selectedType === 'direct') {
+      // For direct flights, prioritize the most recent location data
+      const fromLocation = validateLocationData(
+        currentState.fromLocation || currentState.directFlight?.fromLocation
+      );
+      const toLocation = validateLocationData(
+        currentState.toLocation || currentState.directFlight?.toLocation
+      );
+
+      console.debug('Direct flight validation results:', {
+        fromLocation,
+        toLocation,
+        currentFromLocation: currentState.fromLocation,
+        currentToLocation: currentState.toLocation,
+        directFlight: currentState.directFlight,
+      });
+
+      // Create a new direct flight object with the latest locations
+      const directFlight = {
+        fromLocation,
+        toLocation,
+        date: currentState.directFlight?.date || null,
+        selectedFlight: currentState.directFlight?.selectedFlight || null,
+        id: 'direct-flight',
+        type: 'direct',
+      };
+
+      // Create a corresponding flight segment
+      const flightSegments = [
+        {
+          ...directFlight,
+          id: 'direct-flight',
+          type: 'direct',
+        },
+      ];
+
+      return {
+        fromLocation,
+        toLocation,
+        directFlight,
+        selectedType: 'direct' as 'direct',
+        flightSegments,
+        selectedFlights: [],
+        flightData: currentState.flightData,
+      };
+    }
+
+    console.debug('No valid flight configuration found');
+    return null;
+  };
+
   const handleContinue = async () => {
     if (isLoading) return;
     setIsLoading(true);
 
     try {
-      // Get latest state
       const currentState = useStore.getState();
-      console.log('=== DEBUG: handleContinue Current State ===', {
-        fromLocation: currentState.fromLocation,
-        toLocation: currentState.toLocation,
-        directFlight: currentState.directFlight
-          ? {
-              fromLocation: currentState.directFlight.fromLocation,
-              toLocation: currentState.directFlight.toLocation,
-            }
-          : null,
-        selectedType: currentState.selectedType,
-        timestamp: new Date().toISOString(),
-      });
+      console.debug('Current state before continue:', currentState);
 
-      // Parse location data from state first
-      let fromLocation = null;
-      let toLocation = null;
+      // Prepare and validate flight data
+      const flightData = prepareFlightData(currentState);
+      console.debug('Prepared flight data:', flightData);
 
-      try {
-        // First try to get from directFlight
-        if (
-          currentState.directFlight?.fromLocation &&
-          currentState.directFlight?.toLocation
-        ) {
-          fromLocation = currentState.directFlight.fromLocation;
-          toLocation = currentState.directFlight.toLocation;
-        }
-        // Then try to parse from state strings
-        else if (currentState.fromLocation && currentState.toLocation) {
-          fromLocation =
-            typeof currentState.fromLocation === 'string'
-              ? JSON.parse(currentState.fromLocation)
-              : currentState.fromLocation;
-          toLocation =
-            typeof currentState.toLocation === 'string'
-              ? JSON.parse(currentState.toLocation)
-              : currentState.toLocation;
-        }
-
-        console.log('=== DEBUG: Parsed Location Data ===', {
-          fromLocation,
-          toLocation,
-          timestamp: new Date().toISOString(),
+      if (!flightData || !flightData.fromLocation || !flightData.toLocation) {
+        console.error('Invalid flight data:', {
+          flightData,
+          hasFromLocation: Boolean(flightData?.fromLocation),
+          hasToLocation: Boolean(flightData?.toLocation),
         });
-
-        // Fallback to DOM data if needed
-        if (!fromLocation || !toLocation) {
-          const flightLocations = document.querySelector(
-            '[data-flight-locations]'
-          );
-          const fromLocationStr =
-            flightLocations?.getAttribute('data-from-location');
-          const toLocationStr =
-            flightLocations?.getAttribute('data-to-location');
-
-          if (fromLocationStr) fromLocation = JSON.parse(fromLocationStr);
-          if (toLocationStr) toLocation = JSON.parse(toLocationStr);
-
-          console.log('=== DEBUG: DOM Location Data ===', {
-            fromLocation,
-            toLocation,
-            timestamp: new Date().toISOString(),
-          });
-        }
-      } catch (error) {
-        console.error('Failed to parse location data:', error);
         setIsLoading(false);
         return;
       }
 
-      // Validate parsed data
-      if (!fromLocation?.value || !toLocation?.value) {
-        console.error('Invalid location data:', { fromLocation, toLocation });
-        setIsLoading(false);
-        return;
-      }
-
-      // Update the store with the validated location data
-      useStore.setState({
-        fromLocation: JSON.stringify(fromLocation),
-        toLocation: JSON.stringify(toLocation),
-        directFlight: {
-          ...currentState.directFlight,
-          fromLocation,
-          toLocation,
-        },
-      });
-
-      // Get the updated state
-      const updatedState = useStore.getState();
-
-      // Phase 2 validation
-      const isValid =
-        updatedState.selectedType === 'multi'
-          ? updatedState.flightSegments.length >= 2 &&
-            updatedState.flightSegments.every(
-              (segment) => segment.fromLocation && segment.toLocation
-            )
-          : updatedState.selectedType === 'direct' &&
-            fromLocation?.value &&
-            toLocation?.value;
-
-      if (!isValid) {
-        console.error('Invalid flight data state during transition');
-        setIsLoading(false);
-        return;
-      }
-
-      // Prepare complete state data
+      // Prepare state for storage with type assertion
       const completeStateData = {
-        selectedType: updatedState.selectedType,
-        flightSegments:
-          updatedState.flightSegments?.map((segment) => ({
-            fromLocation: segment.fromLocation,
-            toLocation: segment.toLocation,
-            date: segment.date,
-            selectedFlight: segment.selectedFlight,
-          })) || [],
-        directFlight: {
-          fromLocation,
-          toLocation,
-          date: updatedState.directFlight?.date,
-          selectedFlight: updatedState.directFlight?.selectedFlight,
-        },
-        fromLocation: JSON.stringify(fromLocation),
-        toLocation: JSON.stringify(toLocation),
-        validationState: updatedState.validationState,
+        ...currentState,
+        selectedType: flightData.selectedType as 'multi' | 'direct',
+        fromLocation: JSON.stringify(flightData.fromLocation),
+        toLocation: JSON.stringify(flightData.toLocation),
+        flightSegments: flightData.flightSegments,
+        directFlight: flightData.directFlight,
+        selectedFlights: flightData.selectedFlights,
+        flightData: flightData.flightData,
+        validationState: currentState.validationState,
+        timestamp: Date.now(),
       };
 
-      // Save state to localStorage
-      try {
-        localStorage.setItem(
-          'flightSelectionState',
-          JSON.stringify(completeStateData)
-        );
-        console.log('Successfully saved state to localStorage');
-      } catch (error) {
-        console.error('Failed to save state to localStorage:', error);
-        setIsLoading(false);
-        return;
-      }
+      console.debug('Complete state data prepared:', completeStateData);
 
-      // Proceed with phase transition
-      setCurrentPhase(2);
+      // Update store state
+      useStore.setState(completeStateData);
+
+      // Update localStorage with complete state
+      localStorage.setItem(
+        'phase1FlightData',
+        JSON.stringify(completeStateData)
+      );
+      localStorage.setItem('phase1State', JSON.stringify(completeStateData));
+
+      // Force recalculation of compensation in phase 2
+      localStorage.removeItem('phase2CompensationData');
+
+      // Transition to next phase
+      await setCurrentPhase(2);
       router.push('/phases/compensation-estimate');
     } catch (error) {
       console.error('Error during phase transition:', error);
-    } finally {
       setIsLoading(false);
     }
   };
