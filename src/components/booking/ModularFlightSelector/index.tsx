@@ -257,7 +257,7 @@ ${data.description}
           setIsFlightNotListedOpen(isOpen);
         }}
       />
-      {currentPhase !== 1 && (
+      {currentPhase !== 1 && process.env.NEXT_PUBLIC_ENV === 'development' && (
         <div className="flex gap-4 justify-end">
           <SecondaryButton
             onClick={() => {
