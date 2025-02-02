@@ -376,8 +376,47 @@ export class ClaimService {
           travel_status: request.travel_status,
           journey_fact_type: request.journey_fact_type,
         };
+
         // Store the response in both memory and sessionStorage
         this.setStoredEvaluationResponse(evaluateResponse);
+
+        // Update HubSpot deal with evaluation results
+        const dealId = sessionStorage.getItem('hubspot_deal_id');
+        if (dealId) {
+          try {
+            const hubspotResponse = await fetch(
+              '/.netlify/functions/hubspot-integration/deal',
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  contactId: sessionStorage.getItem('hubspot_contact_id'),
+                  dealId,
+                  originalFlights,
+                  selectedFlights,
+                  evaluationResponse: evaluateResponse,
+                  stage: 'evaluation',
+                  status:
+                    evaluateResponse.status === 'accept'
+                      ? 'qualified'
+                      : 'disqualified',
+                }),
+              }
+            );
+
+            if (!hubspotResponse.ok) {
+              console.error(
+                'Failed to update HubSpot deal:',
+                await hubspotResponse.text()
+              );
+            }
+          } catch (error) {
+            console.error('Error updating HubSpot deal:', error);
+          }
+        }
+
         return evaluateResponse;
       }
       throw new Error('Invalid response format from API');
@@ -398,41 +437,71 @@ export class ClaimService {
     termsAccepted: boolean,
     privacyAccepted: boolean
   ): Promise<OrderClaimResponse> {
-    console.log('=== Ordering Claim ===', {
-      originalFlights: originalFlights.map((f) => ({
-        id: f.id,
-        flightNumber: f.flightNumber,
-      })),
-      selectedFlights: selectedFlights.map((f) => ({
-        id: f.id,
-        flightNumber: f.flightNumber,
-      })),
-      travelStatusAnswers,
-      informedDateAnswers,
-      personalDetails,
-      bookingNumber,
-      termsAccepted,
-      privacyAccepted,
-    });
-
-    const request = this.buildOrderRequest(
-      originalFlights,
-      selectedFlights,
-      travelStatusAnswers,
-      informedDateAnswers,
-      personalDetails,
-      bookingNumber,
-      signature,
-      termsAccepted,
-      privacyAccepted
-    );
-
     try {
+      // Build the request payload for Captain Frank API
+      const request = this.buildOrderRequest(
+        originalFlights,
+        selectedFlights,
+        travelStatusAnswers,
+        informedDateAnswers,
+        personalDetails,
+        bookingNumber,
+        signature,
+        termsAccepted,
+        privacyAccepted
+      );
+
+      // Get the stored evaluation response
+      const evaluationResponse = this.getLastEvaluationResponse();
+
+      // Submit to Captain Frank API
       const response = await api.orderEuflightClaim(request);
       console.log('Order claim response:', response);
+
+      // If Captain Frank API call is successful, update HubSpot
+      if (response.data) {
+        const dealId = sessionStorage.getItem('hubspot_deal_id');
+        if (dealId) {
+          try {
+            const hubspotResponse = await fetch(
+              '/.netlify/functions/hubspot-integration/deal',
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  contactId: sessionStorage.getItem('hubspot_contact_id'),
+                  dealId,
+                  personalDetails,
+                  bookingNumber,
+                  originalFlights,
+                  selectedFlights,
+                  evaluationResponse,
+                  stage: 'final_submission',
+                  status:
+                    evaluationResponse.status === 'accept'
+                      ? 'submitted'
+                      : 'rejected',
+                }),
+              }
+            );
+
+            if (!hubspotResponse.ok) {
+              console.error(
+                'Failed to update HubSpot deal:',
+                await hubspotResponse.text()
+              );
+            }
+          } catch (error) {
+            console.error('Error updating HubSpot deal:', error);
+          }
+        }
+      }
+
       return response;
     } catch (error) {
-      console.error('Error ordering claim:', error);
+      console.error('Error submitting claim:', error);
       throw error;
     }
   }

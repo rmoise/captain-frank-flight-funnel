@@ -235,7 +235,7 @@ export default function InitialAssessment() {
 
   // Handle personal details completion
   const handlePersonalDetailsComplete = useCallback(
-    (details: PassengerDetails) => {
+    async (details: PassengerDetails) => {
       if (!details) return;
 
       // Immediately open step 4 before any state updates
@@ -245,6 +245,72 @@ export default function InitialAssessment() {
       }
 
       setPersonalDetails(details);
+
+      try {
+        // Create initial contact in HubSpot
+        const hubspotResponse = await fetch(
+          '/.netlify/functions/hubspot-integration/contact',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              email: details.email,
+              personalDetails: details,
+              flightDetails: {
+                bookingNumber: sessionStorage.getItem('booking_number') || '',
+              },
+            }),
+          }
+        );
+
+        if (hubspotResponse.ok) {
+          const hubspotResult = await hubspotResponse.json();
+          sessionStorage.setItem(
+            'hubspot_contact_id',
+            hubspotResult.hubspotContactId
+          );
+
+          // Create initial deal in HubSpot
+          const currentState = useStore.getState();
+          const dealResponse = await fetch(
+            '/.netlify/functions/hubspot-integration/deal',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                contactId: hubspotResult.hubspotContactId,
+                personalDetails: details,
+                bookingNumber: sessionStorage.getItem('booking_number') || '',
+                selectedFlights: currentState.selectedFlights || [],
+                originalFlights: currentState.selectedFlights || [], // Same as selected flights at this stage
+                status: 'new_submission',
+                stage: 'initial_assessment',
+              }),
+            }
+          );
+
+          if (dealResponse.ok) {
+            const dealResult = await dealResponse.json();
+            sessionStorage.setItem('hubspot_deal_id', dealResult.hubspotDealId);
+          } else {
+            console.error(
+              'Failed to create HubSpot deal:',
+              await dealResponse.text()
+            );
+          }
+        } else {
+          console.error(
+            'Failed to create HubSpot contact:',
+            await hubspotResponse.text()
+          );
+        }
+      } catch (error) {
+        console.error('Error creating HubSpot records:', error);
+      }
 
       // Update validation state for step 3
       updateValidationState({
