@@ -160,7 +160,6 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
   } = useStore();
 
   const stepId = currentPhase === 5 || currentPhase === 6 ? 1 : 3;
-  const hasInteracted = validationState.stepInteraction[stepId];
   const interactionRef = React.useRef(false);
 
   // Handle initial load validation
@@ -211,29 +210,44 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
       storedDetails[field as keyof PassengerDetails]?.trim()
     );
 
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const emailValue = storedDetails.email?.trim();
+    const isEmailValid = !emailValue || emailRegex.test(emailValue);
+
+    const isValid = hasAllRequiredFields && (emailValue ? isEmailValid : true);
+
     // Get current validation state once
     const store = useStore.getState();
     const currentValidation = store.validationState;
+
+    // Prepare field errors
+    const fieldErrors: Record<string, string> = {};
+    if (!emailValue && hasAllRequiredFields) {
+      fieldErrors.email = `${t.personalDetails.email} ${t.validation.required}`;
+    } else if (emailValue && !isEmailValid) {
+      fieldErrors.email = t.validation.invalidBookingNumber;
+    }
 
     // Update validation state
     store.updateValidationState({
       ...currentValidation,
       stepValidation: {
         ...currentValidation.stepValidation,
-        [stepId]: hasAllRequiredFields,
+        [stepId]: isValid,
       },
       stepInteraction: {
         ...currentValidation.stepInteraction,
         [stepId]: false, // Reset interaction state on mount
       },
-      isPersonalValid: hasAllRequiredFields,
-      [stepId]: hasAllRequiredFields,
-      fieldErrors: {}, // Start with no field errors
+      isPersonalValid: isValid,
+      [stepId]: isValid,
+      fieldErrors: isValid ? {} : fieldErrors, // Clear all errors if form is valid
       _timestamp: Date.now(),
     });
 
     // Call onComplete if all fields are valid
-    if (hasAllRequiredFields) {
+    if (isValid) {
       onComplete(storedDetails);
     }
   }, [
@@ -243,6 +257,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
     onInteract,
     stepId,
     validationState._timestamp,
+    t,
   ]);
 
   // Memoize the input change handler
@@ -267,30 +282,101 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
         const store = useStore.getState();
         const currentValidation = store.validationState;
 
-        // Email validation
+        // Email validation regex
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        const isEmailValid = field === 'email' ? emailRegex.test(value) : true;
 
-        // Only show validation error for email format if there's a value
-        let fieldError = '';
-        if (field === 'email' && value && !isEmailValid) {
-          fieldError = 'Please enter a valid email address';
+        // Determine required fields
+        const requiredFields = isClaimSuccess
+          ? [
+              'salutation',
+              'firstName',
+              'lastName',
+              'email',
+              'phone',
+              'address',
+              'postalCode',
+              'city',
+              'country',
+            ]
+          : ['firstName', 'lastName', 'email'];
+
+        // Validate all required fields
+        const fieldErrors = { ...currentValidation.fieldErrors };
+
+        // First validate the changed field
+        if (field === 'email' && value.trim()) {
+          if (!emailRegex.test(value.trim())) {
+            fieldErrors[field] = t.validation.invalidBookingNumber;
+          } else {
+            delete fieldErrors[field];
+          }
         }
+
+        // Then check required fields
+        requiredFields.forEach((reqField) => {
+          const fieldValue =
+            reqField === field
+              ? value
+              : newDetails[reqField as keyof PassengerDetails];
+          const trimmedValue = fieldValue?.trim();
+
+          if (!trimmedValue) {
+            const fieldNames: Record<keyof PassengerDetails, string> = {
+              salutation: t.personalDetails.salutation,
+              firstName: t.personalDetails.firstName,
+              lastName: t.personalDetails.lastName,
+              email: t.personalDetails.email,
+              phone: t.personalDetails.phone,
+              address: t.personalDetails.address,
+              postalCode: t.personalDetails.postalCode,
+              city: t.personalDetails.city,
+              country: t.personalDetails.country,
+            };
+            fieldErrors[reqField] =
+              `${fieldNames[reqField as keyof PassengerDetails]} ${t.validation.required}`;
+          } else if (reqField !== 'email') {
+            // Skip email as it's handled above
+            delete fieldErrors[reqField];
+          }
+        });
+
+        // Check if all required fields are valid and there are no errors
+        const hasAllRequiredFields = requiredFields.every((field) =>
+          newDetails[field as keyof PassengerDetails]?.trim()
+        );
+        const hasNoErrors = Object.keys(fieldErrors).length === 0;
+        const isValid = hasAllRequiredFields && hasNoErrors;
 
         // Update validation state
         const newValidationState = {
           ...currentValidation,
-          fieldErrors: {
-            ...currentValidation.fieldErrors,
-            [field]: fieldError,
+          fieldErrors,
+          stepValidation: {
+            ...currentValidation.stepValidation,
+            [stepId]: isValid,
           },
+          isPersonalValid: isValid,
+          [stepId]: isValid,
           _timestamp: Date.now(),
         };
 
         store.updateValidationState(newValidationState);
+
+        // Call onComplete if all fields are valid and there are no errors
+        if (isValid) {
+          onComplete(newDetails);
+        }
       }
     },
-    [storedDetails, setPersonalDetails, onInteract]
+    [
+      storedDetails,
+      setPersonalDetails,
+      onInteract,
+      isClaimSuccess,
+      t,
+      stepId,
+      onComplete,
+    ]
   );
 
   return (
@@ -322,7 +408,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
             value={storedDetails?.firstName || ''}
             onChange={(value) => handleInputChange('firstName', value)}
             error={validationState.fieldErrors.firstName}
-            required={isClaimSuccess}
+            required={true}
           />
         </div>
         <div>
@@ -331,7 +417,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
             value={storedDetails?.lastName || ''}
             onChange={(value) => handleInputChange('lastName', value)}
             error={validationState.fieldErrors.lastName}
-            required={isClaimSuccess}
+            required={true}
           />
         </div>
         <div>
@@ -341,7 +427,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
             value={storedDetails?.email || ''}
             onChange={(value) => handleInputChange('email', value)}
             error={validationState.fieldErrors.email}
-            required={isClaimSuccess}
+            required={true}
           />
         </div>
         {showAdditionalFields && (

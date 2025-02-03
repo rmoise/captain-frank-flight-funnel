@@ -41,25 +41,50 @@ export const Input: React.FC<InputProps> = ({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFocus = () => {
+    console.log(`[${label}] Focus - Current value:`, value);
     setIsFieldFocused(true);
     onFocus?.();
   };
 
   const handleBlur = () => {
+    console.log(
+      `[${label}] Blur - Current value:`,
+      value,
+      'Required:',
+      required
+    );
     setIsFieldFocused(false);
-    setIsTouched(true);
+    if (value.trim() || required) {
+      console.log(
+        `[${label}] Setting touched to true - Has value or is required`
+      );
+      setIsTouched(true);
+    }
     onBlur?.();
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
+    console.log(`[${label}] Change - New value:`, newValue);
     onChange(newValue);
-    if (!newValue.trim()) {
+    if (!newValue.trim() && !required) {
+      console.log(
+        `[${label}] Resetting touched - Empty value and not required`
+      );
       setIsTouched(false);
+    }
+    if (type === 'email' && newValue.trim()) {
+      const emailRegex = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
+      const isValid = emailRegex.test(newValue.trim());
+      console.log(`[${label}] Email validation:`, { value: newValue, isValid });
+      if (isValid) {
+        setIsTouched(false);
+      }
     }
   };
 
   const handleClear = (e: React.MouseEvent) => {
+    console.log(`[${label}] Clear clicked`);
     e.stopPropagation();
     e.preventDefault();
     onChange('');
@@ -70,13 +95,37 @@ export const Input: React.FC<InputProps> = ({
   };
 
   useEffect(() => {
-    if (!error) {
+    if (
+      !error ||
+      (type === 'email' &&
+        value.trim() &&
+        /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(value))
+    ) {
+      console.log(
+        `[${label}] Error cleared or valid email - Resetting touched state`
+      );
       setIsTouched(false);
     }
-  }, [error]);
+  }, [error, value, type, label]);
 
-  const showError = error && isTouched;
+  const showError =
+    error &&
+    isTouched &&
+    (!type ||
+      type !== 'email' ||
+      !value.trim() ||
+      !/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(value));
   const showRequiredError = required && isTouched && !value.trim();
+
+  console.log(`[${label}] Render state:`, {
+    value,
+    error,
+    isTouched,
+    isFieldFocused,
+    showError,
+    showRequiredError,
+    required,
+  });
 
   useEffect(() => {
     setIsFieldFocused(isFocused);
