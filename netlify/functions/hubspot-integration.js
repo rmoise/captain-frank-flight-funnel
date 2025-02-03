@@ -1,4 +1,4 @@
-const fetch = require('node-fetch');
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 const { Handler } = require('@netlify/functions');
 const { v4: uuidv4 } = require('uuid');
 
