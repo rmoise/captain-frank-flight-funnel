@@ -246,72 +246,6 @@ export default function InitialAssessment() {
 
       setPersonalDetails(details);
 
-      try {
-        // Create initial contact in HubSpot
-        const hubspotResponse = await fetch(
-          '/.netlify/functions/hubspot-integration/contact',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              email: details.email,
-              personalDetails: details,
-              flightDetails: {
-                bookingNumber: sessionStorage.getItem('booking_number') || '',
-              },
-            }),
-          }
-        );
-
-        if (hubspotResponse.ok) {
-          const hubspotResult = await hubspotResponse.json();
-          sessionStorage.setItem(
-            'hubspot_contact_id',
-            hubspotResult.hubspotContactId
-          );
-
-          // Create initial deal in HubSpot
-          const currentState = useStore.getState();
-          const dealResponse = await fetch(
-            '/.netlify/functions/hubspot-integration/deal',
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                contactId: hubspotResult.hubspotContactId,
-                personalDetails: details,
-                bookingNumber: sessionStorage.getItem('booking_number') || '',
-                selectedFlights: currentState.selectedFlights || [],
-                originalFlights: currentState.selectedFlights || [], // Same as selected flights at this stage
-                status: 'new_submission',
-                stage: 'initial_assessment',
-              }),
-            }
-          );
-
-          if (dealResponse.ok) {
-            const dealResult = await dealResponse.json();
-            sessionStorage.setItem('hubspot_deal_id', dealResult.hubspotDealId);
-          } else {
-            console.error(
-              'Failed to create HubSpot deal:',
-              await dealResponse.text()
-            );
-          }
-        } else {
-          console.error(
-            'Failed to create HubSpot contact:',
-            await hubspotResponse.text()
-          );
-        }
-      } catch (error) {
-        console.error('Error creating HubSpot records:', error);
-      }
-
       // Update validation state for step 3
       updateValidationState({
         ...validationState,
@@ -1264,13 +1198,106 @@ export default function InitialAssessment() {
     return null;
   };
 
-  const handleContinue = async () => {
+  const handleContinue = useCallback(async () => {
     if (isLoading) return;
     setIsLoading(true);
 
     try {
       const currentState = useStore.getState();
       console.debug('Current state before continue:', currentState);
+
+      // Create HubSpot contact and deal
+      try {
+        console.log('Creating HubSpot contact:', {
+          email: personalDetails?.email,
+          personalDetails,
+          bookingNumber: sessionStorage.getItem('booking_number') || '',
+          timestamp: new Date().toISOString(),
+        });
+
+        // Create initial contact in HubSpot
+        const hubspotResponse = await fetch(
+          '/.netlify/functions/hubspot-integration/contact',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              email: personalDetails?.email,
+              firstName: personalDetails?.firstName,
+              lastName: personalDetails?.lastName,
+              phone: personalDetails?.phone,
+              address: personalDetails?.address,
+              city: personalDetails?.city,
+              postalCode: personalDetails?.postalCode,
+              country: personalDetails?.country,
+              personalDetails,
+              flightDetails: {
+                bookingNumber: sessionStorage.getItem('booking_number') || '',
+              },
+            }),
+          }
+        );
+
+        if (!hubspotResponse.ok) {
+          const errorText = await hubspotResponse.text();
+          console.error('Failed to create HubSpot contact:', errorText);
+          throw new Error(`Failed to create HubSpot contact: ${errorText}`);
+        }
+
+        const hubspotResult = await hubspotResponse.json();
+        console.log('HubSpot contact created:', hubspotResult);
+        sessionStorage.setItem(
+          'hubspot_contact_id',
+          hubspotResult.hubspotContactId
+        );
+
+        // Create initial deal in HubSpot
+        console.log('Creating HubSpot deal:', {
+          contactId: hubspotResult.hubspotContactId,
+          selectedFlights,
+          fromLocation: mainStore.fromLocation,
+          toLocation: mainStore.toLocation,
+          timestamp: new Date().toISOString(),
+        });
+
+        const dealResponse = await fetch(
+          '/.netlify/functions/hubspot-integration/deal',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              contactId: hubspotResult.hubspotContactId,
+              personalDetails,
+              bookingNumber: sessionStorage.getItem('booking_number') || '',
+              selectedFlights: selectedFlights || [],
+              originalFlights: selectedFlights || [], // Same as selected flights at this stage
+              status: 'new_submission',
+              stage: 'initial_assessment',
+              fromLocation: mainStore.fromLocation,
+              toLocation: mainStore.toLocation,
+            }),
+          }
+        );
+
+        if (!dealResponse.ok) {
+          const errorText = await dealResponse.text();
+          console.error('Failed to create HubSpot deal:', errorText);
+          throw new Error(`Failed to create HubSpot deal: ${errorText}`);
+        }
+
+        const dealResult = await dealResponse.json();
+        console.log('HubSpot deal created:', dealResult);
+        sessionStorage.setItem('hubspot_deal_id', dealResult.hubspotDealId);
+      } catch (error) {
+        console.error('Error creating HubSpot records:', error);
+        alert('Failed to save your information. Please try again.');
+        setIsLoading(false);
+        return;
+      }
 
       // Prepare and validate flight data
       const flightData = prepareFlightData(currentState);
@@ -1322,7 +1349,14 @@ export default function InitialAssessment() {
       console.error('Error during phase transition:', error);
       setIsLoading(false);
     }
-  };
+  }, [
+    isLoading,
+    setIsLoading,
+    setCurrentPhase,
+    router,
+    personalDetails,
+    selectedFlights,
+  ]);
 
   const renderStepContent = (step: Step) => {
     if (step.component === ModularFlightSelector) {

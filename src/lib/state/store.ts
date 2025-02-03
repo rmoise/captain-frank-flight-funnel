@@ -323,7 +323,7 @@ export const validatePersonalDetails = (state: StoreStateValues): boolean => {
   );
 
   // Email validation
-  const emailRegex = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/i;
   const hasValidEmail = !!(
     personalDetails.email && emailRegex.test(personalDetails.email)
   );
@@ -2474,7 +2474,7 @@ export const useStore = create<StoreState & StoreActions>()(
         });
 
         // Email validation
-        const emailRegex = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
+        const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/i;
         validationDetails.hasValidEmail = !!(
           details.email && emailRegex.test(details.email)
         );

@@ -186,7 +186,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
         },
         isPersonalValid: false,
         [stepId]: false,
-        fieldErrors: {},
+        fieldErrors: {}, // Start with no field errors
         _timestamp: Date.now(),
       });
       return;
@@ -215,37 +215,26 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
     const store = useStore.getState();
     const currentValidation = store.validationState;
 
-    // Only update if validation state has changed
-    if (currentValidation.stepValidation[stepId] !== hasAllRequiredFields) {
-      // Update validation state to reflect completed state
-      const newValidationState = {
-        ...currentValidation,
-        stepValidation: {
-          ...currentValidation.stepValidation,
-          [stepId]: hasAllRequiredFields,
-        },
-        stepInteraction: {
-          ...currentValidation.stepInteraction,
-          [stepId]: hasAllRequiredFields,
-        },
-        isPersonalValid: hasAllRequiredFields,
+    // Update validation state
+    store.updateValidationState({
+      ...currentValidation,
+      stepValidation: {
+        ...currentValidation.stepValidation,
         [stepId]: hasAllRequiredFields,
-        fieldErrors: hasAllRequiredFields ? {} : currentValidation.fieldErrors,
-        _timestamp: Date.now(),
-      };
+      },
+      stepInteraction: {
+        ...currentValidation.stepInteraction,
+        [stepId]: false, // Reset interaction state on mount
+      },
+      isPersonalValid: hasAllRequiredFields,
+      [stepId]: hasAllRequiredFields,
+      fieldErrors: {}, // Start with no field errors
+      _timestamp: Date.now(),
+    });
 
-      store.updateValidationState(newValidationState);
-
-      // If all required fields are present, call onComplete
-      if (hasAllRequiredFields) {
-        onComplete(storedDetails);
-      }
-
-      // Mark as interacted if we have all required fields
-      if (!interactionRef.current && onInteract && hasAllRequiredFields) {
-        interactionRef.current = true;
-        onInteract();
-      }
+    // Call onComplete if all fields are valid
+    if (hasAllRequiredFields) {
+      onComplete(storedDetails);
     }
   }, [
     storedDetails,
@@ -278,94 +267,30 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
         const store = useStore.getState();
         const currentValidation = store.validationState;
 
-        // Only validate if user has interacted with the form
-        if (interactionRef.current) {
-          const requiredFields = isClaimSuccess
-            ? [
-                'salutation',
-                'firstName',
-                'lastName',
-                'email',
-                'phone',
-                'address',
-                'postalCode',
-                'city',
-                'country',
-              ]
-            : ['firstName', 'lastName', 'email'];
+        // Email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const isEmailValid = field === 'email' ? emailRegex.test(value) : true;
 
-          // Email validation
-          const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-          const isEmailValid =
-            field === 'email' ? emailRegex.test(value) : true;
-
-          const hasAllRequiredFields = requiredFields.every((field) => {
-            const fieldValue =
-              newDetails[field as keyof PassengerDetails]?.trim();
-            if (field === 'email') {
-              return fieldValue && emailRegex.test(fieldValue);
-            }
-            return !!fieldValue;
-          });
-
-          // Call onComplete immediately if all fields are valid
-          if (hasAllRequiredFields) {
-            onComplete(newDetails);
-          }
-
-          // Only update validation state if it has changed
-          const shouldUpdate =
-            currentValidation.stepValidation[stepId] !== hasAllRequiredFields ||
-            currentValidation.fieldErrors[field] !==
-              (field === 'email' && value.trim()
-                ? !isEmailValid
-                  ? 'Please enter a valid email address'
-                  : ''
-                : value.trim()
-                  ? ''
-                  : 'This field is required');
-
-          if (shouldUpdate) {
-            // Update validation state
-            const newValidationState = {
-              ...currentValidation,
-              stepValidation: {
-                ...currentValidation.stepValidation,
-                [stepId]: hasAllRequiredFields,
-              },
-              stepInteraction: {
-                ...currentValidation.stepInteraction,
-                [stepId]: true,
-              },
-              [stepId]: hasAllRequiredFields,
-              isPersonalValid: hasAllRequiredFields,
-              fieldErrors: {
-                ...currentValidation.fieldErrors,
-                [field]:
-                  field === 'email' && value.trim()
-                    ? !isEmailValid
-                      ? 'Please enter a valid email address'
-                      : ''
-                    : value.trim()
-                      ? ''
-                      : 'This field is required',
-              },
-              _timestamp: Date.now(),
-            };
-
-            store.updateValidationState(newValidationState);
-          }
+        // Only show validation error for email format if there's a value
+        let fieldError = '';
+        if (field === 'email' && value && !isEmailValid) {
+          fieldError = 'Please enter a valid email address';
         }
+
+        // Update validation state
+        const newValidationState = {
+          ...currentValidation,
+          fieldErrors: {
+            ...currentValidation.fieldErrors,
+            [field]: fieldError,
+          },
+          _timestamp: Date.now(),
+        };
+
+        store.updateValidationState(newValidationState);
       }
     },
-    [
-      storedDetails,
-      setPersonalDetails,
-      onInteract,
-      stepId,
-      isClaimSuccess,
-      onComplete,
-    ]
+    [storedDetails, setPersonalDetails, onInteract]
   );
 
   return (
@@ -383,9 +308,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
             label={t.personalDetails.salutation}
             value={storedDetails?.salutation || ''}
             onChange={(value) => handleInputChange('salutation', value)}
-            error={
-              hasInteracted ? validationState.fieldErrors.salutation : undefined
-            }
+            error={validationState.fieldErrors.salutation}
             options={[
               { value: 'herr', label: t.salutation.mr },
               { value: 'frau', label: t.salutation.mrs },
@@ -398,9 +321,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
             label={t.personalDetails.firstName}
             value={storedDetails?.firstName || ''}
             onChange={(value) => handleInputChange('firstName', value)}
-            error={
-              hasInteracted ? validationState.fieldErrors.firstName : undefined
-            }
+            error={validationState.fieldErrors.firstName}
             required={isClaimSuccess}
           />
         </div>
@@ -409,9 +330,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
             label={t.personalDetails.lastName}
             value={storedDetails?.lastName || ''}
             onChange={(value) => handleInputChange('lastName', value)}
-            error={
-              hasInteracted ? validationState.fieldErrors.lastName : undefined
-            }
+            error={validationState.fieldErrors.lastName}
             required={isClaimSuccess}
           />
         </div>
@@ -421,9 +340,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
             type="email"
             value={storedDetails?.email || ''}
             onChange={(value) => handleInputChange('email', value)}
-            error={
-              hasInteracted ? validationState.fieldErrors.email : undefined
-            }
+            error={validationState.fieldErrors.email}
             required={isClaimSuccess}
           />
         </div>
@@ -435,9 +352,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
                 type="tel"
                 value={storedDetails?.phone || ''}
                 onChange={(value) => handleInputChange('phone', value)}
-                error={
-                  hasInteracted ? validationState.fieldErrors.phone : undefined
-                }
+                error={validationState.fieldErrors.phone}
                 required={isClaimSuccess}
               />
             </div>
@@ -446,11 +361,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
                 label={t.personalDetails.address}
                 value={storedDetails?.address || ''}
                 onChange={(value) => handleInputChange('address', value)}
-                error={
-                  hasInteracted
-                    ? validationState.fieldErrors.address
-                    : undefined
-                }
+                error={validationState.fieldErrors.address}
                 required={isClaimSuccess}
               />
             </div>
@@ -469,9 +380,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
                 label={t.personalDetails.city}
                 value={storedDetails?.city || ''}
                 onChange={(value) => handleInputChange('city', value)}
-                error={
-                  hasInteracted ? validationState.fieldErrors.city : undefined
-                }
+                error={validationState.fieldErrors.city}
                 required={isClaimSuccess}
               />
             </div>
@@ -488,11 +397,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
                 options={
                   lang === 'en' ? COUNTRY_OPTIONS_EN : COUNTRY_OPTIONS_DE
                 }
-                error={
-                  hasInteracted
-                    ? validationState.fieldErrors.country
-                    : undefined
-                }
+                error={validationState.fieldErrors.country}
                 required={isClaimSuccess}
               />
             </div>

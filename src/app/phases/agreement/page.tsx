@@ -579,6 +579,39 @@ export default function AgreementPage() {
         throw new Error('Personal details are required');
       }
 
+      // First update the contact information in HubSpot
+      try {
+        const contactResponse = await fetch(
+          '/.netlify/functions/hubspot-integration/contact',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              contactId: sessionStorage.getItem('hubspot_contact_id'),
+              email: personalDetails.email,
+              firstName: personalDetails.firstName,
+              lastName: personalDetails.lastName,
+              phone: personalDetails.phone,
+              address: personalDetails.address,
+              city: personalDetails.city,
+              postalCode: personalDetails.postalCode,
+              country: personalDetails.country,
+            }),
+          }
+        );
+
+        if (!contactResponse.ok) {
+          console.error(
+            'Failed to update HubSpot contact:',
+            await contactResponse.text()
+          );
+        }
+      } catch (error) {
+        console.error('Error updating HubSpot contact:', error);
+      }
+
       const orderResult = await ClaimService.orderClaim(
         originalFlights,
         phase4SelectedFlights,

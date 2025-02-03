@@ -806,6 +806,67 @@ export default function TripExperiencePage() {
         recommendation_guid: evaluationResult.recommendation_guid,
       });
 
+      // Update HubSpot deal with evaluation results
+      const dealId = sessionStorage.getItem('hubspot_deal_id');
+      if (dealId) {
+        try {
+          // First update the contact information
+          const contactResponse = await fetch(
+            '/.netlify/functions/hubspot-integration/contact',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                contactId: sessionStorage.getItem('hubspot_contact_id'),
+                ...mainStore.personalDetails,
+              }),
+            }
+          );
+
+          if (!contactResponse.ok) {
+            console.error(
+              'Failed to update HubSpot contact:',
+              await contactResponse.text()
+            );
+          }
+
+          // Then update the deal
+          const hubspotResponse = await fetch(
+            '/.netlify/functions/hubspot-integration/deal',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                contactId: sessionStorage.getItem('hubspot_contact_id'),
+                dealId,
+                originalFlights: validOriginalFlights,
+                selectedFlights: flightStore.selectedFlights,
+                evaluationResponse: evaluationResult,
+                stage: 'evaluation',
+                status:
+                  evaluationResult.status === 'accept'
+                    ? 'qualified'
+                    : 'rejected',
+                personalDetails: mainStore.personalDetails,
+              }),
+            }
+          );
+
+          if (!hubspotResponse.ok) {
+            console.error(
+              'Failed to update HubSpot deal:',
+              await hubspotResponse.text()
+            );
+          }
+        } catch (error) {
+          console.error('Error updating HubSpot deal:', error);
+        }
+      }
+
       // Get the next URL based on evaluation result
       const isAccepted = evaluationResult.status === 'accept';
       const nextUrl = isAccepted
