@@ -322,7 +322,7 @@ export class ClaimService {
       owner_firstname: personalDetails.firstName,
       owner_lastname: personalDetails.lastName,
       owner_street: personalDetails.address || '',
-      owner_place: personalDetails.postalCode || '',
+      owner_place: personalDetails.city || '',
       owner_city: personalDetails.city || '',
       owner_zip: personalDetails.postalCode || '',
       owner_country: personalDetails.country || '',
@@ -401,7 +401,7 @@ export class ClaimService {
                   status:
                     evaluateResponse.status === 'accept'
                       ? 'qualified'
-                      : 'disqualified',
+                      : 'rejected',
                 }),
               }
             );
@@ -463,6 +463,38 @@ export class ClaimService {
         const dealId = sessionStorage.getItem('hubspot_deal_id');
         if (dealId) {
           try {
+            // First update the contact
+            const contactResponse = await fetch(
+              '/.netlify/functions/hubspot-integration/contact',
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  contactId: sessionStorage.getItem('hubspot_contact_id'),
+                  email: personalDetails.email,
+                  firstname: personalDetails.firstName,
+                  lastname: personalDetails.lastName,
+                  salutation: personalDetails.salutation,
+                  phone: personalDetails.phone || '',
+                  mobilephone: personalDetails.phone || '',
+                  address: personalDetails.address || '',
+                  city: personalDetails.city || '',
+                  postalCode: personalDetails.postalCode || '',
+                  country: personalDetails.country || '',
+                }),
+              }
+            );
+
+            if (!contactResponse.ok) {
+              console.error(
+                'Failed to update HubSpot contact:',
+                await contactResponse.text()
+              );
+            }
+
+            // Then update the deal
             const hubspotResponse = await fetch(
               '/.netlify/functions/hubspot-integration/deal',
               {
