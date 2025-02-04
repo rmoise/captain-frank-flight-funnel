@@ -318,7 +318,6 @@ function ClaimSuccessContent() {
         // Update HubSpot contact if details are valid
         if (isValid && isEmailValid) {
           const contactId = sessionStorage.getItem('hubspot_contact_id');
-          const currentState = useStore.getState();
 
           console.log('=== HubSpot Personal Details Update ===', {
             contactId,
