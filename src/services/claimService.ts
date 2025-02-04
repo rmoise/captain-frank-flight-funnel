@@ -322,7 +322,7 @@ export class ClaimService {
       owner_firstname: personalDetails.firstName,
       owner_lastname: personalDetails.lastName,
       owner_street: personalDetails.address || '',
-      owner_place: personalDetails.city || '',
+      owner_place: personalDetails.postalCode || '',
       owner_city: personalDetails.city || '',
       owner_zip: personalDetails.postalCode || '',
       owner_country: personalDetails.country || '',
@@ -338,7 +338,8 @@ export class ClaimService {
     originalFlights: Flight[],
     selectedFlights: Flight[],
     travelStatusAnswers: Answer[],
-    informedDateAnswers: Answer[]
+    informedDateAnswers: Answer[],
+    marketingAccepted?: boolean
   ): Promise<EvaluateClaimResponse> {
     console.log('=== Evaluating Claim ===', {
       originalFlights: originalFlights.map((f) => ({
@@ -351,6 +352,7 @@ export class ClaimService {
       })),
       travelStatusAnswers,
       informedDateAnswers,
+      marketingAccepted,
     });
 
     const request = this.buildEvaluateRequest(
@@ -412,8 +414,32 @@ export class ClaimService {
                 await hubspotResponse.text()
               );
             }
+
+            // Update contact with marketing status if provided
+            if (marketingAccepted !== undefined) {
+              const contactResponse = await fetch(
+                '/.netlify/functions/hubspot-integration/contact',
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    contactId: sessionStorage.getItem('hubspot_contact_id'),
+                    arbeitsrecht_marketing_status: marketingAccepted,
+                  }),
+                }
+              );
+
+              if (!contactResponse.ok) {
+                console.error(
+                  'Failed to update HubSpot contact marketing status:',
+                  await contactResponse.text()
+                );
+              }
+            }
           } catch (error) {
-            console.error('Error updating HubSpot deal:', error);
+            console.error('Error updating HubSpot:', error);
           }
         }
 

@@ -281,6 +281,22 @@ export default function AgreementPage() {
         setPrivacyAccepted(checked);
       } else if (field === 'hasAcceptedMarketing') {
         setMarketingAccepted(checked);
+        // Update HubSpot contact with marketing status
+        const contactId = sessionStorage.getItem('hubspot_contact_id');
+        if (contactId) {
+          fetch('/.netlify/functions/hubspot-integration/contact', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              contactId,
+              arbeitsrecht_marketing_status: checked,
+            }),
+          }).catch((error) => {
+            console.error('Error updating HubSpot marketing status:', error);
+          });
+        }
       }
 
       // Use the validateTerms function for consistent validation

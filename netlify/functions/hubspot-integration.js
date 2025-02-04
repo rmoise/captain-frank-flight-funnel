@@ -66,30 +66,78 @@ const createContact = async (payload) => {
     // Parse the payload if it's a string
     const data = typeof payload === 'string' ? JSON.parse(payload) : payload;
 
-    // Extract email and other details
-    const { email, firstname: firstName, lastname: lastName, phone, address, city, postalCode, country, salutation } = data;
+    // If only contactId and marketing status are provided, do a simple update
+    if (data.contactId && typeof data.arbeitsrecht_marketing_status !== 'undefined' && Object.keys(data).length === 2) {
+      console.log('Updating marketing status:', {
+        contactId: data.contactId,
+        marketingStatus: data.arbeitsrecht_marketing_status,
+        timestamp: new Date().toISOString()
+      });
+
+      const updateResponse = await fetch(`https://api.hubapi.com/crm/v3/objects/contacts/${data.contactId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.HUBSPOT_API_TOKEN}`,
+        },
+        body: JSON.stringify({
+          properties: {
+            arbeitsrecht_marketing_status: data.arbeitsrecht_marketing_status ? 'true' : 'false'
+          }
+        })
+      });
+
+      if (!updateResponse.ok) {
+        const errorText = await updateResponse.text();
+        console.error('Failed to update contact marketing status. HubSpot response:', errorText);
+        throw new Error(`Failed to update contact marketing status in HubSpot: ${errorText}`);
+      }
+
+      const responseData = await updateResponse.json();
+      console.log('HubSpot update response:', responseData);
+
+      return {
+        hubspotContactId: data.contactId,
+        message: 'Successfully updated marketing status'
+      };
+    }
+
+    // Extract email and other details for full contact update
+    const {
+      email,
+      firstname: firstName,
+      lastname: lastName,
+      phone,
+      address,
+      city,
+      postalCode,
+      country,
+      salutation,
+      arbeitsrecht_marketing_status
+    } = data;
 
     // Search for existing contact
     const contactResponse = await fetch('https://api.hubapi.com/crm/v3/objects/contacts/search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.HUBSPOT_API_TOKEN}`,
-      },
-      body: JSON.stringify({
-        filterGroups: [{
-          filters: [{
-            propertyName: 'email',
-            operator: 'EQ',
-            value: email
+          'Authorization': `Bearer ${process.env.HUBSPOT_API_TOKEN}`,
+        },
+        body: JSON.stringify({
+          filterGroups: [{
+            filters: [{
+              propertyName: 'email',
+              operator: 'EQ',
+              value: email
+            }]
           }]
-        }]
-      })
+        })
     });
 
     if (!contactResponse.ok) {
-      console.error('Failed to search for contact:', await contactResponse.text());
-      throw new Error('Failed to search for contact in HubSpot');
+      const errorText = await contactResponse.text();
+      console.error('Failed to search for contact. HubSpot response:', errorText);
+      throw new Error(`Failed to search for contact in HubSpot: ${errorText}`);
     }
 
     const contactSearchResult = await contactResponse.json();
@@ -115,14 +163,16 @@ const createContact = async (payload) => {
             zip: postalCode || '',      // Map postalCode to zip
             city: city || '',
             country: country || '',
-            hs_lead_status: 'NEW'
+            hs_lead_status: 'NEW',
+            arbeitsrecht_marketing_status: arbeitsrecht_marketing_status ? 'true' : 'false'
           }
         })
       });
 
       if (!createContactResponse.ok) {
-        console.error('Failed to create contact:', await createContactResponse.text());
-        throw new Error('Failed to create contact in HubSpot');
+        const errorText = await createContactResponse.text();
+        console.error('Failed to create contact. HubSpot response:', errorText);
+        throw new Error(`Failed to create contact in HubSpot: ${errorText}`);
       }
 
       const newContact = await createContactResponse.json();
@@ -148,7 +198,8 @@ const createContact = async (payload) => {
             address: address || '',
             zip: postalCode || '',      // Map postalCode to zip
             city: city || '',
-            country: country || ''
+            country: country || '',
+            arbeitsrecht_marketing_status: arbeitsrecht_marketing_status ? 'true' : 'false'
           }
         })
       });
@@ -283,7 +334,7 @@ const createDeal = async (payload, context) => {
         break;
       case 'evaluation':
         if (status === 'qualified') {
-          dealStage = 'closedwon';  // Use standard HubSpot stage
+          dealStage = 'qualifiedtobuy';  // Changed from closedwon to qualifiedtobuy
           dealStatus = 'Qualified';
           probability = 0.6;
         } else if (status === 'rejected') {
@@ -297,7 +348,7 @@ const createDeal = async (payload, context) => {
         }
         break;
       case 'final_submission':
-        dealStage = 'closedwon';  // Use standard HubSpot stage
+        dealStage = 'closedwon';  // Only mark as won on final submission
         dealStatus = 'Contract Submitted';
         probability = 1.0;  // 100% probability as contract is submitted
         break;

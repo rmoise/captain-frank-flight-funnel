@@ -314,6 +314,45 @@ function ClaimSuccessContent() {
         if (!interactedSteps.includes(1)) {
           setInteractedSteps([...interactedSteps, 1]);
         }
+
+        // Update HubSpot contact if details are valid
+        if (isValid && isEmailValid) {
+          const contactId = sessionStorage.getItem('hubspot_contact_id');
+          const currentState = useStore.getState();
+
+          console.log('=== HubSpot Personal Details Update ===', {
+            contactId,
+            details,
+            timestamp: new Date().toISOString(),
+          });
+
+          if (contactId) {
+            fetch('/.netlify/functions/hubspot-integration/contact', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                contactId,
+                email: details.email,
+                firstName: details.firstName,
+                lastName: details.lastName,
+                phone: details.phone,
+                address: details.address,
+                city: details.city,
+                postalCode: details.postalCode,
+                country: details.country,
+              }),
+            })
+              .then((response) => response.json())
+              .then((data) => {
+                console.log('HubSpot update response:', data);
+              })
+              .catch((error) => {
+                console.error('Error updating HubSpot contact:', error);
+              });
+          }
+        }
       } finally {
         isUpdatingRef.current = false;
       }
@@ -349,6 +388,45 @@ function ClaimSuccessContent() {
     }
 
     try {
+      // Get current state including marketing status
+      const currentState = useStore.getState();
+      const personalDetails = currentState.personalDetails;
+
+      console.log('=== HubSpot Update Data ===', {
+        contactId: sessionStorage.getItem('hubspot_contact_id'),
+        personalDetails,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Update HubSpot contact with final details
+      const contactId = sessionStorage.getItem('hubspot_contact_id');
+      if (contactId && personalDetails) {
+        fetch('/.netlify/functions/hubspot-integration/contact', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contactId,
+            email: personalDetails.email,
+            firstName: personalDetails.firstName,
+            lastName: personalDetails.lastName,
+            phone: personalDetails.phone,
+            address: personalDetails.address,
+            city: personalDetails.city,
+            postalCode: personalDetails.postalCode,
+            country: personalDetails.country,
+          }),
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            console.log('HubSpot update response:', data);
+          })
+          .catch((error) => {
+            console.error('Error updating HubSpot contact:', error);
+          });
+      }
+
       // Complete all required phases
       [1, 2, 3, 4, 5].forEach((phase) => {
         console.log(`Completing phase ${phase}`);

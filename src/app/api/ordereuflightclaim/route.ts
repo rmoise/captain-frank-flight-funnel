@@ -102,7 +102,7 @@ export async function POST(request: Request) {
           owner_firstname: data.owner_firstname,
           owner_lastname: data.owner_lastname,
           owner_street: data.owner_street,
-          owner_place: data.owner_place,
+          owner_place: data.owner_zip || '',
           owner_city: data.owner_city,
           owner_country: data.owner_country,
           owner_email: data.owner_email,

@@ -109,7 +109,7 @@ const handler: Handler = async (event: HandlerEvent) => {
       owner_firstname: requestBody.owner_firstname,
       owner_lastname: requestBody.owner_lastname,
       owner_street: requestBody.owner_street,
-      owner_place: requestBody.owner_place,
+      owner_place: requestBody.owner_zip || '',
       owner_city: requestBody.owner_city,
       owner_country,
       owner_email: requestBody.owner_email,
