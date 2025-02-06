@@ -21,7 +21,6 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { Flight } from '@/types/store';
 import { ClaimService } from '@/services/claimService';
 import type { Answer } from '@/types/wizard';
-import { validateTerms } from '@/lib/validation/termsValidation';
 
 interface FormData {
   hasAcceptedTerms: boolean;
@@ -65,6 +64,7 @@ export default function AgreementPage() {
     setMarketingAccepted,
     termsAccepted,
     privacyAccepted,
+    /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
     marketingAccepted,
     validationState,
     setSignature,
