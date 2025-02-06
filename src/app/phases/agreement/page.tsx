@@ -20,14 +20,15 @@ import { ContinueButton } from '@/components/shared/ContinueButton';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Flight } from '@/types/store';
 import { ClaimService } from '@/services/claimService';
+import type { Answer } from '@/types/wizard';
 import { validateTerms } from '@/lib/validation/termsValidation';
 
 interface FormData {
   hasAcceptedTerms: boolean;
   hasAcceptedPrivacy: boolean;
   hasAcceptedMarketing: boolean;
-  travelStatusAnswers: any[];
-  informedDateAnswers: any[];
+  travelStatusAnswers: Answer[];
+  informedDateAnswers: Answer[];
   [key: string]: unknown;
 }
 
@@ -592,6 +593,7 @@ export default function AgreementPage() {
               action: 'update',
               stage: 'closedwon',
               marketingStatus: marketingAccepted,
+              selectedFlights: phase4SelectedFlights || selectedFlights,
             }),
           }
         );

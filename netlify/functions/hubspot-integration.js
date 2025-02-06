@@ -272,64 +272,72 @@ const createDeal = async (payload, context) => {
         if (selectedFlights && selectedFlights.length > 0) {
           // Use flight data if available
           const firstFlight = selectedFlights[0];
-          from_iata = firstFlight.departureAirport?.code || firstFlight.departureCity;
-          to_iata = firstFlight.arrivalAirport?.code || firstFlight.arrivalCity;
+          from_iata = firstFlight.departureAirport?.code ||
+                      firstFlight.departureCity ||
+                      firstFlight.departure ||
+                      firstFlight.from ||
+                      'Unknown';
+          to_iata = firstFlight.arrivalAirport?.code ||
+                    firstFlight.arrivalCity ||
+                    firstFlight.arrival ||
+                    firstFlight.to ||
+                    'Unknown';
         } else if (directFlight?.fromLocation && directFlight?.toLocation) {
           // Use direct flight location data if available
-          from_iata = directFlight.fromLocation.value || directFlight.fromLocation.city;
-          to_iata = directFlight.toLocation.value || directFlight.toLocation.city;
+          from_iata = directFlight.fromLocation.value ||
+                      directFlight.fromLocation.city ||
+                      'Unknown';
+          to_iata = directFlight.toLocation.value ||
+                    directFlight.toLocation.city ||
+                    'Unknown';
         } else {
-          console.error('No flight or location data available:', {
-            selectedFlights,
-            directFlight
+          // Set default values if no flight data available
+          console.warn('No flight data available, using default values');
+          from_iata = 'Unknown';
+          to_iata = 'Unknown';
+        }
+
+        // Only try to fetch compensation if we have valid route data
+        if (from_iata !== 'Unknown' && to_iata !== 'Unknown') {
+          console.log('Fetching compensation for route:', {
+            from: from_iata,
+            to: to_iata,
+            timestamp: new Date().toISOString()
           });
-          throw new Error('No flight or location data available');
+
+          // Get the base URL from the request context
+          const baseUrl = process.env.URL || 'http://localhost:8888';
+          const compensationUrl = `${baseUrl}/.netlify/functions/calculateCompensation?from_iata=${from_iata}&to_iata=${to_iata}`;
+          console.log('Compensation API URL:', compensationUrl);
+
+          try {
+            const compensationResponse = await fetch(compensationUrl);
+            console.log('Compensation API status:', compensationResponse.status);
+
+            if (!compensationResponse.ok) {
+              console.warn('Failed to get compensation estimate, using provided amount');
+              compensationAmount = providedAmount || 0;
+            } else {
+              const compensationData = await compensationResponse.json();
+              console.log('Compensation API response:', {
+                data: compensationData,
+                timestamp: new Date().toISOString()
+              });
+              compensationAmount = compensationData.amount;
+            }
+          } catch (error) {
+            console.warn('Error fetching compensation, using provided amount:', error);
+            compensationAmount = providedAmount || 0;
+          }
+        } else {
+          console.warn('Using provided amount due to missing route data');
+          compensationAmount = providedAmount || 0;
         }
-
-        console.log('Fetching compensation for route:', {
-          from: from_iata,
-          to: to_iata,
-          timestamp: new Date().toISOString()
-        });
-
-        // Get the base URL from the request context
-        const baseUrl = process.env.URL || 'http://localhost:8888';
-        const compensationUrl = `${baseUrl}/.netlify/functions/calculateCompensation?from_iata=${from_iata}&to_iata=${to_iata}`;
-        console.log('Compensation API URL:', compensationUrl);
-
-        const compensationResponse = await fetch(compensationUrl);
-        console.log('Compensation API status:', compensationResponse.status);
-
-        if (!compensationResponse.ok) {
-          const errorText = await compensationResponse.text();
-          console.error('Failed to get compensation estimate:', errorText);
-          throw new Error('Failed to get compensation estimate');
-        }
-
-        const compensationData = await compensationResponse.json();
-        console.log('Compensation API response:', {
-          data: compensationData,
-          timestamp: new Date().toISOString()
-        });
-
-        compensationAmount = compensationData.amount;
-      } else {
-        // If we have a provided amount, try to get route details from flight data
-        if (selectedFlights && selectedFlights.length > 0) {
-          const firstFlight = selectedFlights[0];
-          from_iata = firstFlight.departureAirport?.code || firstFlight.departureCity;
-          to_iata = firstFlight.arrivalAirport?.code || firstFlight.arrivalCity;
-        } else if (directFlight?.fromLocation && directFlight?.toLocation) {
-          from_iata = directFlight.fromLocation.value || directFlight.fromLocation.city;
-          to_iata = directFlight.toLocation.value || directFlight.toLocation.city;
-        }
-      }
-
-      if (!compensationAmount) {
-        console.error('No compensation amount available');
-        throw new Error('No compensation amount available');
       }
     }
+
+    // Ensure we have a valid compensation amount
+    compensationAmount = compensationAmount || providedAmount || 0;
 
     // Get the pipeline ID
     const pipelineId = await getDefaultPipelineId();
