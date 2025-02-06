@@ -336,11 +336,15 @@ function ClaimSuccessContent() {
                 email: details.email,
                 firstName: details.firstName,
                 lastName: details.lastName,
-                phone: details.phone,
-                address: details.address,
-                city: details.city,
-                postalCode: details.postalCode,
-                country: details.country,
+                salutation: details.salutation,
+                phone: details.phone || '',
+                mobilephone: details.phone || '',
+                address: details.address || '',
+                city: details.city || '',
+                postalCode: details.postalCode || '',
+                country: details.country || '',
+                arbeitsrecht_marketing_status:
+                  details.marketingAccepted || false,
               }),
             })
               .then((response) => response.json())
@@ -410,11 +414,15 @@ function ClaimSuccessContent() {
             email: personalDetails.email,
             firstName: personalDetails.firstName,
             lastName: personalDetails.lastName,
-            phone: personalDetails.phone,
-            address: personalDetails.address,
-            city: personalDetails.city,
-            postalCode: personalDetails.postalCode,
-            country: personalDetails.country,
+            salutation: personalDetails.salutation,
+            phone: personalDetails.phone || '',
+            mobilephone: personalDetails.phone || '',
+            address: personalDetails.address || '',
+            city: personalDetails.city || '',
+            postalCode: personalDetails.postalCode || '',
+            country: personalDetails.country || '',
+            arbeitsrecht_marketing_status:
+              personalDetails.marketingAccepted || false,
           }),
         })
           .then((response) => response.json())

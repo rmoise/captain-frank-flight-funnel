@@ -1243,15 +1243,7 @@ export default function InitialAssessment() {
               email: personalDetails?.email,
               firstName: personalDetails?.firstName,
               lastName: personalDetails?.lastName,
-              phone: personalDetails?.phone,
-              address: personalDetails?.address,
-              city: personalDetails?.city,
-              postalCode: personalDetails?.postalCode,
-              country: personalDetails?.country,
-              personalDetails,
-              flightDetails: {
-                bookingNumber: sessionStorage.getItem('booking_number') || '',
-              },
+              arbeitsrecht_marketing_status: marketingAccepted,
             }),
           }
         );
@@ -1286,15 +1278,17 @@ export default function InitialAssessment() {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              contactId: hubspotResult.hubspotContactId,
-              personalDetails,
-              bookingNumber: sessionStorage.getItem('booking_number') || '',
-              selectedFlights: selectedFlights || [],
-              originalFlights: selectedFlights || [], // Same as selected flights at this stage
-              status: 'new_submission',
+              contactId: sessionStorage.getItem('hubspot_contact_id'),
+              personalDetails: {
+                firstName: personalDetails?.firstName,
+                lastName: personalDetails?.lastName,
+                email: personalDetails?.email,
+              },
+              selectedFlights,
+              directFlight: mainStore.directFlight,
               stage: 'initial_assessment',
-              fromLocation: mainStore.directFlight.fromLocation,
-              toLocation: mainStore.directFlight.toLocation,
+              status: 'New Submission',
+              amount: mainStore.compensationAmount || 0,
             }),
           }
         );

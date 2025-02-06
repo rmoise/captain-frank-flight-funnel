@@ -102,17 +102,18 @@ const createContact = async (payload) => {
       };
     }
 
-    // Extract email and other details for full contact update
+    // Extract email and other details for contact creation/update
     const {
       email,
-      firstname: firstName,
-      lastname: lastName,
+      firstName,
+      lastName,
+      salutation,
       phone,
+      mobilephone,
       address,
       city,
       postalCode,
       country,
-      salutation,
       arbeitsrecht_marketing_status
     } = data;
 
@@ -144,7 +145,7 @@ const createContact = async (payload) => {
     let contactId;
 
     if (contactSearchResult.total === 0) {
-      // Create new contact with full details
+      // Create new contact with all details
       const createContactResponse = await fetch('https://api.hubapi.com/crm/v3/objects/contacts', {
         method: 'POST',
         headers: {
@@ -156,12 +157,12 @@ const createContact = async (payload) => {
             email,
             firstname: firstName,
             lastname: lastName,
-            phone: phone || '',        // Regular phone
-            mobilephone: phone || '',  // Mobile phone (same value)
             salutation: salutation || '',
+            phone: phone || '',
+            mobilephone: mobilephone || phone || '',
             address: address || '',
-            zip: postalCode || '',      // Map postalCode to zip
             city: city || '',
+            zip: postalCode || '',
             country: country || '',
             hs_lead_status: 'NEW',
             arbeitsrecht_marketing_status: arbeitsrecht_marketing_status ? 'true' : 'false'
@@ -180,7 +181,7 @@ const createContact = async (payload) => {
     } else {
       contactId = contactSearchResult.results[0].id;
 
-      // Update existing contact with new details
+      // Update existing contact with all details
       const updateContactResponse = await fetch(`https://api.hubapi.com/crm/v3/objects/contacts/${contactId}`, {
         method: 'PATCH',
         headers: {
@@ -189,15 +190,15 @@ const createContact = async (payload) => {
         },
         body: JSON.stringify({
           properties: {
-            email: email,
+            email,
             firstname: firstName,
             lastname: lastName,
-            phone: phone || '',        // Regular phone
-            mobilephone: phone || '',  // Mobile phone (same value)
             salutation: salutation || '',
+            phone: phone || '',
+            mobilephone: mobilephone || phone || '',
             address: address || '',
-            zip: postalCode || '',      // Map postalCode to zip
             city: city || '',
+            zip: postalCode || '',
             country: country || '',
             arbeitsrecht_marketing_status: arbeitsrecht_marketing_status ? 'true' : 'false'
           }
@@ -228,75 +229,83 @@ const createDeal = async (payload, context) => {
     const {
       contactId,
       personalDetails,
-      bookingNumber,
-      originalFlights,
       selectedFlights,
-      evaluationResponse,
+      directFlight,
       stage,
       status,
-      fromLocation,
-      toLocation
+      amount: providedAmount
     } = payload;
 
-    // Get compensation estimate using either flight data or location data
-    let from_iata, to_iata;
+    // Get compensation estimate using either provided amount or calculate from flight data
+    let compensationAmount = providedAmount;
+    let routeDetails = '';
+    let from_iata = '', to_iata = '';
 
-    if (selectedFlights && selectedFlights.length > 0) {
-      // Use flight data if available
-      const firstFlight = selectedFlights[0];
-      from_iata = firstFlight.departureAirport?.code || firstFlight.departureCity;
-      to_iata = firstFlight.arrivalAirport?.code || firstFlight.arrivalCity;
-    } else if (fromLocation && toLocation) {
-      // Use location data if no flights selected yet
-      try {
-        const fromLocationData = typeof fromLocation === 'string' ? JSON.parse(fromLocation) : fromLocation;
-        const toLocationData = typeof toLocation === 'string' ? JSON.parse(toLocation) : toLocation;
-        from_iata = fromLocationData.city || fromLocationData.value;
-        to_iata = toLocationData.city || toLocationData.value;
-      } catch (error) {
-        console.error('Error parsing location data:', error);
-        from_iata = fromLocation;
-        to_iata = toLocation;
+    if (!compensationAmount) {
+      if (selectedFlights && selectedFlights.length > 0) {
+        // Use flight data if available
+        const firstFlight = selectedFlights[0];
+        from_iata = firstFlight.departureAirport?.code || firstFlight.departureCity;
+        to_iata = firstFlight.arrivalAirport?.code || firstFlight.arrivalCity;
+      } else if (directFlight?.fromLocation && directFlight?.toLocation) {
+        // Use direct flight location data if available
+        from_iata = directFlight.fromLocation.value || directFlight.fromLocation.city;
+        to_iata = directFlight.toLocation.value || directFlight.toLocation.city;
+      } else {
+        console.error('No flight or location data available:', {
+          selectedFlights,
+          directFlight
+        });
+        throw new Error('No flight or location data available');
       }
+
+      console.log('Fetching compensation for route:', {
+        from: from_iata,
+        to: to_iata,
+        timestamp: new Date().toISOString()
+      });
+
+      // Get the base URL from the request context
+      const baseUrl = process.env.URL || 'http://localhost:8888';
+      const compensationUrl = `${baseUrl}/.netlify/functions/calculateCompensation?from_iata=${from_iata}&to_iata=${to_iata}`;
+      console.log('Compensation API URL:', compensationUrl);
+
+      const compensationResponse = await fetch(compensationUrl);
+      console.log('Compensation API status:', compensationResponse.status);
+
+      if (!compensationResponse.ok) {
+        const errorText = await compensationResponse.text();
+        console.error('Failed to get compensation estimate:', errorText);
+        throw new Error('Failed to get compensation estimate');
+      }
+
+      const compensationData = await compensationResponse.json();
+      console.log('Compensation API response:', {
+        data: compensationData,
+        timestamp: new Date().toISOString()
+      });
+
+      compensationAmount = compensationData.amount;
     } else {
-      console.error('No flight or location data available');
-      throw new Error('No flight or location data available');
+      // If we have a provided amount, try to get route details from flight data
+      if (selectedFlights && selectedFlights.length > 0) {
+        const firstFlight = selectedFlights[0];
+        from_iata = firstFlight.departureAirport?.code || firstFlight.departureCity;
+        to_iata = firstFlight.arrivalAirport?.code || firstFlight.arrivalCity;
+      } else if (directFlight?.fromLocation && directFlight?.toLocation) {
+        from_iata = directFlight.fromLocation.value || directFlight.fromLocation.city;
+        to_iata = directFlight.toLocation.value || directFlight.toLocation.city;
+      }
     }
 
-    console.log('Fetching compensation for route:', {
-      from: from_iata,
-      to: to_iata,
-      timestamp: new Date().toISOString()
-    });
-
-    // Get the base URL from the request context
-    const baseUrl = process.env.URL || 'http://localhost:8888';
-    const compensationUrl = `${baseUrl}/.netlify/functions/calculateCompensation?from_iata=${from_iata}&to_iata=${to_iata}`;
-    console.log('Compensation API URL:', compensationUrl);
-
-    const compensationResponse = await fetch(compensationUrl);
-    console.log('Compensation API status:', compensationResponse.status);
-
-    if (!compensationResponse.ok) {
-      const errorText = await compensationResponse.text();
-      console.error('Failed to get compensation estimate:', errorText);
-      throw new Error('Failed to get compensation estimate');
-    }
-
-    const compensationData = await compensationResponse.json();
-    console.log('Compensation API response:', {
-      data: compensationData,
-      timestamp: new Date().toISOString()
-    });
-
-    if (!compensationData.amount) {
-      console.error('No compensation amount returned from API');
+    if (!compensationAmount) {
+      console.error('No compensation amount available');
       throw new Error('No compensation amount available');
     }
 
     console.log('Using compensation amount:', {
-      amount: compensationData.amount,
-      currency: compensationData.currency || 'EUR',
+      amount: compensationAmount,
+      currency: 'EUR',
       timestamp: new Date().toISOString()
     });
 
@@ -307,17 +316,10 @@ const createDeal = async (payload, context) => {
     }
 
     console.log('Using pipeline ID:', pipelineId);
-    console.log('Setting compensation amount:', compensationData.amount);
+    console.log('Setting compensation amount:', compensationAmount);
 
     // Format flight or route details
-    let routeDetails;
-    if (selectedFlights && selectedFlights.length > 0) {
-      routeDetails = selectedFlights.map(flight =>
-        `${flight.departureAirport?.code || flight.departureCity} to ${flight.arrivalAirport?.code || flight.arrivalCity} (${flight.flightNumber})`
-      ).join(', ');
-    } else {
-      routeDetails = `${from_iata} to ${to_iata}`;
-    }
+    routeDetails = from_iata && to_iata ? `${from_iata} to ${to_iata}` : 'Route not specified';
 
     console.log('Formatted route details:', routeDetails);
 
@@ -362,10 +364,11 @@ const createDeal = async (payload, context) => {
     console.log('Setting deal properties with stage:', dealStage);
 
     // Create deal properties using only standard HubSpot properties
+    const dealId = uuidv4(); // Generate a unique ID for the deal
     const dealProperties = {
-      dealname: `${uuidv4()} - ${personalDetails.firstName} ${personalDetails.lastName}`,
-      amount: compensationData.amount.toString(),  // Convert to string as HubSpot expects
-      description: `Route: ${routeDetails}\nBooking: ${bookingNumber}\nCompensation: ${compensationData.amount} ${compensationData.currency || 'EUR'}\nStatus: ${dealStatus}`,
+      dealname: `${dealId} - ${personalDetails.firstName} ${personalDetails.lastName}`,
+      amount: compensationAmount.toString(),  // Convert to string as HubSpot expects
+      description: `Route: ${routeDetails}\nCompensation: ${compensationAmount} EUR\nStatus: ${dealStatus}`,
       pipeline: pipelineId,
       dealstage: dealStage,
       hs_deal_stage_probability: probability
@@ -373,13 +376,13 @@ const createDeal = async (payload, context) => {
 
     console.log('Setting deal properties:', JSON.stringify(dealProperties, null, 2));
 
-    let dealId = payload.dealId;  // Declare dealId separately as let
+    let existingDealId = payload.dealId;  // Use a different name for the existing deal ID
 
     // Create or update deal in HubSpot
-    const dealEndpoint = dealId
-      ? `https://api.hubapi.com/crm/v3/objects/deals/${dealId}`
+    const dealEndpoint = existingDealId
+      ? `https://api.hubapi.com/crm/v3/objects/deals/${existingDealId}`
       : 'https://api.hubapi.com/crm/v3/objects/deals';
-    const dealMethod = dealId ? 'PATCH' : 'POST';
+    const dealMethod = existingDealId ? 'PATCH' : 'POST';
 
     console.log(`${dealMethod}ing deal to HubSpot:`, {
       endpoint: dealEndpoint,
@@ -415,7 +418,7 @@ const createDeal = async (payload, context) => {
     });
 
     return {
-        hubspotDealId: dealResult.id,
+      hubspotDealId: dealResult.id,
       message: dealResult.id ? 'Successfully updated HubSpot deal' : 'Successfully created HubSpot deal'
     };
   } catch (error) {
