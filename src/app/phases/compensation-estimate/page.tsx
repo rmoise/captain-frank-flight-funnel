@@ -1301,6 +1301,14 @@ export default function CompensationEstimatePage() {
           throw new Error('No compensation amount available');
         }
 
+        console.log('=== DEBUG: Compensation Calculation ===', {
+          calculatedAmount: data.amount,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Update store with the compensation amount
+        useStore.setState({ compensationAmount: data.amount });
+
         // Update cache with the latest flight data
         useStore.getState().setCompensationCache({
           amount: data.amount,
@@ -1313,6 +1321,16 @@ export default function CompensationEstimatePage() {
         });
 
         setCompensationAmount(data.amount);
+
+        // Save to localStorage
+        localStorage.setItem('compensationAmount', data.amount.toString());
+
+        console.log('=== DEBUG: After Compensation Update ===', {
+          storeAmount: useStore.getState().compensationAmount,
+          localStorageAmount: localStorage.getItem('compensationAmount'),
+          stateAmount: data.amount,
+          timestamp: new Date().toISOString(),
+        });
       } catch (error) {
         console.error('Error calculating compensation:', error);
         setCompensationError(
@@ -1333,7 +1351,53 @@ export default function CompensationEstimatePage() {
     setIsLoading(true);
 
     try {
-      // Always get the latest phase 1 data first
+      const compensationAmount = useStore.getState().compensationAmount || 0;
+      const dealId = sessionStorage.getItem('hubspot_deal_id');
+      const personalDetails = useStore.getState().personalDetails;
+
+      if (dealId) {
+        console.log('Updating HubSpot deal with compensation:', {
+          dealId,
+          amount: compensationAmount,
+          stage: '1173731568',
+          personalDetails,
+          timestamp: new Date().toISOString(),
+        });
+
+        try {
+          const updateResponse = await fetch(
+            '/.netlify/functions/hubspot-integration/deal',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                contactId: sessionStorage.getItem('hubspot_contact_id'),
+                dealId,
+                amount: compensationAmount,
+                action: 'update',
+                stage: '1173731568',
+                personalDetails,
+              }),
+            }
+          );
+
+          if (!updateResponse.ok) {
+            const errorText = await updateResponse.text();
+            console.error('Failed to update deal amount:', errorText);
+            throw new Error(`Failed to update deal: ${errorText}`);
+          }
+
+          const updateResult = await updateResponse.json();
+          console.log('Successfully updated HubSpot deal:', updateResult);
+        } catch (error) {
+          console.error('Error updating HubSpot deal:', error);
+          throw error;
+        }
+      }
+
+      // Rest of your existing handleContinue code...
       const phase1Data = localStorage.getItem('phase1FlightData');
       let latestFromLocation = fromLocation;
       let latestToLocation = toLocation;
@@ -1406,12 +1470,13 @@ export default function CompensationEstimatePage() {
           },
         };
 
-        // Save both states
+        // Save both states with compensation amount
         localStorage.setItem(
           'phase2State',
           JSON.stringify({
             ...newState,
             phase: 2,
+            compensationAmount,
           })
         );
 
@@ -1420,6 +1485,7 @@ export default function CompensationEstimatePage() {
           JSON.stringify({
             ...newState,
             phase: 3,
+            compensationAmount,
             validationState: {
               isFlightValid: true,
               stepValidation: {

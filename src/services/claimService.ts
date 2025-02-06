@@ -461,7 +461,8 @@ export class ClaimService {
     bookingNumber: string,
     signature: string,
     termsAccepted: boolean,
-    privacyAccepted: boolean
+    privacyAccepted: boolean,
+    marketingAccepted?: boolean
   ): Promise<OrderClaimResponse> {
     try {
       // Build the request payload for Captain Frank API
@@ -509,6 +510,7 @@ export class ClaimService {
                   city: personalDetails.city || '',
                   postalCode: personalDetails.postalCode || '',
                   country: personalDetails.country || '',
+                  arbeitsrecht_marketing_status: marketingAccepted,
                 }),
               }
             );
@@ -541,6 +543,7 @@ export class ClaimService {
                     evaluationResponse.status === 'accept'
                       ? 'submitted'
                       : 'rejected',
+                  arbeitsrecht_marketing_status: marketingAccepted,
                 }),
               }
             );

@@ -1222,6 +1222,24 @@ export default function InitialAssessment() {
       const currentState = useStore.getState();
       console.debug('Current state before continue:', currentState);
 
+      // Try to get compensation amount from localStorage first
+      let compensationAmount = 0;
+      const savedCompensationAmount =
+        localStorage.getItem('compensationAmount');
+      if (savedCompensationAmount) {
+        compensationAmount = parseFloat(savedCompensationAmount);
+        console.log(
+          'Got compensation amount from localStorage:',
+          compensationAmount
+        );
+      }
+
+      // Fallback to store value if not found in localStorage
+      if (!compensationAmount && currentState.compensationAmount) {
+        compensationAmount = currentState.compensationAmount;
+        console.log('Got compensation amount from store:', compensationAmount);
+      }
+
       // Create HubSpot contact and deal
       try {
         console.log('Creating HubSpot contact:', {
@@ -1288,7 +1306,8 @@ export default function InitialAssessment() {
               directFlight: mainStore.directFlight,
               stage: 'initial_assessment',
               status: 'New Submission',
-              amount: mainStore.compensationAmount || 0,
+              amount: compensationAmount,
+              marketingStatus: marketingAccepted,
             }),
           }
         );
@@ -1366,6 +1385,8 @@ export default function InitialAssessment() {
     router,
     personalDetails,
     selectedFlights,
+    marketingAccepted,
+    mainStore.compensationAmount,
   ]);
 
   const renderStepContent = (step: Step) => {

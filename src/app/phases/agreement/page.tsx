@@ -139,19 +139,35 @@ export default function AgreementPage() {
             const parsedValidation = JSON.parse(phase1ValidationState);
             phase1TermsValid =
               parsedValidation.validationState?.isTermsValid || false;
+
+            // Restore marketing status from phase 1
+            if (parsedValidation.marketingAccepted !== undefined) {
+              setMarketingAccepted(parsedValidation.marketingAccepted);
+              // Update HubSpot contact with initial marketing status
+              const contactId = sessionStorage.getItem('hubspot_contact_id');
+              if (contactId) {
+                fetch('/.netlify/functions/hubspot-integration/contact', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    contactId,
+                    arbeitsrecht_marketing_status:
+                      parsedValidation.marketingAccepted,
+                  }),
+                }).catch((error) => {
+                  console.error(
+                    'Error updating HubSpot marketing status:',
+                    error
+                  );
+                });
+              }
+            }
           }
         } catch (error) {
           console.error('Error accessing/parsing localStorage:', error);
         }
-
-        // Initialize form data
-        setFormData({
-          hasAcceptedTerms: termsAccepted || phase1TermsValid,
-          hasAcceptedPrivacy: privacyAccepted || phase1TermsValid,
-          hasAcceptedMarketing: marketingAccepted,
-          travelStatusAnswers: phase4Store.travelStatusAnswers,
-          informedDateAnswers: phase4Store.informedDateAnswers,
-        });
 
         // Validate terms if previously accepted
         if ((termsAccepted && privacyAccepted) || phase1TermsValid) {
@@ -262,24 +278,20 @@ export default function AgreementPage() {
     }
   };
 
-  const handleTermsChange =
-    (field: keyof FormData) =>
-    (checked: boolean): void => {
-      const updatedFormData = {
-        ...formData,
-        [field]: checked,
-      };
-      setFormData(updatedFormData);
-      setFormErrors(
-        (prev: FormErrors): FormErrors => ({ ...prev, [field]: [] })
-      );
+  const handleTermsChange = (field: string) => (checked: boolean) => {
+    let newTermsAccepted = termsAccepted;
+    let newPrivacyAccepted = privacyAccepted;
 
-      // Update store state based on field
-      if (field === 'hasAcceptedTerms') {
+    switch (field) {
+      case 'hasAcceptedTerms':
         setTermsAccepted(checked);
-      } else if (field === 'hasAcceptedPrivacy') {
+        newTermsAccepted = checked;
+        break;
+      case 'hasAcceptedPrivacy':
         setPrivacyAccepted(checked);
-      } else if (field === 'hasAcceptedMarketing') {
+        newPrivacyAccepted = checked;
+        break;
+      case 'hasAcceptedMarketing':
         setMarketingAccepted(checked);
         // Update HubSpot contact with marketing status
         const contactId = sessionStorage.getItem('hubspot_contact_id');
@@ -297,85 +309,31 @@ export default function AgreementPage() {
             console.error('Error updating HubSpot marketing status:', error);
           });
         }
-      }
+        break;
+    }
 
-      // Use the validateTerms function for consistent validation
-      const validationResult = validateTerms(
-        (field === 'hasAcceptedTerms' ? checked : termsAccepted) &&
-          (field === 'hasAcceptedPrivacy' ? checked : privacyAccepted)
-      );
-
-      // Create a consistent validation state update
-      const validationUpdate = {
-        ...validationState,
-        isTermsValid: validationResult.isValid,
-        stepValidation: {
-          ...validationState.stepValidation,
-          2: validationResult.isValid,
-        },
-        stepInteraction: {
-          ...validationState.stepInteraction,
-          2: true,
-        },
-        errors: validationResult.errors,
-        _timestamp: Date.now(),
-        2: validationResult.isValid,
-      };
-
-      // Update validation state
-      updateValidationState(validationUpdate);
-
-      // Save state to both phase 6 and initial assessment localStorage
-      const currentState = {
-        ...useStore.getState(),
-        validationState: validationUpdate,
-        _timestamp: Date.now(),
-      };
-
-      // Save to phase 6 state
-      localStorage.setItem('phase6State', JSON.stringify(currentState));
-
-      // Also update initial assessment validation if terms are valid
-      if (validationResult.isValid) {
-        const phase1ValidationState = localStorage.getItem(
-          'initialAssessmentValidation'
-        );
-        if (phase1ValidationState) {
-          try {
-            const parsedValidation = JSON.parse(phase1ValidationState);
-            parsedValidation.validationState = {
-              ...parsedValidation.validationState,
-              isTermsValid: true,
-              stepValidation: {
-                ...parsedValidation.validationState.stepValidation,
-                4: true,
-              },
-              stepInteraction: {
-                ...parsedValidation.validationState.stepInteraction,
-                4: true,
-              },
-              4: true,
-              _timestamp: Date.now(),
-            };
-            localStorage.setItem(
-              'initialAssessmentValidation',
-              JSON.stringify(parsedValidation)
-            );
-          } catch (error) {
-            console.error('Error updating phase 1 validation state:', error);
-          }
-        }
-      }
-
-      // Log validation update for debugging
-      console.log('=== Terms Validation Update ===', {
-        field,
-        checked,
-        validationResult,
-        validationState: validationUpdate,
-        timestamp: new Date().toISOString(),
-      });
+    const validationResult = {
+      isValid: newTermsAccepted && newPrivacyAccepted,
     };
+
+    // Update validation state for step 2 (agreement page uses step 2 instead of 4)
+    updateValidationState({
+      ...validationState,
+      stepValidation: {
+        ...validationState.stepValidation,
+        2: validationResult.isValid,
+      },
+      stepInteraction: {
+        ...validationState.stepInteraction,
+        2: true,
+      },
+      isTermsValid: validationResult.isValid,
+      _timestamp: Date.now(),
+    });
+
+    // Set interacted steps
+    setInteractedSteps((prev) => [...new Set([...prev, 2])]);
+  };
 
   const isSignatureEmpty = () => {
     if (!signatureRef.current) return true;
@@ -553,12 +511,100 @@ export default function AgreementPage() {
   }, [mounted, validationState.isSignatureValid]);
 
   const handleContinue = async () => {
-    if (!canSubmit()) return;
+    if (isSubmitting) return;
     setIsSubmitting(true);
 
     try {
-      // Get personal details from store
+      const compensationAmount = useStore.getState().compensationAmount || 0;
+      const dealId = sessionStorage.getItem('hubspot_deal_id');
+      const contactId = sessionStorage.getItem('hubspot_contact_id');
       const personalDetails = useStore.getState().personalDetails;
+      const marketingAccepted = useStore.getState().marketingAccepted;
+
+      if (!contactId) {
+        throw new Error('Contact ID is required');
+      }
+
+      if (!personalDetails) {
+        throw new Error('Personal details are required');
+      }
+
+      // First update the contact information
+      console.log('Updating HubSpot contact:', {
+        contactId,
+        personalDetails,
+        marketingAccepted,
+        timestamp: new Date().toISOString(),
+      });
+
+      const contactResponse = await fetch(
+        '/.netlify/functions/hubspot-integration/contact',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contactId,
+            email: personalDetails.email,
+            firstname: personalDetails.firstName,
+            lastname: personalDetails.lastName,
+            salutation: personalDetails.salutation,
+            phone: personalDetails.phone || '',
+            mobilephone: personalDetails.phone || '',
+            address: personalDetails.address || '',
+            city: personalDetails.city || '',
+            zip: personalDetails.postalCode || '',
+            country: personalDetails.country || '',
+            arbeitsrecht_marketing_status: marketingAccepted,
+          }),
+        }
+      );
+
+      if (!contactResponse.ok) {
+        const errorText = await contactResponse.text();
+        console.error('Failed to update HubSpot contact:', errorText);
+        throw new Error(`Failed to update contact: ${errorText}`);
+      }
+
+      // Then update the deal if we have one
+      if (dealId) {
+        console.log('Updating HubSpot deal:', {
+          dealId,
+          contactId,
+          amount: compensationAmount,
+          stage: 'closedwon',
+          marketingStatus: marketingAccepted,
+          timestamp: new Date().toISOString(),
+        });
+
+        const updateResponse = await fetch(
+          '/.netlify/functions/hubspot-integration/deal',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              contactId,
+              dealId,
+              amount: compensationAmount,
+              action: 'update',
+              stage: 'closedwon',
+              marketingStatus: marketingAccepted,
+            }),
+          }
+        );
+
+        if (!updateResponse.ok) {
+          const errorText = await updateResponse.text();
+          console.error('Failed to update deal:', errorText);
+          throw new Error(`Failed to update deal: ${errorText}`);
+        }
+
+        const updateResult = await updateResponse.json();
+        console.log('Successfully updated HubSpot deal:', updateResult);
+      }
 
       // Try to get booking number from phase 3 state if not provided
       let finalBookingNumber = bookingNumber;
@@ -591,43 +637,6 @@ export default function AgreementPage() {
       }
 
       // Submit the order
-      if (!personalDetails) {
-        throw new Error('Personal details are required');
-      }
-
-      // First update the contact information in HubSpot
-      try {
-        const contactResponse = await fetch(
-          '/.netlify/functions/hubspot-integration/contact',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              contactId: sessionStorage.getItem('hubspot_contact_id'),
-              email: personalDetails.email,
-              firstName: personalDetails.firstName,
-              lastName: personalDetails.lastName,
-              phone: personalDetails.phone,
-              address: personalDetails.address,
-              city: personalDetails.city,
-              postalCode: personalDetails.postalCode,
-              country: personalDetails.country,
-            }),
-          }
-        );
-
-        if (!contactResponse.ok) {
-          console.error(
-            'Failed to update HubSpot contact:',
-            await contactResponse.text()
-          );
-        }
-      } catch (error) {
-        console.error('Error updating HubSpot contact:', error);
-      }
-
       const orderResult = await ClaimService.orderClaim(
         originalFlights,
         phase4SelectedFlights,
@@ -637,7 +646,8 @@ export default function AgreementPage() {
         finalBookingNumber,
         signatureRef.current?.toDataURL() || '',
         termsAccepted,
-        privacyAccepted
+        privacyAccepted,
+        marketingAccepted
       );
 
       // Log the order result for debugging
@@ -651,6 +661,9 @@ export default function AgreementPage() {
         router.push(
           `/${lang}/phases/claim-submitted?claim_id=${orderResult.data.guid}`
         );
+      } else if (orderResult.error?.includes('evaluated as reject')) {
+        // If the claim was rejected, redirect to rejection page
+        router.push(`/${lang}/phases/claim-rejected`);
       } else {
         // For other errors, show the error message
         setFormErrors((prev) => ({
@@ -748,7 +761,13 @@ export default function AgreementPage() {
             />
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleContinue();
+            }}
+            className="space-y-6"
+          >
             <AccordionCard
               title={t.phases.agreement.digitalSignature.title}
               subtitle={t.phases.agreement.digitalSignature.subtitle}
@@ -866,7 +885,8 @@ export default function AgreementPage() {
             />
             <ContinueButton
               onClick={handleContinue}
-              disabled={!canSubmit()}
+              disabled={!canSubmit() || isSubmitting}
+              isLoading={isSubmitting}
               text={t.phases.agreement.submit}
             />
           </div>

@@ -102,20 +102,40 @@ const createContact = async (payload) => {
       };
     }
 
-    // Extract email and other details for contact creation/update
+    // Normalize field names to handle both camelCase and lowercase
     const {
       email,
       firstName,
+      firstname,
       lastName,
+      lastname,
       salutation,
       phone,
       mobilephone,
       address,
       city,
       postalCode,
+      zip,
       country,
       arbeitsrecht_marketing_status
     } = data;
+
+    // Use normalized values
+    const normalizedData = {
+      email,
+      firstname: firstname || firstName,
+      lastname: lastname || lastName,
+      salutation,
+      phone,
+      mobilephone,
+      address,
+      city,
+      zip: zip || postalCode,
+      country,
+      arbeitsrecht_marketing_status
+    };
+
+    console.log('Normalized contact data:', normalizedData);
 
     // Search for existing contact
     const contactResponse = await fetch('https://api.hubapi.com/crm/v3/objects/contacts/search', {
@@ -129,7 +149,7 @@ const createContact = async (payload) => {
             filters: [{
               propertyName: 'email',
               operator: 'EQ',
-              value: email
+              value: normalizedData.email
             }]
           }]
         })
@@ -154,18 +174,18 @@ const createContact = async (payload) => {
         },
         body: JSON.stringify({
           properties: {
-            email,
-            firstname: firstName,
-            lastname: lastName,
-            salutation: salutation || '',
-            phone: phone || '',
-            mobilephone: mobilephone || phone || '',
-            address: address || '',
-            city: city || '',
-            zip: postalCode || '',
-            country: country || '',
+            email: normalizedData.email,
+            firstname: normalizedData.firstname,
+            lastname: normalizedData.lastname,
+            salutation: normalizedData.salutation || '',
+            phone: normalizedData.phone || '',
+            mobilephone: normalizedData.mobilephone || normalizedData.phone || '',
+            address: normalizedData.address || '',
+            city: normalizedData.city || '',
+            zip: normalizedData.zip || '',
+            country: normalizedData.country || '',
             hs_lead_status: 'NEW',
-            arbeitsrecht_marketing_status: arbeitsrecht_marketing_status ? 'true' : 'false'
+            arbeitsrecht_marketing_status: normalizedData.arbeitsrecht_marketing_status ? 'true' : 'false'
           }
         })
       });
@@ -190,17 +210,17 @@ const createContact = async (payload) => {
         },
         body: JSON.stringify({
           properties: {
-            email,
-            firstname: firstName,
-            lastname: lastName,
-            salutation: salutation || '',
-            phone: phone || '',
-            mobilephone: mobilephone || phone || '',
-            address: address || '',
-            city: city || '',
-            zip: postalCode || '',
-            country: country || '',
-            arbeitsrecht_marketing_status: arbeitsrecht_marketing_status ? 'true' : 'false'
+            email: normalizedData.email,
+            firstname: normalizedData.firstname,
+            lastname: normalizedData.lastname,
+            salutation: normalizedData.salutation || '',
+            phone: normalizedData.phone || '',
+            mobilephone: normalizedData.mobilephone || normalizedData.phone || '',
+            address: normalizedData.address || '',
+            city: normalizedData.city || '',
+            zip: normalizedData.zip || '',
+            country: normalizedData.country || '',
+            arbeitsrecht_marketing_status: normalizedData.arbeitsrecht_marketing_status ? 'true' : 'false'
           }
         })
       });
@@ -228,13 +248,18 @@ const createDeal = async (payload, context) => {
 
     const {
       contactId,
-      personalDetails,
+      personalDetails = {},  // Add default empty object
       selectedFlights,
       directFlight,
       stage,
       status,
       amount: providedAmount
     } = payload;
+
+    // Validate required fields
+    if (!contactId) {
+      throw new Error('Contact ID is required');
+    }
 
     // Get compensation estimate using either provided amount or calculate from flight data
     let compensationAmount = providedAmount;
@@ -333,11 +358,11 @@ const createDeal = async (payload, context) => {
         break;
       case 'evaluation':
         if (status === 'qualified') {
-          dealStage = 'qualifiedtobuy';  // Changed from closedwon to qualifiedtobuy
+          dealStage = 'appointmentscheduled';  // Keep the original stage
           dealStatus = 'Qualified';
           probability = 0.6;
         } else if (status === 'rejected') {
-          dealStage = '1173731568';  // Use the Rejected stage ID from pipeline
+          dealStage = '1173731568';  // This stage means rejected in HubSpot
           dealStatus = 'Rejected';
           probability = 0;
         } else {
@@ -363,7 +388,9 @@ const createDeal = async (payload, context) => {
     // Create deal properties using only standard HubSpot properties
     const dealId = uuidv4(); // Generate a unique ID for the deal
     const dealProperties = {
-      dealname: `${dealId} - ${personalDetails.firstName} ${personalDetails.lastName}`,
+      dealname: personalDetails.firstName && personalDetails.lastName
+        ? `${dealId} - ${personalDetails.firstName} ${personalDetails.lastName}`
+        : `${dealId} - New Deal`,
       amount: stage === 'initial_assessment' ? '0' : compensationAmount.toString(),  // Convert to string as HubSpot expects
       description: stage === 'initial_assessment'
         ? `Status: ${dealStatus}\nInitial Assessment Phase`

@@ -377,62 +377,95 @@ function ClaimSuccessContent() {
   };
 
   // Handle continue button click
-  const handleContinue = useCallback(() => {
-    console.log('=== Handle Continue ===');
-    console.log('Validation state before continue:', {
-      isStepValid: isStepValid(1),
-      interactedSteps,
-      completedPhases,
-    });
-
-    if (!isStepValid(1)) {
-      console.log('Cannot continue - step 1 is not valid');
-      return;
-    }
+  const handleContinue = async () => {
+    if (isLoading) return;
 
     try {
-      // Get current state including marketing status
-      const currentState = useStore.getState();
-      const personalDetails =
-        currentState.personalDetails as ExtendedPassengerDetails;
-
-      console.log('=== HubSpot Update Data ===', {
-        contactId: sessionStorage.getItem('hubspot_contact_id'),
-        personalDetails,
-        timestamp: new Date().toISOString(),
-      });
-
-      // Update HubSpot contact with final details
+      const compensationAmount = useStore.getState().compensationAmount || 0;
+      const dealId = sessionStorage.getItem('hubspot_deal_id');
       const contactId = sessionStorage.getItem('hubspot_contact_id');
-      if (contactId && personalDetails) {
-        fetch('/.netlify/functions/hubspot-integration/contact', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            contactId,
-            email: personalDetails.email,
-            firstName: personalDetails.firstName,
-            lastName: personalDetails.lastName,
-            salutation: personalDetails.salutation,
-            phone: personalDetails.phone || '',
-            mobilephone: personalDetails.phone || '',
-            address: personalDetails.address || '',
-            city: personalDetails.city || '',
-            postalCode: personalDetails.postalCode || '',
-            country: personalDetails.country || '',
-            arbeitsrecht_marketing_status:
-              personalDetails.marketingAccepted || false,
-          }),
-        })
-          .then((response) => response.json())
-          .then((data) => {
-            console.log('HubSpot update response:', data);
-          })
-          .catch((error) => {
-            console.error('Error updating HubSpot contact:', error);
-          });
+      const personalDetails = useStore.getState().personalDetails;
+      const marketingAccepted = useStore.getState().marketingAccepted;
+
+      if (!contactId) {
+        throw new Error('Contact ID is required');
+      }
+
+      if (dealId) {
+        console.log('Updating HubSpot deal with final status:', {
+          dealId,
+          contactId,
+          amount: compensationAmount,
+          stage: 'closedwon',
+          personalDetails,
+          marketingStatus: marketingAccepted,
+          timestamp: new Date().toISOString(),
+        });
+
+        try {
+          // First update the contact with all details
+          const contactResponse = await fetch(
+            '/.netlify/functions/hubspot-integration/contact',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                contactId,
+                email: personalDetails.email,
+                firstname: personalDetails.firstName,
+                lastname: personalDetails.lastName,
+                salutation: personalDetails.salutation,
+                phone: personalDetails.phone || '',
+                mobilephone: personalDetails.phone || '',
+                address: personalDetails.address || '',
+                city: personalDetails.city || '',
+                zip: personalDetails.postalCode || '',
+                country: personalDetails.country || '',
+                arbeitsrecht_marketing_status: marketingAccepted,
+              }),
+            }
+          );
+
+          if (!contactResponse.ok) {
+            console.error(
+              'Failed to update HubSpot contact:',
+              await contactResponse.text()
+            );
+          }
+
+          // Then update the deal
+          const updateResponse = await fetch(
+            '/.netlify/functions/hubspot-integration/deal',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                contactId,
+                dealId,
+                amount: compensationAmount,
+                action: 'update',
+                stage: 'closedwon',
+                personalDetails,
+                marketingStatus: marketingAccepted,
+              }),
+            }
+          );
+
+          if (updateResponse.ok) {
+            console.log('HubSpot deal update successful');
+          } else {
+            const errorText = await updateResponse.text();
+            console.error('Error updating HubSpot deal:', errorText);
+            throw new Error(`Failed to update deal: ${errorText}`);
+          }
+        } catch (error) {
+          console.error('Error updating HubSpot deal:', error);
+          throw error;
+        }
       }
 
       // Complete all required phases
@@ -469,6 +502,9 @@ function ClaimSuccessContent() {
       );
       localStorage.setItem('currentPhase', '6');
 
+      // Now set loading state just before navigation
+      setIsLoading(true);
+
       // Create URL with all necessary parameters
       const searchParams = new URLSearchParams();
       searchParams.set('bypass_phase_check', 'true');
@@ -486,9 +522,9 @@ function ClaimSuccessContent() {
       setError(
         'An error occurred while navigating to the agreement page. Please try again.'
       );
+      setIsLoading(false); // Make sure to clear loading state on error
     }
-    console.log('=== End Handle Continue ===');
-  }, [isStepValid, interactedSteps, completedPhases, lang, router, setError]);
+  };
 
   useEffect(() => {
     pushToDataLayer({

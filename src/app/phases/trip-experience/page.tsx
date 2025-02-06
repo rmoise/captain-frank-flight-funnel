@@ -17,7 +17,6 @@ import { isValidYYYYMMDD, formatDateToYYYYMMDD } from '@/utils/dateUtils';
 import { AccordionProvider } from '@/components/shared/AccordionContext';
 import { useStore } from '@/lib/state/store';
 import { useFlightStore } from '@/lib/state/flightStore';
-import { EvaluateService } from '@/services/evaluateService';
 import { ClaimService } from '@/services/claimService';
 
 // Helper function to get language-aware URL
@@ -46,6 +45,18 @@ export default function TripExperiencePage() {
     updateValidationState,
   } = phase4Store;
 
+  // Initialize marketing status from store
+  useEffect(() => {
+    const storedState = useStore.getState();
+    if (storedState.marketingAccepted !== undefined) {
+      console.log(
+        'Initializing marketing status from store:',
+        storedState.marketingAccepted
+      );
+      mainStore.setMarketingAccepted(storedState.marketingAccepted);
+    }
+  }, []);
+
   // Initialize state on mount
   useEffect(() => {
     let isInitialized = false;
@@ -58,6 +69,7 @@ export default function TripExperiencePage() {
         mainStoreFlights: mainStore.selectedFlights.length,
         hasPersistedData: !!localStorage.getItem('phase4FlightData'),
         phase4StoreFlights: phase4Store.selectedFlights.length,
+        marketingAccepted: mainStore.marketingAccepted,
       });
 
       try {
@@ -675,10 +687,59 @@ export default function TripExperiencePage() {
   );
 
   const handleContinue = async () => {
-    if (!canContinue()) return;
+    if (isLoading) return;
     setIsLoading(true);
 
     try {
+      const compensationAmount = useStore.getState().compensationAmount || 0;
+      const dealId = sessionStorage.getItem('hubspot_deal_id');
+      const personalDetails = useStore.getState().personalDetails;
+      const marketingAccepted = useStore.getState().marketingAccepted;
+
+      if (dealId) {
+        console.log('Updating HubSpot deal with trip experience:', {
+          dealId,
+          amount: compensationAmount,
+          stage: '1173731568',
+          personalDetails,
+          marketingStatus: marketingAccepted,
+          timestamp: new Date().toISOString(),
+        });
+
+        try {
+          const updateResponse = await fetch(
+            '/.netlify/functions/hubspot-integration/deal',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                contactId: sessionStorage.getItem('hubspot_contact_id'),
+                dealId,
+                amount: compensationAmount,
+                action: 'update',
+                stage: '1173731568',
+                personalDetails,
+                marketingStatus: marketingAccepted,
+              }),
+            }
+          );
+
+          if (!updateResponse.ok) {
+            const errorText = await updateResponse.text();
+            console.error('Failed to update deal:', errorText);
+            throw new Error(`Failed to update deal: ${errorText}`);
+          }
+
+          const updateResult = await updateResponse.json();
+          console.log('Successfully updated HubSpot deal:', updateResult);
+        } catch (error) {
+          console.error('Error updating HubSpot deal:', error);
+          throw error;
+        }
+      }
+
       // Get travel status from answers
       const travelStatusAnswer = travelStatusAnswers.find(
         (a) => a.questionId === 'travel_status'
@@ -764,12 +825,13 @@ export default function TripExperiencePage() {
       // Complete phase 4 before evaluation
       await mainStore.completePhase(4);
 
-      // Use the EvaluateService to evaluate the claim
-      const evaluationResult = await EvaluateService.evaluateClaim(
+      // Use the ClaimService to evaluate the claim
+      const evaluationResult = await ClaimService.evaluateClaim(
         validOriginalFlights,
         requiresAlternativeFlights ? flightStore.selectedFlights : [],
-        travelStatus,
-        informedDate
+        travelStatusAnswers,
+        informedDateAnswers,
+        marketingAccepted
       );
 
       // Validate evaluation result
@@ -807,7 +869,6 @@ export default function TripExperiencePage() {
       });
 
       // Update HubSpot deal with evaluation results
-      const dealId = sessionStorage.getItem('hubspot_deal_id');
       if (dealId) {
         try {
           // First update the contact information
@@ -821,6 +882,7 @@ export default function TripExperiencePage() {
               body: JSON.stringify({
                 contactId: sessionStorage.getItem('hubspot_contact_id'),
                 ...mainStore.personalDetails,
+                arbeitsrecht_marketing_status: marketingAccepted,
               }),
             }
           );
