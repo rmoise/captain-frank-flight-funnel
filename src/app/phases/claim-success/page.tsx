@@ -403,6 +403,11 @@ function ClaimSuccessContent() {
         });
 
         try {
+          // Check if personalDetails exists
+          if (!personalDetails) {
+            throw new Error('Personal details are required');
+          }
+
           // First update the contact with all details
           const contactResponse = await fetch(
             '/.netlify/functions/hubspot-integration/contact',

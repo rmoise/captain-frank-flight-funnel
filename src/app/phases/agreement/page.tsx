@@ -593,7 +593,6 @@ export default function AgreementPage() {
               action: 'update',
               stage: 'closedwon',
               marketingStatus: marketingAccepted,
-              selectedFlights: phase4SelectedFlights || selectedFlights,
             }),
           }
         );
