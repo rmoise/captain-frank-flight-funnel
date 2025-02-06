@@ -3,7 +3,7 @@
 import React, { Suspense, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useStore } from '@/lib/state/store';
-import type { PassengerDetails } from '@/types/store';
+import type { ExtendedPassengerDetails } from '@/types/store';
 import { SpeechBubble } from '@/components/SpeechBubble';
 import { PhaseNavigation } from '@/components/PhaseNavigation';
 import { PhaseGuard } from '@/components/shared/PhaseGuard';
@@ -238,7 +238,7 @@ function ClaimSuccessContent() {
 
   // Handle personal details updates
   const handlePersonalDetailsComplete = useCallback(
-    (details: PassengerDetails | null) => {
+    (details: ExtendedPassengerDetails | null) => {
       if (!details || isUpdatingRef.current) {
         return;
       }
@@ -267,11 +267,11 @@ function ClaimSuccessContent() {
           'postalCode',
           'city',
           'country',
-        ];
+        ] as const;
 
         // Check if all required fields are present and not empty
         const isValid = requiredFields.every(
-          (field) => !!details[field as keyof PassengerDetails]?.trim()
+          (field) => !!details[field]?.trim()
         );
 
         // Email validation
@@ -281,7 +281,7 @@ function ClaimSuccessContent() {
         // Generate field errors
         const fieldErrors: Record<string, string> = {};
         requiredFields.forEach((field) => {
-          if (!details[field as keyof PassengerDetails]?.trim()) {
+          if (!details[field]?.trim()) {
             fieldErrors[field] = 'This field is required';
           }
         });
@@ -393,7 +393,8 @@ function ClaimSuccessContent() {
     try {
       // Get current state including marketing status
       const currentState = useStore.getState();
-      const personalDetails = currentState.personalDetails;
+      const personalDetails =
+        currentState.personalDetails as ExtendedPassengerDetails;
 
       console.log('=== HubSpot Update Data ===', {
         contactId: sessionStorage.getItem('hubspot_contact_id'),

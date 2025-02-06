@@ -52,6 +52,10 @@ export interface PassengerDetails {
   country: string;
 }
 
+export interface ExtendedPassengerDetails extends PassengerDetails {
+  marketingAccepted?: boolean;
+}
+
 export interface LocationData {
   value: string;
   label: string;
