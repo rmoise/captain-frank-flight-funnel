@@ -9,9 +9,6 @@ export interface AccordionCardProps {
   isCompleted: boolean;
   className?: string;
   eyebrow?: string;
-  /**
-   * @deprecated This prop is reserved for future use in accordion card headers
-   */
   subtitle?: string;
   summary?: string;
   hasInteracted?: boolean;
@@ -33,7 +30,6 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
   isCompleted,
   className = '',
   eyebrow,
-  /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
   subtitle,
   summary,
   hasInteracted = false,
@@ -181,6 +177,9 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
             <div className="flex items-center space-x-3">
               <h3 className="text-2xl font-semibold text-gray-900">{title}</h3>
             </div>
+            {currentIsOpen && subtitle && (
+              <p className="mt-2 text-gray-600">{subtitle}</p>
+            )}
             {!currentIsOpen && summary && (
               <p className="mt-2 text-gray-500">{summary}</p>
             )}

@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import type { ReactElement } from 'react';
+import React from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useTranslation } from '@/hooks/useTranslation';
 import { usePhase4Store } from '@/lib/state/phase4Store';
 import { Answer, Question, Flight } from '@/types/store';
 import { QAWizard } from '@/components/wizard/QAWizard';
-import { PhaseGuard } from '@/components/shared/PhaseGuard';
+import { PhaseGuard, PhaseGuardProps } from '@/components/shared/PhaseGuard';
 import { AccordionCard } from '@/components/shared/AccordionCard';
 import { SpeechBubble } from '@/components/SpeechBubble';
 import { ContinueButton } from '@/components/shared/ContinueButton';
@@ -24,13 +25,13 @@ const getLanguageAwareUrl = (url: string, lang: string) => {
   return lang === 'de' ? `/de${url}` : url;
 };
 
-export default function TripExperiencePage() {
+export default function TripExperiencePage(): ReactElement {
   const { t } = useTranslation();
   const router = useRouter();
   const params = useParams();
   const lang = params?.lang?.toString() || '';
-  const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const phase4Store = usePhase4Store();
   const flightStore = useFlightStore();
   const mainStore = useStore();
@@ -46,7 +47,7 @@ export default function TripExperiencePage() {
   } = phase4Store;
 
   // Initialize marketing status from store
-  useEffect(() => {
+  React.useEffect(() => {
     const storedState = useStore.getState();
     if (storedState.marketingAccepted !== undefined) {
       console.log(
@@ -58,7 +59,7 @@ export default function TripExperiencePage() {
   }, []);
 
   // Initialize state on mount
-  useEffect(() => {
+  React.useEffect(() => {
     let isInitialized = false;
 
     const initializeFlights = () => {
@@ -203,7 +204,7 @@ export default function TripExperiencePage() {
   }, [flightStore.originalFlights.length, phase4Store.selectedFlights.length]);
 
   // Memoize validation states to prevent unnecessary re-renders
-  const validationStates = useMemo(
+  const validationStates = React.useMemo(
     () => ({
       isTripExperienceValid: travelStatusStepValidation[2] || false,
       isInformedDateValid: informedDateStepValidation[3] || false,
@@ -379,7 +380,7 @@ export default function TripExperiencePage() {
   ];
 
   // Add validation for alternative flight selection
-  const validateAlternativeFlight = useCallback(
+  const validateAlternativeFlight = React.useCallback(
     (selectedFlight: Flight) => {
       // Get original flight from flightStore
       const originalFlight = flightStore.originalFlights[0];
@@ -417,7 +418,7 @@ export default function TripExperiencePage() {
   );
 
   // Update handleTripExperienceComplete to use validation
-  const handleTripExperienceComplete = useCallback(() => {
+  const handleTripExperienceComplete = React.useCallback(() => {
     // Validate selected flight is different from original
     if (
       flightStore.selectedFlights.length > 0 &&
@@ -457,7 +458,7 @@ export default function TripExperiencePage() {
     validateAlternativeFlight,
   ]);
 
-  const handleInformedDateComplete = useCallback(() => {
+  const handleInformedDateComplete = React.useCallback(() => {
     // Update validation state
     const newValidationState = {
       informedDateStepValidation: {
@@ -480,7 +481,7 @@ export default function TripExperiencePage() {
   ]);
 
   // Initialize state only once
-  useEffect(() => {
+  React.useEffect(() => {
     let mounted = false;
 
     const initializeState = () => {
@@ -513,7 +514,7 @@ export default function TripExperiencePage() {
   }, []);
 
   // Add effect to track when original flights are set
-  useEffect(() => {
+  React.useEffect(() => {
     if (flightStore.originalFlights.length > 0) {
       console.log('Original flights updated:', {
         flights: flightStore.originalFlights.map((f: Flight) => ({
@@ -528,7 +529,7 @@ export default function TripExperiencePage() {
   }, [flightStore.originalFlights]);
 
   // Add logging to track when validation is checked
-  useEffect(() => {
+  React.useEffect(() => {
     console.log('Trip Experience Validation Check:', {
       travelStatusAnswers,
       selectedFlights: flightStore.selectedFlights,
@@ -541,7 +542,7 @@ export default function TripExperiencePage() {
   ]);
 
   // Add logging for when selected flights change
-  useEffect(() => {
+  React.useEffect(() => {
     if (flightStore.selectedFlights && flightStore.selectedFlights.length > 0) {
       console.log('Selected Flights Updated:', {
         selectedFlights: flightStore.selectedFlights.map((f: Flight) => ({
@@ -554,7 +555,7 @@ export default function TripExperiencePage() {
   }, [flightStore.selectedFlights]);
 
   // Update handleAutoTransition to check both validation states
-  const handleAutoTransition = useCallback(
+  const handleAutoTransition = React.useCallback(
     (currentStepId: string) => {
       console.log('TripExperience - handleAutoTransition:', {
         currentStepId,
@@ -592,7 +593,7 @@ export default function TripExperiencePage() {
   );
 
   // Add logging to track validation state updates
-  useEffect(() => {
+  React.useEffect(() => {
     console.log('Validation states updated:', {
       validationStates,
       travelStatusStepValidation,
@@ -605,7 +606,7 @@ export default function TripExperiencePage() {
   ]);
 
   // Check if we can continue
-  const canContinue = useCallback(() => {
+  const canContinue = React.useCallback(() => {
     return (
       validationStates.isTripExperienceValid &&
       validationStates.isInformedDateValid
@@ -626,7 +627,7 @@ export default function TripExperiencePage() {
   };
 
   // Add validation for flight data before evaluation
-  const validateFlightData = useCallback(
+  const validateFlightData = React.useCallback(
     (originalFlights: Flight[], selectedFlights: Flight[]) => {
       // Get travel status from answers
       const travelStatusAnswer = travelStatusAnswers.find(
@@ -995,7 +996,7 @@ export default function TripExperiencePage() {
     }
   };
 
-  const getTripExperienceSummary = useMemo(() => {
+  const getTripExperienceSummary = React.useMemo(() => {
     if (travelStatusAnswers.length === 0) return '';
 
     const travelStatus = travelStatusAnswers.find(
@@ -1015,7 +1016,7 @@ export default function TripExperiencePage() {
     }
   }, [travelStatusAnswers, t]);
 
-  const getInformedDateSummary = useMemo(() => {
+  const getInformedDateSummary = React.useMemo(() => {
     if (informedDateAnswers.length === 0) return '';
 
     const informedDate = informedDateAnswers.find(
@@ -1053,7 +1054,7 @@ export default function TripExperiencePage() {
   }, [informedDateAnswers, t]);
 
   // Memoize QA Wizards to prevent unnecessary re-renders
-  const TripExperienceWizard = useMemo(
+  const TripExperienceWizard = React.useMemo(
     () => (
       <QAWizard
         questions={questions}
@@ -1071,7 +1072,7 @@ export default function TripExperiencePage() {
     ]
   );
 
-  const InformedDateWizard = useMemo(
+  const InformedDateWizard = React.useMemo(
     () => (
       <QAWizard
         questions={informedDateQuestions}
@@ -1084,73 +1085,78 @@ export default function TripExperiencePage() {
     [informedDateQuestions, handleInformedDateComplete, informedDateAnswers]
   );
 
-  return (
-    <PhaseGuard phase={4}>
-      <AccordionProvider
-        onAutoTransition={handleAutoTransition}
-        initialActiveAccordion="2"
-      >
-        <div className="min-h-screen bg-[#f5f7fa]">
-          <PhaseNavigation currentPhase={4} completedPhases={[1, 2, 3]} />
-          <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
-            <div className="space-y-6">
-              <SpeechBubble message={t.phases.tripExperience.speechBubble} />
+  const content = (
+    <AccordionProvider
+      onAutoTransition={handleAutoTransition}
+      initialActiveAccordion="2"
+    >
+      <div className="min-h-screen bg-[#f5f7fa]">
+        <PhaseNavigation currentPhase={4} completedPhases={[1, 2, 3]} />
+        <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
+          <div className="space-y-6">
+            <SpeechBubble message={t.phases.tripExperience.speechBubble} />
 
-              {errorMessage && (
-                <div className="p-4 text-red-700 bg-red-100 rounded-lg">
-                  {errorMessage}
-                </div>
-              )}
-
-              {/* Trip Experience Wizard */}
-              <AccordionCard
-                title={t.phases.tripExperience.steps.travelStatus.title}
-                stepId="2"
-                isCompleted={travelStatusStepValidation[2]}
-                hasInteracted={travelStatusStepInteraction[2]}
-                isValid={validationStates.isTripExperienceValid}
-                summary={getTripExperienceSummary}
-                eyebrow={t.phases.tripExperience.steps.travelStatus.eyebrow}
-                isQA={true}
-              >
-                <div className={accordionConfig.padding.content}>
-                  {TripExperienceWizard}
-                </div>
-              </AccordionCard>
-
-              {/* Informed Date Wizard */}
-              <AccordionCard
-                title={t.phases.tripExperience.steps.informedDate.title}
-                stepId="3"
-                isCompleted={informedDateStepValidation[3]}
-                hasInteracted={informedDateStepInteraction[3]}
-                isValid={validationStates.isInformedDateValid}
-                summary={getInformedDateSummary}
-                eyebrow={t.phases.tripExperience.steps.informedDate.eyebrow}
-                isQA={true}
-              >
-                <div className={accordionConfig.padding.content}>
-                  {InformedDateWizard}
-                </div>
-              </AccordionCard>
-
-              {/* Navigation */}
-              <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
-                <BackButton
-                  onClick={handleBack}
-                  text={t.phases.tripExperience.navigation.back}
-                />
-                <ContinueButton
-                  onClick={handleContinue}
-                  disabled={!canContinue() || isLoading}
-                  isLoading={isLoading}
-                  text={t.phases.tripExperience.navigation.continue}
-                />
+            {errorMessage && (
+              <div className="p-4 text-red-700 bg-red-100 rounded-lg">
+                {errorMessage}
               </div>
+            )}
+
+            {/* Trip Experience Wizard */}
+            <AccordionCard
+              title={t.phases.tripExperience.steps.travelStatus.title}
+              stepId="2"
+              isCompleted={travelStatusStepValidation[2]}
+              hasInteracted={travelStatusStepInteraction[2]}
+              isValid={validationStates.isTripExperienceValid}
+              summary={getTripExperienceSummary}
+              eyebrow={t.phases.tripExperience.steps.travelStatus.eyebrow}
+              isQA={true}
+            >
+              <div className={accordionConfig.padding.content}>
+                {TripExperienceWizard}
+              </div>
+            </AccordionCard>
+
+            {/* Informed Date Wizard */}
+            <AccordionCard
+              title={t.phases.tripExperience.steps.informedDate.title}
+              stepId="3"
+              isCompleted={informedDateStepValidation[3]}
+              hasInteracted={informedDateStepInteraction[3]}
+              isValid={validationStates.isInformedDateValid}
+              summary={getInformedDateSummary}
+              eyebrow={t.phases.tripExperience.steps.informedDate.eyebrow}
+              isQA={true}
+            >
+              <div className={accordionConfig.padding.content}>
+                {InformedDateWizard}
+              </div>
+            </AccordionCard>
+
+            {/* Navigation */}
+            <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
+              <BackButton
+                onClick={handleBack}
+                text={t.phases.tripExperience.navigation.back}
+              />
+              <ContinueButton
+                onClick={handleContinue}
+                disabled={!canContinue() || isLoading}
+                isLoading={isLoading}
+                text={t.phases.tripExperience.navigation.continue}
+              />
             </div>
-          </main>
-        </div>
-      </AccordionProvider>
-    </PhaseGuard>
+          </div>
+        </main>
+      </div>
+    </AccordionProvider>
   );
+
+  const phaseGuardProps: PhaseGuardProps = {
+    phase: 4,
+    children: content,
+  };
+
+  return <PhaseGuard {...phaseGuardProps} />;
 }

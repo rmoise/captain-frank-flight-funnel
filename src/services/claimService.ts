@@ -24,6 +24,7 @@ export interface OrderClaimRequest extends EvaluateClaimRequest {
   owner_country: string;
   owner_email: string;
   owner_phone: string;
+  arbeitsrecht_marketing_status: boolean;
   contract_signature: string;
   contract_tac: boolean;
   contract_dp: boolean;
@@ -134,7 +135,7 @@ export class ClaimService {
 
     // For multi-city trips, ensure we maintain the correct order of flight IDs
     const journey_fact_flightids =
-      journeyFactType === 'provided'
+      journeyFactType === 'provided' || travelStatus === 'took_alternative_own'
         ? validSelectedFlights.map((f) => String(f.id))
         : journeyFactType === 'self'
           ? validOriginalFlights.map((f) => String(f.id))
@@ -260,7 +261,8 @@ export class ClaimService {
     bookingNumber: string,
     signature: string,
     termsAccepted: boolean,
-    privacyAccepted: boolean
+    privacyAccepted: boolean,
+    marketingAccepted: boolean
   ): OrderClaimRequest {
     // Get the stored evaluation response
     const evaluationResponse = this.getLastEvaluationResponse();
@@ -288,6 +290,9 @@ export class ClaimService {
 
     // Get journey fact type from travel status
     const journeyFactType = this.getJourneyFactType(travelStatusAnswers);
+    const travelStatus = travelStatusAnswers.find(
+      (a) => a.questionId === 'travel_status'
+    )?.value;
 
     // Ensure all flights have valid IDs
     const validOriginalFlights = originalFlights.filter(
@@ -303,7 +308,7 @@ export class ClaimService {
       String(f.id)
     );
     const journey_fact_flightids =
-      journeyFactType === 'provided'
+      journeyFactType === 'provided' || travelStatus === 'took_alternative_own'
         ? validSelectedFlights.map((f) => String(f.id))
         : journeyFactType === 'self'
           ? validOriginalFlights.map((f) => String(f.id))
@@ -328,6 +333,7 @@ export class ClaimService {
       owner_country: personalDetails.country || '',
       owner_email: personalDetails.email,
       owner_phone: personalDetails.phone || '',
+      arbeitsrecht_marketing_status: marketingAccepted === true,
       contract_signature: signature,
       contract_tac: termsAccepted,
       contract_dp: privacyAccepted,
@@ -462,7 +468,7 @@ export class ClaimService {
     signature: string,
     termsAccepted: boolean,
     privacyAccepted: boolean,
-    marketingAccepted?: boolean
+    marketingAccepted: boolean = false
   ): Promise<OrderClaimResponse> {
     try {
       // Build the request payload for Captain Frank API
@@ -475,7 +481,8 @@ export class ClaimService {
         bookingNumber,
         signature,
         termsAccepted,
-        privacyAccepted
+        privacyAccepted,
+        marketingAccepted
       );
 
       // Get the stored evaluation response
@@ -510,7 +517,7 @@ export class ClaimService {
                   city: personalDetails.city || '',
                   postalCode: personalDetails.postalCode || '',
                   country: personalDetails.country || '',
-                  arbeitsrecht_marketing_status: marketingAccepted,
+                  arbeitsrecht_marketing_status: marketingAccepted === true,
                 }),
               }
             );
@@ -543,7 +550,7 @@ export class ClaimService {
                     evaluationResponse.status === 'accept'
                       ? 'submitted'
                       : 'rejected',
-                  arbeitsrecht_marketing_status: marketingAccepted,
+                  arbeitsrecht_marketing_status: marketingAccepted === true,
                 }),
               }
             );

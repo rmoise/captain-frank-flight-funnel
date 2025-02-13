@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/lib/state/store';
 import { usePhase4Store } from '@/lib/state/phase4Store';
+import { useFlightStore } from '@/lib/state/flightStore';
 import FormError from '@/components/shared/FormError';
 import { useLoading } from '@/providers/LoadingProvider';
 import { PhaseGuard } from '@/components/guards/PhaseGuard';
@@ -49,11 +50,6 @@ export default function AgreementPage() {
   const [isClient, setIsClient] = useState(false);
   const { t, lang } = useTranslation();
 
-  // Set isClient to true on mount
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
-
   const {
     selectedFlights,
     personalDetails,
@@ -82,6 +78,7 @@ export default function AgreementPage() {
   } = phase4Store;
 
   const signatureRef = useRef<SignaturePadRef>(null);
+  const restorationFlagRef = useRef(false);
   const [mounted, setMounted] = useState(false);
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [openSteps, setOpenSteps] = React.useState<Array<number | string>>([
@@ -101,6 +98,14 @@ export default function AgreementPage() {
     useState(false);
   const [isNavigatingBack, setIsNavigatingBack] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSignatureRestored, setIsSignatureRestored] = useState(false);
+
+  // Set isClient to true on mount
+  useEffect(() => {
+    console.log('=== Client Mount Effect ===', { isClient });
+    setIsClient(true);
+    setMounted(true);
+  }, []);
 
   // Initialize state only on client side
   useEffect(() => {
@@ -205,28 +210,86 @@ export default function AgreementPage() {
 
   // Separate useEffect for signature restoration to ensure SignaturePad is mounted
   useEffect(() => {
-    if (!isClient || !mounted || !signatureRef.current) return;
+    console.log('=== Signature Restoration Effect ===', {
+      isClient,
+      mounted,
+      hasSignatureRef: !!signatureRef.current,
+      storedSignature: !!store.signature,
+      lang,
+      hasRestorationFlag: restorationFlagRef.current,
+    });
 
-    try {
-      const storedSignature = store.signature;
-      if (storedSignature) {
-        // Restore the signature to the pad
-        signatureRef.current.fromDataURL(storedSignature);
-        setHasSignature(true);
-        validateSignature();
-        setHasInteractedWithSignature(true);
-
-        // Update validation state
-        store.updateValidationState({
-          ...store.validationState,
-          isSignatureValid: true,
-          _timestamp: Date.now(),
+    // Wait for next tick to ensure SignaturePad is fully mounted
+    const timer = setTimeout(() => {
+      if (
+        !isClient ||
+        !mounted ||
+        !signatureRef.current ||
+        restorationFlagRef.current
+      ) {
+        console.log('Early return conditions:', {
+          noClient: !isClient,
+          notMounted: !mounted,
+          noSignatureRef: !signatureRef.current,
+          alreadyRestored: restorationFlagRef.current,
         });
+        return;
       }
-    } catch (error) {
-      console.error('Error restoring signature:', error);
+
+      try {
+        const storedSignature = store.signature;
+        console.log('Attempting signature restoration:', {
+          hasStoredSignature: !!storedSignature,
+          signaturePadReady: !!signatureRef.current,
+          currentTime: new Date().toISOString(),
+        });
+
+        if (storedSignature && signatureRef.current) {
+          // Set flag before restoration
+          restorationFlagRef.current = true;
+
+          // Force a clean slate before restoring
+          signatureRef.current.clear();
+
+          // Restore the signature to the pad
+          signatureRef.current.fromDataURL(storedSignature);
+          setHasSignature(true);
+          validateSignature();
+          setHasInteractedWithSignature(true);
+
+          // Update validation state
+          store.updateValidationState({
+            ...store.validationState,
+            isSignatureValid: true,
+            _timestamp: Date.now(),
+          });
+          console.log('Signature successfully restored');
+        }
+      } catch (error) {
+        console.error('Error restoring signature:', error);
+        restorationFlagRef.current = false;
+      }
+    }, 100); // Small delay to ensure component is ready
+
+    return () => clearTimeout(timer);
+  }, [isClient, mounted, signatureRef.current, store.signature, lang]); // Add signatureRef.current and store.signature to dependencies
+
+  // Add effect to handle SignaturePad initialization
+  useEffect(() => {
+    if (signatureRef.current) {
+      console.log('=== SignaturePad Reference Updated ===', {
+        hasRef: !!signatureRef.current,
+        currentTime: new Date().toISOString(),
+      });
     }
-  }, [isClient, mounted, store.signature]);
+  }, [signatureRef.current]);
+
+  // Add cleanup effect
+  useEffect(() => {
+    return () => {
+      restorationFlagRef.current = false;
+    };
+  }, []);
 
   // Remove redundant effects
   useEffect(() => {
@@ -234,13 +297,22 @@ export default function AgreementPage() {
   }, [hideLoading]);
 
   const handleSignatureStart = () => {
+    console.log('=== Signature Start ===', {
+      hasRef: !!signatureRef.current,
+      currentTime: new Date().toISOString(),
+    });
     setHasInteractedWithSignature(true);
   };
 
   const handleSignatureEnd = () => {
+    console.log('=== Signature End ===');
     if (signatureRef.current) {
       const signatureData = signatureRef.current.toDataURL();
       const isEmpty = isSignatureEmpty();
+      console.log('Signature state:', {
+        isEmpty,
+        hasSignatureRef: !!signatureRef.current,
+      });
 
       if (!isEmpty) {
         setSignature(signatureData);
@@ -249,6 +321,7 @@ export default function AgreementPage() {
         setFormErrors(
           (prev: FormErrors): FormErrors => ({ ...prev, signature: [] })
         );
+        console.log('Signature saved to store');
       } else {
         setSignature('');
         setHasSignature(false);
@@ -256,26 +329,32 @@ export default function AgreementPage() {
           setFormErrors(
             (prev: FormErrors): FormErrors => ({
               ...prev,
-              signature: ['Please provide your signature'],
+              signature: [
+                t.phases.agreement.digitalSignature.validation.required,
+              ],
             })
           );
         }
+        console.log('Signature cleared due to empty state');
       }
     }
   };
 
   const clearSignature = () => {
+    console.log('=== Clear Signature ===');
     if (signatureRef.current) {
       signatureRef.current.clear();
       setSignature('');
       setHasSignature(false);
       setHasInteractedWithSignature(false);
+      restorationFlagRef.current = false;
       setFormErrors(
         (prev: FormErrors): FormErrors => ({
           ...prev,
           signature: [],
         })
       );
+      console.log('Signature cleared successfully');
     }
   };
 
@@ -337,8 +416,9 @@ export default function AgreementPage() {
   };
 
   const isSignatureEmpty = () => {
-    if (!signatureRef.current) return true;
-    return signatureRef.current.isEmpty();
+    const isEmpty = !signatureRef.current || signatureRef.current.isEmpty();
+    console.log('Checking if signature is empty:', { isEmpty });
+    return isEmpty;
   };
 
   const canSubmit = () => {
@@ -521,6 +601,27 @@ export default function AgreementPage() {
       const contactId = sessionStorage.getItem('hubspot_contact_id');
       const personalDetails = useStore.getState().personalDetails;
       const marketingAccepted = useStore.getState().marketingAccepted;
+      const flightStore = useFlightStore.getState();
+
+      // Ensure we have the original flights
+      if (!originalFlights?.length) {
+        if (flightStore.originalFlights?.length) {
+          setOriginalFlights(flightStore.originalFlights);
+        } else if (selectedFlights?.length) {
+          setOriginalFlights(selectedFlights);
+        } else {
+          throw new Error('No flight data available');
+        }
+      }
+
+      // Get the final original flights to use
+      const finalOriginalFlights = originalFlights?.length
+        ? originalFlights
+        : flightStore.originalFlights;
+
+      if (!finalOriginalFlights?.length) {
+        throw new Error('No flight data available');
+      }
 
       if (!contactId) {
         throw new Error('Contact ID is required');
@@ -639,7 +740,7 @@ export default function AgreementPage() {
 
       // Submit the order
       const orderResult = await ClaimService.orderClaim(
-        originalFlights,
+        finalOriginalFlights,
         phase4SelectedFlights,
         travelStatusAnswers,
         informedDateAnswers,

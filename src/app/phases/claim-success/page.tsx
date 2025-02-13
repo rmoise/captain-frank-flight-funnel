@@ -3,7 +3,7 @@
 import React, { Suspense, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useStore } from '@/lib/state/store';
-import type { ExtendedPassengerDetails } from '@/types/store';
+import type { PassengerDetails } from '@/types/store';
 import { SpeechBubble } from '@/components/SpeechBubble';
 import { PhaseNavigation } from '@/components/PhaseNavigation';
 import { PhaseGuard } from '@/components/shared/PhaseGuard';
@@ -95,17 +95,47 @@ function ClaimSuccessContent() {
 
         const { amount, provision } = evaluationResult.contract;
 
-        // Set initial state once with all necessary updates
+        // Check existing personal details validation
+        const existingPersonalDetails = store.personalDetails || null;
+        const requiredFields = [
+          'salutation',
+          'firstName',
+          'lastName',
+          'email',
+          'phone',
+          'address',
+          'postalCode',
+          'city',
+          'country',
+        ];
+
+        // Validate all required fields are present and not empty
+        const hasAllRequiredFields = existingPersonalDetails
+          ? requiredFields.every((field) =>
+              existingPersonalDetails[field as keyof PassengerDetails]?.trim()
+            )
+          : false;
+
+        // Email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const isEmailValid = existingPersonalDetails?.email
+          ? emailRegex.test(existingPersonalDetails.email)
+          : false;
+
+        // Overall validation state
+        const isPersonalValid = hasAllRequiredFields && isEmailValid;
+
+        // Set initial state with proper validation
         const initialValidationState = {
           ...store.validationState,
           isFlightValid: true,
           isWizardValid: true,
           isTermsValid: store.validationState?.isTermsValid || false,
           isSignatureValid: store.validationState?.isSignatureValid || false,
-          isPersonalValid: store.validationState?.isPersonalValid || false,
+          isPersonalValid: isPersonalValid,
           stepValidation: {
             ...store.validationState?.stepValidation,
-            1: store.validationState?.isPersonalValid || false,
+            1: isPersonalValid,
             2: true,
             3: true,
             4: true,
@@ -113,19 +143,27 @@ function ClaimSuccessContent() {
           },
           stepInteraction: {
             ...store.validationState?.stepInteraction,
-            1: store.validationState?.isPersonalValid || false,
+            1: existingPersonalDetails !== null,
           },
-          1: store.validationState?.isPersonalValid || false,
-          2: true,
-          3: true,
-          4: true,
-          5: true,
+          fieldErrors: !isPersonalValid
+            ? requiredFields.reduce(
+                (errors, field) => {
+                  if (
+                    !existingPersonalDetails?.[
+                      field as keyof PassengerDetails
+                    ]?.trim()
+                  ) {
+                    errors[field] = `${field} is required`;
+                  }
+                  return errors;
+                },
+                {} as Record<string, string>
+              )
+            : {},
           _timestamp: Date.now(),
         };
 
-        // Get existing personal details
-        const existingPersonalDetails = store.personalDetails || null;
-
+        // Set initial state
         useStore.setState({
           phase: CLAIM_SUCCESS_PHASE,
           currentPhase: CLAIM_SUCCESS_PHASE,
@@ -238,7 +276,7 @@ function ClaimSuccessContent() {
 
   // Handle personal details updates
   const handlePersonalDetailsComplete = useCallback(
-    (details: ExtendedPassengerDetails | null) => {
+    (details: PassengerDetails | null) => {
       if (!details || isUpdatingRef.current) {
         return;
       }
@@ -250,9 +288,15 @@ function ClaimSuccessContent() {
         const currentState = useStore.getState() as ExtendedStore;
         const currentValidationState = currentState.validationState || {};
 
+        // Debug log current state
+        console.log('=== Personal Details Validation Start ===');
+        console.log('Current details:', details);
+        console.log('Current validation state:', currentValidationState);
+
         // Only update if the details have actually changed
         const currentDetails = currentState.personalDetails;
         if (JSON.stringify(currentDetails) === JSON.stringify(details)) {
+          console.log('No changes detected in details, skipping update');
           return;
         }
 
@@ -269,14 +313,25 @@ function ClaimSuccessContent() {
           'country',
         ] as const;
 
+        // Check each field individually and log its state
+        const fieldValidation = requiredFields.map((field) => {
+          const value = details[field]?.trim();
+          const isValid = !!value;
+          console.log(`Field ${field}: value="${value}", isValid=${isValid}`);
+          return isValid;
+        });
+
         // Check if all required fields are present and not empty
-        const isValid = requiredFields.every(
-          (field) => !!details[field]?.trim()
-        );
+        const isValid = fieldValidation.every(Boolean);
+        console.log('All fields valid:', isValid);
 
         // Email validation
         const emailRegex = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
-        const isEmailValid = emailRegex.test(details.email || '');
+        const isEmailValid = emailRegex.test(details.email?.trim() || '');
+        console.log('Email validation:', {
+          email: details.email,
+          isEmailValid,
+        });
 
         // Generate field errors
         const fieldErrors: Record<string, string> = {};
@@ -290,30 +345,40 @@ function ClaimSuccessContent() {
           fieldErrors.email = 'Please enter a valid email address';
         }
 
-        // Update store with new validation state
+        console.log('Field errors:', fieldErrors);
+
+        // Final validation state
+        const finalValidationState = {
+          ...currentValidationState,
+          isPersonalValid: isValid && isEmailValid,
+          stepValidation: {
+            ...currentValidationState.stepValidation,
+            1: isValid && isEmailValid,
+          },
+          stepInteraction: {
+            ...currentValidationState.stepInteraction,
+            1: true,
+          },
+          1: isValid && isEmailValid,
+          fieldErrors,
+          _timestamp: Date.now(),
+        };
+
+        console.log('Final validation state:', finalValidationState);
+
+        // Force validation state update
         useStore.setState({
           personalDetails: details,
-          validationState: {
-            ...currentValidationState,
-            isPersonalValid: isValid && isEmailValid,
-            stepValidation: {
-              ...currentValidationState.stepValidation,
-              1: isValid && isEmailValid,
-            },
-            stepInteraction: {
-              ...currentValidationState.stepInteraction,
-              1: true,
-            },
-            1: isValid && isEmailValid,
-            fieldErrors,
-            _timestamp: Date.now(),
-          },
+          validationState: finalValidationState,
+          _lastUpdate: Date.now(),
         });
 
         // Track step completion
         if (!interactedSteps.includes(1)) {
           setInteractedSteps([...interactedSteps, 1]);
         }
+
+        console.log('=== Personal Details Validation End ===');
 
         // Update HubSpot contact if details are valid
         if (isValid && isEmailValid) {
@@ -343,8 +408,7 @@ function ClaimSuccessContent() {
                 city: details.city || '',
                 postalCode: details.postalCode || '',
                 country: details.country || '',
-                arbeitsrecht_marketing_status:
-                  details.marketingAccepted || false,
+                arbeitsrecht_marketing_status: false,
               }),
             })
               .then((response) => response.json())
@@ -507,9 +571,6 @@ function ClaimSuccessContent() {
       );
       localStorage.setItem('currentPhase', '6');
 
-      // Now set loading state just before navigation
-      setIsLoading(true);
-
       // Create URL with all necessary parameters
       const searchParams = new URLSearchParams();
       searchParams.set('bypass_phase_check', 'true');
@@ -527,7 +588,7 @@ function ClaimSuccessContent() {
       setError(
         'An error occurred while navigating to the agreement page. Please try again.'
       );
-      setIsLoading(false); // Make sure to clear loading state on error
+      setIsLoading(false);
     }
   };
 

@@ -146,10 +146,12 @@ export const de: Translations = {
   phases: {
     initialAssessment: {
       title: 'Erzähle uns von deinem Flug',
-      description: 'Lassen Sie uns Ihren Flugschaden bewerten',
+      description: 'Lass uns deinen Flugschaden bewerten',
       flightDetails: 'Flugdaten',
       bookingNumber: 'Buchungsnummer',
       whatHappened: 'Was ist mit deinem Flug passiert?',
+      whatHappenedSubtitle:
+        'Hattest du einen Anschlussflug? Dann gebe bitte deine Flüge unter "Multi-Stopp" ein.',
       personalDetails: {
         title: 'Persönliche Angaben',
         subtitle:
@@ -284,6 +286,9 @@ export const de: Translations = {
         subtitle: 'Bitte unterschreibe, um deine Zustimmung zu bestätigen.',
         summary: 'Unterschreibe die Vereinbarung, um fortzufahren',
         clearSignature: 'Unterschrift löschen',
+        validation: {
+          required: 'Bitte unterschreibe das Dokument',
+        },
       },
       termsAndConditions: {
         title: 'Allgemeine Geschäftsbedingungen',
@@ -433,7 +438,8 @@ export const de: Translations = {
     },
     flightDetails: {
       title: 'Ihre Flugdaten',
-      description: 'Geben Sie zusätzliche Details zu Ihrem Flug an',
+      description:
+        'Bitte gebe nun das jeweilige Datum zu deinem Flug an, damit wir die Flugnummer pro Flug ermitteln können. Weiter unten siehst du dann eine Auflistung deiner gewählten Flüge.',
       steps: {
         flightSelection: {
           title: 'Wähle deinen Flug',
@@ -579,10 +585,14 @@ export const de: Translations = {
     },
   },
   validation: {
-    required: 'Dieses Feld ist erforderlich',
+    required: 'Pflichtfeld',
     invalidDate: 'Ungültiges Datum',
     invalidBookingNumber: 'Ungültige Buchungsnummer',
-    invalidSignature: 'Bitte geben Sie Ihre Unterschrift an',
+    invalidSignature: 'Ungültige Unterschrift',
+    dateFormat:
+      'Bitte geben Sie ein Datum im Format TT.MM.JJ oder TT.MM.JJJJ ein',
+    incompleteDateFormat:
+      'Bitte vervollständigen Sie das Datum im Format TT.MM.JJ oder TT.MM.JJJJ',
   },
   errors: {
     general: 'Etwas ist schief gelaufen',

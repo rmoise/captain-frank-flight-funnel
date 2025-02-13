@@ -1,4 +1,5 @@
 import React, { useCallback, useState, useEffect } from 'react';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface ContinueButtonProps {
   onClick: (e: React.MouseEvent<HTMLButtonElement>) => void | Promise<void>;
@@ -13,10 +14,11 @@ export function ContinueButton({
   onClick,
   disabled = false,
   isLoading: externalIsLoading = false,
-  text = 'Weiter',
-  loadingText = 'Wird bearbeitet...',
+  text,
+  loadingText,
   children,
 }: ContinueButtonProps) {
+  const { t } = useTranslation();
   const [mounted, setMounted] = useState(false);
   const [internalIsLoading, setInternalIsLoading] = useState(false);
   const isLoading = externalIsLoading || internalIsLoading;
@@ -67,7 +69,7 @@ export function ContinueButton({
         `}
       >
         <div className="flex items-center space-x-2">
-          <span>{children || text}</span>
+          <span>{children || text || t.common.continue}</span>
         </div>
       </button>
     );
@@ -100,14 +102,16 @@ export function ContinueButton({
         {isLoading ? (
           <div className="flex items-center space-x-2">
             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            <span>{loadingText}</span>
+            <span>{loadingText || t.common.loading}</span>
           </div>
         ) : (
           <div className="flex items-center space-x-2">
             <span className="block sm:hidden">
-              {text === 'Antrag einreichen' ? text : 'Weiter'}
+              {text === 'Antrag einreichen' ? text : t.common.continue}
             </span>
-            <span className="hidden sm:block">{children || text}</span>
+            <span className="hidden sm:block">
+              {children || text || t.common.continue}
+            </span>
           </div>
         )}
       </button>

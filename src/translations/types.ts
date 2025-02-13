@@ -139,6 +139,8 @@ export interface ValidationTranslations {
   invalidDate: string;
   invalidBookingNumber: string;
   invalidSignature: string;
+  dateFormat: string;
+  incompleteDateFormat: string;
 }
 
 export interface Translations {
@@ -278,6 +280,7 @@ export interface Translations {
       flightDetails: string;
       bookingNumber: string;
       whatHappened: string;
+      whatHappenedSubtitle: string;
       personalDetails: {
         title: string;
         subtitle: string;
@@ -318,6 +321,9 @@ export interface Translations {
         subtitle: string;
         summary: string;
         clearSignature: string;
+        validation: {
+          required: string;
+        };
       };
       termsAndConditions: {
         title: string;

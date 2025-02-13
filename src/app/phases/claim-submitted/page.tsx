@@ -47,10 +47,16 @@ export default function ClaimSubmittedPage() {
         <h3 className="text-lg font-semibold mb-4">
           {t.phases.claimSubmitted.nextSteps.title}
         </h3>
-        <ul className="list-disc list-inside text-gray-700 space-y-2">
-          <li>{t.phases.claimSubmitted.nextSteps.review}</li>
-          <li>{t.phases.claimSubmitted.nextSteps.contact}</li>
-          <li>{t.phases.claimSubmitted.nextSteps.updates}</li>
+        <ul className="list-disc pl-5 text-gray-700 space-y-2">
+          <li className="pl-1">
+            <span>{t.phases.claimSubmitted.nextSteps.review}</span>
+          </li>
+          <li className="pl-1">
+            <span>{t.phases.claimSubmitted.nextSteps.contact}</span>
+          </li>
+          <li className="pl-1">
+            <span>{t.phases.claimSubmitted.nextSteps.updates}</span>
+          </li>
         </ul>
       </div>
     </div>

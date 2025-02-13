@@ -8,15 +8,16 @@ import React, {
   useState,
 } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Answer } from '../../types/wizard';
-import { Question } from '../../types/experience';
-import { QuestionAnswer } from '../shared/QuestionAnswer';
-import type { Flight } from '../../types/store';
+import { Answer } from '@/types/wizard';
+import { Question } from '@/types/experience';
+import { QuestionAnswer } from '@/components/shared/QuestionAnswer';
+import type { Flight } from '@/types/store';
 import { usePhase4Store } from '@/lib/state/phase4Store';
 import { useFlightStore } from '@/lib/state/flightStore';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
 import { qaWizardConfig } from '@/config/qaWizard';
 import { useTranslation } from '@/hooks/useTranslation';
+import type { Phase4State } from '@/lib/state/phase4Store';
 
 interface Phase4QAWizardProps {
   questions: Question[];
@@ -50,10 +51,28 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
     }
 
     if (wizardTypeRef.current !== wizardType) {
+      // Only update the wizard type reference and reset step
+      // without resetting the state
       wizardTypeRef.current = wizardType;
       setCurrentStep(0);
+
+      // Preserve existing answers based on wizard type
+      const currentAnswers =
+        wizardType === 'informed_date'
+          ? phase4Store.informedDateAnswers
+          : phase4Store.travelStatusAnswers;
+
+      if (currentAnswers.length > 0) {
+        // If we have answers, don't reset the step to 0
+        const lastAnsweredStep = questions.findIndex(
+          (q) => q.id === currentAnswers[currentAnswers.length - 1].questionId
+        );
+        if (lastAnsweredStep >= 0) {
+          setCurrentStep(lastAnsweredStep);
+        }
+      }
     }
-  }, [wizardType]);
+  }, [wizardType, phase4Store, questions]);
 
   // Get current answers - memoize to prevent unnecessary recalculations
   const wizardAnswers = useMemo(() => {
@@ -119,6 +138,16 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
       );
     }
 
+    // For money input questions, check if there's a valid numeric value
+    if (currentQuestion.type === 'money') {
+      const answer = wizardAnswers.find(
+        (a) => a.questionId === currentQuestion.id
+      );
+      if (!answer || !answer.value) return false;
+      const numericValue = parseFloat(answer.value.toString());
+      return !isNaN(numericValue) && numericValue > 0;
+    }
+
     return wizardAnswers.some((a) => a.questionId === currentQuestion.id);
   }, [
     currentQuestion,
@@ -133,98 +162,55 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
       console.log('=== Phase4QAWizard - handleSelect ENTRY ===', {
         questionId,
         value,
-        currentSelectedFlights: phase4Store.selectedFlights.map((f) => ({
-          id: f.id,
-          flightNumber: f.flightNumber,
-          date: f.date,
-          departureCity: f.departureCity,
-          arrivalCity: f.arrivalCity,
-        })),
-        originalFlights: useFlightStore.getState().originalFlights.map((f) => ({
-          id: f.id,
-          flightNumber: f.flightNumber,
-          date: f.date,
-          departureCity: f.departureCity,
-          arrivalCity: f.arrivalCity,
-        })),
+        wizardType,
+        currentSelectedFlights: phase4Store.selectedFlights,
+        originalFlights: useFlightStore.getState().originalFlights,
         timestamp: new Date().toISOString(),
       });
 
-      // Special handling for informed date questions
-      if (
-        questionId === 'informed_date' ||
-        questionId === 'specific_informed_date'
-      ) {
-        // For date selection, we want to update the answer without validation
-        // and preserve the current step
+      // Get current answers based on wizard type
+      const currentAnswers =
+        wizardType === 'informed_date'
+          ? [...phase4Store.informedDateAnswers]
+          : [...phase4Store.travelStatusAnswers];
+
+      // Update or add the answer
+      const answerIndex = currentAnswers.findIndex(
+        (a) => a.questionId === questionId
+      );
+      if (answerIndex >= 0) {
+        currentAnswers[answerIndex] = { questionId, value };
+      } else {
+        currentAnswers.push({ questionId, value });
+      }
+
+      // Only update answers and last answered question, without validation
+      const updates: Partial<Phase4State> = {
+        lastAnsweredQuestion: questionId,
+        _lastUpdate: Date.now(),
+      };
+
+      if (wizardType === 'informed_date') {
         phase4Store.batchUpdate({
-          informedDateAnswers: [
-            ...phase4Store.informedDateAnswers.filter(
-              (a) => a.questionId !== questionId
-            ),
-            { questionId, value },
-          ],
-          lastAnsweredQuestion: questionId,
-          // Preserve current validation and interaction states
-          informedDateStepValidation: phase4Store.informedDateStepValidation,
-          informedDateStepInteraction: phase4Store.informedDateStepInteraction,
-          travelStatusStepValidation: phase4Store.travelStatusStepValidation,
-          travelStatusStepInteraction: phase4Store.travelStatusStepInteraction,
-          _lastUpdate: Date.now(),
+          ...updates,
+          informedDateAnswers: currentAnswers,
         });
-
-        console.log(
-          '=== Phase4QAWizard - handleSelect (Informed Date) EXIT ===',
-          {
-            questionId,
-            value,
-            timestamp: new Date().toISOString(),
-          }
-        );
-        return;
-      }
-
-      // For travel status changes, log the state
-      if (questionId === 'travel_status') {
-        console.log('=== Phase4QAWizard - Travel Status Change ===', {
-          oldStatus: phase4Store.travelStatusAnswers.find(
-            (a) => a.questionId === 'travel_status'
-          )?.value,
-          newStatus: value,
-          requiresAlternativeFlights:
-            value === 'provided' || value === 'took_alternative_own',
-          currentSelectedFlights: phase4Store.selectedFlights.map((f) => ({
-            id: f.id,
-            flightNumber: f.flightNumber,
-            date: f.date,
-            departureCity: f.departureCity,
-            arrivalCity: f.arrivalCity,
-          })),
-          timestamp: new Date().toISOString(),
+      } else {
+        phase4Store.batchUpdate({
+          ...updates,
+          travelStatusAnswers: currentAnswers,
         });
       }
-
-      // For other answers, proceed with normal handling
-      phase4Store.setWizardAnswer({
-        questionId,
-        value,
-        shouldValidate: false,
-      });
 
       console.log('=== Phase4QAWizard - handleSelect EXIT ===', {
         questionId,
         value,
-        currentSelectedFlights: phase4Store.selectedFlights.map((f) => ({
-          id: f.id,
-          flightNumber: f.flightNumber,
-          date: f.date,
-          departureCity: f.departureCity,
-          arrivalCity: f.arrivalCity,
-        })),
+        currentAnswers,
+        wizardType,
         timestamp: new Date().toISOString(),
       });
     },
-    [phase4Store]
+    [phase4Store, wizardType]
   );
 
   // Get current answer for a question
@@ -239,18 +225,114 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
     [wizardAnswers]
   );
 
+  // Handle completion of the wizard
+  const handleComplete = useCallback(
+    (answers: Answer[]) => {
+      console.log('=== Phase4QAWizard - handleComplete START ===', {
+        answers,
+        wizardType,
+        currentStep,
+        visibleQuestions,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Only update validation state when explicitly completing the wizard
+      if (currentStep === visibleQuestions.length - 1) {
+        // Get current validation states
+        const currentStepValidation =
+          wizardType === 'travel_status'
+            ? { ...phase4Store.travelStatusStepValidation }
+            : { ...phase4Store.informedDateStepValidation };
+        const currentStepInteraction =
+          wizardType === 'travel_status'
+            ? { ...phase4Store.travelStatusStepInteraction }
+            : { ...phase4Store.informedDateStepInteraction };
+
+        // Update validation state for current wizard type
+        const updates: Partial<Phase4State> = {
+          _lastUpdate: Date.now(),
+        };
+
+        if (wizardType === 'travel_status') {
+          updates.travelStatusShowingSuccess = true;
+          updates.travelStatusIsValid = true;
+          updates.travelStatusStepValidation = {
+            ...currentStepValidation,
+            2: true,
+          };
+          updates.travelStatusStepInteraction = {
+            ...currentStepInteraction,
+            2: true,
+          };
+        } else {
+          updates.informedDateShowingSuccess = true;
+          updates.informedDateIsValid = true;
+          updates.informedDateStepValidation = {
+            ...currentStepValidation,
+            3: true,
+          };
+          updates.informedDateStepInteraction = {
+            ...currentStepInteraction,
+            3: true,
+          };
+        }
+
+        // Update store state
+        phase4Store.updateValidationState(updates);
+
+        // Call onComplete with current wizard's answers
+        if (onComplete) {
+          const currentAnswers =
+            wizardType === 'travel_status'
+              ? phase4Store.travelStatusAnswers
+              : phase4Store.informedDateAnswers;
+
+          console.log('Calling onComplete with answers:', {
+            wizardType,
+            answers: currentAnswers,
+          });
+          onComplete(currentAnswers);
+        }
+
+        // Save validation state to localStorage
+        if (typeof window !== 'undefined') {
+          const validationState = {
+            travelStatusStepValidation: phase4Store.travelStatusStepValidation,
+            travelStatusStepInteraction:
+              phase4Store.travelStatusStepInteraction,
+            informedDateStepValidation: phase4Store.informedDateStepValidation,
+            informedDateStepInteraction:
+              phase4Store.informedDateStepInteraction,
+            travelStatusShowingSuccess: phase4Store.travelStatusShowingSuccess,
+            travelStatusIsValid: phase4Store.travelStatusIsValid,
+            informedDateShowingSuccess: phase4Store.informedDateShowingSuccess,
+            informedDateIsValid: phase4Store.informedDateIsValid,
+            _timestamp: Date.now(),
+          };
+          localStorage.setItem(
+            'phase4ValidationState',
+            JSON.stringify(validationState)
+          );
+        }
+      }
+
+      console.log('=== Phase4QAWizard - handleComplete END ===', {
+        wizardType,
+        currentStep,
+        timestamp: new Date().toISOString(),
+      });
+    },
+    [currentStep, visibleQuestions.length, phase4Store, wizardType, onComplete]
+  );
+
   // Handle going to next step
   const goToNext = useCallback(() => {
     console.log('=== Phase4QAWizard - goToNext ENTRY ===', {
       currentStep,
       visibleQuestionsLength: visibleQuestions.length,
       isCurrentQuestionAnswered,
-      travelStatusShowingSuccess: phase4Store.travelStatusShowingSuccess,
-      informedDateShowingSuccess: phase4Store.informedDateShowingSuccess,
-      travelStatusStepValidation: phase4Store.travelStatusStepValidation,
-      informedDateStepValidation: phase4Store.informedDateStepValidation,
-      travelStatusStepInteraction: phase4Store.travelStatusStepInteraction,
-      informedDateStepInteraction: phase4Store.informedDateStepInteraction,
+      wizardType,
+      timestamp: new Date().toISOString(),
     });
 
     if (!isCurrentQuestionAnswered) {
@@ -265,56 +347,24 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
       // Just move to next question
       console.log('Moving to next question:', { nextStep });
       setCurrentStep(nextStep);
-    } else if (currentStep < visibleQuestions.length) {
-      console.log('Showing success state and updating validation');
-      // Only update validation state and show success when clicking submit
-      setCurrentStep(visibleQuestions.length);
+    } else {
+      console.log('Completing wizard section:', { wizardType });
 
-      // First, store the current validation state
-      const currentStepValidation =
+      // Get current answers for completion
+      const currentAnswers =
         wizardType === 'travel_status'
-          ? { ...phase4Store.travelStatusStepValidation }
-          : { ...phase4Store.informedDateStepValidation };
-      const currentStepInteraction =
-        wizardType === 'travel_status'
-          ? { ...phase4Store.travelStatusStepInteraction }
-          : { ...phase4Store.informedDateStepInteraction };
+          ? phase4Store.travelStatusAnswers
+          : phase4Store.informedDateAnswers;
 
-      // Show success state immediately - only update the current wizard type
-      if (wizardType === 'travel_status') {
-        phase4Store.updateValidationState({
-          travelStatusShowingSuccess: true,
-          travelStatusIsValid: true,
-          travelStatusStepValidation: { ...currentStepValidation, 2: true },
-          travelStatusStepInteraction: { ...currentStepInteraction, 2: true },
-          _lastUpdate: Date.now(),
-        });
-      } else {
-        phase4Store.updateValidationState({
-          informedDateShowingSuccess: true,
-          informedDateIsValid: true,
-          informedDateStepValidation: { ...currentStepValidation, 3: true },
-          informedDateStepInteraction: { ...currentStepInteraction, 3: true },
-          _lastUpdate: Date.now(),
-        });
-      }
-
-      // Call onComplete immediately to process the answers
-      if (onComplete) {
-        console.log('Calling onComplete with answers:', wizardAnswers);
-        onComplete(wizardAnswers);
-      }
+      // Call handleComplete with current answers
+      handleComplete(currentAnswers);
     }
 
     console.log('=== Phase4QAWizard - goToNext EXIT ===', {
-      nextStep: currentStep + 1,
+      nextStep,
       isLastStep,
-      travelStatusShowingSuccess: phase4Store.travelStatusShowingSuccess,
-      informedDateShowingSuccess: phase4Store.informedDateShowingSuccess,
-      travelStatusStepValidation: phase4Store.travelStatusStepValidation,
-      informedDateStepValidation: phase4Store.informedDateStepValidation,
-      travelStatusStepInteraction: phase4Store.travelStatusStepInteraction,
-      informedDateStepInteraction: phase4Store.informedDateStepInteraction,
+      wizardType,
+      timestamp: new Date().toISOString(),
     });
   }, [
     currentStep,
@@ -322,22 +372,15 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
     isCurrentQuestionAnswered,
     phase4Store,
     wizardType,
-    onComplete,
-    wizardAnswers,
+    handleComplete,
   ]);
 
   // Handle going back
   const goToPrevious = useCallback(() => {
     if (currentStep > 0) {
-      // Reset state based on wizard type
-      if (wizardType === 'travel_status') {
-        phase4Store.resetTravelStatusState();
-      } else {
-        phase4Store.resetInformedDateState();
-      }
-      setCurrentStep(0);
+      setCurrentStep(currentStep - 1);
     }
-  }, [currentStep, phase4Store, wizardType]);
+  }, [currentStep]);
 
   // Handle going back to questions
   const handleBackToQuestions = useCallback(() => {
@@ -416,31 +459,37 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
 
   // Get success state
   const successState = useMemo(() => {
-    const answers =
-      wizardType === 'travel_status'
-        ? phase4Store.travelStatusAnswers
-        : phase4Store.informedDateAnswers;
-
-    // Only show success if explicitly set in store for the current wizard type
-    const isShowingSuccess =
-      wizardType === 'travel_status'
-        ? phase4Store.travelStatusShowingSuccess
-        : phase4Store.informedDateShowingSuccess;
-
     console.log('=== Phase4QAWizard - Success State Check ===', {
       wizardType,
-      answers,
-      isShowingSuccess,
+      answers: wizardAnswers,
+      isShowingSuccess:
+        wizardType === 'travel_status'
+          ? phase4Store.travelStatusShowingSuccess
+          : phase4Store.informedDateShowingSuccess,
       travelStatusShowingSuccess: phase4Store.travelStatusShowingSuccess,
       informedDateShowingSuccess: phase4Store.informedDateShowingSuccess,
       travelStatusIsValid: phase4Store.travelStatusIsValid,
       informedDateIsValid: phase4Store.informedDateIsValid,
     });
 
+    // Get the showing success state based on wizard type
+    const isShowingSuccess =
+      wizardType === 'travel_status'
+        ? phase4Store.travelStatusShowingSuccess
+        : phase4Store.informedDateShowingSuccess;
+
+    // Get the answers based on wizard type
+    const answers =
+      wizardType === 'travel_status'
+        ? phase4Store.travelStatusAnswers
+        : phase4Store.informedDateAnswers;
+
+    // If we don't have success state or answers, return not showing
     if (!isShowingSuccess || !answers || answers.length === 0) {
       return { showing: false, message: '' };
     }
 
+    // Find the last answer and determine success message
     const lastAnswer = answers[answers.length - 1];
     if (!lastAnswer) return { showing: false, message: '' };
 
@@ -464,6 +513,7 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
     wizardType,
     questions,
     t.wizard.success,
+    wizardAnswers,
   ]);
 
   // Get success icon based on last answer

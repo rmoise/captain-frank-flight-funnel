@@ -66,7 +66,7 @@ export const DateSelector: React.FC<DateSelectorProps> = ({
           showYearDropdown
           dropdownMode="select"
           isClearable={false}
-          placeholderText="DD.MM.YYYY"
+          placeholderText="DD.MM.YY / DD.MM.YYYY"
           shouldCloseOnSelect={true}
           popperProps={{
             strategy: 'fixed',

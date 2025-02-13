@@ -820,6 +820,7 @@ export default function FlightDetailsPage() {
                 <AccordionCard
                   title={t.phases.flightDetails.steps.flightSelection.title}
                   eyebrow={t.phases.flightDetails.steps.flightSelection.eyebrow}
+                  subtitle={t.phases.flightDetails.description}
                   summary={(() => {
                     if (selectedFlights.length === 0) return '';
 

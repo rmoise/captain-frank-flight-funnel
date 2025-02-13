@@ -9,7 +9,7 @@ import {
   PHASE_TO_URL,
 } from '@/lib/state/store';
 
-interface PhaseGuardProps {
+export interface PhaseGuardProps {
   phase: number;
   children: React.ReactNode;
 }
@@ -21,7 +21,7 @@ type ExtendedStore = StoreState &
     _preventPhaseChange?: boolean;
   };
 
-export function PhaseGuard({ phase, children }: PhaseGuardProps) {
+export const PhaseGuard: React.FC<PhaseGuardProps> = ({ phase, children }) => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isInitialized, setIsInitialized] = useState(false);
@@ -157,4 +157,4 @@ export function PhaseGuard({ phase, children }: PhaseGuardProps) {
   }
 
   return <>{children}</>;
-}
+};

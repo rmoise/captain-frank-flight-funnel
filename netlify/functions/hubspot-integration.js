@@ -68,11 +68,11 @@ const createContact = async (payload) => {
 
     // If only contactId and marketing status are provided, do a simple update
     if (data.contactId && typeof data.arbeitsrecht_marketing_status !== 'undefined' && Object.keys(data).length === 2) {
-      console.log('Updating marketing status:', {
-        contactId: data.contactId,
-        marketingStatus: data.arbeitsrecht_marketing_status,
-        timestamp: new Date().toISOString()
-      });
+      console.log('=== Marketing Status Update Details ===');
+      console.log('Raw marketing status:', data.arbeitsrecht_marketing_status);
+      console.log('Type of marketing status:', typeof data.arbeitsrecht_marketing_status);
+      console.log('Converted marketing status:', data.arbeitsrecht_marketing_status ? 'true' : 'false');
+      console.log('================================');
 
       const updateResponse = await fetch(`https://api.hubapi.com/crm/v3/objects/contacts/${data.contactId}`, {
         method: 'PATCH',
@@ -220,7 +220,7 @@ const createContact = async (payload) => {
             city: normalizedData.city || '',
             zip: normalizedData.zip || '',
             country: normalizedData.country || '',
-            arbeitsrecht_marketing_status: normalizedData.arbeitsrecht_marketing_status ? 'true' : 'false'
+            arbeitsrecht_marketing_status: Boolean(normalizedData.arbeitsrecht_marketing_status)
           }
         })
       });
@@ -250,6 +250,7 @@ const createDeal = async (payload, context) => {
       contactId,
       personalDetails = {},  // Add default empty object
       selectedFlights,
+      originalFlights,  // Add originalFlights to destructuring
       directFlight,
       stage,
       status,
@@ -269,17 +270,25 @@ const createDeal = async (payload, context) => {
     // Skip flight data validation for initial assessment stage
     if (stage !== 'initial_assessment') {
       if (!compensationAmount) {
-        if (selectedFlights && selectedFlights.length > 0) {
-          // Use flight data if available
+        // First try to use originalFlights
+        if (originalFlights && originalFlights.length > 0) {
+          const firstFlight = originalFlights[0];
+          from_iata = firstFlight.departureAirport?.code || firstFlight.departureCity;
+          to_iata = firstFlight.arrivalAirport?.code || firstFlight.arrivalCity;
+        }
+        // Then try selectedFlights
+        else if (selectedFlights && selectedFlights.length > 0) {
           const firstFlight = selectedFlights[0];
           from_iata = firstFlight.departureAirport?.code || firstFlight.departureCity;
           to_iata = firstFlight.arrivalAirport?.code || firstFlight.arrivalCity;
-        } else if (directFlight?.fromLocation && directFlight?.toLocation) {
-          // Use direct flight location data if available
+        }
+        // Finally try directFlight
+        else if (directFlight?.fromLocation && directFlight?.toLocation) {
           from_iata = directFlight.fromLocation.value || directFlight.fromLocation.city;
           to_iata = directFlight.toLocation.value || directFlight.toLocation.city;
         } else {
           console.error('No flight or location data available:', {
+            originalFlights,
             selectedFlights,
             directFlight
           });

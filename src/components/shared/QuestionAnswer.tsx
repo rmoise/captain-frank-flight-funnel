@@ -7,8 +7,8 @@ import { MoneyInput } from '@/components/MoneyInput';
 import { CustomDateInput } from '@/components/shared/CustomDateInput';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { useStore } from '@/lib/state/store';
-import { useTranslation } from '@/hooks/useTranslation';
 import type { ValidationStateSteps } from '@/lib/state/store';
+import { useTranslation } from '@/hooks/useTranslation';
 import { format, parseISO, isValid } from 'date-fns';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
@@ -44,8 +44,89 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
   }, []);
 
   const handleMoneyInputChange = (value: string) => {
-    // Pass through the value directly to onSelect
-    onSelect(question.id, value);
+    console.log('handleMoneyInputChange:', {
+      value,
+      currentLocalValue: localValue,
+    });
+
+    // Always update local state first
+    setLocalValue(value);
+
+    // Handle empty value case
+    if (!value || value === '') {
+      setLocalValue('');
+      onSelect(question.id, '');
+      updateValidationState({
+        stepValidation: {
+          1: currentStep === 1 ? false : true,
+          2: currentStep === 2 ? false : true,
+          3: currentStep === 3 ? false : true,
+          4: currentStep === 4 ? false : true,
+          5: currentStep === 5 ? false : true,
+        },
+      });
+      return;
+    }
+
+    // Don't validate while typing unless we have a complete value
+    const hasDecimalPoint = value.includes('.');
+    const decimalPlaces = hasDecimalPoint
+      ? (value.split('.')[1] || '').length
+      : 0;
+    const isComplete = hasDecimalPoint && decimalPlaces === 2;
+
+    // Only update validation state and call onSelect when we have a complete value
+    if (question.type === 'money' && isComplete) {
+      const numericValue = parseFloat(value || '0');
+      const isValid = numericValue > 0;
+
+      // Batch our state updates
+      updateValidationState({
+        stepValidation: {
+          1: currentStep === 1 ? isValid : true,
+          2: currentStep === 2 ? isValid : true,
+          3: currentStep === 3 ? isValid : true,
+          4: currentStep === 4 ? isValid : true,
+          5: currentStep === 5 ? isValid : true,
+        },
+      });
+
+      // Always call onSelect with the current value
+      onSelect(question.id, value);
+    }
+  };
+
+  const handleMoneyInputBlur = () => {
+    console.log('handleMoneyInputBlur:', { localValue });
+    setIsFocused(false);
+
+    if (!localValue || localValue === '') {
+      setLocalValue('');
+      return;
+    }
+
+    // Parse the numeric value
+    const numericValue = parseFloat(localValue || '0');
+
+    // Always format with 2 decimal places on blur
+    const formattedValue = numericValue.toFixed(2);
+    setLocalValue(formattedValue);
+
+    // Update validation state and call onSelect
+    const isValid = numericValue > 0;
+    updateValidationState({
+      stepValidation: {
+        1: currentStep === 1 ? isValid : true,
+        2: currentStep === 2 ? isValid : true,
+        3: currentStep === 3 ? isValid : true,
+        4: currentStep === 4 ? isValid : true,
+        5: currentStep === 5 ? isValid : true,
+      },
+    });
+
+    if (isValid) {
+      onSelect(question.id, formattedValue);
+    }
   };
 
   // Helper function to safely parse dates
@@ -166,32 +247,46 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
               label={question.label || question.text}
               value={localValue || ''}
               onChange={(value) => {
+                console.log('MoneyInput onChange:', {
+                  value,
+                  currentLocalValue: localValue,
+                });
                 if (value === '+') {
-                  const currentValue = parseFloat(
-                    localValue?.replace(/[^0-9.-]+/g, '') || '0'
-                  );
-                  const newValue = `€${(currentValue + 1).toFixed(2)}`;
-                  setLocalValue(newValue);
+                  const currentValue = parseFloat(localValue || '0');
+                  const newValue = (currentValue + 1).toFixed(2);
+                  console.log('Increment:', { currentValue, newValue });
                   handleMoneyInputChange(newValue);
                 } else if (value === '-') {
-                  const currentValue = parseFloat(
-                    localValue?.replace(/[^0-9.-]+/g, '') || '0'
-                  );
+                  const currentValue = parseFloat(localValue || '0');
                   if (currentValue > 0) {
-                    const newValue = `€${Math.max(0, currentValue - 1).toFixed(
-                      2
-                    )}`;
-                    setLocalValue(newValue);
+                    const newValue = Math.max(0, currentValue - 1).toFixed(2);
+                    console.log('Decrement:', { currentValue, newValue });
                     handleMoneyInputChange(newValue);
                   }
+                } else if (value === '') {
+                  // Handle clear action
+                  setLocalValue('');
+                  onSelect(question.id, '');
+                  updateValidationState({
+                    stepValidation: {
+                      1: currentStep === 1 ? false : true,
+                      2: currentStep === 2 ? false : true,
+                      3: currentStep === 3 ? false : true,
+                      4: currentStep === 4 ? false : true,
+                      5: currentStep === 5 ? false : true,
+                    },
+                  });
                 } else {
-                  setLocalValue(value);
+                  console.log('Direct value change:', { value });
                   handleMoneyInputChange(value);
                 }
               }}
               isFocused={isFocused}
-              onFocus={() => setIsFocused(true)}
-              onBlur={() => setIsFocused(false)}
+              onFocus={() => {
+                console.log('MoneyInput onFocus');
+                setIsFocused(true);
+              }}
+              onBlur={handleMoneyInputBlur}
               className="w-full"
               placeholder={question.placeholder || t.common.enterAmount}
               required={question.required}
@@ -229,7 +324,7 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
               showYearDropdown
               dropdownMode="select"
               isClearable={false}
-              placeholderText="DD.MM.YYYY"
+              placeholderText="DD.MM.YY / DD.MM.YYYY"
               shouldCloseOnSelect={true}
               maxDate={new Date()}
               minDate={

@@ -243,10 +243,11 @@ export const Phase1QAWizard: React.FC<Phase1QAWizardProps> = ({
         timestamp: new Date().toISOString(),
       });
 
-      // Update wizard state
+      // Update wizard state without automatically validating
       batchUpdateWizardState({
         wizardAnswers: currentAnswers,
         lastAnsweredQuestion: questionId,
+        // Don't automatically set validation state here
       });
     },
     [instanceAnswers, batchUpdateWizardState]
@@ -279,63 +280,71 @@ export const Phase1QAWizard: React.FC<Phase1QAWizardProps> = ({
         timestamp: new Date().toISOString(),
       });
 
-      // First update the wizard state to show success
-      batchUpdateWizardState({
-        wizardAnswers: answers,
-        wizardIsCompleted: true,
-        wizardIsValid: true,
-        wizardSuccessMessage: successMessage,
-        validationState: {
-          ...validationState,
-          stepValidation: {
-            ...validationState.stepValidation,
-            2: true,
+      // Only update validation state when explicitly completing the wizard
+      if (currentStep === visibleQuestions.length - 1) {
+        batchUpdateWizardState({
+          wizardAnswers: answers,
+          wizardIsCompleted: true,
+          wizardIsValid: true,
+          wizardSuccessMessage: successMessage,
+          validationState: {
+            ...validationState,
+            stepValidation: {
+              ...validationState.stepValidation,
+              2: true,
+            },
+            stepInteraction: {
+              ...validationState.stepInteraction,
+              2: true,
+            },
+            isWizardValid: true,
+            isWizardSubmitted: true,
+            _timestamp: Date.now(),
           },
-          stepInteraction: {
-            ...validationState.stepInteraction,
-            2: true,
-          },
-          isWizardValid: true,
-          isWizardSubmitted: true,
-          _timestamp: Date.now(),
-        },
-      });
+        });
 
-      console.log('=== QA Wizard Complete - State Updated ===', {
-        successMessage,
-        timestamp: new Date().toISOString(),
-      });
-
-      // Clear any existing timeouts
-      if (window.__wizardSuccessTimeout) {
-        clearTimeout(window.__wizardSuccessTimeout);
-      }
-      if (window.__wizardTransitionTimeout) {
-        clearTimeout(window.__wizardTransitionTimeout);
-      }
-
-      // Set timeout for onComplete callback
-      window.__wizardSuccessTimeout = setTimeout(() => {
-        console.log('=== Success State Timeout - Calling onComplete ===', {
+        console.log('=== QA Wizard Complete - State Updated ===', {
+          successMessage,
           timestamp: new Date().toISOString(),
         });
 
-        // Call onComplete callback
-        onComplete?.(answers);
+        // Clear any existing timeouts
+        if (window.__wizardSuccessTimeout) {
+          clearTimeout(window.__wizardSuccessTimeout);
+        }
+        if (window.__wizardTransitionTimeout) {
+          clearTimeout(window.__wizardTransitionTimeout);
+        }
 
-        // Set another timeout for accordion transition
-        window.__wizardTransitionTimeout = setTimeout(() => {
-          console.log('=== Success State Timeout - Transitioning ===', {
+        // Set timeout for onComplete callback
+        window.__wizardSuccessTimeout = setTimeout(() => {
+          console.log('=== Success State Timeout - Calling onComplete ===', {
             timestamp: new Date().toISOString(),
           });
 
-          // Transition to next step after delay
-          const accordionContext = (window as any).__accordionContext;
-          if (accordionContext?.setActiveAccordion) {
-            accordionContext.setActiveAccordion('3');
-          }
-        }, 1000); // Additional 1 second after onComplete
-      }, 2000); // 2 seconds to show success state
+          // Call onComplete callback
+          onComplete?.(answers);
+
+          // Set another timeout for accordion transition
+          window.__wizardTransitionTimeout = setTimeout(() => {
+            console.log('=== Success State Timeout - Transitioning ===', {
+              timestamp: new Date().toISOString(),
+            });
+
+            // Transition to next step after delay
+            const accordionContext = (window as any).__accordionContext;
+            if (accordionContext?.setActiveAccordion) {
+              accordionContext.setActiveAccordion('3');
+            }
+          }, 1000); // Additional 1 second after onComplete
+        }, 2000); // 2 seconds to show success state
+      } else {
+        // Just update answers without validation if not at the last step
+        batchUpdateWizardState({
+          wizardAnswers: answers,
+          lastAnsweredQuestion: lastAnswer?.questionId,
+        });
+      }
 
       console.log('=== QA Wizard Complete END ===', {
         timestamp: new Date().toISOString(),
@@ -347,6 +356,8 @@ export const Phase1QAWizard: React.FC<Phase1QAWizardProps> = ({
       validationState,
       questions,
       t.wizard.success,
+      currentStep,
+      visibleQuestions.length,
     ]
   );
 
@@ -388,6 +399,14 @@ export const Phase1QAWizard: React.FC<Phase1QAWizardProps> = ({
 
   // Handle going back to questions
   const handleBackToQuestions = useCallback(() => {
+    // Clear any existing timeouts first
+    if (window.__wizardSuccessTimeout) {
+      clearTimeout(window.__wizardSuccessTimeout);
+    }
+    if (window.__wizardTransitionTimeout) {
+      clearTimeout(window.__wizardTransitionTimeout);
+    }
+
     batchUpdateWizardState({
       wizardIsCompleted: false,
       wizardCurrentSteps: {
@@ -400,7 +419,10 @@ export const Phase1QAWizard: React.FC<Phase1QAWizardProps> = ({
       wizardSuccessMessage: '',
       validationState: {
         ...validationState,
+        isWizardValid: false,
+        isWizardSubmitted: false,
         stepValidation: {
+          ...validationState.stepValidation,
           1: false,
           2: false,
           3: false,
@@ -408,14 +430,13 @@ export const Phase1QAWizard: React.FC<Phase1QAWizardProps> = ({
           5: false,
         },
         stepInteraction: {
+          ...validationState.stepInteraction,
           1: false,
           2: false,
           3: false,
           4: false,
           5: false,
         },
-        isWizardValid: false,
-        isWizardSubmitted: false,
         _timestamp: Date.now(),
       },
     });

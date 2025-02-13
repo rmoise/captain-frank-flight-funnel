@@ -390,8 +390,9 @@ export const checkStepValidity =
     }
 
     // For other phases, maintain existing validation logic
+    // Only consider a step valid if it has both been validated AND interacted with
     return !!(
-      state.validationState?.stepValidation?.[step] ||
+      state.validationState?.stepValidation?.[step] &&
       state.validationState?.stepInteraction?.[step]
     );
   };

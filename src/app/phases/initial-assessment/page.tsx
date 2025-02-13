@@ -129,14 +129,18 @@ export default function InitialAssessment() {
           city: firstFlight.departureCity,
           description:
             firstFlight.departureAirport || firstFlight.departureCity,
-          dropdownLabel: `${firstFlight.departureAirport || firstFlight.departureCity} (${firstFlight.departureCity})`,
+          dropdownLabel: `${
+            firstFlight.departureAirport || firstFlight.departureCity
+          } (${firstFlight.departureCity})`,
         };
         const toLocation = {
           value: firstFlight.arrivalCity,
           label: firstFlight.arrivalCity,
           city: firstFlight.arrivalCity,
           description: firstFlight.arrivalAirport || firstFlight.arrivalCity,
-          dropdownLabel: `${firstFlight.arrivalAirport || firstFlight.arrivalCity} (${firstFlight.arrivalCity})`,
+          dropdownLabel: `${
+            firstFlight.arrivalAirport || firstFlight.arrivalCity
+          } (${firstFlight.arrivalCity})`,
         };
 
         console.log('=== DEBUG: Setting Location Data ===', {
@@ -660,10 +664,10 @@ export default function InitialAssessment() {
         ? validationState.stepValidation[2] &&
           validationState.stepInteraction[2]
         : step.id === 3
-          ? validationState.stepValidation[3] &&
-            validationState.stepInteraction[3]
-          : validationState.stepValidation[step.id] &&
-            validationState.stepInteraction[step.id];
+        ? validationState.stepValidation[3] &&
+          validationState.stepInteraction[3]
+        : validationState.stepValidation[step.id] &&
+          validationState.stepInteraction[step.id];
 
     const isCurrentStepValid =
       step.id === 2
@@ -671,7 +675,7 @@ export default function InitialAssessment() {
         : step.id === 3
           ? validationState.isPersonalValid &&
             validationState.stepInteraction[3]
-          : validationState.stepValidation[step.id];
+        : validationState.stepValidation[step.id];
 
     const summary = step.getSummary(currentState);
     console.log('=== Step Summary Generated ===', {
@@ -683,27 +687,28 @@ export default function InitialAssessment() {
     });
 
     return (
-      <AccordionCard
-        key={step.id}
-        title={step.title}
-        subtitle={step.subtitle}
-        stepId={step.id.toString()}
-        isCompleted={isStepCompleted}
-        hasInteracted={interactedSteps.includes(step.id)}
-        isValid={isCurrentStepValid}
-        summary={summary}
-        shouldStayOpen={false}
-        className={accordionConfig.padding.wrapper}
-        eyebrow={t.phases.initialAssessment.step.replace(
-          '{number}',
-          step.id.toString()
-        )}
-        isQA={step.id === 2}
-      >
-        <div className={accordionConfig.padding.content}>
-          {renderStepContent(step)}
-        </div>
-      </AccordionCard>
+      <div key={step.id}>
+        <AccordionCard
+          title={step.title}
+          subtitle={step.subtitle}
+          stepId={step.id.toString()}
+          isCompleted={isStepCompleted}
+          hasInteracted={interactedSteps.includes(step.id)}
+          isValid={isCurrentStepValid}
+          summary={summary}
+          shouldStayOpen={false}
+          className={accordionConfig.padding.wrapper}
+          eyebrow={t.phases.initialAssessment.step.replace(
+            '{number}',
+            step.id.toString()
+          )}
+          isQA={step.id === 2}
+        >
+          <div className={accordionConfig.padding.content}>
+            {renderStepContent(step)}
+          </div>
+        </AccordionCard>
+      </div>
     );
   };
 
@@ -736,8 +741,8 @@ export default function InitialAssessment() {
       {
         id: 1 as ValidationStateSteps,
         name: t.phases.initialAssessment.flightDetails,
-        title: t.phases.initialAssessment.title,
-        subtitle: t.phases.initialAssessment.description,
+        title: t.phases.initialAssessment.flightDetails,
+        subtitle: t.phases.initialAssessment.whatHappenedSubtitle,
         component: ModularFlightSelector,
         props: {
           onSelect: handleFlightSelect,
@@ -1373,7 +1378,8 @@ export default function InitialAssessment() {
 
       // Transition to next phase
       await setCurrentPhase(2);
-      router.push('/phases/compensation-estimate');
+      const lang = t.lang;
+      router.push(`/${lang}/phases/compensation-estimate`);
     } catch (error) {
       console.error('Error during phase transition:', error);
       setIsLoading(false);
@@ -1387,6 +1393,7 @@ export default function InitialAssessment() {
     selectedFlights,
     marketingAccepted,
     mainStore.compensationAmount,
+    t.lang,
   ]);
 
   const renderStepContent = (step: Step) => {

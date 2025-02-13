@@ -85,8 +85,13 @@ const handler: Handler = async (event: HandlerEvent) => {
     const journey_fact_flightids =
       requestBody.journey_fact_flightids.map(Number);
 
-    // Convert country to uppercase
-    const owner_country = requestBody.owner_country.toUpperCase();
+    // Handle country value
+    let owner_country = requestBody.owner_country;
+    if (owner_country === 'Germany') {
+      owner_country = 'Deutschland';
+    } else if (owner_country !== 'Deutschland') {
+      owner_country = owner_country.toUpperCase();
+    }
 
     const apiUrl = `${API_BASE_URL}/ordereuflightclaim`;
     console.log('Making request to:', apiUrl);
@@ -99,29 +104,44 @@ const handler: Handler = async (event: HandlerEvent) => {
       console.log('=====================');
     }
 
-    const apiRequestBody = {
-      journey_booked_flightids,
-      journey_fact_flightids,
-      information_received_at: requestBody.information_received_at,
-      journey_booked_pnr: requestBody.journey_booked_pnr,
-      journey_fact_type: requestBody.journey_fact_type,
-      owner_salutation: requestBody.owner_salutation,
-      owner_firstname: requestBody.owner_firstname,
-      owner_lastname: requestBody.owner_lastname,
-      owner_street: requestBody.owner_street,
-      owner_place: requestBody.owner_zip || '',
-      owner_city: requestBody.owner_city,
-      owner_country,
-      owner_email: requestBody.owner_email,
-      owner_phone: requestBody.owner_phone || '',
-      owner_marketable_status: false,
-      contract_signature: requestBody.contract_signature,
-      contract_tac: Boolean(requestBody.contract_tac),
-      contract_dp: Boolean(requestBody.contract_dp),
-      lang: 'en',
-    };
-
     console.log('=== DETAILED REQUEST LOGGING ===');
+    console.log('Marketing Status Details:', {
+      rawValue: requestBody.arbeitsrecht_marketing_status,
+      typeOfRaw: typeof requestBody.arbeitsrecht_marketing_status,
+      rawValueString: String(requestBody.arbeitsrecht_marketing_status),
+      isBoolean: typeof requestBody.arbeitsrecht_marketing_status === 'boolean',
+      finalValue:
+        typeof requestBody.arbeitsrecht_marketing_status === 'boolean'
+          ? requestBody.arbeitsrecht_marketing_status
+          : String(requestBody.arbeitsrecht_marketing_status).toLowerCase() ===
+            'true',
+      timestamp: new Date().toISOString(),
+    });
+
+    // Add this new logging section
+    console.log('=== MARKETING STATUS TRANSFORMATION ===');
+    console.log('Input Value:', {
+      raw: requestBody.arbeitsrecht_marketing_status,
+      type: typeof requestBody.arbeitsrecht_marketing_status,
+      stringified: JSON.stringify(requestBody.arbeitsrecht_marketing_status),
+      fromHubSpot: true,
+      isTrue: typeof requestBody.arbeitsrecht_marketing_status === 'boolean'
+        ? requestBody.arbeitsrecht_marketing_status
+        : String(requestBody.arbeitsrecht_marketing_status).toLowerCase() === 'true'
+    });
+
+    const marketingStatus = typeof requestBody.arbeitsrecht_marketing_status === 'boolean'
+      ? requestBody.arbeitsrecht_marketing_status
+      : String(requestBody.arbeitsrecht_marketing_status).toLowerCase() === 'true';
+
+    console.log('Marketing Status:', {
+      inputValue: requestBody.arbeitsrecht_marketing_status,
+      inputType: typeof requestBody.arbeitsrecht_marketing_status,
+      finalValue: marketingStatus,
+      finalType: typeof marketingStatus,
+      timestamp: new Date().toISOString()
+    });
+
     console.log('Journey Booked Flight IDs:', journey_booked_flightids);
     console.log('Journey Fact Flight IDs:', journey_fact_flightids);
     console.log(
@@ -138,7 +158,39 @@ const handler: Handler = async (event: HandlerEvent) => {
     console.log('PNR:', requestBody.journey_booked_pnr);
     console.log('================================');
 
+    const apiRequestBody = {
+      journey_booked_flightids,
+      journey_fact_flightids,
+      information_received_at: requestBody.information_received_at,
+      journey_booked_pnr: requestBody.journey_booked_pnr,
+      journey_fact_type: requestBody.journey_fact_type,
+      owner_salutation: requestBody.owner_salutation,
+      owner_firstname: requestBody.owner_firstname,
+      owner_lastname: requestBody.owner_lastname,
+      owner_street: requestBody.owner_street,
+      owner_place: requestBody.owner_zip || '',
+      owner_city: requestBody.owner_city,
+      owner_country,
+      owner_email: requestBody.owner_email,
+      owner_phone: requestBody.owner_phone || '',
+      arbeitsrecht_marketing_status: marketingStatus,
+      contract_signature: requestBody.contract_signature,
+      contract_tac: Boolean(requestBody.contract_tac),
+      contract_dp: Boolean(requestBody.contract_dp),
+      lang: 'en',
+    };
+
     console.log('API request body:', apiRequestBody);
+
+    // Add detailed marketing status logging
+    console.log('=== FINAL MARKETING STATUS CHECK ===');
+    console.log('Marketing Status:', {
+      finalValue: apiRequestBody.arbeitsrecht_marketing_status,
+      type: typeof apiRequestBody.arbeitsrecht_marketing_status,
+      stringified: JSON.stringify(apiRequestBody.arbeitsrecht_marketing_status),
+      timestamp: new Date().toISOString(),
+    });
+    console.log('=================================');
 
     const response = await fetch(apiUrl, {
       method: 'POST',

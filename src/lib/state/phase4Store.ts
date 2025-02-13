@@ -181,6 +181,19 @@ const getInitialState = () => {
             state.informedDateStepInteraction =
               parsedState.state.informedDateStepInteraction ?? {};
           }
+
+          // Ensure original flights are preserved
+          if (parsedState.state.originalFlights?.length > 0) {
+            state.originalFlights = parsedState.state.originalFlights;
+            // Also ensure flightStore has the original flights
+            useFlightStore.getState().setOriginalFlights(state.originalFlights);
+          } else {
+            // Try to get original flights from flightStore
+            const flightStoreState = useFlightStore.getState();
+            if (flightStoreState.originalFlights.length > 0) {
+              state.originalFlights = flightStoreState.originalFlights;
+            }
+          }
         }
 
         console.log('=== Phase4Store - Restored State ===', {
@@ -196,6 +209,7 @@ const getInitialState = () => {
             showingSuccess: state.informedDateShowingSuccess,
             stepValidation: state.informedDateStepValidation,
           },
+          originalFlights: state.originalFlights.length,
           timestamp: new Date().toISOString(),
         });
 
@@ -208,6 +222,16 @@ const getInitialState = () => {
     console.error('Error loading persisted state:', error);
   } finally {
     isInitializingPhase4Store.value = false;
+  }
+
+  // If no persisted state, try to get original flights from flightStore
+  const flightStoreState = useFlightStore.getState();
+  if (flightStoreState.originalFlights.length > 0) {
+    return {
+      ...initialState,
+      originalFlights: flightStoreState.originalFlights,
+      _lastUpdate: Date.now(),
+    };
   }
 
   return {

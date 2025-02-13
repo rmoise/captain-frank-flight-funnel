@@ -3,12 +3,15 @@ import type { Metadata } from 'next';
 import { isValidLanguage } from '@/config/language';
 import { getTranslation } from '@/translations';
 
-export async function generateMetadata({
-  params,
-}: {
-  params: { lang: string };
-}): Promise<Metadata> {
-  const lang = isValidLanguage(params.lang) ? params.lang : 'de';
+type Props = {
+  params: Promise<{ lang: string }>;
+};
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const resolvedParams = await params;
+  const lang = isValidLanguage(resolvedParams.lang)
+    ? resolvedParams.lang
+    : 'de';
   const t = getTranslation(lang);
 
   return {

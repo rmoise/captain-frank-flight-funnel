@@ -71,6 +71,9 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   const inputRef = useRef<HTMLInputElement>(null);
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
 
+  // Add new ref to track if we're handling tab navigation
+  const isTabNavigatingRef = useRef(false);
+
   // Sync input value with external value
   useEffect(() => {
     if (!isTyping && value?.label !== prevValueRef.current) {
@@ -104,84 +107,278 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
     [onSearch]
   );
 
-  const handleInputChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const newValue = e.target.value.toUpperCase();
-      setInputValue(newValue);
-      setIsTyping(true);
-      setIsTouched(true);
-
-      // Always open dropdown when typing
-      setIsOpen(true);
-
-      if (!newValue) {
-        onChange(null);
-        setOptions([]);
-        setIsTyping(false);
-        return;
-      }
-
-      // If the input is exactly 3 characters and matches an IATA code format
-      if (newValue.length === 3 && /^[A-Z]{3}$/.test(newValue)) {
-        // Search for exact IATA code match
-        debouncedSearch(newValue);
-      } else {
-        // Normal search for other cases
-        debouncedSearch(newValue);
-      }
-    },
-    [debouncedSearch, onChange]
-  );
-
   const handleOptionSelect = useCallback(
-    (option: LocationData) => {
+    (option: LocationData, isAutoSelect: boolean = false) => {
+      // Prevent processing if no option is provided
+      if (!option) return;
+
       // Extract the full name and code
       const fullName = option.dropdownLabel
         ? option.dropdownLabel.split(' (')[0]
         : option.description || option.label;
       const code = option.value;
 
+      // Ensure we have a valid code
+      if (!code) {
+        console.warn('Invalid option selected:', option);
+        return;
+      }
+
       const updatedOption = {
         ...option,
         label: code,
-        value: code, // Ensure value is the IATA code
+        value: code,
         description: fullName,
-        dropdownLabel: `${fullName} (${code})`, // Keep the full format for dropdown
+        dropdownLabel: `${fullName} (${code})`,
       };
 
-      onChange(updatedOption);
-      setInputValue(code);
-      setIsOpen(false);
+      // Update state based on selection type
       setIsTyping(false);
       setHighlightedIndex(null);
-      setIsFocused(false);
       setIsTouched(true);
+      setInputValue(code);
 
-      // Find and focus the next input field within the same step
-      setTimeout(() => {
-        const currentInput = inputRef.current;
-        if (currentInput) {
-          // Find the closest parent step container
-          const stepContainer = currentInput.closest('[data-step]');
-          if (stepContainer) {
-            // Only search for inputs within the same step container
-            const allInputs = Array.from(
-              stepContainer.querySelectorAll('input')
-            );
-            const currentIndex = allInputs.indexOf(currentInput);
-            const nextInput = allInputs[currentIndex + 1];
-            if (nextInput) {
-              nextInput.focus();
-              nextInput.click(); // Also trigger click to open dropdown
+      if (isAutoSelect) {
+        // Keep dropdown open for auto-select
+        setIsFocused(true);
+        setIsOpen(true);
+      } else {
+        // Close dropdown for manual selection or tab
+        setIsFocused(false);
+        setIsOpen(false);
+        setOptions([]);
+        setLoading(false);
+
+        // Move to next input
+        requestAnimationFrame(() => {
+          const currentInput = inputRef.current;
+          if (currentInput) {
+            const stepContainer = currentInput.closest('[data-step]');
+            if (stepContainer) {
+              const allInputs = Array.from(
+                stepContainer.querySelectorAll('input')
+              );
+              const currentIndex = allInputs.indexOf(currentInput);
+              const nextInput = allInputs[currentIndex + 1];
+              if (nextInput) {
+                nextInput.focus();
+              }
             }
           }
-        }
-      }, 100);
+        });
+      }
+
+      // Trigger the onChange callback
+      onChange(updatedOption);
     },
     [onChange]
   );
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Tab') {
+      // Set tab navigation flag immediately to prevent any other operations
+      isTabNavigatingRef.current = true;
+
+      // Cancel any pending searches immediately
+      debouncedSearch.cancel();
+
+      // If we have a 3-letter code, try to auto-select FIRST
+      if (inputValue.length === 3) {
+        const code = inputValue.toUpperCase();
+
+        // Check if it matches IATA code pattern (3 uppercase letters)
+        if (/^[A-Z]{3}$/.test(code)) {
+          e.preventDefault();
+          // Create a generic airport option - the actual name will be updated later if needed
+          const airportOption = {
+            label: code,
+            value: code,
+            description: `${code} International Airport`,
+            dropdownLabel: `${code} International Airport (${code})`,
+          };
+          handleOptionSelect(airportOption, false);
+
+          // Optionally trigger a search to update the airport name later
+          onSearch(code)
+            .then((results) => {
+              const exactMatch = results.find((r) => r.value === code);
+              if (exactMatch && !isTabNavigatingRef.current) {
+                handleOptionSelect(exactMatch, false);
+              }
+            })
+            .catch(() => {
+              // If search fails, we still have the generic airport option selected
+              console.log(
+                'Could not fetch airport details, using generic name'
+              );
+            });
+          return;
+        }
+
+        // Check for exact match in current options as fallback
+        const exactMatch = options.find((option) => option.value === code);
+        if (exactMatch) {
+          e.preventDefault();
+          handleOptionSelect(exactMatch, false);
+          return;
+        }
+      }
+
+      // Clear all states immediately
+      setIsOpen(false);
+      setHighlightedIndex(null);
+      setLoading(false);
+      setOptions([]);
+
+      // Reset input if no valid selection was made
+      if (isTyping) {
+        setInputValue(value?.label || '');
+        setIsTyping(false);
+      }
+
+      // Keep tab navigation flag true for longer to handle rapid tabbing
+      setTimeout(() => {
+        isTabNavigatingRef.current = false;
+      }, 300);
+    }
+  };
+
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      // Don't process if we're tabbing away
+      if (isTabNavigatingRef.current) {
+        return;
+      }
+
+      const newValue = e.target.value.toUpperCase();
+
+      // Always allow input changes
+      setInputValue(newValue);
+      setIsTyping(true);
+      setIsTouched(true);
+      setIsOpen(true);
+      setIsFocused(true);
+
+      // Handle empty input
+      if (!newValue) {
+        setOptions([]);
+        onChange(null);
+        return;
+      }
+
+      // If the input is exactly 3 characters and matches an IATA code format
+      if (newValue.length === 3 && /^[A-Z]{3}$/.test(newValue)) {
+        // Cancel any previous search
+        debouncedSearch.cancel();
+
+        let isCancelled = false;
+
+        // Try both IATA code and city name search
+        const searchWithBothMethods = async () => {
+          if (isTabNavigatingRef.current) return; // Exit if tabbing
+
+          setLoading(true);
+          try {
+            // First try with the IATA code
+            const iataResults = await onSearch(newValue);
+
+            if (!isCancelled && !isTabNavigatingRef.current) {
+              // Create a temporary option for immediate feedback
+              const tempOption = {
+                label: newValue,
+                value: newValue,
+                description: `${newValue} International Airport`,
+                dropdownLabel: `${newValue} International Airport (${newValue})`,
+              };
+
+              // If we don't have an exact match in the results, add our temporary option
+              if (!iataResults.some((r) => r.value === newValue)) {
+                iataResults.unshift(tempOption);
+              }
+
+              setOptions(iataResults);
+              setIsOpen(true);
+
+              // Try to find an exact match
+              const exactMatch = iataResults.find(
+                (option) => option.value === newValue
+              );
+              if (exactMatch && !isTabNavigatingRef.current) {
+                handleOptionSelect(exactMatch, true);
+              } else {
+                // If no exact match found, use the temporary option
+                handleOptionSelect(tempOption, true);
+              }
+
+              // Try city name search as additional results
+              const cityMap: Record<string, string> = {
+                BER: 'BERLIN',
+                FRA: 'FRANKFURT',
+                MUC: 'MUNICH',
+                HAM: 'HAMBURG',
+                // Add more common city mappings if needed
+              };
+
+              const cityName = cityMap[newValue];
+              if (cityName) {
+                const cityResults = await onSearch(cityName);
+                if (!isCancelled && !isTabNavigatingRef.current) {
+                  const combinedResults = [...iataResults];
+                  cityResults.forEach((cityResult) => {
+                    if (
+                      !combinedResults.some((r) => r.value === cityResult.value)
+                    ) {
+                      combinedResults.push(cityResult);
+                    }
+                  });
+
+                  setOptions(combinedResults);
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error searching locations:', error);
+            if (!isCancelled && !isTabNavigatingRef.current) {
+              // Even if search fails, show temporary option
+              const tempOption = {
+                label: newValue,
+                value: newValue,
+                description: `${newValue} International Airport`,
+                dropdownLabel: `${newValue} International Airport (${newValue})`,
+              };
+              setOptions([tempOption]);
+              handleOptionSelect(tempOption, true);
+            }
+          } finally {
+            if (!isCancelled && !isTabNavigatingRef.current) {
+              setLoading(false);
+            }
+          }
+        };
+
+        searchWithBothMethods();
+        return () => {
+          isCancelled = true;
+        };
+      } else {
+        // Normal search for other cases
+        debouncedSearch(newValue);
+      }
+    },
+    [debouncedSearch, onChange, onSearch, handleOptionSelect, value]
+  );
+
   const handleInputFocus = useCallback(async () => {
+    // Don't show dropdown if we're tabbing or if we just auto-selected
+    if (isTabNavigatingRef.current) {
+      return;
+    }
+
+    // If we have a valid selection, don't show dropdown immediately
+    if (value?.label === inputValue && inputValue.length === 3) {
+      return;
+    }
+
     setIsFocused(true);
     setIsOpen(true);
 
@@ -200,7 +397,10 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
       setLoading(true);
       try {
         const results = await onFocus();
-        setOptions(results);
+        if (!isTabNavigatingRef.current) {
+          // Check again in case user started tabbing
+          setOptions(results);
+        }
       } catch (error) {
         console.error('Error loading initial options:', error);
         setOptions([]);
@@ -209,33 +409,47 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
       }
     }
     // If there's a value but no options, perform a search
-    else if (inputValue && !options.length) {
+    else if (inputValue && !options.length && !value?.label) {
       debouncedSearch(inputValue);
     }
-  }, [debouncedSearch, inputValue, options.length, onFocus]);
+  }, [debouncedSearch, inputValue, options.length, onFocus, value]);
 
-  const handleInputBlur = useCallback(() => {
-    // Delay closing to allow click events on options
-    setTimeout(() => {
-      const dropdownElement = document.getElementById('autocomplete-dropdown');
-      const activeElement = document.activeElement;
-      const isClickingDropdown = dropdownElement?.contains(activeElement);
+  // Modify the blur handler
+  const handleBlur = () => {
+    debouncedSearch.cancel();
 
-      if (!isClickingDropdown) {
-        setIsFocused(false);
+    if (isTabNavigatingRef.current) {
+      setIsFocused(false);
+      setIsOpen(false);
+      setHighlightedIndex(null);
+      setLoading(false);
+      setOptions([]);
+
+      if (isTyping) {
+        setInputValue(value?.label || '');
         setIsTyping(false);
-        setIsOpen(false);
-        setIsTouched(true);
-
-        // Reset input value to selected value if user was typing
-        if (isTyping && value?.label) {
-          setInputValue(value.label);
-        }
-
-        onBlur?.();
       }
-    }, 150);
-  }, [onBlur, isTyping, value]);
+      onBlur?.();
+      return;
+    }
+
+    // For non-tab blur, use shorter timeout
+    setTimeout(() => {
+      if (!isTabNavigatingRef.current) {
+        setIsFocused(false);
+        setIsOpen(false);
+        setHighlightedIndex(null);
+        setLoading(false);
+
+        if (isTyping) {
+          setInputValue(value?.label || '');
+          setIsTyping(false);
+        }
+      }
+    }, 50);
+
+    onBlur?.();
+  };
 
   const handleClear = useCallback(
     (e: React.MouseEvent) => {
@@ -247,8 +461,15 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
       setHighlightedIndex(null);
       setIsTyping(false);
       setIsTouched(true);
+      setLoading(false);
+      isTabNavigatingRef.current = false;
       if (inputRef.current) {
         inputRef.current.focus();
+        // Reset typing state after a small delay to allow new input
+        setTimeout(() => {
+          setIsTyping(false);
+          setIsFocused(true);
+        }, 0);
       }
     },
     [onChange]
@@ -334,6 +555,8 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
                 ? option.dropdownLabel.split(' (')[1]?.replace(')', '')
                 : option.value;
 
+              const isSelected = option.value === value?.value;
+
               return (
                 <li
                   key={option.value || index}
@@ -344,14 +567,22 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
                     option.value
                       ? 'cursor-pointer hover:bg-gray-100'
                       : 'text-gray-500 cursor-default'
-                  } ${highlightedIndex === index ? 'bg-gray-100' : ''}`}
+                  } ${isSelected ? 'bg-[#FEF2F2] text-[#F54538]' : ''} ${
+                    highlightedIndex === index ? 'bg-gray-100' : ''
+                  }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-base font-medium text-[#4B616D]">
+                    <span
+                      className={`text-base font-medium ${isSelected ? 'text-[#F54538]' : 'text-[#4B616D]'}`}
+                    >
                       {fullName}
                     </span>
                     {code && (
-                      <span className="text-sm text-gray-500 ml-2">{code}</span>
+                      <span
+                        className={`text-sm ml-2 ${isSelected ? 'text-[#F54538]' : 'text-gray-500'}`}
+                      >
+                        {code}
+                      </span>
                     )}
                   </div>
                 </li>
@@ -415,8 +646,9 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
           type="text"
           value={inputValue}
           onChange={handleInputChange}
-          onClick={handleInputFocus}
-          onBlur={handleInputBlur}
+          onFocus={handleInputFocus}
+          onBlur={handleBlur}
+          onKeyDown={handleKeyDown}
           className={inputClassName}
           placeholder=""
           disabled={disabled}

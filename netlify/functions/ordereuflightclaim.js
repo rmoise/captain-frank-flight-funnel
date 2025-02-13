@@ -100,7 +100,7 @@ const handler = async (event) => {
             owner_country,
             owner_email: requestBody.owner_email,
             owner_phone: requestBody.owner_phone || '',
-            owner_marketable_status: false,
+            owner_marketable_status: Boolean(requestBody.arbeitsrecht_marketing_status),
             contract_signature: requestBody.contract_signature,
             contract_tac: Boolean(requestBody.contract_tac),
             contract_dp: Boolean(requestBody.contract_dp),

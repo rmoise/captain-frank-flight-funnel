@@ -10,10 +10,10 @@ import { useTranslation } from '@/hooks/useTranslation';
 
 const COUNTRY_OPTIONS_DE = [
   // EU Countries
+  { value: 'Deutschland', label: 'Deutschland' },
   { value: 'BEL', label: 'Belgien' },
   { value: 'BGR', label: 'Bulgarien' },
   { value: 'DNK', label: 'Dänemark' },
-  { value: 'DEU', label: 'Deutschland' },
   { value: 'EST', label: 'Estland' },
   { value: 'FIN', label: 'Finnland' },
   { value: 'FRA', label: 'Frankreich' },
@@ -75,10 +75,10 @@ const COUNTRY_OPTIONS_DE = [
 
 const COUNTRY_OPTIONS_EN = [
   // EU Countries
+  { value: 'Deutschland', label: 'Germany' },
   { value: 'BEL', label: 'Belgium' },
   { value: 'BGR', label: 'Bulgaria' },
   { value: 'DNK', label: 'Denmark' },
-  { value: 'DEU', label: 'Germany' },
   { value: 'EST', label: 'Estonia' },
   { value: 'FIN', label: 'Finland' },
   { value: 'FRA', label: 'France' },

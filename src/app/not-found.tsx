@@ -1,6 +1,10 @@
-import Link from 'next/link';
+'use client';
+
+import { useRouter } from 'next/navigation';
 
 export default function NotFound() {
+  const router = useRouter();
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
@@ -14,12 +18,12 @@ export default function NotFound() {
           </p>
         </div>
         <div className="mt-5">
-          <Link
-            href="/"
+          <button
+            onClick={() => router.push('/')}
             className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-brand-red hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-red"
           >
             Go back home
-          </Link>
+          </button>
         </div>
       </div>
     </div>

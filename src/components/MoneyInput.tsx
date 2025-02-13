@@ -62,7 +62,7 @@ export const MoneyInput: React.FC<MoneyInputProps> = ({
 
     setShowWarning(false);
     setLocalValue(numericValue);
-    onChange(`€${numericValue}`);
+    onChange(numericValue);
   };
 
   const handleInputFocus = () => {
@@ -80,8 +80,8 @@ export const MoneyInput: React.FC<MoneyInputProps> = ({
           localValue.replace(/[^0-9.-]+/g, '') || '0'
         );
         if (!isNaN(numericValue)) {
-          const formattedValue = `€${numericValue.toFixed(2)}`;
-          setLocalValue(numericValue.toFixed(2));
+          const formattedValue = numericValue.toFixed(2);
+          setLocalValue(formattedValue);
           onChange(formattedValue);
         }
       }
@@ -98,7 +98,7 @@ export const MoneyInput: React.FC<MoneyInputProps> = ({
       className={`relative money-input-container ${className}`}
       ref={wrapperRef}
     >
-      <div className="relative p-[2px]">
+      <div className="relative p-[2px] group">
         <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
           <span className="text-base">€</span>
         </div>
@@ -111,25 +111,23 @@ export const MoneyInput: React.FC<MoneyInputProps> = ({
           onFocus={handleInputFocus}
           onBlur={handleInputBlur}
           aria-label={label}
-          placeholder={placeholder}
+          placeholder=""
           className={`
-            w-full h-14 pl-8 pr-4
+            peer w-full h-14 pl-10 pr-10
             text-[#4b616d] text-base font-normal font-heebo
             bg-white rounded-xl
             transition-[border-color,border-width] duration-[250ms] ease-in-out
             ${
-              isFocused ? 'border-2 border-blue-500' : 'border border-[#e0e1e4]'
+              isFocused
+                ? 'border-2 border-blue-500'
+                : 'border border-[#e0e1e4] hover:border-blue-500'
             }
-            ${localValue ? 'pr-10' : ''}
             focus:outline-none
-            flex items-center
-            leading-none
           `}
-          style={{ paddingTop: '0', paddingBottom: '0' }}
         />
         <label
           className={`
-            absolute left-8 top-0
+            absolute left-10 top-1/2 -translate-y-1/2
             transition-all duration-[200ms] cubic-bezier(0.4, 0, 0.2, 1) pointer-events-none
             text-[#909090] font-heebo ${
               required
@@ -137,14 +135,14 @@ export const MoneyInput: React.FC<MoneyInputProps> = ({
                 : ''
             }
             ${
-              isFocused || value
-                ? '-translate-y-[50%] text-[10px] px-1 bg-white opacity-100'
-                : 'translate-y-[14px] text-base opacity-0'
+              isFocused || localValue
+                ? '-translate-y-8 text-[10px] px-1 bg-white'
+                : 'text-base'
             }
             ${isFocused ? 'text-[#464646]' : ''}
           `}
         >
-          {label}
+          {placeholder || label}
         </label>
       </div>
       {showWarning && (
@@ -163,10 +161,15 @@ export const MoneyInput: React.FC<MoneyInputProps> = ({
                 : Math.max(0, currentValue - 1);
             const formattedValue = updatedValue.toFixed(2);
             setLocalValue(formattedValue);
-            onChange(`€${formattedValue}`);
+            onChange(formattedValue);
+          } else if (newValue === '') {
+            // Handle clear action
+            setLocalValue('');
+            setShowWarning(false);
+            onChange('');
           } else {
             setLocalValue(newValue);
-            onChange(newValue.startsWith('€') ? newValue : `€${newValue}`);
+            onChange(newValue);
           }
         }}
         containerRef={wrapperRef}

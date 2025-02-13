@@ -524,12 +524,15 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
         }
       }
 
+      // Preserve the existing date when updating location
+      const existingDate = newSegments[index].date;
+
       // Setting a new location or clearing it
       newSegments[index] = {
         ...newSegments[index],
         [field]: location,
         ...(currentPhase !== 4 && { selectedFlight: null }), // Only clear selected flight in non-phase-4
-        ...(currentPhase !== 4 && { date: null }), // Only clear date in non-phase-4
+        date: existingDate, // Preserve the existing date
       };
 
       // Handle linking in multi-city mode
@@ -538,18 +541,22 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
           // Forward linking: Set next segment's fromLocation
           if (index < newSegments.length - 1) {
             const nextSegment = newSegments[index + 1];
+            const nextSegmentDate = nextSegment.date; // Preserve next segment's date
             newSegments[index + 1] = {
               ...nextSegment, // Preserve all existing data
               fromLocation: location,
+              date: nextSegmentDate, // Keep the date
               ...(currentPhase !== 4 && { selectedFlight: null }), // Only clear selected flight in non-phase-4
             };
           }
           // Only backward link if we're setting a new location (not clearing)
           if (location && index > 0 && newSegments[index].fromLocation) {
             const prevSegment = newSegments[index - 1];
+            const prevSegmentDate = prevSegment.date; // Preserve previous segment's date
             newSegments[index - 1] = {
               ...prevSegment, // Preserve all existing data
               toLocation: newSegments[index].fromLocation,
+              date: prevSegmentDate, // Keep the date
               ...(currentPhase !== 4 && { selectedFlight: null }), // Only clear selected flight in non-phase-4
             };
           }
@@ -557,9 +564,11 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
           // Backward linking: Set previous segment's toLocation
           if (index > 0) {
             const prevSegment = newSegments[index - 1];
+            const prevSegmentDate = prevSegment.date; // Preserve previous segment's date
             newSegments[index - 1] = {
               ...prevSegment, // Preserve all existing data
               toLocation: location,
+              date: prevSegmentDate, // Keep the date
               ...(currentPhase !== 4 && { selectedFlight: null }), // Only clear selected flight in non-phase-4
             };
           }
@@ -570,9 +579,11 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
             newSegments[index].toLocation
           ) {
             const nextSegment = newSegments[index + 1];
+            const nextSegmentDate = nextSegment.date; // Preserve next segment's date
             newSegments[index + 1] = {
               ...nextSegment, // Preserve all existing data
               fromLocation: newSegments[index].toLocation,
+              date: nextSegmentDate, // Keep the date
               ...(currentPhase !== 4 && { selectedFlight: null }), // Only clear selected flight in non-phase-4
             };
           }
@@ -1276,7 +1287,7 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
                     showYearDropdown
                     dropdownMode="select"
                     isClearable={false}
-                    placeholderText="DD.MM.YYYY"
+                    placeholderText="DD.MM.YY / DD.MM.YYYY"
                     shouldCloseOnSelect={true}
                     maxDate={new Date()}
                     minDate={

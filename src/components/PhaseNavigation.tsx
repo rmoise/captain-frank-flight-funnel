@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { PHASES, Phase } from '@/constants/phases';
 import styles from './PhaseNavigation.module.css';
 import {
@@ -21,8 +21,10 @@ export interface PhaseNavigationProps {
   completedPhases?: number[];
 }
 
-export const PhaseNavigation: React.FC<PhaseNavigationProps> = () => {
-  const [isClient, setIsClient] = useState(false);
+export const PhaseNavigation: React.FC<PhaseNavigationProps> = ({
+  currentPhase: propCurrentPhase,
+  completedPhases: propCompletedPhases,
+}) => {
   const [hoveredPhase, setHoveredPhase] = useState<number | null>(null);
   const pathname = usePathname();
 
@@ -31,39 +33,26 @@ export const PhaseNavigation: React.FC<PhaseNavigationProps> = () => {
 
   // Split store subscriptions to minimize re-renders
   const {
-    completedPhases,
+    completedPhases: storeCompletedPhases,
     completedSteps,
     validationState,
     phasesCompletedViaContinue,
-    setCurrentPhase,
   } = useStore();
 
   const router = useRouter();
 
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
-
-  // Update current phase based on URL
-  useEffect(() => {
-    if (pathname && typeof pathname === 'string') {
-      // Remove language prefix before looking up phase
-      const basePath = pathname.replace(/^\/[a-z]{2}\//, '');
-      const phase =
-        basePath === '/phases/claim-success' ||
-        basePath === '/phases/claim-rejected'
-          ? 5
-          : getPhaseFromUrl(pathname);
-      setCurrentPhase(phase);
-    }
-  }, [pathname, setCurrentPhase]);
-
-  const currentPhase = pathname
+  // Use props if provided, otherwise fallback to computed value from pathname
+  const currentPhase =
+    propCurrentPhase ??
+    (pathname
     ? pathname.includes('/phases/claim-success') ||
       pathname.includes('/phases/claim-rejected')
       ? 5
       : getPhaseFromUrl(pathname)
-    : 1;
+      : 1);
+
+  // Use props if provided, otherwise fallback to store value
+  const completedPhases = propCompletedPhases ?? storeCompletedPhases;
 
   const isPhaseAccessible = React.useCallback(
     (phaseNumber: number) => {
@@ -114,10 +103,6 @@ export const PhaseNavigation: React.FC<PhaseNavigationProps> = () => {
 
   const getBarClassName = React.useCallback(
     (phaseNumber: number, accessible: boolean) => {
-      if (!isClient) {
-        return styles.inactive;
-      }
-
       const classes = [];
 
       // Base class based on phase state
@@ -139,7 +124,7 @@ export const PhaseNavigation: React.FC<PhaseNavigationProps> = () => {
 
       return classes.join(' ');
     },
-    [isClient, currentPhase, hoveredPhase]
+    [currentPhase, hoveredPhase]
   );
 
   const getPhaseLabel = React.useCallback(

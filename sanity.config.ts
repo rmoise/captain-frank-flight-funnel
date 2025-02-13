@@ -4,6 +4,7 @@ import { defineConfig } from 'sanity';
 import { deskTool } from 'sanity/desk';
 import { visionTool } from '@sanity/vision';
 import { RocketIcon, RobotIcon } from '@sanity/icons';
+import { ComponentType } from 'react';
 
 const projectId = '6zuqzp5l';
 const apiVersion = '2024-01-01';
@@ -16,7 +17,7 @@ export default defineConfig([
     basePath: '/studio/production',
     title: 'Production Workspace',
     subtitle: 'Content for live site',
-    icon: RocketIcon,
+    icon: RocketIcon as ComponentType,
     schema: {
       types: [],
     },
@@ -29,7 +30,7 @@ export default defineConfig([
     basePath: '/studio/staging',
     title: 'Staging Workspace',
     subtitle: 'Testing environment',
-    icon: RobotIcon,
+    icon: RobotIcon as ComponentType,
     schema: {
       types: [],
     },

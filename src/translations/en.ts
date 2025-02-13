@@ -142,6 +142,8 @@ export const en: Translations = {
       flightDetails: 'Flight Details',
       bookingNumber: 'Booking Number',
       whatHappened: 'What happened to your flight?',
+      whatHappenedSubtitle:
+        'Did you have a connecting flight? Please enter your flights under "Multi-Stop".',
       personalDetails: {
         title: 'Personal Details',
         subtitle:
@@ -262,13 +264,16 @@ export const en: Translations = {
       privacy: 'Privacy Policy',
       signature: 'Signature',
       message:
-        'I, {salutation} {firstName} {lastName}, residing at {address}, {zipCode} {city}, {country}, hereby assign my claims for compensation from the flight connection with PNR/booking number {bookingNumber} from {departure}{connection} to {arrival} on {date} to Captain Frank GmbH.\n\nCaptain Frank GmbH accepts the declaration of assignment.',
+        'I, {salutation} {firstName} {lastName}, residing at {address}, {postalCode} {city}, {country}, hereby assign my claims for compensation from the flight connection with PNR/booking number {bookingNumber} from {departure}{connection} to {arrival} on {date} to Captain Frank GmbH.\n\nCaptain Frank GmbH accepts the declaration of assignment.',
       step: 'Step {number}',
       digitalSignature: {
         title: 'Digital Signature',
         subtitle: 'Please sign to confirm your agreement.',
         summary: 'Sign the agreement to proceed',
         clearSignature: 'Clear signature',
+        validation: {
+          required: 'Please provide your signature',
+        },
       },
       termsAndConditions: {
         title: 'Terms and Conditions',
@@ -431,8 +436,9 @@ export const en: Translations = {
       },
     },
     flightDetails: {
-      title: 'Flight Details',
-      description: 'Please provide additional details about your flight',
+      title: 'Your Flight Details',
+      description:
+        'Please enter the date for your flight so we can determine the flight number for each flight. Below you will see a list of your selected flights.',
       steps: {
         flightSelection: {
           title: 'Choose your flight',
@@ -570,10 +576,13 @@ export const en: Translations = {
     country: 'Country',
   },
   validation: {
-    required: 'This field is required',
+    required: 'Required field',
     invalidDate: 'Invalid date',
     invalidBookingNumber: 'Invalid booking number',
     invalidSignature: 'Invalid signature',
+    dateFormat: 'Please enter a date in the format DD.MM.YY or DD.MM.YYYY',
+    incompleteDateFormat:
+      'Please complete the date in the format DD.MM.YY or DD.MM.YYYY',
   },
   errors: {
     general: 'Something went wrong',
