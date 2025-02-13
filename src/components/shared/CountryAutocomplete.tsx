@@ -8,7 +8,6 @@ import { useTranslation } from '@/hooks/useTranslation';
 export interface CountryOption {
   value: string;
   label: string;
-  germanName: string;
 }
 
 interface CountryAutocompleteProps {
@@ -48,8 +47,7 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
     ? options.filter(
         (option) =>
           option.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          option.value.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          option.germanName.toLowerCase().includes(searchTerm.toLowerCase())
+          option.value.toLowerCase().includes(searchTerm.toLowerCase())
       )
     : options;
 
@@ -67,8 +65,7 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
       const optionByValue = options.find(
         (opt) =>
           opt.value.toLowerCase() === value.toLowerCase() ||
-          opt.label.toLowerCase() === value.toLowerCase() ||
-          opt.germanName.toLowerCase() === value.toLowerCase()
+          opt.label.toLowerCase() === value.toLowerCase()
       );
 
       if (optionByValue) {
@@ -144,9 +141,7 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
 
         // Try to match by label first (case insensitive)
         let matchingOption = options.find(
-          (opt) =>
-            opt.label.toLowerCase() === autofillValue.toLowerCase() ||
-            opt.germanName.toLowerCase() === autofillValue.toLowerCase()
+          (opt) => opt.label.toLowerCase() === autofillValue.toLowerCase()
         );
 
         if (matchingOption) {
@@ -265,11 +260,53 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
     setIsOpen(true);
     setIsTouched(true);
 
+    // English to German name mappings for validation
+    const countryMappings: Record<string, string> = {
+      germany: 'deutschland',
+      austria: 'österreich',
+      switzerland: 'schweiz',
+      france: 'frankreich',
+      italy: 'italien',
+      spain: 'spanien',
+      netherlands: 'niederlande',
+      belgium: 'belgien',
+      denmark: 'dänemark',
+      poland: 'polen',
+      sweden: 'schweden',
+      norway: 'norwegen',
+      finland: 'finnland',
+      greece: 'griechenland',
+      portugal: 'portugal',
+      ireland: 'irland',
+      'united kingdom': 'großbritannien',
+      'czech republic': 'tschechien',
+      hungary: 'ungarn',
+      croatia: 'kroatien',
+      slovakia: 'slowakei',
+      slovenia: 'slowenien',
+      romania: 'rumänien',
+      bulgaria: 'bulgarien',
+      'united states': 'vereinigte staaten',
+      canada: 'kanada',
+      japan: 'japan',
+      china: 'china',
+      australia: 'australien',
+      russia: 'russland',
+      brazil: 'brasilien',
+      india: 'indien',
+      mexico: 'mexiko',
+      'south africa': 'südafrika',
+      egypt: 'ägypten',
+    };
+
+    const normalizedInput = newValue.toLowerCase().trim();
+    const germanName = countryMappings[normalizedInput] || normalizedInput;
+
     // Try to find an exact match in either language
     const exactMatch = options.find(
       (opt) =>
-        opt.label.toLowerCase() === newValue.toLowerCase() ||
-        opt.germanName.toLowerCase() === newValue.toLowerCase()
+        opt.label.toLowerCase() === normalizedInput ||
+        opt.label.toLowerCase() === germanName
     );
 
     if (exactMatch && onChange) {
