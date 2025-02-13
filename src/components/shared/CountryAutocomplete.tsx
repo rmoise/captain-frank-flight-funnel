@@ -8,6 +8,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 export interface CountryOption {
   value: string;
   label: string;
+  germanName: string;
 }
 
 interface CountryAutocompleteProps {
@@ -47,7 +48,8 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
     ? options.filter(
         (option) =>
           option.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          option.value.toLowerCase().includes(searchTerm.toLowerCase())
+          option.value.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          option.germanName.toLowerCase().includes(searchTerm.toLowerCase())
       )
     : options;
 
@@ -141,7 +143,9 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
 
         // Try to match by label first (case insensitive)
         let matchingOption = options.find(
-          (opt) => opt.label.toLowerCase() === autofillValue.toLowerCase()
+          (opt) =>
+            opt.label.toLowerCase() === autofillValue.toLowerCase() ||
+            opt.germanName.toLowerCase() === autofillValue.toLowerCase()
         );
 
         if (matchingOption) {
@@ -151,15 +155,19 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
         // If no match found, try country codes
         if (!matchingOption) {
           const countryMappings: Record<string, string> = {
-            germany: 'DEU',
-            deutschland: 'DEU',
+            germany: 'Deutschland',
+            deutschland: 'Deutschland',
+            land: 'Deutschland',
             austria: 'AUT',
             österreich: 'AUT',
           };
 
           const countryCode = countryMappings[autofillValue.toLowerCase()];
           if (countryCode) {
-            matchingOption = options.find((opt) => opt.value === countryCode);
+            matchingOption = options.find(
+              (opt) =>
+                opt.value === countryCode || opt.germanName === countryCode
+            );
             console.log(
               'Found matching option by country code:',
               matchingOption
