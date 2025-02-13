@@ -208,19 +208,28 @@ export const CustomDateInput = forwardRef<
       isManualInput.current = true;
       const newValue = e.target.value;
 
-      // Only allow digits
-      const digits = newValue.replace(/[^\d]/g, '');
+      // Only allow digits and dots
+      const cleanValue = newValue.replace(/[^\d.]/g, '');
+
+      // Split into parts if dots exist
+      const parts = cleanValue.split('.');
       let formattedValue = '';
 
-      // Format as DD.MM.YY or DD.MM.YYYY
-      if (digits.length > 0) {
-        formattedValue = digits.slice(0, 2); // First 2 digits
-        if (digits.length > 2) {
-          formattedValue += '.' + digits.slice(2, 4); // Next 2 digits with dot
-          if (digits.length > 4) {
-            formattedValue += '.' + digits.slice(4); // Remaining digits with dot
-          }
-        }
+      // Handle the day part (first 2 digits)
+      if (parts[0]) {
+        formattedValue = parts[0].slice(0, 2);
+      }
+
+      // Handle the month part (next 2 digits)
+      if (parts[1] || (parts[0] && parts[0].length > 2)) {
+        const monthPart = parts[1] || parts[0].slice(2);
+        formattedValue += '.' + monthPart.slice(0, 2);
+      }
+
+      // Handle the year part (remaining digits)
+      if (parts[2] || (parts[1] && parts[1].length > 2)) {
+        const yearPart = parts[2] || parts[1].slice(2);
+        formattedValue += '.' + yearPart.slice(0, 4);
       }
 
       // Only show red border during typing if there was a previous error
@@ -233,45 +242,43 @@ export const CustomDateInput = forwardRef<
       // Clear error message while typing
       setErrorMessage('');
 
-      // Limit to 8 characters (DD.MM.YY) or 10 characters (DD.MM.YYYY)
-      if (formattedValue.length <= 10) {
-        setInputValue(formattedValue);
-        lastManualInput.current = formattedValue;
+      // Update the input value
+      setInputValue(formattedValue);
+      lastManualInput.current = formattedValue;
 
-        // Check if it's a complete date and validate
-        const isComplete =
-          formattedValue.length === 8 || formattedValue.length === 10;
+      // Check if it's a complete date and validate
+      const isComplete =
+        formattedValue.length === 8 || formattedValue.length === 10;
 
-        // Create a synthetic event with the appropriate value
-        let eventValue = '';
+      // Create a synthetic event with the appropriate value
+      let eventValue = '';
 
-        if (formattedValue === '') {
-          eventValue = '';
-        } else if (isComplete) {
-          const [day, month, yearStr] = formattedValue.split('.').map(Number);
-          const year =
-            yearStr < 100
-              ? yearStr >= 30
-                ? 1900 + yearStr
-                : 2000 + yearStr
-              : yearStr;
+      if (formattedValue === '') {
+        eventValue = '';
+      } else if (isComplete) {
+        const [day, month, yearStr] = formattedValue.split('.').map(Number);
+        const year =
+          yearStr < 100
+            ? yearStr >= 30
+              ? 1900 + yearStr
+              : 2000 + yearStr
+            : yearStr;
 
-          // Create a Date object and convert to ISO string
-          const dateObj = new Date(year, month - 1, day);
-          if (isValid(dateObj)) {
-            eventValue = dateObj.toISOString();
-          }
+        // Create a Date object and convert to ISO string
+        const dateObj = new Date(year, month - 1, day);
+        if (isValid(dateObj)) {
+          eventValue = dateObj.toISOString();
         }
-
-        // Always trigger onChange with the current value
-        const syntheticEvent = {
-          ...e,
-          target: { ...e.target, value: eventValue },
-        };
-        onChange?.(syntheticEvent);
       }
 
-      previousLength.current = digits.length;
+      // Always trigger onChange with the current value
+      const syntheticEvent = {
+        ...e,
+        target: { ...e.target, value: eventValue },
+      };
+      onChange?.(syntheticEvent);
+
+      previousLength.current = formattedValue.length;
     };
 
     const handleBlur = () => {
