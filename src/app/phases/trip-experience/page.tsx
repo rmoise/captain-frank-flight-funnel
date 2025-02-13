@@ -20,11 +20,6 @@ import { useStore } from '@/lib/state/store';
 import { useFlightStore } from '@/lib/state/flightStore';
 import { ClaimService } from '@/services/claimService';
 
-// Helper function to get language-aware URL
-const getLanguageAwareUrl = (url: string, lang: string) => {
-  return lang === 'de' ? `/de${url}` : url;
-};
-
 export default function TripExperiencePage(): ReactElement {
   const { t } = useTranslation();
   const router = useRouter();
@@ -623,7 +618,7 @@ export default function TripExperiencePage(): ReactElement {
         travelStatusStepInteraction,
       })
     );
-    router.replace(getLanguageAwareUrl(previousUrl, lang));
+    router.replace(`/${lang}${previousUrl}`);
   };
 
   // Add validation for flight data before evaluation

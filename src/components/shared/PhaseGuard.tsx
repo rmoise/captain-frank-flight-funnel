@@ -1,13 +1,8 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import {
-  useStore,
-  StoreState,
-  StoreActions,
-  PHASE_TO_URL,
-} from '@/lib/state/store';
+import { useSearchParams } from 'next/navigation';
+import { useStore } from '@/lib/state/store';
 
 export interface PhaseGuardProps {
   phase: number;
@@ -15,23 +10,12 @@ export interface PhaseGuardProps {
 }
 
 // Extend store type to include claim success flags
-type ExtendedStore = StoreState &
-  StoreActions & {
-    _isClaimSuccess?: boolean;
-    _preventPhaseChange?: boolean;
-  };
-
 export const PhaseGuard: React.FC<PhaseGuardProps> = ({ phase, children }) => {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [isInitialized, setIsInitialized] = useState(false);
   const [isPhaseAccessible, setIsPhaseAccessible] = useState(true);
-  const {
-    currentPhase,
-    completedPhases,
-    completedSteps,
-    initializeNavigationFromUrl,
-  } = useStore();
+  const { currentPhase, completedPhases, initializeNavigationFromUrl } =
+    useStore();
 
   // First effect: Initialize navigation from URL
   useEffect(() => {
@@ -48,60 +32,34 @@ export const PhaseGuard: React.FC<PhaseGuardProps> = ({ phase, children }) => {
 
     // Check if phase check should be bypassed
     const shouldBypassCheck =
-      searchParams?.get('bypass_phase_check') === 'true' ||
-      phase === 6 ||
-      phase === 7;
-    if (shouldBypassCheck) {
-      setIsPhaseAccessible(true);
-      return;
-    }
+      searchParams?.get('bypass') === 'true' ||
+      useStore.getState()._preventPhaseChange;
 
-    const store = useStore.getState() as ExtendedStore;
+    // Special cases for phase transitions
+    const isCompensationEstimate = phase === 2;
+    const isFlightDetails = phase === 3;
+    const isTripExperience = phase === 4;
+    const isFromPhaseOne = currentPhase === 1;
+    const isFromPhaseTwo = currentPhase === 2;
+    const isFromPhaseThree = currentPhase === 3;
 
-    // Check if we're in claim success mode
-    const isClaimSuccess = store._isClaimSuccess;
-    const preventPhaseChange = store._preventPhaseChange;
-
-    // If we're in claim success mode and this is phase 5, always allow access
-    // and prevent phase changes
-    if (isClaimSuccess && phase === 5) {
-      setIsPhaseAccessible(true);
-      if (!preventPhaseChange) {
-        useStore.setState({
-          currentPhase: 5,
-          _preventPhaseChange: true,
-        } as Partial<StoreState & StoreActions>);
-      }
-      return;
-    }
-
-    // For phase 5, check specific requirements
-    const isPhase5Accessible =
-      phase === 5 &&
-      !isClaimSuccess && // Only check these requirements if not in claim success mode
-      completedPhases.includes(4) &&
-      completedSteps.includes(2) &&
-      completedSteps.includes(3) &&
-      store.validationState?.stepValidation?.[2] &&
-      store.validationState?.stepValidation?.[3] &&
-      store.phasesCompletedViaContinue.includes(4);
-
-    // For other phases, only allow access if not in claim success mode
-    const isCurrentPhase = !isClaimSuccess && phase === currentPhase;
-    const highestCompletedPhase = Math.max(...completedPhases, currentPhase);
-    const isWithinCompletedPhases =
-      !isClaimSuccess && phase <= highestCompletedPhase;
-    const isPreviousPhaseCompletedViaContinue =
-      phase >= 2 ? store.phasesCompletedViaContinue.includes(phase - 1) : true;
-
-    // Allow back navigation to previous phases only if not in claim success mode
-    const isBackNavigation = !isClaimSuccess && phase < currentPhase;
-
-    const accessible =
-      isPhase5Accessible ||
-      isCurrentPhase ||
-      isBackNavigation ||
-      (isWithinCompletedPhases && isPreviousPhaseCompletedViaContinue);
+    // Allow access if:
+    // 1. Phase check is bypassed
+    // 2. Current phase matches requested phase
+    // 3. Phase is within completed phases
+    // 4. Phase is the next phase after current phase
+    // 5. Special case: Compensation estimate (phase 2) access from phase 1
+    // 6. Special case: Flight details (phase 3) access from phase 2
+    // 7. Special case: Trip experience (phase 4) access from phase 3
+    const isCurrentPhase = phase === currentPhase;
+    const isWithinCompletedPhases = completedPhases.includes(phase);
+    const isNextPhase = phase === currentPhase + 1;
+    const allowCompensationAccess =
+      isCompensationEstimate && (isFromPhaseOne || completedPhases.includes(1));
+    const allowFlightDetailsAccess =
+      isFlightDetails && (isFromPhaseTwo || completedPhases.includes(2));
+    const allowTripExperienceAccess =
+      isTripExperience && (isFromPhaseThree || completedPhases.includes(3));
 
     console.log('Phase accessibility check:', {
       phase,
@@ -109,50 +67,32 @@ export const PhaseGuard: React.FC<PhaseGuardProps> = ({ phase, children }) => {
       completedPhases,
       isCurrentPhase,
       isWithinCompletedPhases,
-      isPreviousPhaseCompletedViaContinue,
-      isClaimSuccess,
-      accessible,
+      isNextPhase,
+      shouldBypassCheck,
+      isCompensationEstimate,
+      isFlightDetails,
+      isTripExperience,
+      isFromPhaseOne,
+      isFromPhaseTwo,
+      isFromPhaseThree,
+      allowCompensationAccess,
+      allowFlightDetailsAccess,
+      allowTripExperienceAccess,
     });
 
-    // Only redirect if we're definitely sure the phase is not accessible
-    if (!accessible && isInitialized && currentPhase > 1 && !isClaimSuccess) {
-      const redirectUrl = PHASE_TO_URL[currentPhase];
-      if (redirectUrl) {
-        const currentPath = window.location.pathname;
-        const isGermanRoute = currentPath.startsWith('/de/');
-        const langPrefix = isGermanRoute ? '/de' : '';
-        const fullUrl = `${langPrefix}${redirectUrl}`;
-        console.log('Redirecting to:', fullUrl);
-        router.replace(fullUrl);
-      }
-    }
+    const isAccessible =
+      shouldBypassCheck ||
+      isCurrentPhase ||
+      isWithinCompletedPhases ||
+      isNextPhase ||
+      allowCompensationAccess ||
+      allowFlightDetailsAccess ||
+      allowTripExperienceAccess;
 
-    setIsPhaseAccessible(accessible);
-  }, [
-    isInitialized,
-    phase,
-    currentPhase,
-    completedPhases,
-    completedSteps,
-    searchParams,
-    router,
-  ]);
+    setIsPhaseAccessible(isAccessible);
+  }, [isInitialized, phase, currentPhase, completedPhases, searchParams]);
 
-  // Don't render anything until initialization is complete
-  if (!isInitialized) {
-    return null;
-  }
-
-  // Check if phase check should be bypassed
-  const shouldBypassCheck =
-    searchParams?.get('bypass_phase_check') === 'true' ||
-    phase === 6 ||
-    phase === 7;
-  if (shouldBypassCheck) {
-    return <>{children}</>;
-  }
-
-  if (!isPhaseAccessible) {
+  if (!isInitialized || !isPhaseAccessible) {
     return null;
   }
 

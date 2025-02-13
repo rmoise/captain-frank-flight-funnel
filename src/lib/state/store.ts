@@ -1640,6 +1640,53 @@ export const useStore = create<StoreState & StoreActions>()(
           return;
         }
 
+        // Prevent invalid phase transitions
+        if (phase < 1 || phase > 7) {
+          console.log('=== Invalid Phase Transition Prevented ===', {
+            currentPhase: state.currentPhase,
+            attemptedPhase: phase,
+          });
+          return;
+        }
+
+        // Allow phase transition if:
+        // 1. Moving to the next phase
+        // 2. Moving to a completed phase
+        // 3. Moving back to a previous phase
+        // 4. Moving to phase 2 from compensation estimate page
+        // 5. Moving to phase 3 from phase 2
+        const isNextPhase = phase === state.currentPhase + 1;
+        const isCompletedPhase = state.completedPhases.includes(phase);
+        const isPreviousPhase = phase < state.currentPhase;
+        const isCompensationEstimatePage =
+          typeof window !== 'undefined' &&
+          window.location.pathname.includes('/phases/compensation-estimate');
+        const isPhase2 = phase === 2;
+        const isPhase3FromPhase1 =
+          phase === 3 &&
+          state.currentPhase === 1 &&
+          state.completedPhases.includes(2);
+
+        if (
+          !isNextPhase &&
+          !isCompletedPhase &&
+          !isPreviousPhase &&
+          !(isCompensationEstimatePage && isPhase2) &&
+          !isPhase3FromPhase1
+        ) {
+          console.log('=== Invalid Phase Transition Prevented ===', {
+            currentPhase: state.currentPhase,
+            attemptedPhase: phase,
+            isNextPhase,
+            isCompletedPhase,
+            isPreviousPhase,
+            isCompensationEstimatePage,
+            isPhase3FromPhase1,
+            completedPhases: state.completedPhases,
+          });
+          return;
+        }
+
         console.log('=== Starting Phase Transition ===', {
           from: state.currentPhase,
           to: phase,

@@ -37,7 +37,7 @@ const extractCityName = async (
     // Clean up the input - remove any extra spaces and convert to uppercase for comparison
     const cleanInput = desc.trim().toUpperCase();
 
-    // Handle common airport codes directly
+    // Handle common airport codes directly - do this first before any other processing
     const commonAirports: Record<string, string> = {
       MUC: 'Munich',
       BER: 'Berlin',
@@ -48,16 +48,16 @@ const extractCityName = async (
       CGN: 'Cologne',
     };
 
-    // First check if the input matches a common airport code exactly
+    // Check for exact IATA code match first
     if (commonAirports[cleanInput]) {
-      console.log('Found exact airport code match:', {
+      console.log('Using common airport code:', {
         code: cleanInput,
         city: commonAirports[cleanInput],
       });
       return commonAirports[cleanInput];
     }
 
-    // Then check if the input contains a common airport code
+    // Check if input contains a common airport code
     for (const [code, city] of Object.entries(commonAirports)) {
       if (cleanInput.includes(code)) {
         console.log('Found airport code within string:', {
@@ -69,7 +69,19 @@ const extractCityName = async (
       }
     }
 
-    // If no direct match, try the API
+    // First try to extract city from description if it contains a comma
+    if (desc.includes(',')) {
+      const cityName = desc
+        .split(',')[0]
+        .replace(/\b(international|airport|flughafen)\b/gi, '')
+        .trim();
+      if (cityName.length > 2 && !cityName.match(/^[A-Z]{3}$/)) {
+        console.log('Extracted city name from description:', cityName);
+        return cityName;
+      }
+    }
+
+    // Then try the API
     const response = await fetch(
       `/.netlify/functions/searchAirports?${new URLSearchParams({
         term: desc,
@@ -77,54 +89,48 @@ const extractCityName = async (
       })}`
     );
 
-    if (!response.ok) {
-      console.warn('Airport API response not ok:', {
-        status: response.status,
-        statusText: response.statusText,
-      });
-      // Clean up the input string to get just the city name
-      return desc.split(/[,\(]/)[0].trim();
-    }
-
-    const airports = await response.json();
-
-    if (Array.isArray(airports) && airports.length > 0) {
-      // Use the city from the first matching airport
-      if (airports[0].city) {
-        console.log('Found city name from API:', airports[0].city);
-        return airports[0].city;
-      }
-      // If no city, try to extract it from the airport name
-      if (airports[0].name) {
-        // Remove "International Airport" and similar suffixes
-        const cityName = airports[0].name
-          .split(/[,\(]/)[0] // Split on comma or opening parenthesis
-          .replace(/\b(international|airport|flughafen)\b/gi, '') // Remove common airport words
-          .trim();
-        console.log('Extracted city name from airport name:', cityName);
-        return cityName;
+    if (response.ok) {
+      const airports = await response.json();
+      if (Array.isArray(airports) && airports.length > 0) {
+        // Use the city from the first matching airport
+        if (airports[0].city) {
+          console.log('Found city name from API:', airports[0].city);
+          return airports[0].city;
+        }
+        // If no city, try to extract it from the airport name
+        if (airports[0].name) {
+          const cityName = airports[0].name
+            .split(/[,\(]/)[0]
+            .replace(/\b(international|airport|flughafen)\b/gi, '')
+            .trim();
+          if (cityName.length > 2 && !cityName.match(/^[A-Z]{3}$/)) {
+            console.log('Extracted city name from airport name:', cityName);
+            return cityName;
+          }
+        }
       }
     }
 
-    // If no results found, clean up the input string
-    console.log(
-      'No airports found in API response, using cleaned input as fallback'
-    );
-    return desc
-      .split(/[,\(]/)[0] // Split on comma or opening parenthesis
-      .replace(/\b(international|airport|flughafen)\b/gi, '') // Remove common airport words
+    // Final fallback: clean up the input string
+    const fallbackCity = desc
+      .split(/[,\(]/)[0]
+      .replace(/\b(international|airport|flughafen)\b/gi, '')
       .trim();
+
+    // Only return the fallback if it's not just an IATA code
+    if (fallbackCity.length > 2 && !fallbackCity.match(/^[A-Z]{3}$/)) {
+      console.log('Using cleaned input as fallback:', fallbackCity);
+      return fallbackCity;
+    }
+
+    return null;
   } catch (error) {
-    console.error('Error fetching airport data:', {
+    console.error('Error extracting city name:', {
       error,
       code: desc,
       timestamp: new Date().toISOString(),
     });
-    // Return cleaned input as fallback
-    return desc
-      .split(/[,\(]/)[0]
-      .replace(/\b(international|airport|flughafen)\b/gi, '')
-      .trim();
+    return null;
   }
 };
 
@@ -142,41 +148,63 @@ const AsyncCityName: React.FC<{
   fallback: string;
 }> = ({ cityData, fallback }) => {
   const [cityName, setCityName] = useState<string>(fallback);
+  const lastValidCityRef = useRef<string | null>(null);
 
   useEffect(() => {
     const loadCityName = async () => {
       // Try each source in order of preference
-      if (cityData.locationCity) {
+      if (cityData.locationCity && !cityData.locationCity.match(/^[A-Z]{3}$/)) {
+        lastValidCityRef.current = cityData.locationCity;
         setCityName(cityData.locationCity);
         return;
       }
 
-      if (cityData.selectedFlightCity) {
+      if (
+        cityData.selectedFlightCity &&
+        !cityData.selectedFlightCity.match(/^[A-Z]{3}$/)
+      ) {
+        lastValidCityRef.current = cityData.selectedFlightCity;
         setCityName(cityData.selectedFlightCity);
         return;
       }
 
-      // Try to get city name from description or IATA code
-      const desc = cityData.locationDesc || cityData.value;
-      if (desc) {
-        const extractedCity = await extractCityName(desc);
+      // Try to get city name from description
+      if (cityData.locationDesc) {
+        const extractedCity = await extractCityName(cityData.locationDesc);
         if (extractedCity) {
+          lastValidCityRef.current = extractedCity;
           setCityName(extractedCity);
           return;
         }
       }
 
-      // Try dropdown label as last resort
+      // Try dropdown label
       if (cityData.dropdownLabel) {
         const extractedCity = await extractCityName(cityData.dropdownLabel);
         if (extractedCity) {
+          lastValidCityRef.current = extractedCity;
           setCityName(extractedCity);
           return;
         }
       }
 
-      // Use arrival/departure or fallback
-      setCityName(cityData.arrival || cityData.departure || fallback);
+      // Try IATA code only if we don't have a valid city name
+      if (!lastValidCityRef.current && cityData.value) {
+        const extractedCity = await extractCityName(cityData.value);
+        if (extractedCity) {
+          lastValidCityRef.current = extractedCity;
+          setCityName(extractedCity);
+          return;
+        }
+      }
+
+      // Use last valid city name or fallback
+      setCityName(
+        lastValidCityRef.current ||
+          cityData.arrival ||
+          cityData.departure ||
+          fallback
+      );
     };
 
     loadCityName();
@@ -217,8 +245,92 @@ export default function CompensationEstimatePage() {
   const [mounted, setMounted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null);
+  const [cityData, setCityData] = useState<
+    Array<{ departureCity: string; arrivalCity: string }>
+  >([]);
   const isInitialized = useRef(false);
   const initializationLock = useRef(false);
+  const cityDataLoaded = useRef(false);
+
+  // Helper function to get city data
+  const getCityData = useCallback(
+    async (segment: FlightSegment, index: number) => {
+      if (!segment) {
+        console.error(`=== Invalid segment data for index ${index} ===`);
+        return {
+          departureCity:
+            t.phases.compensationEstimate.flightSummary.noFlightDetails,
+          arrivalCity:
+            t.phases.compensationEstimate.flightSummary.noFlightDetails,
+        };
+      }
+
+      const fromDesc = segment.fromLocation?.description;
+      const toDesc = segment.toLocation?.description;
+
+      const [departureCity, arrivalCity] = await Promise.all([
+        extractCityName(fromDesc).then(
+          (city) =>
+            city ||
+            selectedFlights?.[index]?.departureCity ||
+            t.phases.compensationEstimate.flightSummary.noFlightDetails
+        ),
+        extractCityName(toDesc).then(
+          (city) =>
+            city ||
+            selectedFlights?.[index]?.arrivalCity ||
+            t.phases.compensationEstimate.flightSummary.noFlightDetails
+        ),
+      ]);
+
+      return { departureCity, arrivalCity };
+    },
+    [
+      t.phases.compensationEstimate.flightSummary.noFlightDetails,
+      selectedFlights,
+    ]
+  );
+
+  // Add effect to handle mounting
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  // Add effect to ensure we stay in phase 2 and prevent bouncing
+  useEffect(() => {
+    if (!mounted || initializationLock.current) return;
+
+    const init = async () => {
+      if (isInitialized.current) return;
+      initializationLock.current = true;
+
+      try {
+        // Set phase 2 immediately to prevent bouncing
+        if (currentPhase !== 2) {
+          await setCurrentPhase(2);
+        }
+
+        // Only load city data if we haven't already
+        if (!cityDataLoaded.current) {
+          const cityDataPromises = flightSegments.map((segment, index) =>
+            getCityData(segment, index)
+          );
+          const resolvedCityData = await Promise.all(cityDataPromises);
+          setCityData(resolvedCityData);
+          cityDataLoaded.current = true;
+        }
+
+        isInitialized.current = true;
+      } catch (error) {
+        console.error('Error initializing compensation estimate page:', error);
+      } finally {
+        initializationLock.current = false;
+      }
+    };
+
+    init();
+  }, [mounted, currentPhase, setCurrentPhase, flightSegments, getCityData]);
 
   // Helper functions for comparing flight data
   const hasDirectFlightDataChanged = (
@@ -1697,61 +1809,6 @@ export default function CompensationEstimatePage() {
     await setCurrentPhase(1);
     router.push(getLanguageAwareUrl(previousUrl, lang));
   };
-
-  const getCityData = useCallback(
-    async (segment: FlightSegment, index: number) => {
-      if (!segment) {
-        console.error(`=== Invalid segment data for index ${index} ===`);
-        return {
-          departureCity:
-            t.phases.compensationEstimate.flightSummary.noFlightDetails,
-          arrivalCity:
-            t.phases.compensationEstimate.flightSummary.noFlightDetails,
-        };
-      }
-
-      const fromDesc = segment.fromLocation?.description;
-      const toDesc = segment.toLocation?.description;
-
-      const [departureCity, arrivalCity] = await Promise.all([
-        extractCityName(fromDesc).then(
-          (city) =>
-            city ||
-            selectedFlights?.[index]?.departureCity ||
-            t.phases.compensationEstimate.flightSummary.noFlightDetails
-        ),
-        extractCityName(toDesc).then(
-          (city) =>
-            city ||
-            selectedFlights?.[index]?.arrivalCity ||
-            t.phases.compensationEstimate.flightSummary.noFlightDetails
-        ),
-      ]);
-
-      return { departureCity, arrivalCity };
-    },
-    [t.phases.compensationEstimate.flightSummary.noFlightDetails]
-  );
-
-  // Update the memoized city data to handle async
-  const [cityData, setCityData] = useState<
-    Array<{
-      departureCity: string;
-      arrivalCity: string;
-    }>
-  >([]);
-
-  useEffect(() => {
-    const loadCityData = async () => {
-      const cityDataPromises = flightSegments.map((segment, index) =>
-        getCityData(segment, index)
-      );
-      const resolvedCityData = await Promise.all(cityDataPromises);
-      setCityData(resolvedCityData);
-    };
-
-    loadCityData();
-  }, [flightSegments, getCityData]);
 
   if (!mounted) {
     return null;

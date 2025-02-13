@@ -3,6 +3,69 @@ import { Handler, HandlerEvent } from '@netlify/functions';
 const API_BASE_URL =
   'https://secure.captain-frank.net/api/services/euflightclaim';
 
+// Map of English country names to German country names
+const COUNTRY_NAME_MAP: Record<string, string> = {
+  Germany: 'Deutschland',
+  Belgium: 'Belgien',
+  Bulgaria: 'Bulgarien',
+  Denmark: 'Dänemark',
+  Estonia: 'Estland',
+  Finland: 'Finnland',
+  France: 'Frankreich',
+  Greece: 'Griechenland',
+  Ireland: 'Irland',
+  Italy: 'Italien',
+  Croatia: 'Kroatien',
+  Latvia: 'Lettland',
+  Lithuania: 'Litauen',
+  Luxembourg: 'Luxemburg',
+  Malta: 'Malta',
+  Netherlands: 'Niederlande',
+  Austria: 'Österreich',
+  Poland: 'Polen',
+  Portugal: 'Portugal',
+  Romania: 'Rumänien',
+  Sweden: 'Schweden',
+  Slovakia: 'Slowakei',
+  Slovenia: 'Slowenien',
+  Spain: 'Spanien',
+  'Czech Republic': 'Tschechien',
+  Hungary: 'Ungarn',
+  Cyprus: 'Zypern',
+  'United Kingdom': 'Großbritannien',
+  Switzerland: 'Schweiz',
+  Norway: 'Norwegen',
+  Iceland: 'Island',
+  Liechtenstein: 'Liechtenstein',
+  Egypt: 'Ägypten',
+  Argentina: 'Argentinien',
+  Australia: 'Australien',
+  Brazil: 'Brasilien',
+  Chile: 'Chile',
+  China: 'China',
+  India: 'Indien',
+  Indonesia: 'Indonesien',
+  Israel: 'Israel',
+  Japan: 'Japan',
+  Canada: 'Kanada',
+  Colombia: 'Kolumbien',
+  'Republic of Korea': 'Korea, Republik',
+  Malaysia: 'Malaysia',
+  Mexico: 'Mexiko',
+  'New Zealand': 'Neuseeland',
+  Pakistan: 'Pakistan',
+  Philippines: 'Philippinen',
+  Russia: 'Russland',
+  'Saudi Arabia': 'Saudi-Arabien',
+  Singapore: 'Singapur',
+  'South Africa': 'Südafrika',
+  Thailand: 'Thailand',
+  Turkey: 'Türkei',
+  'United Arab Emirates': 'Vereinigte Arabische Emirate',
+  'United States': 'Vereinigte Staaten',
+  Vietnam: 'Vietnam',
+};
+
 const handler: Handler = async (event: HandlerEvent) => {
   if (event.httpMethod !== 'POST') {
     return {
@@ -85,12 +148,14 @@ const handler: Handler = async (event: HandlerEvent) => {
     const journey_fact_flightids =
       requestBody.journey_fact_flightids.map(Number);
 
-    // Handle country value
+    // Handle country value - ensure it's in German
     let owner_country = requestBody.owner_country;
-    if (owner_country === 'Germany') {
-      owner_country = 'Deutschland';
-    } else if (owner_country !== 'Deutschland') {
-      owner_country = owner_country.toUpperCase();
+    // First check if it's already a German name
+    const isGermanName =
+      Object.values(COUNTRY_NAME_MAP).includes(owner_country);
+    if (!isGermanName) {
+      // If not a German name, try to find the German equivalent
+      owner_country = COUNTRY_NAME_MAP[owner_country] || owner_country;
     }
 
     const apiUrl = `${API_BASE_URL}/ordereuflightclaim`;
@@ -125,21 +190,25 @@ const handler: Handler = async (event: HandlerEvent) => {
       type: typeof requestBody.arbeitsrecht_marketing_status,
       stringified: JSON.stringify(requestBody.arbeitsrecht_marketing_status),
       fromHubSpot: true,
-      isTrue: typeof requestBody.arbeitsrecht_marketing_status === 'boolean'
-        ? requestBody.arbeitsrecht_marketing_status
-        : String(requestBody.arbeitsrecht_marketing_status).toLowerCase() === 'true'
+      isTrue:
+        typeof requestBody.arbeitsrecht_marketing_status === 'boolean'
+          ? requestBody.arbeitsrecht_marketing_status
+          : String(requestBody.arbeitsrecht_marketing_status).toLowerCase() ===
+            'true',
     });
 
-    const marketingStatus = typeof requestBody.arbeitsrecht_marketing_status === 'boolean'
-      ? requestBody.arbeitsrecht_marketing_status
-      : String(requestBody.arbeitsrecht_marketing_status).toLowerCase() === 'true';
+    const marketingStatus =
+      typeof requestBody.arbeitsrecht_marketing_status === 'boolean'
+        ? requestBody.arbeitsrecht_marketing_status
+        : String(requestBody.arbeitsrecht_marketing_status).toLowerCase() ===
+          'true';
 
     console.log('Marketing Status:', {
       inputValue: requestBody.arbeitsrecht_marketing_status,
       inputType: typeof requestBody.arbeitsrecht_marketing_status,
       finalValue: marketingStatus,
       finalType: typeof marketingStatus,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     console.log('Journey Booked Flight IDs:', journey_booked_flightids);
