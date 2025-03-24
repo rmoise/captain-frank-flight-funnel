@@ -1,37 +1,17 @@
-import { useStore } from './store';
+import useStore from '@/lib/state/store';
 import type { Answer } from '@/types/wizard';
-import type { StoreState, ValidationStateSteps } from './store';
+import type { Store } from '@/lib/state/store';
+import type { StoreState, ValidationStep, WizardSlice } from './types';
+import type { WizardActions } from './slices/wizardSlice';
 
-interface WizardStateSlice {
-  isCompleted: boolean;
-  isValid: boolean;
-  successMessage: string;
-}
-
-interface WizardActionsSlice {
-  validateAndUpdateStep: (step: ValidationStateSteps, isValid: boolean) => void;
+export interface WizardState extends WizardSlice {
+  // Additional state and actions specific to wizard state
+  initializeStore: () => void;
+  validateAndUpdateStep: (step: ValidationStep) => boolean;
   batchUpdateWizardState: (updates: Partial<StoreState>) => void;
-}
-
-export interface WizardState {
-  // State
-  wizardAnswers: Answer[];
-  wizardCurrentSteps: Record<string, number>;
-  wizardIsCompleted: boolean;
-  wizardIsValid: boolean;
-  completedWizards: Record<string, boolean>;
-  wizardShowingSuccess: boolean;
-  wizardSuccessMessage: string;
-  wizardIsEditingMoney: boolean;
-  wizardLastActiveStep: number | null;
-  wizardValidationState: Record<number, boolean>;
-  wizardIsValidating: boolean;
-
-  // Actions
   setWizardAnswers: (answers: Answer[]) => void;
-  validateAndUpdateStep: (step: ValidationStateSteps, isValid: boolean) => void;
-  setWizardValidationState: (state: Record<number, boolean>) => void;
-  batchUpdateWizardState: (updates: Partial<StoreState>) => void;
+  setWizardShowingSuccess: (showing: boolean) => void;
+  setWizardValidationState: (state: Record<string, boolean>) => void;
   markWizardComplete: (wizardId: string) => void;
   isWizardCompleted: (wizardId: string) => boolean;
   validateQAWizard: () => {
@@ -39,76 +19,68 @@ export interface WizardState {
     answers: Answer[];
     bookingNumber: string;
   };
-  setWizardShowingSuccess: (showing: boolean) => void;
-  initializeStore: () => void;
+  handleWizardComplete: (wizardId: string, answers: Answer[], successMessage: string) => boolean;
+  handleTripExperienceComplete: () => void;
+  handleInformedDateComplete: () => void;
+  setLastAnsweredQuestion: (questionId: string | null) => void;
+  updateWizardAnswer: (questionId: string, answer: string) => void;
+  setWizardLastActiveStep: (step: number) => void;
+  setWizardIsValid: (isValid: boolean) => void;
+  setWizardIsCompleted: (isCompleted: boolean) => void;
 }
-
-// Type for the store that includes both state and actions
-type StoreStateWithActions = StoreState & {
-  setWizardAnswers: (answers: Answer[]) => void;
-  validateAndUpdateStep: (step: ValidationStateSteps, isValid: boolean) => void;
-  setWizardValidationState: (state: Record<number, boolean>) => void;
-  batchUpdateWizardState: (updates: Partial<StoreState>) => void;
-  markWizardComplete: (wizardId: string) => void;
-  isWizardCompleted: (wizardId: string) => boolean;
-  validateQAWizard: () => {
-    isValid: boolean;
-    answers: Answer[];
-    bookingNumber: string;
-  };
-  setWizardShowingSuccess: (showing: boolean) => void;
-  initializeStore: () => void;
-};
-
-const selectWizardState = (state: StoreStateWithActions): WizardStateSlice => ({
-  isCompleted: state.wizardIsCompleted,
-  isValid: state.wizardIsValid,
-  successMessage: state.wizardSuccessMessage,
-});
-
-const selectWizardActions = (
-  state: StoreStateWithActions
-): WizardActionsSlice => ({
-  validateAndUpdateStep: state.validateAndUpdateStep,
-  batchUpdateWizardState: state.batchUpdateWizardState,
-});
 
 export const useWizardState = (): WizardState => {
-  const wizardAnswers = useStore(
-    (state: StoreStateWithActions) => state.wizardAnswers
-  );
-  const wizardCurrentSteps = useStore(
-    (state: StoreStateWithActions) => state.wizardCurrentSteps
-  );
-  const wizardState = useStore(selectWizardState);
-  const wizardActions = useStore(selectWizardActions);
+  const store = useStore();
+  const wizardAnswers = useStore((state) => state.wizardAnswers);
+  const wizardCurrentSteps = useStore((state) => state.wizardCurrentSteps);
+
+  // Cast store to Store type to ensure TypeScript recognizes all actions
+  const typedStore = store as Store & WizardActions;
 
   return {
-    // State
+    // State from WizardSlice
     wizardAnswers,
     wizardCurrentSteps,
-    wizardIsCompleted: wizardState.isCompleted,
-    wizardIsValid: wizardState.isValid,
-    wizardSuccessMessage: wizardState.successMessage,
-    completedWizards: {},
-    wizardShowingSuccess: false,
-    wizardIsEditingMoney: false,
-    wizardLastActiveStep: null,
-    wizardValidationState: {},
-    wizardIsValidating: false,
+    wizardShowingSuccess: typedStore.wizardShowingSuccess,
+    wizardSuccessMessage: typedStore.wizardSuccessMessage,
+    wizardIsCompleted: typedStore.wizardIsCompleted,
+    wizardIsValid: typedStore.wizardIsValid,
+    wizardIsValidating: typedStore.wizardIsValidating,
+    lastAnsweredQuestion: typedStore.lastAnsweredQuestion,
+    completedWizards: typedStore.completedWizards,
+    lastValidAnswers: typedStore.lastValidAnswers,
+    lastValidStep: typedStore.lastValidStep,
+    wizardIsEditingMoney: typedStore.wizardIsEditingMoney,
+    wizardLastActiveStep: typedStore.wizardLastActiveStep,
+    wizardValidationState: typedStore.wizardValidationState,
+    wizardSuccessStates: typedStore.wizardSuccessStates,
+    tripExperienceAnswers: typedStore.tripExperienceAnswers,
+    wizardQuestions: typedStore.wizardQuestions,
 
     // Actions
-    ...wizardActions,
-    setWizardAnswers: () => {},
-    setWizardValidationState: () => {},
-    markWizardComplete: () => {},
-    isWizardCompleted: () => false,
-    validateQAWizard: () => ({
-      isValid: false,
-      answers: [],
-      bookingNumber: '',
-    }),
-    setWizardShowingSuccess: () => {},
-    initializeStore: () => {},
+    validateAndUpdateStep: typedStore.validateAndUpdateStep,
+    batchUpdateWizardState: typedStore.batchUpdateWizardState,
+    setWizardAnswers: typedStore.setWizardAnswers,
+    setWizardShowingSuccess: typedStore.setWizardShowingSuccess,
+    setWizardValidationState: typedStore.setWizardValidationState,
+    markWizardComplete: typedStore.markWizardComplete,
+    isWizardCompleted: typedStore.isWizardCompleted,
+    validateQAWizard: () => {
+      const result = typedStore.validateQAWizard();
+      return {
+        isValid: result.isValid,
+        answers: result.answers,
+        bookingNumber: result.bookingNumber
+      };
+    },
+    handleWizardComplete: typedStore.handleWizardComplete,
+    handleTripExperienceComplete: typedStore.handleTripExperienceComplete,
+    handleInformedDateComplete: typedStore.handleInformedDateComplete,
+    setLastAnsweredQuestion: typedStore.setLastAnsweredQuestion,
+    updateWizardAnswer: typedStore.updateWizardAnswer,
+    setWizardLastActiveStep: typedStore.setWizardLastActiveStep,
+    setWizardIsValid: typedStore.setWizardIsValid,
+    setWizardIsCompleted: typedStore.setWizardIsCompleted,
+    initializeStore: typedStore.initializeStore
   };
 };

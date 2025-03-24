@@ -1,4 +1,6 @@
-import type { Flight, LocationData } from '@/types/store';
+import type { Flight } from '@/types/store';
+import type { Store } from '@/lib/state/store';
+import type { Phase4State, Phase4Actions } from '@/lib/state/phase4Store';
 
 export interface FlightSelectorProps {
   showFlightSearch?: boolean;
@@ -18,13 +20,6 @@ export interface FlightSelectorProps {
   isOpenByDefault?: boolean;
 }
 
-export interface FlightSegment {
-  fromLocation: LocationData | null;
-  toLocation: LocationData | null;
-  date: string | Date | null;
-  selectedFlight: Flight | null;
-}
-
 export interface FlightSegmentsProps {
   showFlightSearch?: boolean;
   showFlightDetails?: boolean;
@@ -35,8 +30,9 @@ export interface FlightSegmentsProps {
   setValidationState?: (
     updater: (prev: Record<number, boolean>) => Record<number, boolean>
   ) => void;
-  onSelect?: (flight: Flight) => void;
-  setIsFlightNotListedOpen: (isOpen: boolean) => void;
+  setIsFlightNotListedOpen?: (isOpen: boolean) => void;
+  store: Store | (Phase4State & Phase4Actions);
+  onSegmentUpdate?: (segmentIndex: number, updatedSegment: any) => void;
 }
 
 export interface FlightPreviewCardProps {

@@ -144,7 +144,7 @@ export interface ValidationTranslations {
 }
 
 export interface Translations {
-  lang: 'en' | 'de';
+  lang: "en" | "de";
   common: {
     next: string;
     back: string;
@@ -164,6 +164,9 @@ export interface Translations {
     title: string;
     description: string;
     copy: string;
+    share: string;
+    copied: string;
+    explanation: string;
   };
   salutation: {
     label: string;
@@ -307,6 +310,13 @@ export interface Translations {
         multiple: string;
       };
     };
+    unauthorized: {
+      title: string;
+      message: string;
+      titles: Record<number, string>;
+      messages: Record<number, string>;
+      backText: Record<number, string>;
+    };
     tripExperience: TripExperienceTranslations;
     agreement: {
       title: string;
@@ -364,6 +374,8 @@ export interface Translations {
         title: string;
         calculating: string;
         disclaimer: string;
+        errorMessage: string;
+        estimate: string;
       };
       nextSteps: {
         title: string;
@@ -419,6 +431,11 @@ export interface Translations {
         back: string;
         viewStatus: string;
       };
+      accessDenied: {
+        title: string;
+        message: string;
+        back: string;
+      };
     };
     claimSubmitted: {
       title: string;
@@ -463,6 +480,11 @@ export interface Translations {
       navigation: {
         back: string;
         startNew: string;
+      };
+      accessDenied: {
+        title: string;
+        message: string;
+        back: string;
       };
     };
     flightDetails: {

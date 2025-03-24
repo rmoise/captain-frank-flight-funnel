@@ -1,8 +1,8 @@
-import type { LocationLike } from '@/types/location';
 import type { ValidationStore } from './slices/validationSlice';
 import type { FlightSlice, StoreStateValues } from '@/lib/state/types';
 import type { Answer } from '@/types/store';
 import { isValid, parseISO } from 'date-fns';
+import { isValidLocation } from '../validation/locationValidation';
 
 export const validateFlightSelection = (
   state: ValidationStore & FlightSlice
@@ -21,21 +21,13 @@ export const validateFlightSelection = (
     selectedType,
     currentPhase,
     segmentCount: flightSegments.length,
+    fromLocation: state.fromLocation,
+    toLocation: state.toLocation,
+    directFlight: state.directFlight,
+    timestamp: new Date().toISOString()
   });
 
-  const isLocationValid = (loc: LocationLike | null | string): boolean => {
-    // During initialization in phase 3, be more lenient
-    if (currentPhase === 3 && !loc) {
-      return true;
-    }
-    if (!loc) return false;
-    if (typeof loc === 'string') {
-      return loc.trim().length === 3;
-    }
-    return typeof loc.value === 'string' && loc.value.trim().length === 3;
-  };
-
-  // Helper function to normalize city names
+  // Helper function to normalize city names for comparison
   const normalizeCity = (city: string): string => {
     if (!city) return '';
     return city
@@ -48,153 +40,54 @@ export const validateFlightSelection = (
   // Base validation for all phases
   let isValid = false;
 
-  if (selectedType === 'direct') {
-    const fromLocationValid = isLocationValid(state.directFlight.fromLocation);
-    const toLocationValid = isLocationValid(state.directFlight.toLocation);
-    const distinctLocations =
-      fromLocationValid && toLocationValid
-        ? normalizeCity(state.directFlight.fromLocation?.value || '') !==
-          normalizeCity(state.directFlight.toLocation?.value || '')
-        : false;
-
-    // Base validation (locations)
-    isValid = fromLocationValid && toLocationValid && distinctLocations;
-
-    // Additional validation for phase 3 and above
-    if (currentPhase >= 3) {
-      const hasDate = !!state.directFlight.date;
-      const hasSelectedFlight = !!state.directFlight.selectedFlight;
-      isValid = isValid && hasDate && hasSelectedFlight;
-    }
-  } else {
-    // Multi-flight validation
-    isValid =
+  if (selectedType === 'multi') {
+    // For multi-city flights
+    isValid = !!(
       flightSegments.length >= 2 &&
-      flightSegments.length <= 4 &&
+      flightSegments.every(
+        (segment) => isValidLocation(segment.fromLocation) && isValidLocation(segment.toLocation)
+      ) &&
+      // Validate city connections
       flightSegments.every((segment, index) => {
-        const fromValid = isLocationValid(segment.fromLocation);
-        const toValid = isLocationValid(segment.toLocation);
-        const distinct =
-          fromValid &&
-          toValid &&
-          normalizeCity(segment.fromLocation?.value || '') !==
-            normalizeCity(segment.toLocation?.value || '');
+        if (index === 0) return true;
+        const prevSegment = flightSegments[index - 1];
+        if (!prevSegment.toLocation || !segment.fromLocation) return false;
 
-        // Base validation (locations)
-        let segmentValid = fromValid && toValid && distinct;
+        const prevCity =
+          prevSegment.toLocation.city ||
+          prevSegment.toLocation.description ||
+          prevSegment.toLocation.label;
+        const currentCity =
+          segment.fromLocation.city ||
+          segment.fromLocation.description ||
+          segment.fromLocation.label;
 
-        // Additional validation for phase 3 and above
-        if (currentPhase >= 3) {
-          const hasDate = !!segment.date;
-          const hasSelectedFlight = !!segment.selectedFlight;
-          segmentValid = segmentValid && hasDate && hasSelectedFlight;
+        return normalizeCity(prevCity) === normalizeCity(currentCity);
+      })
+    );
+  } else {
+    // For direct flights
+    const segment = flightSegments[0] || state.directFlight;
+    const fromLoc = segment?.fromLocation || state.fromLocation;
+    const toLoc = segment?.toLocation || state.toLocation;
 
-          // Skip further validation if basic requirements not met
-          if (!segmentValid) {
-            console.log(`Segment ${index} missing required data in phase 3:`, {
-              hasDate,
-              hasSelectedFlight,
-              fromValid,
-              toValid,
-              distinct,
-            });
-            return false;
-          }
-        }
-
-        // Check connection with previous segment
-        if (index > 0) {
-          const prevSegment = flightSegments[index - 1];
-
-          // In phase 3, require both segments to have selected flights
-          if (
-            currentPhase >= 3 &&
-            (!prevSegment.selectedFlight || !segment.selectedFlight)
-          ) {
-            console.log(
-              `Segment ${index} or previous segment missing flight data in phase 3`
-            );
-            return false;
-          }
-
-          // Only check connections if both segments have flights
-          if (prevSegment.selectedFlight && segment.selectedFlight) {
-            // Check city connections using normalized city names
-            const prevCity = normalizeCity(
-              prevSegment.selectedFlight.arrivalCity || ''
-            );
-            const currentCity = normalizeCity(
-              segment.selectedFlight.departureCity || ''
-            );
-
-            if (prevCity !== currentCity) {
-              console.log('City connection validation failed:', {
-                prevCity,
-                currentCity,
-                prevFlight: prevSegment.selectedFlight,
-                currentFlight: segment.selectedFlight,
-                segmentIndex: index,
-              });
-              return false;
-            }
-
-            // Check dates and times if in phase 3 or above
-            if (currentPhase >= 3 && prevSegment.date && segment.date) {
-              const prevArrivalTime = new Date(
-                `${prevSegment.selectedFlight.date}T${prevSegment.selectedFlight.arrivalTime}:00.000Z`
-              );
-              const currentDepartureTime = new Date(
-                `${segment.selectedFlight.date}T${segment.selectedFlight.departureTime}:00.000Z`
-              );
-
-              // Check if there's at least 30 minutes between flights
-              const timeDiff =
-                (currentDepartureTime.getTime() - prevArrivalTime.getTime()) /
-                60000;
-              if (timeDiff < 30) {
-                console.log('Time difference validation failed:', {
-                  timeDiff,
-                  prevArrivalTime,
-                  currentDepartureTime,
-                  segmentIndex: index,
-                });
-                return false;
-              }
-            }
-          }
-        }
-
-        return segmentValid;
-      });
-  }
-
-  // Update last validation timestamp and cache result
-  state._lastValidation = state._lastUpdate;
-  state.isFlightValid = isValid;
-
-  // Set validation states for phase 3
-  if (currentPhase === 3) {
-    state.validationState = {
-      ...state.validationState,
-      isFlightValid: isValid,
-      3: isValid, // Only set phase 3 validation
-      stepValidation: {
-        ...state.validationState.stepValidation,
-        3: isValid, // Only set phase 3 step validation
-      },
-    };
+    // For phase 1 and 2, only validate locations
+    if (currentPhase <= 2) {
+      isValid = !!(isValidLocation(fromLoc) && isValidLocation(toLoc));
+    } else {
+      // For phase 3 and above, validate locations and selected flight
+      isValid = !!(
+        isValidLocation(fromLoc) &&
+        isValidLocation(toLoc) &&
+        segment?.selectedFlight
+      );
+    }
   }
 
   console.log('=== Flight Selection Validation Result ===', {
     isValid,
-    selectedType,
     currentPhase,
-    segments: flightSegments.map((segment) => ({
-      from: segment.fromLocation?.value,
-      to: segment.toLocation?.value,
-      date: segment.date,
-      hasSelectedFlight: !!segment.selectedFlight,
-    })),
+    timestamp: new Date().toISOString()
   });
 
   return isValid;

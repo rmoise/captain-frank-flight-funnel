@@ -1,12 +1,6 @@
 import type { Flight, LocationData } from '@/types/store';
 import { parseISO, isValid, parse } from 'date-fns';
-
-export interface FlightSegment {
-  fromLocation: LocationData | null;
-  toLocation: LocationData | null;
-  date: string | Date | null;
-  selectedFlight: Flight | null;
-}
+import type { FlightSegment } from '@/lib/state/types';
 
 export interface ValidationResult {
   isValid: boolean;
@@ -270,26 +264,27 @@ export const validateDirectFlight = (
     return { isValid: false, errors };
   }
 
-  // Phase 1: Validate locations only
-  if (!isValidLocation(segment.fromLocation)) {
-    errors.push('Invalid departure location');
-  }
-  if (!isValidLocation(segment.toLocation)) {
-    errors.push('Invalid arrival location');
-  }
+  // Phase-specific validations
+  if (phase === 1) {
+    // Phase 1: Validate locations only
+    if (!isValidLocation(segment.fromLocation)) {
+      errors.push('Invalid departure location');
+    }
+    if (!isValidLocation(segment.toLocation)) {
+      errors.push('Invalid arrival location');
+    }
 
-  // Check for same city
-  if (
-    segment.fromLocation?.value &&
-    segment.toLocation?.value &&
-    normalizeCity(segment.fromLocation.value) ===
-      normalizeCity(segment.toLocation.value)
-  ) {
-    errors.push('Departure and arrival cities cannot be the same');
-  }
-
-  // Phase 3+: Additional validations
-  if (phase >= 3) {
+    // Check for same city
+    if (
+      segment.fromLocation?.value &&
+      segment.toLocation?.value &&
+      normalizeCity(segment.fromLocation.value) ===
+        normalizeCity(segment.toLocation.value)
+    ) {
+      errors.push('Departure and arrival cities cannot be the same');
+    }
+  } else if (phase === 3) {
+    // Phase 3: Only validate flight selection and date
     if (!segment.date) {
       errors.push('Flight date is required');
     }
@@ -322,37 +317,39 @@ export const validateMultiCityFlights = (
     return { isValid: false, errors };
   }
 
-  // Check for circular routes
-  if (hasCircularRoute(segments)) {
-    errors.push(
-      'Your itinerary contains a circular route. Each segment should progress to a new city.'
-    );
-  }
-
-  // Validate each segment
-  segments.forEach((segment, index) => {
-    // Validate locations
-    if (!isValidLocation(segment.fromLocation)) {
-      errors.push(`Segment ${index + 1}: Please select a valid departure city`);
-    }
-    if (!isValidLocation(segment.toLocation)) {
-      errors.push(`Segment ${index + 1}: Please select a valid arrival city`);
-    }
-
-    // Check for same city with improved message
-    if (
-      segment.fromLocation?.value &&
-      segment.toLocation?.value &&
-      normalizeCity(segment.fromLocation.value) ===
-        normalizeCity(segment.toLocation.value)
-    ) {
+  // Phase-specific validations
+  if (phase === 1) {
+    // Check for circular routes
+    if (hasCircularRoute(segments)) {
       errors.push(
-        `Segment ${index + 1}: Departure and arrival cities are the same (${segment.fromLocation.value}). Please select different cities.`
+        'Your itinerary contains a circular route. Each segment should progress to a new city.'
       );
     }
 
-    // Phase 3+: Additional validations
-    if (phase === 3) {
+    // Validate locations only in phase 1
+    segments.forEach((segment, index) => {
+      if (!isValidLocation(segment.fromLocation)) {
+        errors.push(`Segment ${index + 1}: Please select a valid departure city`);
+      }
+      if (!isValidLocation(segment.toLocation)) {
+        errors.push(`Segment ${index + 1}: Please select a valid arrival city`);
+      }
+
+      // Check for same city with improved message
+      if (
+        segment.fromLocation?.value &&
+        segment.toLocation?.value &&
+        normalizeCity(segment.fromLocation.value) ===
+          normalizeCity(segment.toLocation.value)
+      ) {
+        errors.push(
+          `Segment ${index + 1}: Departure and arrival cities are the same (${segment.fromLocation.value}). Please select different cities.`
+        );
+      }
+    });
+  } else if (phase === 3) {
+    // Phase 3: Only validate flight selection, dates, and connections
+    segments.forEach((segment, index) => {
       if (!segment.date) {
         errors.push(`Segment ${index + 1}: Please select a flight date`);
       }
@@ -396,40 +393,13 @@ export const validateMultiCityFlights = (
           }
         }
       }
-    }
-  });
+    });
+  }
 
   return {
     isValid: errors.length === 0,
     errors,
   };
-};
-
-// Cache for validation results
-let validationCache: {
-  key: string;
-  result: ValidationResult;
-  timestamp: number;
-} | null = null;
-
-const CACHE_TTL = 1000; // 1 second cache TTL
-
-// Helper function to generate cache key
-const generateCacheKey = (
-  selectedType: 'direct' | 'multi',
-  segments: FlightSegment[],
-  phase: number
-): string => {
-  return JSON.stringify({
-    type: selectedType,
-    phase,
-    segments: segments.map((s) => ({
-      from: s.fromLocation?.value,
-      to: s.toLocation?.value,
-      date: s.date,
-      flightId: s.selectedFlight?.id,
-    })),
-  });
 };
 
 // Main validation function
@@ -446,30 +416,32 @@ export const validateFlightSelection = (
     };
   }
 
-  // Generate cache key
-  const cacheKey = generateCacheKey(selectedType, segments, phase);
+  // For phase 3, validate flight selections
+  if (phase === 3) {
+    const hasSelectedFlights = segments.some(segment => segment.selectedFlight);
+    const allSegmentsHaveFlights = selectedType === 'multi'
+      ? segments.every(segment => segment.selectedFlight)
+      : segments.some(segment => segment.selectedFlight);
 
-  // Check cache
-  if (
-    validationCache &&
-    validationCache.key === cacheKey &&
-    Date.now() - validationCache.timestamp < CACHE_TTL
-  ) {
-    return validationCache.result;
+    // Create validation result with properly typed errors array
+    const errors: string[] = [];
+    const isValid = hasSelectedFlights && allSegmentsHaveFlights;
+
+    // Add specific errors
+    if (!hasSelectedFlights) {
+      errors.push('Please select at least one flight');
+    } else if (selectedType === 'multi' && !allSegmentsHaveFlights) {
+      errors.push('Please select flights for all segments');
+    }
+
+    return {
+      isValid,
+      errors
+    };
   }
 
-  // Perform validation
-  const result =
-    selectedType === 'direct'
-      ? validateDirectFlight(segments[0], phase)
-      : validateMultiCityFlights(segments, phase);
-
-  // Update cache
-  validationCache = {
-    key: cacheKey,
-    result,
-    timestamp: Date.now(),
-  };
-
-  return result;
+  // For other phases, use existing validation logic
+  return selectedType === 'direct'
+    ? validateDirectFlight(segments[0], phase)
+    : validateMultiCityFlights(segments, phase);
 };

@@ -18,7 +18,7 @@ export const formatTime = (time: string): string => {
 // Price formatting
 export const formatPrice = (
   price: number | undefined,
-  currency: string = '€'
+  currency = '€'
 ): string => {
   if (price === undefined) return '';
   return `${currency}${price.toFixed(2)}`;

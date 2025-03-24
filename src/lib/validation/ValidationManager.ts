@@ -1,4 +1,4 @@
-import type { StoreStateValues, ValidationStep } from '../state/types';
+import type { StoreStateValues, ValidationStep } from '@/lib/state/types';
 import {
   IValidationStrategy,
   ValidationResult,
@@ -49,6 +49,7 @@ export class ValidationManager {
       toLocation: state.toLocation,
       directFlight: state.directFlight,
       flightSegments: state.flightSegments,
+      selectedFlights: state.selectedFlights,
       phase,
     };
     return JSON.stringify(relevantState);

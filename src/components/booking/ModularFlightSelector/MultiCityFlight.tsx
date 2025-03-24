@@ -6,13 +6,8 @@ import { CustomDateInput } from '@/components/shared/CustomDateInput';
 import { useTranslation } from '@/hooks/useTranslation';
 import { TrashIcon } from '@heroicons/react/24/outline';
 import type { Flight, LocationData } from '@/types/store';
-
-interface FlightSegment {
-  fromLocation: LocationData | null;
-  toLocation: LocationData | null;
-  date: string | null;
-  selectedFlight: Flight | null;
-}
+import type { FlightSegment } from '@/lib/state/types';
+import { parseISO, format } from 'date-fns';
 
 interface MultiCityFlightProps {
   segments: FlightSegment[];
@@ -61,7 +56,7 @@ export const MultiCityFlight: React.FC<MultiCityFlightProps> = ({
       {
         from: segment.fromLocation,
         to: segment.toLocation,
-        date: segment.date,
+        date: segment.date ? format(segment.date, 'yyyy-MM-dd') : null,
       },
       index
     ).catch((error) => {
@@ -86,7 +81,7 @@ export const MultiCityFlight: React.FC<MultiCityFlightProps> = ({
     (index: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
       onSegmentChange(index, {
         ...segments[index],
-        date: e.target.value || null,
+        date: e.target.value ? parseISO(e.target.value) : null,
       });
     };
 
@@ -130,7 +125,7 @@ export const MultiCityFlight: React.FC<MultiCityFlightProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <CustomDateInput
-              value={segment.date || ''}
+              value={segment.date ? format(segment.date, 'yyyy-MM-dd') : ''}
               onChange={handleDateChange(index)}
               onClear={() => onSegmentChange(index, { ...segment, date: null })}
               label={t.flightSelector.labels.departureDate}

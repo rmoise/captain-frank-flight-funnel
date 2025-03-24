@@ -7,7 +7,8 @@ import { BackButton } from '@/components/shared/BackButton';
 import { ContinueButton } from '@/components/shared/ContinueButton';
 import { pushToDataLayer } from '@/utils/gtm';
 import { useTranslation } from '@/hooks/useTranslation';
-import { useStore } from '@/lib/state/store';
+import useStore from '@/lib/state/store';
+import { PhaseGuard } from '@/components/shared/PhaseGuard';
 
 // Map API reason codes to translation keys
 const REASON_MAP: Record<string, string> = {
@@ -171,7 +172,7 @@ export default function ClaimRejectedPage() {
       resetStore();
 
       // Redirect to initial assessment to start fresh funnel
-      router.push('/phases/initial-assessment');
+      router.push(`/${lang}/phases/initial-assessment`);
     } catch (error) {
       console.error('Error navigating:', error);
     } finally {
@@ -191,97 +192,141 @@ export default function ClaimRejectedPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f7fa]">
-      <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
-        <div className="mt-4 sm:mt-8 mb-8">
-          <SpeechBubble message={t.phases.claimRejected.speechBubble} />
-        </div>
-
-        <div className="space-y-6">
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-xl font-semibold mb-4">
-              {t.phases.claimRejected.reasons.title}
-            </h2>
-            {rejectionReasons.error ? (
-              <div className="text-red-600 mb-4 p-4 bg-red-50 rounded-lg">
-                <p className="font-medium">{t.common.error}</p>
-                <p className="mt-1">{rejectionReasons.error}</p>
-              </div>
-            ) : (
-              <>
-                <p className="text-gray-600 mb-4">
-                  {t.phases.claimRejected.reasons.description}
-                </p>
-                <ul className="list-disc pl-5 text-gray-600 space-y-2 mb-6">
-                  <li>
-                    {
-                      t.phases.claimRejected.reasons.items
-                        .extraordinaryCircumstances
-                    }
-                  </li>
-                  <li>{t.phases.claimRejected.reasons.items.shortDelay}</li>
-                  <li>{t.phases.claimRejected.reasons.items.nonEUFlight}</li>
-                  <li>
-                    {t.phases.claimRejected.reasons.items.timeLimitExceeded}
-                  </li>
-                </ul>
-                <div className="mt-6 p-4 bg-red-50 rounded-lg border border-red-100">
-                  <h3 className="text-lg font-medium text-red-800 mb-4">
-                    {t.phases.claimRejected.reasonsBox.title}
-                  </h3>
-                  {Object.entries(rejectionReasons).map(([key, reason]) => {
-                    console.log('Rendering reason:', { key, reason });
-                    return (
-                      <div key={key} className="text-red-700 mb-4 last:mb-0">
-                        <div className="bg-white p-4 rounded border border-red-100">
-                          <p className="whitespace-pre-wrap text-red-600">
-                            {reason}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            )}
+    <PhaseGuard phase={8}>
+      <div className="min-h-screen bg-[#f5f7fa] flex flex-col">
+        <main className="max-w-3xl mx-auto px-4 py-8">
+          <div className="mt-4 sm:mt-8 mb-8">
+            <SpeechBubble message={t.phases.claimRejected.speechBubble} />
           </div>
 
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-xl font-semibold mb-4">
-              {t.phases.claimRejected.nextSteps.title}
-            </h2>
-            <div className="text-left space-y-4">
-              <div className="flex items-start space-x-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#F54538] text-white flex items-center justify-center text-sm">
-                  1
+          <div className="space-y-6">
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h2 className="text-xl font-semibold mb-4">
+                {t.phases.claimRejected.reasons.title}
+              </h2>
+              {rejectionReasons.error ? (
+                <div className="text-red-600 mb-4 p-4 bg-red-50 rounded-lg">
+                  <p className="font-medium">{t.common.error}</p>
+                  <p className="mt-1">{rejectionReasons.error}</p>
                 </div>
-                <p className="text-gray-700">
-                  {t.phases.claimRejected.nextSteps.items.checkOtherFlights}
-                </p>
-              </div>
-              <div className="flex items-start space-x-3">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#F54538] text-white flex items-center justify-center text-sm">
-                  2
+              ) : (
+                <>
+                  <p className="text-gray-600 mb-4">
+                    {t.phases.claimRejected.reasons.description}
+                  </p>
+                  <ul className="list-disc pl-5 text-gray-600 space-y-2 mb-6">
+                    <li>
+                      {
+                        t.phases.claimRejected.reasons.items
+                          .extraordinaryCircumstances
+                      }
+                    </li>
+                    <li>{t.phases.claimRejected.reasons.items.shortDelay}</li>
+                    <li>{t.phases.claimRejected.reasons.items.nonEUFlight}</li>
+                    <li>
+                      {t.phases.claimRejected.reasons.items.timeLimitExceeded}
+                    </li>
+                  </ul>
+                  <div className="mt-6 p-4 bg-red-50 rounded-lg border border-red-100">
+                    <h3 className="text-lg font-medium text-red-800 mb-4">
+                      {t.phases.claimRejected.reasonsBox.title}
+                    </h3>
+                    {Object.entries(rejectionReasons).map(([key, reason]) => {
+                      console.log('Rendering reason:', { key, reason });
+                      return (
+                        <div key={key} className="text-red-700 mb-4 last:mb-0">
+                          <div className="bg-white p-4 rounded border border-red-100">
+                            <p className="whitespace-pre-wrap text-red-600">
+                              {reason}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h2 className="text-xl font-semibold mb-4">
+                {t.phases.claimRejected.nextSteps.title}
+              </h2>
+              <div className="text-left space-y-4">
+                <div className="flex items-start space-x-3">
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#F54538] text-white flex items-center justify-center text-sm">
+                    1
+                  </div>
+                  <p className="text-gray-700">
+                    {t.phases.claimRejected.nextSteps.items.checkOtherFlights}
+                  </p>
                 </div>
-                <p className="text-gray-700">
-                  {t.phases.claimRejected.nextSteps.items.contactInsurance}
-                </p>
+                <div className="flex items-start space-x-3">
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#F54538] text-white flex items-center justify-center text-sm">
+                    2
+                  </div>
+                  <p className="text-gray-700">
+                    {t.phases.claimRejected.nextSteps.items.contactInsurance}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
-            <BackButton
-              onClick={() => router.push('/phases/trip-experience')}
-            />
-            <ContinueButton
-              onClick={handleContinue}
-              isLoading={isLoading}
-              text={t.phases.claimRejected.navigation.startNew}
-            />
+            <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
+              <BackButton
+                onClick={() => {
+                  // Make sure we save the phase 4 completion status before navigating back
+                  try {
+                    // Mark phase 4 as explicitly completed in localStorage
+                    localStorage.setItem('phase4_explicitlyCompleted', 'true');
+
+                    // Get store instance
+                    const store = useStore.getState();
+
+                    // Ensure phase 4 is included in completed phases
+                    const completedPhases = store.completedPhases || [];
+                    if (!completedPhases.includes(4)) {
+                      completedPhases.push(4);
+                      localStorage.setItem('completedPhases', JSON.stringify(completedPhases));
+                    }
+
+                    // Ensure phase 4 is included in phasesCompletedViaContinue
+                    const phasesCompletedViaContinue = store.phasesCompletedViaContinue || [];
+                    if (!phasesCompletedViaContinue.includes(4)) {
+                      phasesCompletedViaContinue.push(4);
+                      localStorage.setItem('phasesCompletedViaContinue', JSON.stringify(phasesCompletedViaContinue));
+                    }
+
+                    console.log('=== Claim Rejected - Back to Trip Experience ===', {
+                      completedPhases,
+                      phasesCompletedViaContinue,
+                      timestamp: new Date().toISOString()
+                    });
+
+                    // Update store state
+                    useStore.setState({
+                      currentPhase: 4,
+                      _isClaimRejected: false,
+                      _preventPhaseChange: false,
+                      completedPhases: completedPhases,
+                      phasesCompletedViaContinue: phasesCompletedViaContinue
+                    });
+                  } catch (e) {
+                    console.error('Error saving phase completion state', e);
+                  }
+
+                  router.push(`/${lang}/phases/trip-experience`);
+                }}
+              />
+              <ContinueButton
+                onClick={handleContinue}
+                isLoading={isLoading}
+                text={t.phases.claimRejected.navigation.startNew}
+              />
+            </div>
           </div>
-        </div>
-      </main>
-    </div>
+        </main>
+      </div>
+    </PhaseGuard>
   );
 }

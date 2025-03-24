@@ -1,7 +1,19 @@
 import type { Flight, FlightSegmentData } from '@/types/store';
 import type { LocationLike } from '@/types/location';
-import type { StoreState } from '../types';
+import type { StoreState, ValidationStep } from '../types';
 import type { ValidationStore } from './validationSlice';
+
+// Helper function to create a validation record with all steps
+const createValidationRecord = <T>(defaultValue: T): Record<ValidationStep, T> => {
+  const steps: ValidationStep[] = [1, 2, 3, 4, 5, 6, 7];
+  return steps.reduce((acc, step) => ({
+    ...acc,
+    [step]: defaultValue
+  }), {} as Record<ValidationStep, T>);
+};
+
+// Helper function to get current phase as ValidationStep
+const asValidationStep = (phase: number): ValidationStep => phase as ValidationStep;
 
 export const initialFlightSelectionState: FlightSelectionState = {
   selectedType: 'direct',
@@ -17,56 +29,22 @@ export const initialFlightSelectionState: FlightSelectionState = {
   fromLocation: null,
   toLocation: null,
   validationState: {
-    stepValidation: {
-      1: false,
-      2: false,
-      3: false,
-      4: false,
-      5: false,
-    },
-    stepInteraction: {
-      1: false,
-      2: false,
-      3: false,
-      4: false,
-      5: false,
-    },
+    stepValidation: createValidationRecord(false),
+    stepInteraction: createValidationRecord(false),
     isFlightValid: false,
     isWizardValid: false,
     isPersonalValid: false,
     isTermsValid: false,
     isSignatureValid: false,
     isBookingValid: false,
-    errors: {
-      1: [],
-      2: [],
-      3: [],
-      4: [],
-      5: [],
-    },
+    isCompensationValid: false,
+    errors: createValidationRecord<string[]>([]),
     fieldErrors: {},
     transitionInProgress: false,
-    1: false,
-    2: false,
-    3: false,
-    4: false,
-    5: false,
     isWizardSubmitted: false,
     questionValidation: {},
-    stepCompleted: {
-      1: false,
-      2: false,
-      3: false,
-      4: false,
-      5: false,
-    },
-    completedSteps: {
-      1: false,
-      2: false,
-      3: false,
-      4: false,
-      5: false,
-    },
+    stepCompleted: createValidationRecord(false),
+    completedSteps: [],
     _timestamp: Date.now(),
   },
   searchTerm: '',
@@ -77,13 +55,7 @@ export const initialFlightSelectionState: FlightSelectionState = {
   isComponentReady: false,
   hasValidLocations: false,
   hasValidFlights: false,
-  previousValidationState: {
-    1: false,
-    2: false,
-    3: false,
-    4: false,
-    5: false,
-  },
+  previousValidationState: createValidationRecord(false),
   isMounted: false,
   isInitStarted: false,
   onInteract: null,
@@ -100,8 +72,8 @@ export interface FlightSelectionState {
   flightSegments: FlightSegmentData[];
   selectedFlights: Flight[];
   selectedDate: string | null;
-  fromLocation: LocationLike | null;
-  toLocation: LocationLike | null;
+  fromLocation: (string & LocationLike) | null;
+  toLocation: (string & LocationLike) | null;
   validationState: ValidationStore['validationState'];
   searchTerm: string;
   isSearchModalOpen: boolean;
@@ -117,7 +89,7 @@ export interface FlightSelectionState {
   isComponentReady: boolean;
   hasValidLocations: boolean;
   hasValidFlights: boolean;
-  previousValidationState: Record<number, boolean>;
+  previousValidationState: Record<ValidationStep, boolean>;
   isMounted: boolean;
   isInitStarted: boolean;
   onInteract: (() => void) | null;
@@ -162,7 +134,7 @@ export const createFlightSelectionSlice = (
         ...state.validationState,
         stepInteraction: {
           ...state.validationState.stepInteraction,
-          [state.currentPhase]: true,
+          [asValidationStep(state.currentPhase)]: true,
         },
       },
     }));
@@ -176,7 +148,7 @@ export const createFlightSelectionSlice = (
         location.value !== state.toLocation
       );
       return {
-        fromLocation: location?.value || null,
+        fromLocation: location as (string & LocationLike) | null,
         directFlight: {
           ...state.directFlight,
           fromLocation: location,
@@ -186,14 +158,14 @@ export const createFlightSelectionSlice = (
           isFlightValid: isValid,
           stepValidation: {
             ...state.validationState.stepValidation,
-            [state.currentPhase]: isValid,
+            [asValidationStep(state.currentPhase)]: isValid,
           },
           stepInteraction: {
             ...state.validationState.stepInteraction,
-            [state.currentPhase]: true,
+            [asValidationStep(state.currentPhase)]: true,
           },
         },
-      };
+      } as Partial<StoreState>;
     });
   },
 
@@ -205,7 +177,7 @@ export const createFlightSelectionSlice = (
         location.value !== state.fromLocation
       );
       return {
-        toLocation: location?.value || null,
+        toLocation: location as (string & LocationLike) | null,
         directFlight: {
           ...state.directFlight,
           toLocation: location,
@@ -222,14 +194,15 @@ export const createFlightSelectionSlice = (
             [state.currentPhase]: true,
           },
         },
-      };
+      } as Partial<StoreState>;
     });
   },
 
   setSelectedDate: (date: string | null) => {
     set(
-      (state) =>
-        ({
+      (state) => {
+        // Create the state update object
+        const update = {
           selectedDate: date,
           validationState: {
             ...state.validationState,
@@ -238,7 +211,10 @@ export const createFlightSelectionSlice = (
               [state.currentPhase]: true,
             },
           },
-        }) as Partial<StoreState>
+        };
+        // Return the update with the correct type
+        return update as unknown as Partial<StoreState>;
+      }
     );
   },
 
@@ -260,9 +236,104 @@ export const createFlightSelectionSlice = (
 
   setFlightSegments: (segments: FlightSegmentData[]) => {
     set(
-      (state) =>
-        ({
-          flightSegments: segments,
+      (state) => {
+        // Make a deep copy of the segments to prevent reference issues
+        const segmentsCopy = JSON.parse(JSON.stringify(segments));
+
+        // For multi-city flights, ensure proper connection between segments
+        // This fixes issues when navigating back from phase 2 to phase 1
+        if (state.selectedType === 'multi' && segmentsCopy.length > 1) {
+          // First, check if we have the BER → MUC, MUC → MUC pattern
+          // This is a common issue that occurs on reload or phase transitions
+          let needsFix = false;
+
+          // Find if last destination matches first destination
+          if (segmentsCopy.length >= 2 &&
+              segmentsCopy[0].toLocation &&
+              segmentsCopy[1].fromLocation &&
+              segmentsCopy[1].toLocation) {
+
+            // Check if second segment has same from/to location (MUC → MUC)
+            if (segmentsCopy[1].fromLocation.value === segmentsCopy[1].toLocation.value) {
+              needsFix = true;
+            }
+
+            // Or check if first segment destination skipped to final destination (FRA → MUC)
+            if (segmentsCopy[0].toLocation.value === segmentsCopy[segmentsCopy.length-1].toLocation?.value &&
+                segmentsCopy[1].fromLocation.value !== segmentsCopy[0].toLocation.value) {
+              needsFix = true;
+            }
+          }
+
+          // If we detected the issue pattern, try to restore proper connections
+          if (needsFix) {
+            console.log('Detected broken segment connections, attempting to fix', {
+              segments: segmentsCopy.map((s: FlightSegmentData) => ({
+                from: s.fromLocation?.value,
+                to: s.toLocation?.value
+              }))
+            });
+
+            // Try to find segments in localStorage that might have the correct connections
+            try {
+              const storedPhase1 = localStorage.getItem('phase1State');
+              if (storedPhase1) {
+                const phase1Data = JSON.parse(storedPhase1);
+
+                // If we have stored segments with proper connections, use those
+                if (phase1Data.flightSegments &&
+                    phase1Data.flightSegments.length >= 2 &&
+                    phase1Data.flightSegments[0].toLocation &&
+                    phase1Data.flightSegments[1].fromLocation &&
+                    phase1Data.flightSegments[0].toLocation.value === phase1Data.flightSegments[1].fromLocation.value) {
+
+                  console.log('Restoring segments from localStorage with proper connections');
+                  // Copy the stored segments (they have the right connections)
+                  return {
+                    flightSegments: phase1Data.flightSegments,
+                    validationState: {
+                      ...state.validationState,
+                      stepInteraction: {
+                        ...state.validationState.stepInteraction,
+                        [state.currentPhase]: true,
+                      },
+                    },
+                  } as Partial<StoreState>;
+                }
+              }
+            } catch (e) {
+              console.error('Error trying to restore segments from localStorage', e);
+            }
+          }
+
+          // Regular check: Loop through segments and ensure they connect properly
+          for (let i = 1; i < segmentsCopy.length; i++) {
+            const prevSegment = segmentsCopy[i-1];
+            const currentSegment = segmentsCopy[i];
+
+            // If previous segment has a toLocation but current segment's fromLocation doesn't match it,
+            // or current segment's fromLocation equals current segment's toLocation, fix it
+            if (prevSegment.toLocation && currentSegment.fromLocation &&
+                (prevSegment.toLocation.value !== currentSegment.fromLocation.value ||
+                 (currentSegment.toLocation && currentSegment.fromLocation.value === currentSegment.toLocation.value))) {
+
+              // Fix the connection by setting current segment's fromLocation to previous segment's toLocation
+              segmentsCopy[i] = {
+                ...currentSegment,
+                fromLocation: prevSegment.toLocation
+              };
+
+              console.log('Fixed segment connection', {
+                segmentIndex: i,
+                from: prevSegment.toLocation.value,
+                wasIncorrectlySetTo: currentSegment.fromLocation.value
+              });
+            }
+          }
+        }
+
+        return {
+          flightSegments: segmentsCopy,
           validationState: {
             ...state.validationState,
             stepInteraction: {
@@ -270,7 +341,8 @@ export const createFlightSelectionSlice = (
               [state.currentPhase]: true,
             },
           },
-        }) as Partial<StoreState>
+        } as Partial<StoreState>;
+      }
     );
   },
 
@@ -294,8 +366,9 @@ export const createFlightSelectionSlice = (
 
   setFlightState: (newState) => {
     set(
-      (state) =>
-        ({
+      (state) => {
+        // Create the state update object
+        const update = {
           ...newState,
           validationState: {
             ...state.validationState,
@@ -304,7 +377,10 @@ export const createFlightSelectionSlice = (
               [state.currentPhase]: true,
             },
           },
-        }) as Partial<StoreState>
+        };
+        // Return the update with the correct type
+        return update as unknown as Partial<StoreState>;
+      }
     );
   },
 

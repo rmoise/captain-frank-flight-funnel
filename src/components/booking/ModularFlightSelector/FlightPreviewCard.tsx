@@ -1,11 +1,11 @@
-import React from 'react';
-import { PiAirplaneTakeoff } from 'react-icons/pi';
-import { PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
-import { useFlightStore } from '../../../lib/state/flightStore';
-import { formatSafeDate } from '../../../utils/dateUtils';
-import { useTranslation } from '../../../hooks/useTranslation';
-import type { FlightPreviewCardProps } from './types';
-import { validateFlightConnection } from '../../../lib/validation/flightValidation';
+import React from "react";
+import { PiAirplaneTakeoff } from "react-icons/pi";
+import { PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { useFlightStore } from "../../../lib/state/flightStore";
+import { formatSafeDate } from "../../../utils/dateUtils";
+import { useTranslation } from "../../../hooks/useTranslation";
+import type { FlightPreviewCardProps } from "./types";
+import { validateFlightConnection } from "../../../lib/validation/flightValidation";
 
 export const FlightPreviewCard: React.FC<FlightPreviewCardProps> = React.memo(
   ({
@@ -20,9 +20,32 @@ export const FlightPreviewCard: React.FC<FlightPreviewCardProps> = React.memo(
     const { t } = useTranslation();
     const flightStore = useFlightStore();
 
+    // Add debugging to check flight props
+    console.log("=== FlightPreviewCard - Rendering with props ===", {
+      hasFlightData: !!flight,
+      flightInfo: flight
+        ? {
+            id: flight.id,
+            flightNumber: flight.flightNumber,
+            airline: flight.airline,
+            departure: flight.departure,
+            arrival: flight.arrival,
+            departureCity: flight.departureCity,
+            arrivalCity: flight.arrivalCity,
+            date: flight.date,
+            dateType: typeof flight.date,
+          }
+        : null,
+      index,
+      isMultiCity,
+      showConnectionInfo,
+      currentPhase,
+      timestamp: new Date().toISOString(),
+    });
+
     // Get the previous flight from the flight store's selected flights
     const prevFlight = showConnectionInfo
-      ? flightStore.selectedFlights[index - 1]
+      ? flightStore.getSelectedFlights(currentPhase)[index - 1]
       : null;
 
     // Create copies of the flights with their correct dates
@@ -39,7 +62,7 @@ export const FlightPreviewCard: React.FC<FlightPreviewCardProps> = React.memo(
       },
     };
 
-    console.log('=== FlightPreviewCard - Connection Info Input ===', {
+    console.log("=== FlightPreviewCard - Connection Info Input ===", {
       prevFlight: validationFlights.prev
         ? {
             id: validationFlights.prev.id,
@@ -60,7 +83,7 @@ export const FlightPreviewCard: React.FC<FlightPreviewCardProps> = React.memo(
       currentPhase,
       rawFlightDate: flight.date,
       prevRawFlightDate: prevFlight?.date,
-      flightStoreFlights: flightStore.selectedFlights,
+      flightStoreFlights: flightStore.getSelectedFlights(currentPhase),
     });
 
     const connectionInfo =
@@ -72,7 +95,7 @@ export const FlightPreviewCard: React.FC<FlightPreviewCardProps> = React.memo(
           )
         : null;
 
-    console.log('=== FlightPreviewCard - Connection Info Result ===', {
+    console.log("=== FlightPreviewCard - Connection Info Result ===", {
       connectionInfo,
       timestamp: new Date().toISOString(),
     });
@@ -81,8 +104,8 @@ export const FlightPreviewCard: React.FC<FlightPreviewCardProps> = React.memo(
       const hours = Math.floor(minutes / 60);
       const remainingMinutes = minutes % 60;
       return t.flightSelector.errors.connectionTime
-        .replace('{hours}', hours.toString())
-        .replace('{minutes}', remainingMinutes.toString());
+        .replace("{hours}", hours.toString())
+        .replace("{minutes}", remainingMinutes.toString());
     };
 
     return (
@@ -153,7 +176,7 @@ export const FlightPreviewCard: React.FC<FlightPreviewCardProps> = React.memo(
             <div className="mt-2 pt-2 border-t border-gray-100">
               <p
                 className={`text-sm ${
-                  connectionInfo.isValid ? 'text-gray-500' : 'text-red-500'
+                  connectionInfo.isValid ? "text-gray-500" : "text-red-500"
                 }`}
               >
                 {connectionInfo.isValid
@@ -235,7 +258,7 @@ export const FlightPreviewCard: React.FC<FlightPreviewCardProps> = React.memo(
             <div className="mt-2 pt-2 border-t border-gray-100">
               <p
                 className={`text-sm flex items-center ${
-                  connectionInfo.isValid ? 'text-gray-500' : 'text-red-500'
+                  connectionInfo.isValid ? "text-gray-500" : "text-red-500"
                 }`}
               >
                 <svg
@@ -266,4 +289,4 @@ export const FlightPreviewCard: React.FC<FlightPreviewCardProps> = React.memo(
   }
 );
 
-FlightPreviewCard.displayName = 'FlightPreviewCard';
+FlightPreviewCard.displayName = "FlightPreviewCard";

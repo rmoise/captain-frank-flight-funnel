@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import React, {
   useState,
@@ -6,16 +6,17 @@ import React, {
   useLayoutEffect,
   useMemo,
   useCallback,
-} from 'react';
-import { ChevronUpIcon } from '@heroicons/react/24/outline';
-import { motion } from 'framer-motion';
-import { useStore } from '@/lib/state/store';
-import { useTranslation } from '@/hooks/useTranslation';
+} from "react";
+import { ChevronUpIcon } from "@heroicons/react/24/outline";
+import { motion } from "framer-motion";
+import useStore from "@/lib/state/store";
+import { useTranslation } from "@/hooks/useTranslation";
+import type { ValidationStep } from "@/lib/state/types";
 
 interface ConsentCheckboxProps {
   id?: string;
   label: string;
-  type: 'terms' | 'privacy' | 'marketing';
+  type: "terms" | "privacy" | "marketing";
   required?: boolean;
   details?: string;
   checked?: boolean;
@@ -32,6 +33,7 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
   onChange,
 }) => {
   const { t, lang } = useTranslation();
+  const store = useStore();
   const {
     termsAccepted,
     privacyAccepted,
@@ -41,7 +43,7 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
     setMarketingAccepted,
     validationState,
     currentPhase,
-  } = useStore();
+  } = store;
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [isTextTruncated, setIsTextTruncated] = useState(false);
@@ -52,63 +54,63 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
   // Get the current checked state based on type
   const isChecked =
     checked ||
-    (type === 'terms'
+    (type === "terms"
       ? termsAccepted
-      : type === 'privacy'
-        ? privacyAccepted
-        : marketingAccepted);
+      : type === "privacy"
+      ? privacyAccepted
+      : marketingAccepted);
 
   // Get the appropriate setter based on type
   const setChecked =
-    type === 'terms'
+    type === "terms"
       ? setTermsAccepted
-      : type === 'privacy'
-        ? setPrivacyAccepted
-        : setMarketingAccepted;
+      : type === "privacy"
+      ? setPrivacyAccepted
+      : setMarketingAccepted;
 
   // Handle click on the link
   const handleLinkClick = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (e.currentTarget instanceof HTMLAnchorElement) {
-      window.open(e.currentTarget.href, '_blank');
+      window.open(e.currentTarget.href, "_blank");
     }
   }, []);
 
   // Format the label to include the link for privacy type
   const formattedLabel = useMemo(() => {
     const termsUrl =
-      lang === 'en'
-        ? 'https://www.captain-frank.com/en/terms'
-        : 'https://www.captain-frank.com/de/agb';
+      lang === "en"
+        ? "https://www.captain-frank.com/en/terms"
+        : "https://www.captain-frank.com/de/agb";
     const privacyUrl =
-      lang === 'en'
-        ? 'https://www.captain-frank.com/en/privacy'
-        : 'https://www.captain-frank.com/de/datenschutz';
+      lang === "en"
+        ? "https://www.captain-frank.com/en/privacy"
+        : "https://www.captain-frank.com/de/datenschutz";
 
-    return type === 'terms' ? (
+    return type === "terms" ? (
       <span>
-        {lang === 'en' ? 'I have read and accept the ' : 'Ich habe die '}
+        {lang === "en" ? "I have read and accept the " : "Ich habe die "}
         <a
           href={termsUrl}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            window.open(termsUrl, '_blank');
+            window.open(termsUrl, "_blank");
           }}
           className="text-[#F54538] hover:text-[#E03F33] underline"
           target="_blank"
           rel="noopener noreferrer"
         >
-          {lang === 'en'
-            ? 'Terms and Conditions'
-            : 'Allgemeinen Geschäftsbedingungen'}
+          {lang === "en"
+            ? "Terms and Conditions"
+            : "Allgemeinen Geschäftsbedingungen"}
         </a>
-        {lang === 'en' ? '.' : ' gelesen und akzeptiere sie.'}
+        {lang === "en" ? "." : " gelesen und akzeptiere sie."}
       </span>
-    ) : type === 'privacy' ? (
+    ) : type === "privacy" ? (
       <span>
-        {lang === 'en' ? 'I have read and accept the ' : 'Ich habe die '}
+        {lang === "en" ? "I have read and accept the " : "Ich habe die "}
         <a
           href={privacyUrl}
           onClick={handleLinkClick}
@@ -116,15 +118,15 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
           target="_blank"
           rel="noopener noreferrer"
         >
-          {lang === 'en' ? 'Privacy Policy' : 'Datenschutzerklärung'}
+          {lang === "en" ? "Privacy Policy" : "Datenschutzerklärung"}
         </a>
-        {lang === 'en' ? '.' : ' gelesen und akzeptiere sie.'}
+        {lang === "en" ? "." : " gelesen und akzeptiere sie."}
       </span>
-    ) : type === 'marketing' ? (
+    ) : type === "marketing" ? (
       <span>
-        {lang === 'en'
-          ? 'I agree that Captain Frank can send me advertisements about services, promotions, and satisfaction surveys via email. Captain Frank processes my personal data for this purpose (see '
-          : 'Ich stimme zu, dass Captain Frank mir Werbung zu Dienstleistungen, Aktionen und Zufriedenheitsumfragen per E-Mail sendet. Captain Frank verarbeitet meine persönlichen Daten zu diesem Zweck (siehe '}
+        {lang === "en"
+          ? "I agree that Captain Frank can send me advertisements about services, promotions, and satisfaction surveys via email. Captain Frank processes my personal data for this purpose (see "
+          : "Ich stimme zu, dass Captain Frank mir Werbung zu Dienstleistungen, Aktionen und Zufriedenheitsumfragen per E-Mail sendet. Captain Frank verarbeitet meine persönlichen Daten zu diesem Zweck (siehe "}
         <a
           href={privacyUrl}
           onClick={handleLinkClick}
@@ -132,11 +134,11 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
           target="_blank"
           rel="noopener noreferrer"
         >
-          {lang === 'en' ? 'Privacy Policy' : 'Datenschutzbestimmungen'}
+          {lang === "en" ? "Privacy Policy" : "Datenschutzbestimmungen"}
         </a>
-        {lang === 'en'
-          ? '). I can revoke this consent at any time.'
-          : '). Ich kann diese Einwilligung jederzeit widerrufen.'}
+        {lang === "en"
+          ? "). I can revoke this consent at any time."
+          : "). Ich kann diese Einwilligung jederzeit widerrufen."}
       </span>
     ) : (
       label
@@ -162,11 +164,11 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
     const timeoutId = setTimeout(checkTruncation, 0);
 
     // Add resize listener
-    window.addEventListener('resize', checkTruncation);
+    window.addEventListener("resize", checkTruncation);
 
     return () => {
       clearTimeout(timeoutId);
-      window.removeEventListener('resize', checkTruncation);
+      window.removeEventListener("resize", checkTruncation);
     };
   }, [formattedLabel]);
 
@@ -187,21 +189,22 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
   };
 
   // Get validation state based on current phase
-  const stepToValidate = currentPhase === 1 ? 4 : currentPhase === 6 ? 2 : null;
+  const stepToValidate: ValidationStep | null =
+    currentPhase === 1 ? 4 : currentPhase === 6 ? 2 : null;
   const isValid = stepToValidate
-    ? validationState[stepToValidate] || false
+    ? validationState.stepValidation[stepToValidate] || false
     : true;
   const showError =
     required &&
     !isValid &&
-    (type === 'terms' || type === 'privacy') &&
+    (type === "terms" || type === "privacy") &&
     isTouched;
 
   return (
     <div
       id={id}
       className={`flex flex-col bg-white rounded-xl border transition-colors hover:bg-gray-50 ${
-        showError ? 'border-[#F54538]' : 'border-[#e0e1e4]'
+        showError ? "border-[#F54538]" : "border-[#e0e1e4]"
       }`}
     >
       <div
@@ -213,10 +216,10 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
             flex-shrink-0 mt-0.5 w-4 h-4 rounded border transition-colors cursor-pointer
             ${
               isChecked
-                ? 'bg-[#F54538] border-[#F54538]'
+                ? "bg-[#F54538] border-[#F54538]"
                 : showError
-                  ? 'border-[#F54538] hover:border-[#F54538]'
-                  : 'border-zinc-300 hover:border-[#F54538]'
+                ? "border-[#F54538] hover:border-[#F54538]"
+                : "border-zinc-300 hover:border-[#F54538]"
             }
           `}
           onClick={handleChange}
@@ -238,7 +241,7 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
             <div
               ref={textRef}
               className={`flex-1 min-w-0 break-words ${
-                !isExpanded ? 'line-clamp-2' : ''
+                !isExpanded ? "line-clamp-2" : ""
               }`}
             >
               <div className="inline-block max-w-full">
@@ -247,38 +250,44 @@ export const ConsentCheckbox: React.FC<ConsentCheckboxProps> = ({
               </div>
             </div>
             {(isTextTruncated || details) && (
-              <motion.div
-                animate={{ rotate: isExpanded ? 180 : 0 }}
-                transition={{ duration: 0.2 }}
-                className="flex-shrink-0 mt-0.5"
-              >
-                <ChevronUpIcon className="w-4 h-4 text-gray-400" />
-              </motion.div>
+              <div className="flex-shrink-0 mt-0.5">
+                <motion.div
+                  animate={{ rotate: isExpanded ? 180 : 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <ChevronUpIcon className="w-4 h-4 text-gray-400" />
+                </motion.div>
+              </div>
             )}
           </div>
-          {details && (
-            <motion.div
-              initial={false}
-              animate={{
-                height: isExpanded ? 'auto' : 0,
-                opacity: isExpanded ? 1 : 0,
-              }}
-              transition={{
-                duration: 0.3,
-                ease: 'easeInOut',
-                height: {
-                  type: 'spring',
-                  damping: 15,
-                  stiffness: 200,
-                },
-              }}
-              className="overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="mt-2 text-sm text-[#4b616d] font-heebo break-words">
-                {details}
+          {isExpanded && details && (
+            <div className="mt-2 pl-7">
+              <div className="text-sm text-gray-600 bg-gray-50 p-4 rounded-md">
+                <motion.div
+                  initial={false}
+                  animate={{
+                    height: isExpanded ? "auto" : 0,
+                    opacity: isExpanded ? 1 : 0,
+                  }}
+                  transition={{
+                    duration: 0.3,
+                    ease: "easeInOut",
+                    height: {
+                      type: "spring",
+                      damping: 15,
+                      stiffness: 100,
+                    },
+                  }}
+                >
+                  <div
+                    className="prose prose-sm max-w-none"
+                    onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                  >
+                    {details}
+                  </div>
+                </motion.div>
               </div>
-            </motion.div>
+            </div>
           )}
           {showError && (
             <div className="text-red-600 text-sm">{t.common.required}</div>

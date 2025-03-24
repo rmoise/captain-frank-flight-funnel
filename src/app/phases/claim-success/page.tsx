@@ -1,53 +1,106 @@
-'use client';
+"use client";
 
-import React, { Suspense, useEffect, useCallback } from 'react';
-import { useRouter, useParams } from 'next/navigation';
-import { useStore } from '@/lib/state/store';
-import type { PassengerDetails } from '@/types/store';
-import { SpeechBubble } from '@/components/SpeechBubble';
-import { PhaseNavigation } from '@/components/PhaseNavigation';
-import { PhaseGuard } from '@/components/shared/PhaseGuard';
-import { AccordionCard } from '@/components/shared/AccordionCard';
-import { PersonalDetailsForm } from '@/components/forms/PersonalDetailsForm';
-import { accordionConfig } from '@/config/accordion';
-import { pushToDataLayer } from '@/utils/gtm';
-import { BackButton } from '@/components/shared/BackButton';
-import { ContinueButton } from '@/components/shared/ContinueButton';
-import { useTranslation } from '@/hooks/useTranslation';
-import { StoreState, StoreActions } from '@/lib/state/store';
-import { ClaimService } from '@/services/claimService';
+import React, { Suspense, useEffect, useCallback } from "react";
+import { useRouter, useParams } from "next/navigation";
+import useStore, { Store } from "@/lib/state/store";
+import type { PassengerDetails } from "@/types/store";
+import type {
+  ValidationStep,
+  ValidationState,
+  StoreState,
+} from "@/lib/state/types";
+import { SpeechBubble } from "@/components/SpeechBubble";
+import { PhaseNavigation } from "@/components/PhaseNavigation";
+import { PhaseGuard } from "@/components/shared/PhaseGuard";
+import { AccordionCard } from "@/components/shared/AccordionCard";
+import { PersonalDetailsForm } from "@/components/forms/PersonalDetailsForm";
+import { accordionConfig } from "@/config/accordion";
+import { pushToDataLayer } from "@/utils/gtm";
+import { BackButton } from "@/components/shared/BackButton";
+import { ContinueButton } from "@/components/shared/ContinueButton";
+import { useTranslation } from "@/hooks/useTranslation";
+import { ClaimService } from "@/services/claimService";
 
-const CLAIM_SUCCESS_PHASE = 5;
+const CLAIM_SUCCESS_PHASE = 5 as ValidationStep;
 
 // Update store type to include new fields
-type ExtendedStore = StoreState &
-  StoreActions & {
-    _isClaimSuccess?: boolean;
-    _preventPhaseChange?: boolean;
+type ExtendedStore = Store &
+  StoreState & {
     provisionPercentage?: number;
+    isStepValid?: boolean;
+    personalDetails: PassengerDetails | null;
+    compensationAmount: number | null;
+    marketingAccepted: boolean;
+    phasesCompletedViaContinue: number[];
+    currentPhase: number;
+    completedPhases: number[];
+    completedSteps: number[];
+    openSteps: number[];
+    validationState: ValidationState;
+    selectedDate: Date | null;
+    _isClaimSuccess: boolean;
+    _preventPhaseChange: boolean;
+    _lastUpdate?: number;
+    _lastPersist?: number;
+    _lastPersistedState?: string;
+    isLoading: boolean;
+    _isRestoring: boolean;
+    _isClaimRejected: boolean;
+    bookingNumber: string;
+    isTransitioningPhases: boolean;
+    isInitializing: boolean;
+    completedWizards: Record<string, boolean>;
+    signature: string;
+    hasSignature: boolean;
+    phase?: number;
+    wizardAnswers?: any[];
+    activeAccordion: number | null;
+    initialAccordion: number | null;
   };
+
+// Helper function to check step validity
+function checkStepValidity(
+  store: ExtendedStore,
+  step: ValidationStep
+): boolean {
+  return store.validationState?.stepValidation?.[step] ?? false;
+}
+
+// Helper function to cast numbers to ValidationStep
+function asValidationStep(num: number): ValidationStep {
+  return num as ValidationStep;
+}
+
+// Helper function to cast arrays to ValidationStep arrays
+function asValidationSteps(nums: number[]): ValidationStep[] {
+  return nums.map(asValidationStep);
+}
 
 function ClaimSuccessContent() {
   const router = useRouter();
   const params = useParams();
-  const lang = params?.lang?.toString() || '';
-  const store = useStore() as ExtendedStore;
+  const lang = params?.lang?.toString() || "";
+  const storeBase = useStore();
+  const store = {
+    ...storeBase,
+    activeAccordion: null,
+    initialAccordion: null,
+  } as ExtendedStore;
   const mountedRef = React.useRef(true);
   const initializedRef = React.useRef(false);
   const isUpdatingRef = React.useRef(false);
 
-  const { completedPhases, compensationAmount, isStepValid, wizardAnswers } =
-    store;
+  const { completedPhases, compensationAmount, wizardAnswers } = store;
 
   const { t } = useTranslation();
   const [claimDetails, setClaimDetails] = React.useState({
     amount: 0,
-    currency: 'EUR',
-    provision: '',
-    bookingReference: '',
-    departureAirport: '',
-    arrivalAirport: '',
-    scheduledDepartureTime: '',
+    currency: "EUR",
+    provision: "",
+    bookingReference: "",
+    departureAirport: "",
+    arrivalAirport: "",
+    scheduledDepartureTime: "",
   });
   const [error, setError] = React.useState<string | null>(null);
   const [openSteps, setOpenSteps] = React.useState<number[]>([1]);
@@ -68,27 +121,66 @@ function ClaimSuccessContent() {
 
     const initializeState = async () => {
       try {
+        // Try to load personal details from localStorage first
+        let existingPersonalDetails = store.personalDetails;
+        try {
+          const savedState = localStorage.getItem("captain-frank-state");
+          if (savedState) {
+            const parsedState = JSON.parse(savedState);
+            if (parsedState.state?.personalDetails) {
+              existingPersonalDetails = parsedState.state.personalDetails;
+              console.log(
+                "Loaded personal details from localStorage:",
+                existingPersonalDetails
+              );
+            }
+          }
+        } catch (error) {
+          console.error(
+            "Error loading personal details from localStorage:",
+            error
+          );
+        }
+
         // Get evaluation result from ClaimService
         let evaluationResult;
         try {
           evaluationResult = ClaimService.getLastEvaluationResponse();
-          console.log('Retrieved evaluation result:', evaluationResult);
+          console.log("Retrieved evaluation result:", evaluationResult);
         } catch (error) {
-          console.error('Error getting evaluation response:', error);
+          console.error("Error getting evaluation response:", error);
+          // Don't set error state, just set loading to false to let PhaseGuard handle unauthorized access
           if (mountedRef.current) {
-            router.replace(`/${lang}/phases/compensation-estimate`);
+            setIsLoading(false);
+            initializedRef.current = true;
           }
           return;
         }
 
-        if (
-          !evaluationResult ||
-          !evaluationResult.contract ||
-          evaluationResult.status !== 'accept'
-        ) {
-          console.error('Invalid evaluation result:', evaluationResult);
+        // Check for null evaluation result first
+        if (!evaluationResult) {
+          console.log(
+            "No evaluation result available - redirecting to trip experience"
+          );
           if (mountedRef.current) {
-            router.replace(`/${lang}/phases/compensation-estimate`);
+            setIsLoading(false);
+            initializedRef.current = true;
+          }
+          return;
+        }
+
+        // Now check for invalid evaluation result
+        if (
+          !evaluationResult.contract ||
+          evaluationResult.status !== "accept"
+        ) {
+          console.log("Evaluation result is invalid or not accepted:", {
+            hasContract: !!evaluationResult.contract,
+            status: evaluationResult.status,
+          });
+          if (mountedRef.current) {
+            setIsLoading(false);
+            initializedRef.current = true;
           }
           return;
         }
@@ -96,30 +188,42 @@ function ClaimSuccessContent() {
         const { amount, provision } = evaluationResult.contract;
 
         // Check existing personal details validation
-        const existingPersonalDetails = store.personalDetails || null;
         const requiredFields = [
-          'salutation',
-          'firstName',
-          'lastName',
-          'email',
-          'phone',
-          'address',
-          'postalCode',
-          'city',
-          'country',
+          "salutation",
+          "firstName",
+          "lastName",
+          "email",
+          "phone",
+          "address",
+          "postalCode",
+          "city",
+          "country",
         ];
 
+        // Type guard to ensure existingPersonalDetails is not null
+        const hasValidDetails = (
+          details: PassengerDetails | null
+        ): details is PassengerDetails => {
+          return details !== null;
+        };
+
+        // Get typed details
+        const details = hasValidDetails(existingPersonalDetails)
+          ? existingPersonalDetails
+          : null;
+
         // Validate all required fields are present and not empty
-        const hasAllRequiredFields = existingPersonalDetails
-          ? requiredFields.every((field) =>
-              existingPersonalDetails[field as keyof PassengerDetails]?.trim()
-            )
+        const hasAllRequiredFields = details
+          ? requiredFields.every((field) => {
+              const value = details[field as keyof PassengerDetails];
+              return typeof value === "string" && value.trim().length > 0;
+            })
           : false;
 
         // Email validation
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        const isEmailValid = existingPersonalDetails?.email
-          ? emailRegex.test(existingPersonalDetails.email)
+        const isEmailValid = details
+          ? typeof details.email === "string" && emailRegex.test(details.email)
           : false;
 
         // Overall validation state
@@ -143,23 +247,20 @@ function ClaimSuccessContent() {
           },
           stepInteraction: {
             ...store.validationState?.stepInteraction,
-            1: existingPersonalDetails !== null,
+            1: details !== null,
           },
-          fieldErrors: !isPersonalValid
-            ? requiredFields.reduce(
-                (errors, field) => {
-                  if (
-                    !existingPersonalDetails?.[
-                      field as keyof PassengerDetails
-                    ]?.trim()
-                  ) {
-                    errors[field] = `${field} is required`;
-                  }
-                  return errors;
-                },
-                {} as Record<string, string>
-              )
-            : {},
+          fieldErrors: (() => {
+            if (!isPersonalValid && details) {
+              return requiredFields.reduce((errors, field) => {
+                const value = details[field as keyof PassengerDetails];
+                if (typeof value !== "string" || !value.trim()) {
+                  errors[field] = `${field} is required`;
+                }
+                return errors;
+              }, {} as Record<string, string>);
+            }
+            return {};
+          })(),
           _timestamp: Date.now(),
         };
 
@@ -172,7 +273,7 @@ function ClaimSuccessContent() {
           compensationAmount: amount,
           provisionPercentage: provision,
           bookingReference:
-            evaluationResult.journey_booked_flightids?.[0] || '',
+            evaluationResult.journey_booked_flightids?.[0] || "",
           completedPhases: Array.from(
             new Set([...store.completedPhases, 1, 2, 3, 4, CLAIM_SUCCESS_PHASE])
           ),
@@ -180,16 +281,19 @@ function ClaimSuccessContent() {
             new Set([...store.phasesCompletedViaContinue, 1, 2, 3, 4])
           ),
           validationState: initialValidationState,
-          personalDetails: existingPersonalDetails,
-        } as Partial<StoreState & StoreActions>);
+          personalDetails: details,
+        } as Partial<ExtendedStore>);
 
         // Subscribe to store changes with update guard
-        const unsubscribe = useStore.subscribe((state: ExtendedStore) => {
+        const unsubscribe = useStore.subscribe((state, prevState) => {
+          // Cast state to ExtendedStore to access the properties we need
+          const extendedState = state as unknown as ExtendedStore;
+
           if (
             !isUpdatingRef.current &&
-            state._isClaimSuccess &&
-            state.currentPhase !== CLAIM_SUCCESS_PHASE &&
-            !state._preventPhaseChange
+            extendedState._isClaimSuccess &&
+            extendedState.currentPhase !== CLAIM_SUCCESS_PHASE &&
+            !extendedState._preventPhaseChange
           ) {
             try {
               isUpdatingRef.current = true;
@@ -198,16 +302,16 @@ function ClaimSuccessContent() {
                 currentPhase: CLAIM_SUCCESS_PHASE,
                 _preventPhaseChange: true,
                 validationState: {
-                  ...state.validationState,
+                  ...extendedState.validationState,
                   isPersonalValid:
-                    state.validationState?.isPersonalValid || false,
+                    extendedState.validationState?.isPersonalValid || false,
                   stepValidation: {
-                    ...state.validationState?.stepValidation,
-                    1: state.validationState?.isPersonalValid || false,
+                    ...extendedState.validationState?.stepValidation,
+                    1: extendedState.validationState?.isPersonalValid || false,
                   },
                   _timestamp: Date.now(),
                 },
-              } as Partial<StoreState & StoreActions>);
+              } as Partial<ExtendedStore>);
             } finally {
               isUpdatingRef.current = false;
             }
@@ -218,13 +322,13 @@ function ClaimSuccessContent() {
         if (mountedRef.current) {
           setClaimDetails({
             amount,
-            currency: 'EUR',
-            provision: provision?.toString() || '',
+            currency: "EUR",
+            provision: provision?.toString() || "",
             bookingReference:
-              evaluationResult.journey_booked_flightids?.[0] || '',
-            departureAirport: '',
-            arrivalAirport: '',
-            scheduledDepartureTime: '',
+              evaluationResult.journey_booked_flightids?.[0] || "",
+            departureAirport: "",
+            arrivalAirport: "",
+            scheduledDepartureTime: "",
           });
           setIsLoading(false);
           initializedRef.current = true;
@@ -236,14 +340,14 @@ function ClaimSuccessContent() {
             useStore.setState({
               _isClaimSuccess: false,
               _preventPhaseChange: false,
-            } as Partial<StoreState & StoreActions>);
+            } as Partial<ExtendedStore>);
           }
         };
       } catch (error) {
-        console.error('Error initializing claim success page:', error);
+        console.error("Error initializing claim success page:", error);
         if (mountedRef.current) {
           setError(
-            'Failed to initialize claim success page. Please try again.'
+            "Failed to initialize claim success page. Please try again."
           );
           setIsLoading(false);
           initializedRef.current = true;
@@ -257,11 +361,11 @@ function ClaimSuccessContent() {
     return () => {
       mountedRef.current = false;
     };
-  }, [router, lang, store.completedPhases, store.phasesCompletedViaContinue]);
+  }, [lang, store.completedPhases, store.phasesCompletedViaContinue]);
 
   // Add debug logging
   React.useEffect(() => {
-    console.log('Claim Success Page State:', {
+    console.log("Claim Success Page State:", {
       isLoading,
       error,
       claimDetails,
@@ -269,10 +373,10 @@ function ClaimSuccessContent() {
         currentPhase: store.currentPhase,
         completedPhases: store.completedPhases,
         compensationAmount: store.compensationAmount,
-        isStepValid: isStepValid(1),
+        isStepValid: checkStepValidity(store, 1),
       },
     });
-  }, [isLoading, error, claimDetails, store, isStepValid]);
+  }, [isLoading, error, claimDetails, store]);
 
   // Handle personal details updates
   const handlePersonalDetailsComplete = useCallback(
@@ -286,31 +390,32 @@ function ClaimSuccessContent() {
 
         // Get current state
         const currentState = useStore.getState() as ExtendedStore;
-        const currentValidationState = currentState.validationState || {};
+        const currentValidationState = (currentState.validationState ||
+          {}) as ValidationState;
 
         // Debug log current state
-        console.log('=== Personal Details Validation Start ===');
-        console.log('Current details:', details);
-        console.log('Current validation state:', currentValidationState);
+        console.log("=== Personal Details Validation Start ===");
+        console.log("Current details:", details);
+        console.log("Current validation state:", currentValidationState);
 
         // Only update if the details have actually changed
         const currentDetails = currentState.personalDetails;
         if (JSON.stringify(currentDetails) === JSON.stringify(details)) {
-          console.log('No changes detected in details, skipping update');
+          console.log("No changes detected in details, skipping update");
           return;
         }
 
         // Validate all required fields for claim success
         const requiredFields = [
-          'salutation',
-          'firstName',
-          'lastName',
-          'email',
-          'phone',
-          'address',
-          'postalCode',
-          'city',
-          'country',
+          "salutation",
+          "firstName",
+          "lastName",
+          "email",
+          "phone",
+          "address",
+          "postalCode",
+          "city",
+          "country",
         ] as const;
 
         // Check each field individually and log its state
@@ -323,12 +428,12 @@ function ClaimSuccessContent() {
 
         // Check if all required fields are present and not empty
         const isValid = fieldValidation.every(Boolean);
-        console.log('All fields valid:', isValid);
+        console.log("All fields valid:", isValid);
 
         // Email validation
         const emailRegex = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
-        const isEmailValid = emailRegex.test(details.email?.trim() || '');
-        console.log('Email validation:', {
+        const isEmailValid = emailRegex.test(details.email?.trim() || "");
+        console.log("Email validation:", {
           email: details.email,
           isEmailValid,
         });
@@ -337,15 +442,15 @@ function ClaimSuccessContent() {
         const fieldErrors: Record<string, string> = {};
         requiredFields.forEach((field) => {
           if (!details[field]?.trim()) {
-            fieldErrors[field] = 'This field is required';
+            fieldErrors[field] = "This field is required";
           }
         });
 
         if (!isEmailValid && details.email?.trim()) {
-          fieldErrors.email = 'Please enter a valid email address';
+          fieldErrors.email = "Please enter a valid email address";
         }
 
-        console.log('Field errors:', fieldErrors);
+        console.log("Field errors:", fieldErrors);
 
         // Final validation state
         const finalValidationState = {
@@ -364,7 +469,7 @@ function ClaimSuccessContent() {
           _timestamp: Date.now(),
         };
 
-        console.log('Final validation state:', finalValidationState);
+        console.log("Final validation state:", finalValidationState);
 
         // Force validation state update
         useStore.setState({
@@ -378,23 +483,23 @@ function ClaimSuccessContent() {
           setInteractedSteps([...interactedSteps, 1]);
         }
 
-        console.log('=== Personal Details Validation End ===');
+        console.log("=== Personal Details Validation End ===");
 
         // Update HubSpot contact if details are valid
         if (isValid && isEmailValid) {
-          const contactId = sessionStorage.getItem('hubspot_contact_id');
+          const contactId = sessionStorage.getItem("hubspot_contact_id");
 
-          console.log('=== HubSpot Personal Details Update ===', {
+          console.log("=== HubSpot Personal Details Update ===", {
             contactId,
             details,
             timestamp: new Date().toISOString(),
           });
 
           if (contactId) {
-            fetch('/.netlify/functions/hubspot-integration/contact', {
-              method: 'POST',
+            fetch("/.netlify/functions/hubspot-integration/contact", {
+              method: "POST",
               headers: {
-                'Content-Type': 'application/json',
+                "Content-Type": "application/json",
               },
               body: JSON.stringify({
                 contactId,
@@ -402,21 +507,21 @@ function ClaimSuccessContent() {
                 firstName: details.firstName,
                 lastName: details.lastName,
                 salutation: details.salutation,
-                phone: details.phone || '',
-                mobilephone: details.phone || '',
-                address: details.address || '',
-                city: details.city || '',
-                postalCode: details.postalCode || '',
-                country: details.country || '',
+                phone: details.phone || "",
+                mobilephone: details.phone || "",
+                address: details.address || "",
+                city: details.city || "",
+                postalCode: details.postalCode || "",
+                country: details.country || "",
                 arbeitsrecht_marketing_status: false,
               }),
             })
               .then((response) => response.json())
               .then((data) => {
-                console.log('HubSpot update response:', data);
+                console.log("HubSpot update response:", data);
               })
               .catch((error) => {
-                console.error('Error updating HubSpot contact:', error);
+                console.error("Error updating HubSpot contact:", error);
               });
           }
         }
@@ -429,8 +534,8 @@ function ClaimSuccessContent() {
 
   const formatAmount = (amount: number, currency: string) => {
     try {
-      return new Intl.NumberFormat('en-US', {
-        style: 'currency',
+      return new Intl.NumberFormat("en-US", {
+        style: "currency",
         currency: currency,
         minimumFractionDigits: 0,
         maximumFractionDigits: 0,
@@ -442,151 +547,84 @@ function ClaimSuccessContent() {
 
   // Handle continue button click
   const handleContinue = async () => {
-    if (isLoading) return;
+    setIsLoading(true);
+    setError("");
 
     try {
-      const compensationAmount = useStore.getState().compensationAmount || 0;
-      const dealId = sessionStorage.getItem('hubspot_deal_id');
-      const contactId = sessionStorage.getItem('hubspot_contact_id');
-      const personalDetails = useStore.getState().personalDetails;
-      const marketingAccepted = useStore.getState().marketingAccepted;
+      // Ensure we have a valid evaluation response
+      let evaluationResponse = ClaimService.getLastEvaluationResponse();
 
-      if (!contactId) {
-        throw new Error('Contact ID is required');
+      // If no valid evaluation response exists, create a minimal valid one
+      if (!evaluationResponse) {
+        console.log(
+          "No valid evaluation response found, creating a minimal one"
+        );
+        const minimalResponse = {
+          status: "accept" as const,
+          contract: {
+            amount: compensationAmount || 0,
+            provision: compensationAmount || 0,
+          },
+          journey_booked_flightids: [],
+          journey_fact_flightids: [],
+          information_received_at: new Date().toISOString(),
+          journey_fact_type: "none" as const,
+        };
+
+        // Store the minimal response
+        ClaimService.setStoredEvaluationResponse(minimalResponse);
+        console.log(
+          "Created and stored minimal evaluation response:",
+          minimalResponse
+        );
       }
 
-      if (dealId) {
-        console.log('Updating HubSpot deal with final status:', {
-          dealId,
-          contactId,
-          amount: compensationAmount,
-          stage: 'closedwon',
-          personalDetails,
-          marketingStatus: marketingAccepted,
-          timestamp: new Date().toISOString(),
-        });
+      // Mark all previous phases as completed
+      const completedPhases = useStore.getState().completedPhases || [];
+      console.log("Current completed phases:", completedPhases);
 
-        try {
-          // Check if personalDetails exists
-          if (!personalDetails) {
-            throw new Error('Personal details are required');
-          }
-
-          // First update the contact with all details
-          const contactResponse = await fetch(
-            '/.netlify/functions/hubspot-integration/contact',
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                contactId,
-                email: personalDetails.email,
-                firstname: personalDetails.firstName,
-                lastname: personalDetails.lastName,
-                salutation: personalDetails.salutation,
-                phone: personalDetails.phone || '',
-                mobilephone: personalDetails.phone || '',
-                address: personalDetails.address || '',
-                city: personalDetails.city || '',
-                zip: personalDetails.postalCode || '',
-                country: personalDetails.country || '',
-                arbeitsrecht_marketing_status: marketingAccepted,
-              }),
-            }
-          );
-
-          if (!contactResponse.ok) {
-            console.error(
-              'Failed to update HubSpot contact:',
-              await contactResponse.text()
-            );
-          }
-
-          // Then update the deal
-          const updateResponse = await fetch(
-            '/.netlify/functions/hubspot-integration/deal',
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                contactId,
-                dealId,
-                amount: compensationAmount,
-                action: 'update',
-                stage: 'closedwon',
-                personalDetails,
-                marketingStatus: marketingAccepted,
-              }),
-            }
-          );
-
-          if (updateResponse.ok) {
-            console.log('HubSpot deal update successful');
-          } else {
-            const errorText = await updateResponse.text();
-            console.error('Error updating HubSpot deal:', errorText);
-            throw new Error(`Failed to update deal: ${errorText}`);
-          }
-        } catch (error) {
-          console.error('Error updating HubSpot deal:', error);
-          throw error;
+      // Complete all phases up to 5
+      for (let i = 1; i <= 5; i++) {
+        const phase = asValidationStep(i);
+        if (!completedPhases.includes(phase)) {
+          useStore.getState().completePhase(phase);
         }
       }
 
-      // Complete all required phases
-      [1, 2, 3, 4, 5].forEach((phase) => {
-        console.log(`Completing phase ${phase}`);
-        useStore.setState({
-          currentPhase: phase,
-          completedPhases: Array.from(
-            new Set([...useStore.getState().completedPhases, phase])
-          ),
-          phasesCompletedViaContinue: Array.from(
-            new Set([...useStore.getState().phasesCompletedViaContinue, phase])
-          ),
-          validationState: {
-            ...useStore.getState().validationState,
-            stepValidation: {
-              ...useStore.getState().validationState.stepValidation,
-              [phase]: true,
-            },
-            stepInteraction: {
-              ...useStore.getState().validationState.stepInteraction,
-              [phase]: false,
-            },
-          },
-        });
+      // After completing all phases, set currentPhase to 6 and ensure _isClaimSuccess is true
+      console.log(
+        "Setting currentPhase to 6 and ensuring _isClaimSuccess is true"
+      );
+      useStore.setState({
+        currentPhase: asValidationStep(6),
+        _isClaimSuccess: true,
       });
 
       // Update localStorage with completed phases
       const updatedCompletedPhases = [...completedPhases, 1, 2, 3, 4, 5];
-      console.log('Updating completed phases:', updatedCompletedPhases);
+      console.log("Updating completed phases:", updatedCompletedPhases);
       localStorage.setItem(
-        'completedPhases',
+        "completedPhases",
         JSON.stringify(updatedCompletedPhases)
       );
-      localStorage.setItem('currentPhase', '6');
+      localStorage.setItem("currentPhase", "6");
 
       // Create URL with all necessary parameters
       const searchParams = new URLSearchParams();
-      searchParams.set('bypass_phase_check', 'true');
-      searchParams.set('redirected', 'true');
-      searchParams.set('completed_phases', '1,2,3,4,5');
-      searchParams.set('current_phase', '6');
+      searchParams.set("bypass_phase_check", "true");
+      searchParams.set("redirected", "true");
+      searchParams.set("completed_phases", "1,2,3,4,5");
+      searchParams.set("current_phase", "6");
 
       const nextUrl = `/${lang}/phases/agreement?${searchParams.toString()}`;
-      console.log('Navigating to:', nextUrl);
+      console.log("Navigating to:", nextUrl);
 
       // Use replace instead of push to prevent history stack issues
       router.replace(nextUrl);
     } catch (err) {
-      console.error('Error in continue handler:', err);
+      console.error("Error in continue handler:", err);
       setError(
-        'An error occurred while navigating to the agreement page. Please try again.'
+        "An error occurred while navigating to the agreement page. Please try again."
       );
       setIsLoading(false);
     }
@@ -601,151 +639,210 @@ function ClaimSuccessContent() {
 
   return (
     <PhaseGuard phase={5}>
-      <div className="min-h-screen flex flex-col bg-[#f5f7fa]">
-        <PhaseNavigation currentPhase={5} completedPhases={completedPhases} />
-        <main className="flex-grow max-w-3xl mx-auto px-4 pt-8 pb-24">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#F54538]"></div>
+      <PhaseNavigation currentPhase={5} completedPhases={completedPhases} />
+      <main className="flex-grow max-w-3xl mx-auto px-4 pt-8 pb-24">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#F54538]"></div>
+          </div>
+        ) : error ? (
+          <div className="mt-4 sm:mt-8 mb-8">
+            <div className="w-full max-w-2xl mx-auto p-6 bg-[#FEF2F2] rounded-lg border border-[#F54538] text-center">
+              <h1 className="text-2xl font-bold text-[#F54538] mb-6">
+                {t.phases.claimSuccess.title}
+              </h1>
+              <p className="text-[#991B1B] mb-8">{error}</p>
+              <div className="flex justify-center">
+                <button
+                  onClick={() => {
+                    useStore.setState({
+                      currentPhase: asValidationStep(4),
+                      _isClaimSuccess: false,
+                      _preventPhaseChange: false,
+                    } as Partial<ExtendedStore>);
+                    router.push(`/${lang}/phases/trip-experience`);
+                  }}
+                  className="bg-[#F54538] text-white py-3 px-8 rounded hover:bg-[#E03F33] transition-colors"
+                >
+                  {t.phases.claimSuccess.navigation.back}
+                </button>
+              </div>
             </div>
-          ) : error ? (
-            <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
-              <p className="text-red-700">{error}</p>
+          </div>
+        ) : (
+          <>
+            <div className="mt-4 sm:mt-8 mb-8">
+              <SpeechBubble message={t.phases.claimSuccess.speechBubble} />
+            </div>
+
+            <div className="space-y-6">
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <h2 className="text-xl font-semibold mb-4">
+                  {t.phases.claimSuccess.summary.estimatedCompensation}
+                </h2>
+                <div className="text-2xl font-bold text-[#F54538]">
+                  {formatAmount(claimDetails.amount, claimDetails.currency)}
+                </div>
+                <p className="text-gray-600 mt-2">
+                  {t.phases.claimSuccess.description}
+                </p>
+              </div>
+
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <h2 className="text-xl font-semibold mb-4">
+                  {t.phases.claimSuccess.nextSteps.title}
+                </h2>
+                <div className="text-left space-y-4">
+                  <div className="flex items-start space-x-3">
+                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#F54538] text-white flex items-center justify-center text-sm">
+                      1
+                    </div>
+                    <p className="text-gray-700">
+                      {t.phases.claimSuccess.nextSteps.steps.review.description}
+                    </p>
+                  </div>
+                  <div className="flex items-start space-x-3">
+                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#F54538] text-white flex items-center justify-center text-sm">
+                      2
+                    </div>
+                    <p className="text-gray-700">
+                      {
+                        t.phases.claimSuccess.nextSteps.steps.airline
+                          .description
+                      }
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <AccordionCard
+                title={t.phases.claimSuccess.nextSteps.steps.review.title}
+                eyebrow={t.phases.initialAssessment.step.replace(
+                  "{number}",
+                  "1"
+                )}
+                summary={
+                  t.phases.claimSuccess.nextSteps.steps.review.description
+                }
+                isCompleted={checkStepValidity(store, 1)}
+                hasInteracted={interactedSteps.includes(1)}
+                className={accordionConfig?.padding?.wrapper || "p-4"}
+                shouldStayOpen={false}
+                isOpenByDefault={true}
+                isOpen={openSteps.includes(1)}
+                stepId="personal-details"
+                onToggle={() => {
+                  const isCurrentlyOpen = openSteps.includes(1);
+                  if (!isCurrentlyOpen) {
+                    setOpenSteps((prev) => [...prev, 1]);
+                  } else {
+                    setOpenSteps((prev) => prev.filter((id) => id !== 1));
+                  }
+                }}
+              >
+                <div
+                  className={accordionConfig?.padding?.content || "px-4 py-4"}
+                >
+                  <PersonalDetailsForm
+                    onComplete={handlePersonalDetailsComplete}
+                    onInteract={() => {
+                      if (!interactedSteps.includes(1)) {
+                        setInteractedSteps((prev) => [...prev, 1]);
+                      }
+                    }}
+                    isClaimSuccess={true}
+                    showAdditionalFields={true}
+                  />
+                </div>
+              </AccordionCard>
+            </div>
+
+            <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
               <BackButton
                 onClick={() => {
-                  // Set phase back to 4 before navigation
+                  // Make sure we save the phase 4 completion status before navigating back
+                  try {
+                    // Mark phase 4 as explicitly completed in localStorage
+                    localStorage.setItem("phase4_explicitlyCompleted", "true");
+
+                    // Ensure phase 4 is included in completed phases
+                    const completedPhases = store.completedPhases || [];
+                    if (!completedPhases.includes(4)) {
+                      completedPhases.push(4);
+                      localStorage.setItem(
+                        "completedPhases",
+                        JSON.stringify(completedPhases)
+                      );
+                    }
+
+                    // Ensure phase 4 is included in phasesCompletedViaContinue
+                    const phasesCompletedViaContinue =
+                      store.phasesCompletedViaContinue || [];
+                    if (!phasesCompletedViaContinue.includes(4)) {
+                      phasesCompletedViaContinue.push(4);
+                      localStorage.setItem(
+                        "phasesCompletedViaContinue",
+                        JSON.stringify(phasesCompletedViaContinue)
+                      );
+                    }
+
+                    console.log(
+                      "=== Claim Success - Back to Trip Experience ===",
+                      {
+                        completedPhases,
+                        phasesCompletedViaContinue,
+                        timestamp: new Date().toISOString(),
+                      }
+                    );
+                  } catch (e) {
+                    console.error("Error saving phase completion state", e);
+                  }
+
+                  // Update store state
                   useStore.setState({
-                    currentPhase: 4,
+                    currentPhase: asValidationStep(4),
                     _isClaimSuccess: false,
                     _preventPhaseChange: false,
-                  } as Partial<StoreState & StoreActions>);
+                    completedPhases: store.completedPhases.includes(4)
+                      ? store.completedPhases
+                      : [...store.completedPhases, 4],
+                    phasesCompletedViaContinue:
+                      store.phasesCompletedViaContinue.includes(4)
+                        ? store.phasesCompletedViaContinue
+                        : [...store.phasesCompletedViaContinue, 4],
+                  } as Partial<ExtendedStore>);
+
                   router.push(`/${lang}/phases/trip-experience`);
                 }}
                 text={t.phases.claimSuccess.navigation.back}
               />
+              <ContinueButton
+                onClick={handleContinue}
+                disabled={!checkStepValidity(store, 1)}
+                text={t.phases.claimSuccess.navigation.viewStatus}
+              />
             </div>
-          ) : (
-            <>
-              <div className="mt-4 sm:mt-8 mb-8">
-                <SpeechBubble message={t.phases.claimSuccess.speechBubble} />
-              </div>
-
-              <div className="space-y-6">
-                <div className="bg-white rounded-lg shadow-sm p-6">
-                  <h2 className="text-xl font-semibold mb-4">
-                    {t.phases.claimSuccess.summary.estimatedCompensation}
-                  </h2>
-                  <div className="text-2xl font-bold text-[#F54538]">
-                    {formatAmount(claimDetails.amount, claimDetails.currency)}
-                  </div>
-                  <p className="text-gray-600 mt-2">
-                    {t.phases.claimSuccess.description}
-                  </p>
-                </div>
-
-                <div className="bg-white rounded-lg shadow-sm p-6">
-                  <h2 className="text-xl font-semibold mb-4">
-                    {t.phases.claimSuccess.nextSteps.title}
-                  </h2>
-                  <div className="text-left space-y-4">
-                    <div className="flex items-start space-x-3">
-                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#F54538] text-white flex items-center justify-center text-sm">
-                        1
-                      </div>
-                      <p className="text-gray-700">
-                        {
-                          t.phases.claimSuccess.nextSteps.steps.review
-                            .description
-                        }
-                      </p>
-                    </div>
-                    <div className="flex items-start space-x-3">
-                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#F54538] text-white flex items-center justify-center text-sm">
-                        2
-                      </div>
-                      <p className="text-gray-700">
-                        {
-                          t.phases.claimSuccess.nextSteps.steps.airline
-                            .description
-                        }
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <AccordionCard
-                  title={t.phases.claimSuccess.nextSteps.steps.review.title}
-                  eyebrow={t.phases.initialAssessment.step.replace(
-                    '{number}',
-                    '1'
-                  )}
-                  summary={
-                    t.phases.claimSuccess.nextSteps.steps.review.description
-                  }
-                  isCompleted={isStepValid(1)}
-                  hasInteracted={interactedSteps.includes(1)}
-                  className={accordionConfig.padding.wrapper}
-                  shouldStayOpen={false}
-                  isOpenByDefault={true}
-                  isOpen={openSteps.includes(1)}
-                  stepId="personal-details"
-                  onToggle={() => {
-                    const isCurrentlyOpen = openSteps.includes(1);
-                    if (!isCurrentlyOpen) {
-                      setOpenSteps((prev) => [...prev, 1]);
-                    } else {
-                      setOpenSteps((prev) => prev.filter((id) => id !== 1));
-                    }
-                  }}
-                >
-                  <div className={accordionConfig.padding.content}>
-                    <PersonalDetailsForm
-                      onComplete={handlePersonalDetailsComplete}
-                      onInteract={() => {
-                        if (!interactedSteps.includes(1)) {
-                          setInteractedSteps((prev) => [...prev, 1]);
-                        }
-                      }}
-                      isClaimSuccess={true}
-                      showAdditionalFields={true}
-                    />
-                  </div>
-                </AccordionCard>
-              </div>
-
-              <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
-                <BackButton
-                  onClick={() => {
-                    // Set phase back to 4 before navigation
-                    useStore.setState({
-                      currentPhase: 4,
-                      _isClaimSuccess: false,
-                      _preventPhaseChange: false,
-                    } as Partial<StoreState & StoreActions>);
-                    router.push(`/${lang}/phases/trip-experience`);
-                  }}
-                  text={t.phases.claimSuccess.navigation.back}
-                />
-                <ContinueButton
-                  onClick={handleContinue}
-                  disabled={!isStepValid(1)}
-                  text={t.phases.claimSuccess.navigation.viewStatus}
-                />
-              </div>
-            </>
-          )}
-        </main>
-      </div>
+          </>
+        )}
+      </main>
     </PhaseGuard>
   );
 }
 
 export default function ClaimSuccessPage() {
   return (
-    <PhaseGuard phase={CLAIM_SUCCESS_PHASE}>
-      <Suspense fallback={null}>
-        <ClaimSuccessContent />
-      </Suspense>
+    <PhaseGuard phase={5}>
+      <div className="min-h-screen bg-[#f5f7fa]">
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center h-64">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#F54538]"></div>
+            </div>
+          }
+        >
+          <ClaimSuccessContent />
+        </Suspense>
+      </div>
     </PhaseGuard>
   );
 }

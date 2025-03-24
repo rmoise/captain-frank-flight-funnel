@@ -1,5 +1,6 @@
-import { Answer } from '@/types/store';
-import { StoreStateValues } from '../types';
+import type { Answer } from '@/types/wizard';
+import type { Question } from '@/types/experience';
+import { StoreStateValues, ValidationStep } from '../types';
 import { validateInformedDate } from '../validationHelpers';
 
 export type WizardStepKey =
@@ -24,11 +25,9 @@ export interface WizardSlice {
   wizardIsEditingMoney: boolean;
   wizardLastActiveStep: number | null;
   wizardValidationState: Record<string, boolean>;
-  wizardSuccessStates: Record<
-    WizardStepKey,
-    { showing: boolean; message: string }
-  >;
+  wizardSuccessStates: Record<WizardStepKey, { showing: boolean; message: string }>;
   tripExperienceAnswers: Answer[];
+  wizardQuestions: Question[];
 }
 
 export const initialWizardState: WizardSlice = {
@@ -60,6 +59,7 @@ export const initialWizardState: WizardSlice = {
     default: { showing: false, message: '' },
   },
   tripExperienceAnswers: [],
+  wizardQuestions: [],
 };
 
 export interface WizardActions {
@@ -220,38 +220,42 @@ export const createWizardSlice = (
     const completeWizardId =
       wizardType === 'informed_date' ? 'informed_date' : wizardId;
 
+    // Validate answers immediately
+    const isValid = answers.length > 0 && answers.every(a => a.value);
+
     set((state) => ({
       ...state,
       validationState: {
         ...state.validationState,
-        isWizardValid: true,
+        isWizardValid: isValid,
+        isWizardSubmitted: true,
         stepValidation: {
           ...state.validationState.stepValidation,
-          2: true,
+          2: isValid,
         },
         stepInteraction: {
           ...state.validationState.stepInteraction,
           2: true,
         },
-        2: true,
+        2: isValid,
         _timestamp: Date.now(),
       },
       lastAnsweredQuestion: wizardId,
       wizardAnswers: answers,
       wizardSuccessStates,
       wizardIsCompleted: true,
-      wizardIsValid: true,
+      wizardIsValid: isValid,
       completedWizards: {
         ...state.completedWizards,
         [completeWizardId]: true,
       },
-      completedSteps: Array.from(new Set([...state.completedSteps, 2])).sort(
-        (a, b) => a - b
-      ),
+      completedSteps: Array.from(
+        new Set([...state.completedSteps, 2 as ValidationStep])
+      ).sort((a, b) => a - b),
       _lastUpdate: Date.now(),
     }));
 
-    return true;
+    return isValid;
   },
 
   handleTripExperienceComplete: () => {
@@ -325,11 +329,11 @@ export const createWizardSlice = (
           2: isValid,
           _timestamp: Date.now(),
         },
-        completedSteps: isValid
+        completedSteps: state.validationState.stepValidation[2]
           ? Array.from(new Set([...state.completedSteps, 2])).sort(
               (a, b) => a - b
-            )
-          : state.completedSteps.filter((step) => step !== 2),
+            ).filter((step): step is ValidationStep => step >= 1 && step <= 7)
+          : state.completedSteps.filter((step): step is ValidationStep => step >= 1 && step <= 7),
         completedWizards: {
           ...state.completedWizards,
           travel_status: isValid,
@@ -358,11 +362,11 @@ export const createWizardSlice = (
         3: isValid,
         _timestamp: Date.now(),
       },
-      completedSteps: isValid
+      completedSteps: state.validationState.stepValidation[3]
         ? Array.from(new Set([...state.completedSteps, 3])).sort(
             (a, b) => a - b
-          )
-        : state.completedSteps.filter((step) => step !== 3),
+          ).filter((step): step is ValidationStep => step >= 1 && step <= 7)
+        : state.completedSteps.filter((step): step is ValidationStep => step >= 1 && step <= 7),
       completedWizards: {
         ...state.completedWizards,
         informed_date: isValid,
@@ -387,7 +391,6 @@ export const createWizardSlice = (
   },
 
   batchUpdateWizardState: (updates) => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     set((state) => ({
       ...state,
       ...updates,

@@ -1,8 +1,8 @@
 'use client';
 
-import React from 'react';
-import { LightBulbIcon } from '@heroicons/react/24/outline';
 import { getAlternativeOptions } from '@/utils/flightIssues';
+import { LightBulbIcon } from '@heroicons/react/24/outline';
+import Link from 'next/link';
 
 export function AlternativeOptions() {
   const options = getAlternativeOptions();
@@ -31,12 +31,12 @@ export function AlternativeOptions() {
           </div>
           <div className="mt-4">
             <div className="-mx-2 -my-1.5 flex">
-              <a
+              <Link
                 href="/contact"
                 className="rounded-md bg-yellow-50 px-2 py-1.5 text-sm font-medium text-yellow-800 hover:bg-yellow-100"
               >
                 Kontakt aufnehmen
-              </a>
+              </Link>
             </div>
           </div>
         </div>

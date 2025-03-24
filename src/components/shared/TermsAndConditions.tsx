@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
-import { useStore } from '@/lib/state/store';
+import useStore from '@/lib/state/store';
 import { validateTerms } from '@/lib/validation/termsValidation';
+import type { ValidationStep, ValidationState } from '@/lib/state/types';
 
 interface TermsAndConditionsProps {
   onAcceptChange?: (accepted: boolean) => void;
@@ -19,20 +20,21 @@ export const TermsAndConditions: React.FC<TermsAndConditionsProps> = ({
       const validationResult = validateTerms(isAccepted);
 
       // Create a consistent validation state update
-      const validationUpdate = {
-        ...validationState,
+      const validationUpdate: Partial<ValidationState> = {
         isTermsValid: validationResult.isValid,
         stepValidation: {
           ...validationState.stepValidation,
-          1: validationResult.isValid,
+          [1 as ValidationStep]: validationResult.isValid,
         },
         stepInteraction: {
           ...validationState.stepInteraction,
-          1: true,
+          [1 as ValidationStep]: true,
         },
-        errors: validationResult.errors,
+        errors: {
+          ...validationState.errors,
+          [1 as ValidationStep]: validationResult.errors,
+        },
         _timestamp: Date.now(),
-        1: validationResult.isValid,
       };
 
       // Update the validation state
@@ -41,7 +43,10 @@ export const TermsAndConditions: React.FC<TermsAndConditionsProps> = ({
       // Save the state to localStorage
       const currentState = {
         ...useStore.getState(),
-        validationState: validationUpdate,
+        validationState: {
+          ...validationState,
+          ...validationUpdate,
+        },
         _timestamp: Date.now(),
       };
 
@@ -70,7 +75,7 @@ export const TermsAndConditions: React.FC<TermsAndConditionsProps> = ({
         id="terms"
         className="mt-1"
         onChange={handleTermsChange}
-        checked={validationState.stepValidation[1] ?? false}
+        checked={validationState.stepValidation[1 as ValidationStep] ?? false}
       />
       <label htmlFor="terms" className="text-sm text-gray-600">
         I accept the{' '}
@@ -83,10 +88,10 @@ export const TermsAndConditions: React.FC<TermsAndConditionsProps> = ({
           terms and conditions
         </a>
       </label>
-      {Object.keys(validationState.fieldErrors).length > 0 &&
-        validationState.stepInteraction[1] && (
+      {validationState.fieldErrors && Object.keys(validationState.fieldErrors).length > 0 &&
+        validationState.stepInteraction[1 as ValidationStep] && (
           <div className="text-red-500 text-sm mt-1">
-            {Object.values(validationState.fieldErrors)[0]}
+            {validationState.fieldErrors[Object.keys(validationState.fieldErrors)[0]]}
           </div>
         )}
     </div>

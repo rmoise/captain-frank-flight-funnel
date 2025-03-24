@@ -7,7 +7,7 @@ import { BackButton } from '@/components/shared/BackButton';
 import { ContinueButton } from '@/components/shared/ContinueButton';
 import { pushToDataLayer } from '@/utils/gtm';
 import { useTranslation } from '@/hooks/useTranslation';
-import { useStore } from '@/lib/state/store';
+import useStore from '@/lib/state/store';
 
 // Map API reason codes to translation keys
 const REASON_MAP: Record<string, string> = {

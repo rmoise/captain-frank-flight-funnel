@@ -1,4 +1,4 @@
-import type { StoreState } from '@/lib/state/store';
+import type { StoreState } from '@/lib/state/types';
 
 export interface Phase {
   id: number;

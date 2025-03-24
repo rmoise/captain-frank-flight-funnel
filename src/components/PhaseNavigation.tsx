@@ -3,14 +3,13 @@
 import React, { useState } from 'react';
 import { PHASES, Phase } from '@/constants/phases';
 import styles from './PhaseNavigation.module.css';
-import {
-  useStore,
-  PHASE_TO_URL,
-  getLanguageAwareUrl,
-  getPhaseFromUrl,
-} from '@/lib/state/store';
+import useStore from '@/lib/state/store';
+import { getLanguageAwareUrl } from '@/lib/state/store';
+import { PHASE_TO_URL } from '@/lib/state/slices/navigationSlice';
+import { PATH_TO_PHASE } from '@/hooks/useNavigation';
 import { useRouter, usePathname } from 'next/navigation';
 import { useTranslation } from '@/hooks/useTranslation';
+import { ValidationStep } from '@/lib/state/types';
 
 interface PhaseState extends Phase {
   accessible: boolean;
@@ -45,11 +44,11 @@ export const PhaseNavigation: React.FC<PhaseNavigationProps> = ({
   const currentPhase =
     propCurrentPhase ??
     (pathname
-    ? pathname.includes('/phases/claim-success') ||
-      pathname.includes('/phases/claim-rejected')
-      ? 5
-      : getPhaseFromUrl(pathname)
-      : 1);
+      ? pathname.includes('/phases/claim-success') ||
+        pathname.includes('/phases/claim-rejected')
+        ? (5 as ValidationStep)
+        : (PATH_TO_PHASE[pathname] || 1) as ValidationStep
+      : (1 as ValidationStep));
 
   // Use props if provided, otherwise fallback to store value
   const completedPhases = propCompletedPhases ?? storeCompletedPhases;
@@ -103,7 +102,7 @@ export const PhaseNavigation: React.FC<PhaseNavigationProps> = ({
 
   const getBarClassName = React.useCallback(
     (phaseNumber: number, accessible: boolean) => {
-      const classes = [];
+      const classes: string[] = [];
 
       // Base class based on phase state
       if (phaseNumber < currentPhase) {
@@ -139,7 +138,7 @@ export const PhaseNavigation: React.FC<PhaseNavigationProps> = ({
   const handlePhaseClick = React.useCallback(
     (phaseNumber: number, accessible: boolean) => {
       if (accessible) {
-        const url = PHASE_TO_URL[phaseNumber];
+        const url = PHASE_TO_URL[phaseNumber as ValidationStep];
         if (url) {
           router.push(getLanguageAwareUrl(url, lang));
         }

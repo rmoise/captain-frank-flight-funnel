@@ -37,7 +37,7 @@ export const Input: React.FC<InputProps> = ({
   name,
 }) => {
   const [isFieldFocused, setIsFieldFocused] = useState(isFocused);
-  const [isTouched, setIsTouched] = useState(false);
+  const [isTouched, setIsTouched] = useState(!!value.trim());
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFocus = () => {
@@ -54,12 +54,7 @@ export const Input: React.FC<InputProps> = ({
       required
     );
     setIsFieldFocused(false);
-    if (value.trim() || required) {
-      console.log(
-        `[${label}] Setting touched to true - Has value or is required`
-      );
-      setIsTouched(true);
-    }
+    setIsTouched(true);
     onBlur?.();
   };
 
@@ -67,20 +62,7 @@ export const Input: React.FC<InputProps> = ({
     const newValue = e.target.value;
     console.log(`[${label}] Change - New value:`, newValue);
     onChange(newValue);
-    if (!newValue.trim() && !required) {
-      console.log(
-        `[${label}] Resetting touched - Empty value and not required`
-      );
-      setIsTouched(false);
-    }
-    if (type === 'email' && newValue.trim()) {
-      const emailRegex = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
-      const isValid = emailRegex.test(newValue.trim());
-      console.log(`[${label}] Email validation:`, { value: newValue, isValid });
-      if (isValid) {
-        setIsTouched(false);
-      }
-    }
+    setIsTouched(true);
   };
 
   const handleClear = (e: React.MouseEvent) => {
@@ -88,25 +70,20 @@ export const Input: React.FC<InputProps> = ({
     e.stopPropagation();
     e.preventDefault();
     onChange('');
-    setIsTouched(false);
     if (inputRef.current) {
       inputRef.current.focus();
     }
   };
 
   useEffect(() => {
-    if (
-      !error ||
-      (type === 'email' &&
-        value.trim() &&
-        /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(value))
-    ) {
-      console.log(
-        `[${label}] Error cleared or valid email - Resetting touched state`
-      );
-      setIsTouched(false);
+    if (value.trim()) {
+      setIsTouched(true);
     }
-  }, [error, value, type, label]);
+  }, [value]);
+
+  useEffect(() => {
+    setIsFieldFocused(isFocused);
+  }, [isFocused]);
 
   const showError =
     error &&
@@ -126,10 +103,6 @@ export const Input: React.FC<InputProps> = ({
     showRequiredError,
     required,
   });
-
-  useEffect(() => {
-    setIsFieldFocused(isFocused);
-  }, [isFocused]);
 
   return (
     <div className={`relative ${className}`}>

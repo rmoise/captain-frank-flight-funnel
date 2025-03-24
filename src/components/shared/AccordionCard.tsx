@@ -48,6 +48,10 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
   const [isInteractingWithForm, setIsInteractingWithForm] =
     React.useState(false);
 
+  // Define currentIsOpen before using it
+  const currentIsOpen =
+    isOpen !== undefined ? isOpen : openAccordions.has(stepId);
+
   // Handle default open state only once on mount
   useEffect(() => {
     // Only handle default opening on first visit
@@ -59,15 +63,31 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
 
   // Handle auto-transition when step becomes valid and completed
   useEffect(() => {
-    if (!isValid || !isCompleted || isInteractingWithForm) return;
+    if (isInteractingWithForm) return;
 
-    // Immediately transition to next step
-    const nextStepId = (parseInt(stepId) + 1).toString();
-    autoTransition(nextStepId, true);
-  }, [isValid, isCompleted, stepId, autoTransition, isInteractingWithForm]);
+    // Only attempt auto-transition when a step is both completed and valid
+    if (isCompleted && isValid) {
+      console.log(`=== Step ${stepId} is completed and valid, auto-transitioning ===`, {
+        stepId,
+        isCompleted,
+        isValid,
+        currentOpenState: currentIsOpen,
+        timestamp: new Date().toISOString()
+      });
 
-  const currentIsOpen =
-    isOpen !== undefined ? isOpen : openAccordions.has(stepId);
+      // First, ensure this step is open if it wasn't already
+      if (!currentIsOpen && setOpenAccordions) {
+        setOpenAccordions((prev: Set<string>) => new Set([...prev, stepId]));
+      }
+
+      // Then attempt to open the next step (numeric steps only)
+      if (!isNaN(parseInt(stepId))) {
+        const nextStepId = (parseInt(stepId) + 1).toString();
+        console.log(`Attempting to auto-transition to step ${nextStepId}`);
+        autoTransition(nextStepId, true);
+      }
+    }
+  }, [isCompleted, isValid, stepId, autoTransition, isInteractingWithForm, currentIsOpen, setOpenAccordions]);
 
   const toggleAccordion = (e?: React.MouseEvent) => {
     // Only allow toggle from within the header
@@ -125,8 +145,27 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
     }
   };
 
+  // Add debugging log to track status of accordion card
+  console.log(`Accordion Card Status for step ${stepId}:`, {
+    isCompleted,
+    isValid,
+    hasInteracted,
+    stepId,
+    timestamp: new Date().toISOString()
+  });
+
   const getStatusIcon = useMemo(() => {
-    if (isCompleted) {
+    // Show check mark only if both completed AND valid
+    if (isCompleted && isValid) {
+      return (
+        <CheckCircleIcon
+          className="w-6 h-6 text-green-500"
+          aria-hidden="true"
+        />
+      );
+    }
+    // Show check mark if explicitly marked as completed
+    else if (isCompleted) {
       return (
         <CheckCircleIcon
           className="w-6 h-6 text-green-500"
@@ -142,7 +181,7 @@ export const AccordionCard: React.FC<AccordionCardProps> = ({
     return (
       <div className="w-2 h-2 rounded-full bg-gray-300" aria-hidden="true" />
     );
-  }, [isCompleted, hasInteracted]);
+  }, [isCompleted, hasInteracted, isValid]);
 
   return (
     <div

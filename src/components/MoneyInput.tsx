@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { MoneyInputControls } from './MoneyInputControls';
+import React, { useRef, useState, useEffect } from "react";
+import { MoneyInputControls } from "./MoneyInputControls";
 
 interface MoneyInputProps {
   label: string;
@@ -20,159 +20,115 @@ export const MoneyInput: React.FC<MoneyInputProps> = ({
   onFocus,
   onBlur,
   isFocused,
-  placeholder = '',
-  className = '',
+  placeholder = "",
+  className = "",
   required = false,
 }) => {
-  const [showWarning, setShowWarning] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [localValue, setLocalValue] = useState(value);
+  const [isFocusedInternal, setIsFocusedInternal] = useState(isFocused);
 
   // Sync local value with prop value
   useEffect(() => {
     setLocalValue(value);
   }, [value]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log('=== MoneyInput handleChange ===', {
-      newValue: e.target.value,
-      currentValue: value,
-    });
+  // Sync focused state with prop
+  useEffect(() => {
+    setIsFocusedInternal(isFocused);
+    if (isFocused && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [isFocused]);
 
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
 
-    // Allow empty input
-    if (!newValue) {
-      setShowWarning(false);
-      setLocalValue('');
-      onChange('');
-      return;
+    // Only allow numbers and a single decimal point
+    if (/^[0-9]*\.?[0-9]*$/.test(newValue) || newValue === "") {
+      setLocalValue(newValue);
+      onChange(newValue);
     }
-
-    // Only allow valid numeric input with at most one decimal point
-    const numericValue = newValue.replace(/[^0-9.]/g, '');
-    const parts = numericValue.split('.');
-
-    // Validate format
-    if (parts.length > 2 || !/^\d*\.?\d*$/.test(numericValue)) {
-      setShowWarning(true);
-      return;
-    }
-
-    setShowWarning(false);
-    setLocalValue(numericValue);
-    onChange(numericValue);
   };
 
   const handleInputFocus = () => {
+    setIsFocusedInternal(true);
     onFocus?.();
   };
 
   const handleInputBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-    // Only blur if clicking outside the wrapper
-    if (!wrapperRef.current?.contains(e.relatedTarget as Node)) {
-      setShowWarning(false);
+    setIsFocusedInternal(false);
+    onBlur?.();
 
-      // Format the value with decimals on blur
-      if (localValue) {
-        const numericValue = parseFloat(
-          localValue.replace(/[^0-9.-]+/g, '') || '0'
-        );
-        if (!isNaN(numericValue)) {
-          const formattedValue = numericValue.toFixed(2);
-          setLocalValue(formattedValue);
-          onChange(formattedValue);
-        }
+    // Format the value on blur
+    let formattedValue = localValue;
+
+    // If there's a value, ensure it has 2 decimal places
+    if (formattedValue && !formattedValue.includes(".")) {
+      formattedValue = `${formattedValue}.00`;
+    } else if (formattedValue && formattedValue.includes(".")) {
+      const parts = formattedValue.split(".");
+      if (parts[1].length === 0) {
+        formattedValue = `${parts[0]}.00`;
+      } else if (parts[1].length === 1) {
+        formattedValue = `${parts[0]}.${parts[1]}0`;
       }
-
-      onBlur?.();
     }
+
+    setLocalValue(formattedValue);
+    onChange(formattedValue);
   };
 
-  // Format the display value - strip € from input value and use local value for display
-  const displayValue = localValue || '';
-
   return (
-    <div
-      className={`relative money-input-container ${className}`}
-      ref={wrapperRef}
-    >
-      <div className="relative p-[2px] group">
-        <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-          <span className="text-base">€</span>
-        </div>
+    <div className={`relative ${className}`}>
+      <label
+        htmlFor="money-input"
+        className={`absolute left-4 transition-all duration-200 ${
+          isFocusedInternal || localValue
+            ? "top-2 text-xs text-gray-500"
+            : "top-1/2 -translate-y-1/2 text-sm text-gray-400"
+        }`}
+      >
+        {label}
+        {required && <span className="text-red-500 ml-1">*</span>}
+      </label>
+      <div className="relative">
+        <span className="absolute left-4 top-8 text-gray-500">€</span>
         <input
           ref={inputRef}
           type="text"
-          inputMode="decimal"
-          value={displayValue}
+          id="money-input"
+          className={`w-full h-16 pt-6 pl-8 pr-24 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+            isFocusedInternal ? "border-blue-500" : "border-gray-300"
+          }`}
+          value={localValue}
           onChange={handleChange}
           onFocus={handleInputFocus}
           onBlur={handleInputBlur}
-          aria-label={label}
-          placeholder=""
-          className={`
-            peer w-full h-14 pl-10 pr-10
-            text-[#4b616d] text-base font-normal font-heebo
-            bg-white rounded-xl
-            transition-[border-color,border-width] duration-[250ms] ease-in-out
-            ${
-              isFocused
-                ? 'border-2 border-blue-500'
-                : 'border border-[#e0e1e4] hover:border-blue-500'
-            }
-            focus:outline-none
-          `}
+          placeholder={placeholder}
         />
-        <label
-          className={`
-            absolute left-10 top-1/2 -translate-y-1/2
-            transition-all duration-[200ms] cubic-bezier(0.4, 0, 0.2, 1) pointer-events-none
-            text-[#909090] font-heebo ${
-              required
-                ? "after:content-['*'] after:text-[#F54538] after:ml-[1px] after:align-super after:text-[10px]"
-                : ''
-            }
-            ${
-              isFocused || localValue
-                ? '-translate-y-8 text-[10px] px-1 bg-white'
-                : 'text-base'
-            }
-            ${isFocused ? 'text-[#464646]' : ''}
-          `}
-        >
-          {placeholder || label}
-        </label>
       </div>
-      {showWarning && (
-        <div className="absolute -bottom-6 left-0 text-sm text-[#F54538]">
-          Please enter numbers only
-        </div>
-      )}
       <MoneyInputControls
         value={localValue}
         onChange={(newValue) => {
-          if (newValue === '+' || newValue === '-') {
-            const currentValue = parseFloat(localValue || '0');
-            const updatedValue =
-              newValue === '+'
-                ? currentValue + 1
-                : Math.max(0, currentValue - 1);
-            const formattedValue = updatedValue.toFixed(2);
-            setLocalValue(formattedValue);
-            onChange(formattedValue);
-          } else if (newValue === '') {
-            // Handle clear action
-            setLocalValue('');
-            setShowWarning(false);
-            onChange('');
+          if (newValue === "") {
+            setLocalValue("");
+            onChange("");
+          } else if (newValue === "+") {
+            const currentValue = parseFloat(localValue || "0");
+            const newVal = (currentValue + 1).toString();
+            setLocalValue(newVal);
+            onChange(newVal);
+          } else if (newValue === "-") {
+            const currentValue = parseFloat(localValue || "0");
+            const newVal = Math.max(0, currentValue - 1).toString();
+            setLocalValue(newVal);
+            onChange(newVal);
           } else {
             setLocalValue(newValue);
             onChange(newValue);
           }
         }}
-        containerRef={wrapperRef}
       />
     </div>
   );

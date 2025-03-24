@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useStore } from '@/lib/state/store';
+import useStore from '@/lib/state/store';
 
 export const useStateSync = () => {
   const { currentPhase, completedPhases, setCurrentPhase, completePhase } =

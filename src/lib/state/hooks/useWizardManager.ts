@@ -1,6 +1,6 @@
 'use client';
 
-import { useStore } from '@/lib/state/store';
+import useStore from '@/lib/state/store';
 
 export function useWizardManager() {
   const store = useStore();

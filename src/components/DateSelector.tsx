@@ -1,11 +1,11 @@
 'use client';
 
 import React from 'react';
-import { useStore } from '@/lib/state/store';
-import { format } from 'date-fns';
 import DatePicker from 'react-datepicker';
-import { CustomDateInput } from '@/components/shared/CustomDateInput';
 import 'react-datepicker/dist/react-datepicker.css';
+import useStore from '@/lib/state/store';
+import { format } from 'date-fns';
+import { CustomDateInput } from '@/components/shared/CustomDateInput';
 
 interface DateSelectorProps {
   onSelect?: () => void;
@@ -20,7 +20,7 @@ export const DateSelector: React.FC<DateSelectorProps> = ({
 
   const handleDateChange = (date: Date | null) => {
     try {
-      setSelectedDate(date ? format(date, 'yyyy-MM-dd') : null);
+      setSelectedDate(date);
       if (date) {
         onSelect();
       }
@@ -33,16 +33,6 @@ export const DateSelector: React.FC<DateSelectorProps> = ({
     setSelectedDate(null);
   };
 
-  const parseDate = (dateString: string | null): Date | null => {
-    if (!dateString) return null;
-    try {
-      return new Date(dateString);
-    } catch (error) {
-      console.error('Error parsing date:', error);
-      return null;
-    }
-  };
-
   return (
     <div className="space-y-2">
       <label className="block text-sm font-medium text-gray-700">
@@ -50,11 +40,11 @@ export const DateSelector: React.FC<DateSelectorProps> = ({
       </label>
       <div className="relative date-picker-input w-full">
         <DatePicker
-          selected={parseDate(selectedDate)}
+          selected={selectedDate}
           onChange={handleDateChange}
           customInput={
             <CustomDateInput
-              value={selectedDate || ''}
+              value={selectedDate ? format(selectedDate, 'yyyy-MM-dd') : ''}
               onClear={handleClear}
               label="Select Date"
             />

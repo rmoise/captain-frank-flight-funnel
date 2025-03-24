@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { Input } from '../Input';
 import { Select } from '../shared/Select';
-import { useStore } from '@/lib/state/store';
+import useStore from '@/lib/state/store';
 import type { PassengerDetails } from '@/types/store';
+import type { ValidationState, ValidationStep } from '@/lib/state/types';
 import { CountryAutocomplete } from '../shared/CountryAutocomplete';
 import { useTranslation } from '@/hooks/useTranslation';
 
@@ -165,7 +166,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
 }) => {
   const { t, lang } = useTranslation();
   const {
-    personalDetails: storedDetails,
+    personalDetails,
     setPersonalDetails,
     validationState,
     currentPhase,
@@ -174,103 +175,131 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
   const stepId = currentPhase === 5 || currentPhase === 6 ? 1 : 3;
   const interactionRef = React.useRef(false);
 
+  // Call onComplete if valid
+  // Use a separate ref to track onComplete calls to prevent infinite loops
+  const onCompleteCalledRef = useRef(false);
+
   // Handle initial load validation
   useEffect(() => {
-    // Skip if already validated
-    if (validationState._timestamp) return;
-
-    // Skip validation entirely on mount if no stored details or all values are empty
-    if (
-      !storedDetails ||
-      !Object.values(storedDetails).some((value) => value?.trim())
-    ) {
-      const store = useStore.getState();
-      store.updateValidationState({
-        ...store.validationState,
-        stepValidation: {
-          ...store.validationState.stepValidation,
-          [stepId]: false,
-        },
-        stepInteraction: {
-          ...store.validationState.stepInteraction,
-          [stepId]: false,
-        },
-        isPersonalValid: false,
-        [stepId]: false,
-        fieldErrors: {}, // Start with no field errors
-        _timestamp: Date.now(),
-      });
-      return;
-    }
-
-    // Only validate if we have stored details with actual values
-    const requiredFields = isClaimSuccess
-      ? [
-          'salutation',
-          'firstName',
-          'lastName',
-          'email',
-          'phone',
-          'address',
-          'postalCode',
-          'city',
-          'country',
-        ]
-      : ['firstName', 'lastName', 'email'];
-
-    const hasAllRequiredFields = requiredFields.every((field) =>
-      storedDetails[field as keyof PassengerDetails]?.trim()
-    );
-
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const emailValue = storedDetails.email?.trim();
-    const isEmailValid = !emailValue || emailRegex.test(emailValue);
-
-    const isValid = hasAllRequiredFields && (emailValue ? isEmailValid : true);
-
-    // Get current validation state once
+    // Get current validation state
     const store = useStore.getState();
-    const currentValidation = store.validationState;
+    const currentValidation = (store.validationState || {}) as ValidationState;
 
-    // Prepare field errors
-    const fieldErrors: Record<string, string> = {};
-    if (!emailValue && hasAllRequiredFields) {
-      fieldErrors.email = `${t.personalDetails.email} ${t.validation.required}`;
-    } else if (emailValue && !isEmailValid) {
-      fieldErrors.email = t.validation.invalidBookingNumber;
+    // Try to load details from localStorage if we don't have them
+    if (!personalDetails) {
+      try {
+        const savedState = localStorage.getItem('captain-frank-state');
+        if (savedState) {
+          const parsedState = JSON.parse(savedState);
+          if (parsedState.state?.personalDetails) {
+            setPersonalDetails(parsedState.state.personalDetails);
+            return; // Exit early as setPersonalDetails will trigger this effect again
+          }
+        }
+      } catch (error) {
+        console.error('Error loading personal details from localStorage:', error);
+      }
     }
+
+    // Get required fields based on claim success
+    const requiredFields = isClaimSuccess
+      ? ['salutation', 'firstName', 'lastName', 'email', 'phone', 'address', 'postalCode', 'city', 'country']
+      : ['salutation', 'firstName', 'lastName', 'email'];
+
+    // Check if we have stored values and required fields
+    const hasStoredValues = !!personalDetails;
+    const hasAllRequiredFields = hasStoredValues &&
+      requiredFields.every((field) => {
+        return personalDetails[field as keyof PassengerDetails];
+      });
+
+    // Check if email is valid
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const isEmailValid = !personalDetails?.email || emailRegex.test(personalDetails.email);
+
+    // Determine if form is valid
+    const isValid = hasStoredValues && hasAllRequiredFields && isEmailValid;
 
     // Update validation state
-    store.updateValidationState({
-      ...currentValidation,
-      stepValidation: {
-        ...currentValidation.stepValidation,
-        [stepId]: isValid,
-      },
-      stepInteraction: {
-        ...currentValidation.stepInteraction,
-        [stepId]: false, // Reset interaction state on mount
-      },
-      isPersonalValid: isValid,
-      [stepId]: isValid,
-      fieldErrors: isValid ? {} : fieldErrors, // Clear all errors if form is valid
-      _timestamp: Date.now(),
-    });
+    if (
+      currentValidation.stepValidation?.[stepId] !== isValid ||
+      currentValidation.isPersonalValid !== isValid
+    ) {
+      // Update validation state with more thorough approach
+      store.updateValidationState({
+        stepValidation: {
+          ...currentValidation.stepValidation,
+          [stepId]: isValid,
+          // Always update both step 1 and 3 for personal details to ensure cross-phase consistency
+          // since personal details can be in step 3 (phase 1) or step 1 (phases 5-6)
+          [currentPhase === 5 || currentPhase === 6 ? 3 : 1]: isValid,
+        },
+        stepInteraction: {
+          ...currentValidation.stepInteraction,
+          [stepId]: true,
+          [currentPhase === 5 || currentPhase === 6 ? 3 : 1]: true,
+        },
+        stepCompleted: {
+          ...currentValidation.stepCompleted,
+          [stepId]: isValid,
+          [currentPhase === 5 || currentPhase === 6 ? 3 : 1]: isValid,
+        },
+        isPersonalValid: isValid,
+        _timestamp: Date.now(),
+      });
 
-    // Call onComplete if all fields are valid
-    if (isValid) {
-      onComplete(storedDetails);
+      // Also save to localStorage for maximum persistence
+      try {
+        const updatedValidationState = {
+          ...store.getState().validationState,
+          stepValidation: {
+            ...store.getState().validationState?.stepValidation,
+            [stepId]: isValid,
+            [currentPhase === 5 || currentPhase === 6 ? 3 : 1]: isValid,
+          },
+          stepInteraction: {
+            ...store.getState().validationState?.stepInteraction,
+            [stepId]: true,
+            [currentPhase === 5 || currentPhase === 6 ? 3 : 1]: true,
+          },
+          stepCompleted: {
+            ...store.getState().validationState?.stepCompleted,
+            [stepId]: isValid,
+            [currentPhase === 5 || currentPhase === 6 ? 3 : 1]: isValid,
+          },
+          isPersonalValid: isValid,
+          _timestamp: Date.now(),
+        };
+        localStorage.setItem('validationState', JSON.stringify(updatedValidationState));
+        localStorage.setItem(`phase${currentPhase}ValidationState`, JSON.stringify({ validationState: updatedValidationState }));
+      } catch (e) {
+        console.error('Error saving validation state to localStorage:', e);
+      }
+
+      console.log('=== PersonalDetailsForm - Validation State Updated ===', {
+        hasStoredValues,
+        hasAllRequiredFields,
+        isEmailValid,
+        isValid,
+        stepId,
+        currentPhase,
+        updatedSteps: [stepId, currentPhase === 5 || currentPhase === 6 ? 3 : 1],
+        timestamp: new Date().toISOString()
+      });
     }
-  }, [
-    storedDetails,
-    isClaimSuccess,
-    onComplete,
-    onInteract,
-    stepId,
-    validationState._timestamp,
-    t,
-  ]);
+
+    // Call onComplete if valid and not already called for this validation state
+    if (isValid && hasStoredValues && !onCompleteCalledRef.current) {
+      onCompleteCalledRef.current = true;
+      onComplete(personalDetails);
+    }
+
+    // Set interaction ref and notify parent if we have stored values
+    if (hasStoredValues && !interactionRef.current) {
+      interactionRef.current = true;
+      onInteract?.();
+    }
+  }, [personalDetails, isClaimSuccess, stepId, onComplete, onInteract, setPersonalDetails]);
 
   // Memoize the input change handler
   const handleInputChange = useCallback(
@@ -282,17 +311,17 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
       }
 
       const newDetails = {
-        ...storedDetails,
+        ...personalDetails,
         [field]: value,
       } as PassengerDetails;
 
       // Only update if value actually changed
-      if (storedDetails?.[field] !== value) {
+      if (personalDetails?.[field] !== value) {
         setPersonalDetails(newDetails);
 
         // Get current validation state once
         const store = useStore.getState();
-        const currentValidation = store.validationState;
+        const currentValidation = (store.validationState || {}) as ValidationState;
 
         // Email validation regex
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -313,7 +342,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
           : ['firstName', 'lastName', 'email'];
 
         // Validate all required fields
-        const fieldErrors = { ...currentValidation.fieldErrors };
+        const fieldErrors: Record<string, string> = { ...currentValidation.fieldErrors };
 
         // First validate the changed field
         if (field === 'email' && value.trim()) {
@@ -366,13 +395,42 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
           stepValidation: {
             ...currentValidation.stepValidation,
             [stepId]: isValid,
-          },
+            // Always update both step 1 and 3 for personal details to ensure cross-phase consistency
+            [currentPhase === 5 || currentPhase === 6 ? 3 : 1]: isValid,
+          } as Record<ValidationStep, boolean>,
+          stepInteraction: {
+            ...currentValidation.stepInteraction,
+            [stepId]: true,
+            [currentPhase === 5 || currentPhase === 6 ? 3 : 1]: true,
+          } as Record<ValidationStep, boolean>,
+          stepCompleted: {
+            ...currentValidation.stepCompleted,
+            [stepId]: isValid,
+            [currentPhase === 5 || currentPhase === 6 ? 3 : 1]: isValid,
+          } as Record<ValidationStep, boolean>,
           isPersonalValid: isValid,
           [stepId]: isValid,
           _timestamp: Date.now(),
         };
 
         store.updateValidationState(newValidationState);
+
+        // Also save to localStorage for maximum persistence
+        try {
+          localStorage.setItem('validationState', JSON.stringify(newValidationState));
+          localStorage.setItem(`phase${currentPhase}ValidationState`, JSON.stringify({ validationState: newValidationState }));
+        } catch (e) {
+          console.error('Error saving validation state to localStorage:', e);
+        }
+
+        console.log('=== PersonalDetailsForm - Input Change Validation ===', {
+          field,
+          isValid,
+          stepId,
+          currentPhase,
+          updatedSteps: [stepId, currentPhase === 5 || currentPhase === 6 ? 3 : 1],
+          timestamp: new Date().toISOString()
+        });
 
         // Call onComplete if all fields are valid and there are no errors
         if (isValid) {
@@ -381,7 +439,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
       }
     },
     [
-      storedDetails,
+      personalDetails,
       setPersonalDetails,
       onInteract,
       isClaimSuccess,
@@ -404,9 +462,9 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
         <div>
           <Select
             label={t.personalDetails.salutation}
-            value={storedDetails?.salutation || ''}
+            value={personalDetails?.salutation || ''}
             onChange={(value) => handleInputChange('salutation', value)}
-            error={validationState.fieldErrors.salutation}
+            error={validationState?.fieldErrors?.salutation}
             options={[
               { value: 'herr', label: t.salutation.mr },
               { value: 'frau', label: t.salutation.mrs },
@@ -417,18 +475,18 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
         <div>
           <Input
             label={t.personalDetails.firstName}
-            value={storedDetails?.firstName || ''}
+            value={personalDetails?.firstName || ''}
             onChange={(value) => handleInputChange('firstName', value)}
-            error={validationState.fieldErrors.firstName}
+            error={validationState?.fieldErrors?.firstName}
             required={true}
           />
         </div>
         <div>
           <Input
             label={t.personalDetails.lastName}
-            value={storedDetails?.lastName || ''}
+            value={personalDetails?.lastName || ''}
             onChange={(value) => handleInputChange('lastName', value)}
-            error={validationState.fieldErrors.lastName}
+            error={validationState?.fieldErrors?.lastName}
             required={true}
           />
         </div>
@@ -436,9 +494,9 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
           <Input
             label={t.personalDetails.email}
             type="email"
-            value={storedDetails?.email || ''}
+            value={personalDetails?.email || ''}
             onChange={(value) => handleInputChange('email', value)}
-            error={validationState.fieldErrors.email}
+            error={validationState?.fieldErrors?.email}
             required={true}
           />
         </div>
@@ -448,18 +506,18 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
               <Input
                 label={t.personalDetails.phone}
                 type="tel"
-                value={storedDetails?.phone || ''}
+                value={personalDetails?.phone || ''}
                 onChange={(value) => handleInputChange('phone', value)}
-                error={validationState.fieldErrors.phone}
+                error={validationState?.fieldErrors?.phone}
                 required={isClaimSuccess}
               />
             </div>
             <div>
               <Input
                 label={t.personalDetails.address}
-                value={storedDetails?.address || ''}
+                value={personalDetails?.address || ''}
                 onChange={(value) => handleInputChange('address', value)}
-                error={validationState.fieldErrors.address}
+                error={validationState?.fieldErrors?.address}
                 required={isClaimSuccess}
               />
             </div>
@@ -467,25 +525,25 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
               <Input
                 type="text"
                 label={t.personalDetails.postalCode}
-                value={storedDetails?.postalCode || ''}
+                value={personalDetails?.postalCode || ''}
                 onChange={(value) => handleInputChange('postalCode', value)}
-                error={validationState.fieldErrors?.postalCode}
+                error={validationState?.fieldErrors?.postalCode}
                 required={isClaimSuccess}
               />
             </div>
             <div>
               <Input
                 label={t.personalDetails.city}
-                value={storedDetails?.city || ''}
+                value={personalDetails?.city || ''}
                 onChange={(value) => handleInputChange('city', value)}
-                error={validationState.fieldErrors.city}
+                error={validationState?.fieldErrors?.city}
                 required={isClaimSuccess}
               />
             </div>
             <div>
               <CountryAutocomplete
                 label={t.personalDetails.country}
-                value={storedDetails?.country}
+                value={personalDetails?.country}
                 onChange={(value) => {
                   const selectedOption = (
                     lang === 'en' ? COUNTRY_OPTIONS_EN : COUNTRY_OPTIONS_DE
@@ -500,7 +558,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
                 options={
                   lang === 'en' ? COUNTRY_OPTIONS_EN : COUNTRY_OPTIONS_DE
                 }
-                error={validationState.fieldErrors.country}
+                error={validationState?.fieldErrors?.country}
                 required={isClaimSuccess}
               />
             </div>

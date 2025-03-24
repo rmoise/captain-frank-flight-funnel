@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
-import { Input } from '@/components/Input';
-import { Button } from '@/components/Button';
-import { Select } from '@/components/shared/Select';
-import { useTranslation } from '@/hooks/useTranslation';
+import React, { useState, useEffect } from "react";
+import { Input } from "@/components/Input";
+import { Button } from "@/components/Button";
+import { Select } from "@/components/shared/Select";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface FlightNotListedFormProps {
   onSubmit: (data: FlightNotListedData) => void;
+  initialData?: FlightNotListedData | null;
 }
 
 export interface FlightNotListedData {
@@ -18,17 +19,47 @@ export interface FlightNotListedData {
 
 export const FlightNotListedForm: React.FC<FlightNotListedFormProps> = ({
   onSubmit,
+  initialData = null,
 }) => {
   const { t } = useTranslation();
-  const [formData, setFormData] = useState<FlightNotListedData>({
-    salutation: '',
-    firstName: '',
-    lastName: '',
-    email: '',
-    description: '',
+  const [formData, setFormData] = useState<FlightNotListedData>(() => {
+    // Use initialData if provided, otherwise use empty values
+    if (initialData) {
+      console.log("Initializing form with provided data:", initialData);
+      return {
+        salutation: initialData.salutation || "",
+        firstName: initialData.firstName || "",
+        lastName: initialData.lastName || "",
+        email: initialData.email || "",
+        description: "",
+      };
+    }
+    return {
+      salutation: "",
+      firstName: "",
+      lastName: "",
+      email: "",
+      description: "",
+    };
   });
 
-  const [characterCount, setCharacterCount] = useState(0);
+  // Update form when initialData changes
+  useEffect(() => {
+    if (initialData) {
+      console.log("Updating form with new initialData:", initialData);
+      setFormData((prev) => ({
+        ...prev,
+        salutation: initialData.salutation || "",
+        firstName: initialData.firstName || "",
+        lastName: initialData.lastName || "",
+        email: initialData.email || "",
+      }));
+    }
+  }, []);
+
+  const [characterCount, setCharacterCount] = useState(
+    initialData?.description?.length || 0
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -40,33 +71,23 @@ export const FlightNotListedForm: React.FC<FlightNotListedFormProps> = ({
     setError(null);
 
     try {
-      const response = await fetch('/api/submitflightnotlisted', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to submit form');
-      }
+      // Directly call the onSubmit function passed as a prop
+      await onSubmit(formData);
 
       setSuccess(true);
-      onSubmit(formData);
 
       // Reset form after successful submission
       setFormData({
-        salutation: '',
-        firstName: '',
-        lastName: '',
-        email: '',
-        description: '',
+        salutation: "",
+        firstName: "",
+        lastName: "",
+        email: "",
+        description: "",
       });
       setCharacterCount(0);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to submit form');
+      console.error("Error in FlightNotListedForm submit:", err);
+      setError(err instanceof Error ? err.message : "Failed to submit form");
     } finally {
       setIsSubmitting(false);
     }
@@ -74,7 +95,7 @@ export const FlightNotListedForm: React.FC<FlightNotListedFormProps> = ({
 
   const handleInputChange =
     (field: keyof FlightNotListedData) => (value: string) => {
-      if (field === 'description') {
+      if (field === "description") {
         setCharacterCount(value.length);
       }
       setFormData((prev) => ({ ...prev, [field]: value }));
@@ -117,10 +138,10 @@ export const FlightNotListedForm: React.FC<FlightNotListedFormProps> = ({
             <Select
               label={t.personalDetails.salutation}
               value={formData.salutation}
-              onChange={handleInputChange('salutation')}
+              onChange={handleInputChange("salutation")}
               options={[
-                { value: 'herr', label: t.salutation.mr },
-                { value: 'frau', label: t.salutation.mrs },
+                { value: "herr", label: t.salutation.mr },
+                { value: "frau", label: t.salutation.mrs },
               ]}
               required
             />
@@ -131,14 +152,14 @@ export const FlightNotListedForm: React.FC<FlightNotListedFormProps> = ({
             <Input
               label={t.flightSelector.flightNotListed.form.firstName}
               value={formData.firstName}
-              onChange={handleInputChange('firstName')}
+              onChange={handleInputChange("firstName")}
               required
               name="firstName"
             />
             <Input
               label={t.flightSelector.flightNotListed.form.lastName}
               value={formData.lastName}
-              onChange={handleInputChange('lastName')}
+              onChange={handleInputChange("lastName")}
               required
               name="lastName"
             />
@@ -148,7 +169,7 @@ export const FlightNotListedForm: React.FC<FlightNotListedFormProps> = ({
             label={t.flightSelector.flightNotListed.form.email}
             type="email"
             value={formData.email}
-            onChange={handleInputChange('email')}
+            onChange={handleInputChange("email")}
             required
             name="email"
           />
@@ -156,7 +177,7 @@ export const FlightNotListedForm: React.FC<FlightNotListedFormProps> = ({
           <div>
             <textarea
               value={formData.description}
-              onChange={(e) => handleInputChange('description')(e.target.value)}
+              onChange={(e) => handleInputChange("description")(e.target.value)}
               className="w-full min-h-[100px] max-h-[200px] px-4 py-3 pb-6 border border-gray-300 rounded-xl focus:ring-blue-500 focus:border-blue-500 focus:outline-none text-base text-[#4B626D] placeholder-[#9BA3AF] resize-y overflow-auto hover:border-blue-500"
               required
               maxLength={maxCharacters}
@@ -165,8 +186,8 @@ export const FlightNotListedForm: React.FC<FlightNotListedFormProps> = ({
             />
             <div className="text-right text-xs text-gray-500 mt-1">
               {t.flightSelector.flightNotListed.form.characterCount
-                .replace('{count}', characterCount.toString())
-                .replace('{max}', maxCharacters.toString())}
+                .replace("{count}", characterCount.toString())
+                .replace("{max}", maxCharacters.toString())}
             </div>
           </div>
 

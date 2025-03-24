@@ -66,7 +66,7 @@ export const initialFlightState = {
   },
 };
 
-export const useStore = create<FlightState>()(
+export const useFlightSelectionStore = create<FlightState>()(
   persist(
     (set, get) => ({
       ...initialFlightState,

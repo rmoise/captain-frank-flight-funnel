@@ -35,53 +35,42 @@ export interface ValidationActions {
 }
 
 export interface ValidationStore extends StoreState {
-  validationState: ValidationState;
-  hasValidLocations: boolean;
-  hasValidFlights: boolean;
-  selectedType: 'direct' | 'multi';
-  directFlight: {
-    fromLocation: LocationLike | null;
-    toLocation: LocationLike | null;
-    date: Date | null;
-    selectedFlight: Flight | null;
-  };
-  flightSegments: Array<{
-    fromLocation: LocationLike | null;
-    toLocation: LocationLike | null;
-    date: Date | null;
-    selectedFlight: Flight | null;
-  }>;
-  currentSegmentIndex: number;
-  fromLocation: string | null;
-  toLocation: string | null;
-  selectedDate: string | null;
+  stepValidation: Record<ValidationStep, boolean>;
+  stepInteraction: Record<ValidationStep, boolean>;
+  errors: Record<ValidationStep, string[]>;
+  stepCompleted: Record<ValidationStep, boolean>;
+  completedSteps: ValidationStep[];
+  isPersonalValid?: boolean;
+  isFlightValid?: boolean;
+  isBookingValid?: boolean;
+  isWizardValid?: boolean;
+  isTermsValid?: boolean;
+  isSignatureValid?: boolean;
+  isWizardSubmitted?: boolean;
+  questionValidation?: Record<string, boolean>;
+  fieldErrors?: Record<string, string>;
+  transitionInProgress?: boolean;
+  _timestamp: number;
+  fromLocation: (string & LocationLike) | null;
+  toLocation: (string & LocationLike) | null;
+  selectedDate: Date | null;
   selectedFlights: Flight[];
   originalFlights: Flight[];
   selectedFlight: Flight | null;
   flightDetails: Flight | null;
   delayDuration: number | null;
-  _lastUpdate?: number;
+  _lastUpdate: number;
 }
 
 export const initialValidationState: ValidationState = {
-  1: false,
-  2: false,
-  3: false,
-  4: false,
-  5: false,
-  isFlightValid: false,
-  isWizardValid: false,
-  isPersonalValid: false,
-  isTermsValid: false,
-  isSignatureValid: false,
-  isBookingValid: false,
-  isWizardSubmitted: false,
   stepValidation: {
     1: false,
     2: false,
     3: false,
     4: false,
     5: false,
+    6: false,
+    7: false
   },
   stepInteraction: {
     1: false,
@@ -89,82 +78,83 @@ export const initialValidationState: ValidationState = {
     3: false,
     4: false,
     5: false,
+    6: false,
+    7: false
   },
-  questionValidation: {},
   errors: {
     1: [],
-    2: [],
+    2: ['Please enter your booking number'],
     3: [],
     4: [],
     5: [],
+    6: [],
+    7: []
   },
-  fieldErrors: {},
   stepCompleted: {
     1: false,
     2: false,
     3: false,
     4: false,
     5: false,
+    6: false,
+    7: false
   },
-  completedSteps: {
-    1: false,
-    2: false,
-    3: false,
-    4: false,
-    5: false,
-  },
+  completedSteps: [],
+  isFlightValid: false,
+  isWizardValid: false,
+  isPersonalValid: false,
+  isTermsValid: false,
+  isSignatureValid: false,
+  isBookingValid: false,
+  isWizardSubmitted: false,
+  isCompensationValid: false,
+  questionValidation: {},
+  fieldErrors: {},
   transitionInProgress: false,
-  _timestamp: Date.now(),
+  _timestamp: Date.now()
 };
 
-// Helper to ensure validation state is complete
+// Helper function to ensure validation state is properly initialized
 export const ensureValidationState = (
   state: Partial<ValidationState> | null | undefined
 ): ValidationState => {
-  if (!state) return initialValidationState;
+  if (!state) return { ...initialValidationState };
 
-  return {
-    1: true,
-    2: true,
-    3: true,
-    4: true,
-    5: true,
-    isFlightValid: state.isFlightValid ?? false,
-    isWizardValid: state.isWizardValid ?? false,
-    isPersonalValid: state.isPersonalValid ?? false,
-    isTermsValid: state.isTermsValid ?? false,
-    isSignatureValid: state.isSignatureValid ?? false,
-    isBookingValid: state.isBookingValid ?? false,
-    isWizardSubmitted: state.isWizardSubmitted ?? false,
+  // Create a new validation state with all required fields
+  const validationState: ValidationState = {
     stepValidation: {
       ...initialValidationState.stepValidation,
-      ...(state.stepValidation || {}),
+      ...(state.stepValidation || {})
     },
     stepInteraction: {
-      1: true,
-      2: true,
-      3: true,
-      4: true,
-      5: true,
-      ...(state.stepInteraction || {}),
+      ...initialValidationState.stepInteraction,
+      ...(state.stepInteraction || {})
     },
-    questionValidation: state.questionValidation ?? {},
     errors: {
       ...initialValidationState.errors,
-      ...(state.errors || {}),
+      ...(state.errors || {})
     },
-    fieldErrors: state.fieldErrors ?? {},
     stepCompleted: {
       ...initialValidationState.stepCompleted,
-      ...(state.stepCompleted || {}),
+      ...(state.stepCompleted || {})
     },
-    completedSteps: {
-      ...initialValidationState.completedSteps,
-      ...(state.completedSteps || {}),
-    },
-    transitionInProgress: state.transitionInProgress ?? false,
-    _timestamp: state._timestamp ?? Date.now(),
+    // Ensure completedSteps is always an array
+    completedSteps: Array.isArray(state.completedSteps) ? [...state.completedSteps] : [],
+    isFlightValid: state.isFlightValid ?? initialValidationState.isFlightValid,
+    isWizardValid: state.isWizardValid ?? initialValidationState.isWizardValid,
+    isPersonalValid: state.isPersonalValid ?? initialValidationState.isPersonalValid,
+    isTermsValid: state.isTermsValid ?? initialValidationState.isTermsValid,
+    isSignatureValid: state.isSignatureValid ?? initialValidationState.isSignatureValid,
+    isBookingValid: state.isBookingValid ?? initialValidationState.isBookingValid,
+    isWizardSubmitted: state.isWizardSubmitted ?? initialValidationState.isWizardSubmitted,
+    isCompensationValid: state.isCompensationValid ?? initialValidationState.isCompensationValid,
+    questionValidation: state.questionValidation || {},
+    fieldErrors: state.fieldErrors || {},
+    transitionInProgress: state.transitionInProgress ?? initialValidationState.transitionInProgress,
+    _timestamp: state._timestamp ?? Date.now()
   };
+
+  return validationState;
 };
 
 export const createValidationSlice = (
@@ -343,33 +333,42 @@ export const createValidationSlice = (
 
     set((state) => {
       const currentPhase = state.currentPhase as ValidationStep;
+      const currentValidationState = ensureValidationState(state.validationState);
+      const newValidationState = ensureValidationState(validationState);
+
       const newState = {
         ...state,
         validationState: {
-          ...state.validationState,
-          ...validationState,
+          ...currentValidationState,
+          ...newValidationState,
           stepValidation: {
-            ...state.validationState.stepValidation,
-            ...validationState.stepValidation,
+            ...currentValidationState.stepValidation,
+            ...newValidationState.stepValidation,
             [currentPhase]:
-              validationState.stepValidation?.[currentPhase] ?? false,
+              newValidationState.stepValidation?.[currentPhase] ?? false,
           },
           stepInteraction: {
-            ...state.validationState.stepInteraction,
-            ...validationState.stepInteraction,
+            ...currentValidationState.stepInteraction,
+            ...newValidationState.stepInteraction,
             [currentPhase]: true,
           },
           errors: {
-            ...state.validationState.errors,
-            ...validationState.errors,
-            [currentPhase]: validationState.errors?.[currentPhase] ?? [],
+            ...currentValidationState.errors,
+            ...newValidationState.errors,
+            [currentPhase]: newValidationState.errors?.[currentPhase] ?? [],
           },
+          completedSteps: Array.isArray(newValidationState.completedSteps)
+            ? newValidationState.completedSteps
+            : Array.isArray(currentValidationState.completedSteps)
+              ? currentValidationState.completedSteps
+              : [],
+          _timestamp: Date.now()
         },
-        completedSteps: validationState.stepValidation?.[currentPhase]
-          ? Array.from(new Set([...state.completedSteps, currentPhase])).sort(
+        completedSteps: newValidationState.stepValidation?.[currentPhase]
+          ? Array.from(new Set([...(state.completedSteps || []), currentPhase])).sort(
               (a: number, b: number) => a - b
             )
-          : state.completedSteps.filter(
+          : (state.completedSteps || []).filter(
               (step: number) => step !== currentPhase
             ),
       };
@@ -388,21 +387,21 @@ export const createValidationSlice = (
         isValid = validateFlightSelection(state);
         break;
       case 2:
-        isValid = state.validationState.isWizardValid;
+        isValid = state.validationState.isWizardValid ?? false;
         break;
       case 3:
-        isValid = state.validationState.isPersonalValid;
+        isValid = state.validationState.isPersonalValid ?? false;
         break;
       case 4:
-        isValid = state.validationState.isTermsValid;
+        isValid = state.validationState.isTermsValid ?? false;
         break;
       case 5:
         // Step 5 is valid if all previous steps are valid
         isValid =
-          state.validationState.stepValidation[1] &&
-          state.validationState.stepValidation[2] &&
-          state.validationState.stepValidation[3] &&
-          state.validationState.stepValidation[4];
+          (state.validationState.stepValidation[1] ?? false) &&
+          (state.validationState.stepValidation[2] ?? false) &&
+          (state.validationState.stepValidation[3] ?? false) &&
+          (state.validationState.stepValidation[4] ?? false);
         break;
       default:
         isValid = false;

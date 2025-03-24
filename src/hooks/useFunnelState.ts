@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from 'react';
-import { useStore } from '@/lib/state/store';
+import useStore from '@/lib/state/store';
 import type { ValidationStep } from '@/lib/state/types';
 import { ensureValidationState } from '@/lib/state/slices/validationSlice';
 

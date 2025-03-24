@@ -2,6 +2,7 @@ import InitialAssessment from '@/app/phases/initial-assessment/page';
 import type { Metadata } from 'next';
 import { isValidLanguage } from '@/config/language';
 import { getTranslation } from '@/translations';
+import React from 'react';
 
 type Props = {
   params: Promise<{ lang: string }>;
@@ -20,6 +21,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default function InitialAssessmentPage() {
+export default function InitialAssessmentPage(): React.ReactNode {
   return <InitialAssessment />;
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useStore } from '@/lib/state/store';
+import useStore from '@/lib/state/store';
 
 export const DevBypassInitializer = () => {
   const { setCurrentPhase, completePhase } = useStore();

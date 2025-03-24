@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { useStore } from '@/lib/state/store';
+import useStore from '@/lib/state/store';
 
 export function NavigationProvider({
   children,
@@ -12,7 +12,9 @@ export function NavigationProvider({
 
   useEffect(() => {
     // Initialize navigation state when the pathname changes
-    initializeNavigationFromUrl();
+    if (pathname) {
+      initializeNavigationFromUrl(pathname);
+    }
   }, [pathname, initializeNavigationFromUrl]);
 
   return <>{children}</>;

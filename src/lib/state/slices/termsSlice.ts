@@ -23,46 +23,59 @@ export const createTermsSlice = (
   set: (fn: (state: StoreStateValues) => Partial<StoreStateValues>) => void
 ): TermsActions => ({
   setTermsAccepted: (accepted: boolean) => {
-    set((state) => ({
-      ...state,
-      termsAccepted: accepted,
-      validationState: {
-        ...state.validationState,
-        stepValidation: {
-          ...state.validationState.stepValidation,
-          4: accepted && state.privacyAccepted,
+    set((state) => {
+      const isValid = accepted && state.privacyAccepted;
+      return {
+        termsAccepted: accepted,
+        validationState: {
+          ...state.validationState,
+          stepValidation: {
+            ...state.validationState.stepValidation,
+            4: isValid,
+          },
+          stepInteraction: {
+            ...state.validationState.stepInteraction,
+            4: true,
+          },
+          stepCompleted: {
+            ...state.validationState.stepCompleted,
+            4: isValid
+          },
+          isTermsValid: isValid,
+          _timestamp: Date.now(),
         },
-        stepInteraction: {
-          ...state.validationState.stepInteraction,
-          4: true,
-        },
-        isTermsValid: accepted && state.privacyAccepted,
-      },
-      _lastUpdate: Date.now(),
-    }));
+        _lastUpdate: Date.now(),
+      };
+    });
   },
   setPrivacyAccepted: (accepted: boolean) => {
-    set((state) => ({
-      ...state,
-      privacyAccepted: accepted,
-      validationState: {
-        ...state.validationState,
-        stepValidation: {
-          ...state.validationState.stepValidation,
-          4: accepted && state.termsAccepted,
+    set((state) => {
+      const isValid = accepted && state.termsAccepted;
+      return {
+        privacyAccepted: accepted,
+        validationState: {
+          ...state.validationState,
+          stepValidation: {
+            ...state.validationState.stepValidation,
+            4: isValid,
+          },
+          stepInteraction: {
+            ...state.validationState.stepInteraction,
+            4: true,
+          },
+          stepCompleted: {
+            ...state.validationState.stepCompleted,
+            4: isValid
+          },
+          isTermsValid: isValid,
+          _timestamp: Date.now(),
         },
-        stepInteraction: {
-          ...state.validationState.stepInteraction,
-          4: true,
-        },
-        isTermsValid: accepted && state.termsAccepted,
-      },
-      _lastUpdate: Date.now(),
-    }));
+        _lastUpdate: Date.now(),
+      };
+    });
   },
   setMarketingAccepted: (accepted: boolean) => {
-    set((state) => ({
-      ...state,
+    set(() => ({
       marketingAccepted: accepted,
       _lastUpdate: Date.now(),
     }));
@@ -71,7 +84,26 @@ export const createTermsSlice = (
     let isValid = false;
     set((state) => {
       isValid = state.termsAccepted && state.privacyAccepted;
-      return state;
+      return {
+        validationState: {
+          ...state.validationState,
+          stepValidation: {
+            ...state.validationState.stepValidation,
+            4: isValid,
+          },
+          stepInteraction: {
+            ...state.validationState.stepInteraction,
+            4: true,
+          },
+          stepCompleted: {
+            ...state.validationState.stepCompleted,
+            4: isValid
+          },
+          isTermsValid: isValid,
+          _timestamp: Date.now(),
+        },
+        _lastUpdate: Date.now(),
+      };
     });
     return isValid;
   },

@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import React, {
   useCallback,
@@ -6,25 +6,25 @@ import React, {
   useLayoutEffect,
   useRef,
   useState,
-} from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Answer } from '@/types/wizard';
-import { Question } from '@/types/experience';
-import { QuestionAnswer } from '@/components/shared/QuestionAnswer';
-import type { Flight } from '@/types/store';
-import { usePhase4Store } from '@/lib/state/phase4Store';
-import { useFlightStore } from '@/lib/state/flightStore';
-import { CheckCircleIcon } from '@heroicons/react/24/solid';
-import { qaWizardConfig } from '@/config/qaWizard';
-import { useTranslation } from '@/hooks/useTranslation';
-import type { Phase4State } from '@/lib/state/phase4Store';
+} from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Answer } from "@/types/wizard";
+import { Question } from "@/types/experience";
+import { QuestionAnswer } from "@/components/shared/QuestionAnswer";
+import type { Flight } from "@/types/store";
+import { usePhase4Store } from "@/lib/state/phase4Store";
+import { useFlightStore } from "@/lib/state/flightStore";
+import { CheckCircleIcon } from "@heroicons/react/24/solid";
+import { qaWizardConfig } from "@/config/qaWizard";
+import { useTranslation } from "@/hooks/useTranslation";
+import type { Phase4State } from "@/lib/state/phase4Store";
 
 interface Phase4QAWizardProps {
   questions: Question[];
   onComplete?: (answers: Answer[]) => void;
   initialAnswers?: Answer[];
   selectedFlight?: Flight | null;
-  wizardType: 'travel_status' | 'informed_date';
+  wizardType: "travel_status" | "informed_date";
 }
 
 export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
@@ -34,7 +34,7 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
   selectedFlight,
   wizardType,
 }) => {
-  console.log('Phase4QAWizard rendered:', { wizardType, questions });
+  console.log("Phase4QAWizard rendered:", { wizardType, questions });
 
   const { t } = useTranslation();
   const phase4Store = usePhase4Store();
@@ -50,6 +50,14 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
       return;
     }
 
+    console.log("=== Phase4QAWizard - useLayoutEffect ===", {
+      wizardType,
+      wizardTypeRef: wizardTypeRef.current,
+      informedDateAnswers: phase4Store.informedDateAnswers,
+      travelStatusAnswers: phase4Store.travelStatusAnswers,
+      timestamp: new Date().toISOString(),
+    });
+
     if (wizardTypeRef.current !== wizardType) {
       // Only update the wizard type reference and reset step
       // without resetting the state
@@ -58,9 +66,17 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
 
       // Preserve existing answers based on wizard type
       const currentAnswers =
-        wizardType === 'informed_date'
+        wizardType === "informed_date"
           ? phase4Store.informedDateAnswers
           : phase4Store.travelStatusAnswers;
+
+      console.log("=== Phase4QAWizard - Switching Wizard Type ===", {
+        wizardType,
+        currentAnswers,
+        informedDateAnswers: phase4Store.informedDateAnswers,
+        travelStatusAnswers: phase4Store.travelStatusAnswers,
+        timestamp: new Date().toISOString(),
+      });
 
       if (currentAnswers.length > 0) {
         // If we have answers, don't reset the step to 0
@@ -77,11 +93,20 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
   // Get current answers - memoize to prevent unnecessary recalculations
   const wizardAnswers = useMemo(() => {
     const answers =
-      wizardType === 'informed_date'
+      wizardType === "informed_date"
         ? phase4Store.informedDateAnswers
         : initialAnswers?.length > 0
-          ? initialAnswers
-          : phase4Store.travelStatusAnswers;
+        ? initialAnswers
+        : phase4Store.travelStatusAnswers;
+
+    console.log("=== Phase4QAWizard - wizardAnswers ===", {
+      wizardType,
+      answers,
+      informedDateAnswers: phase4Store.informedDateAnswers,
+      travelStatusAnswers: phase4Store.travelStatusAnswers,
+      initialAnswers,
+      timestamp: new Date().toISOString(),
+    });
 
     // Only update if answers have changed
     if (JSON.stringify(answers) !== JSON.stringify(prevAnswersRef.current)) {
@@ -125,21 +150,21 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
   const isCurrentQuestionAnswered = useMemo(() => {
     if (!currentQuestion) return false;
 
-    if (currentQuestion.type === 'flight_selector') {
+    if (currentQuestion.type === "flight_selector") {
       const hasSelectedFlight = Boolean(selectedFlight?.id);
       const hasStoredFlights = phase4Store.selectedFlights?.length > 0;
       return hasSelectedFlight || hasStoredFlights;
     }
 
     // For date selection questions, consider them answered if they have any value
-    if (currentQuestion.id === 'specific_informed_date') {
+    if (currentQuestion.id === "specific_informed_date") {
       return wizardAnswers.some(
         (a) => a.questionId === currentQuestion.id && a.value
       );
     }
 
     // For money input questions, check if there's a valid numeric value
-    if (currentQuestion.type === 'money') {
+    if (currentQuestion.type === "money") {
       const answer = wizardAnswers.find(
         (a) => a.questionId === currentQuestion.id
       );
@@ -159,18 +184,20 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
   // Handle selection of an answer
   const handleSelect = useCallback(
     (questionId: string, value: string | number | boolean) => {
-      console.log('=== Phase4QAWizard - handleSelect ENTRY ===', {
+      console.log("=== Phase4QAWizard - handleSelect ENTRY ===", {
+        wizardType,
         questionId,
         value,
-        wizardType,
-        currentSelectedFlights: phase4Store.selectedFlights,
-        originalFlights: useFlightStore.getState().originalFlights,
+        currentAnswers:
+          wizardType === "informed_date"
+            ? phase4Store.informedDateAnswers
+            : phase4Store.travelStatusAnswers,
         timestamp: new Date().toISOString(),
       });
 
       // Get current answers based on wizard type
       const currentAnswers =
-        wizardType === 'informed_date'
+        wizardType === "informed_date"
           ? [...phase4Store.informedDateAnswers]
           : [...phase4Store.travelStatusAnswers];
 
@@ -190,19 +217,127 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
         _lastUpdate: Date.now(),
       };
 
-      if (wizardType === 'informed_date') {
+      if (wizardType === "informed_date") {
         phase4Store.batchUpdate({
           ...updates,
           informedDateAnswers: currentAnswers,
         });
+
+        console.log("=== Phase4QAWizard - Updated informedDateAnswers ===", {
+          informedDateAnswers: currentAnswers,
+          storeAnswers: phase4Store.informedDateAnswers,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Save to localStorage directly to ensure persistence
+        if (typeof window !== "undefined") {
+          const validationState = {
+            ...JSON.parse(
+              localStorage.getItem("phase4ValidationState") || "{}"
+            ),
+            informedDateAnswers: currentAnswers,
+            _timestamp: Date.now(),
+          };
+
+          console.log(
+            "=== Phase4QAWizard - Saving informedDateAnswers to localStorage ===",
+            {
+              validationState,
+              timestamp: new Date().toISOString(),
+            }
+          );
+
+          localStorage.setItem(
+            "phase4ValidationState",
+            JSON.stringify(validationState)
+          );
+
+          // Also save to phase4Store in localStorage directly
+          try {
+            const phase4StoreData = localStorage.getItem("phase4Store");
+            if (phase4StoreData) {
+              const parsedData = JSON.parse(phase4StoreData);
+              if (parsedData.state) {
+                parsedData.state.informedDateAnswers = currentAnswers;
+                parsedData.state._lastUpdate = Date.now();
+
+                localStorage.setItem("phase4Store", JSON.stringify(parsedData));
+
+                console.log(
+                  "=== Phase4QAWizard - Updated phase4Store in localStorage ===",
+                  {
+                    informedDateAnswers: currentAnswers,
+                    timestamp: new Date().toISOString(),
+                  }
+                );
+              }
+            }
+          } catch (error) {
+            console.error("Error updating phase4Store in localStorage:", error);
+          }
+        }
       } else {
         phase4Store.batchUpdate({
           ...updates,
           travelStatusAnswers: currentAnswers,
         });
+
+        console.log("=== Phase4QAWizard - Updated travelStatusAnswers ===", {
+          travelStatusAnswers: currentAnswers,
+          storeAnswers: phase4Store.travelStatusAnswers,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Save to localStorage directly to ensure persistence
+        if (typeof window !== "undefined") {
+          const validationState = {
+            ...JSON.parse(
+              localStorage.getItem("phase4ValidationState") || "{}"
+            ),
+            travelStatusAnswers: currentAnswers,
+            _timestamp: Date.now(),
+          };
+
+          console.log(
+            "=== Phase4QAWizard - Saving travelStatusAnswers to localStorage ===",
+            {
+              validationState,
+              timestamp: new Date().toISOString(),
+            }
+          );
+
+          localStorage.setItem(
+            "phase4ValidationState",
+            JSON.stringify(validationState)
+          );
+
+          // Also save to phase4Store in localStorage directly
+          try {
+            const phase4StoreData = localStorage.getItem("phase4Store");
+            if (phase4StoreData) {
+              const parsedData = JSON.parse(phase4StoreData);
+              if (parsedData.state) {
+                parsedData.state.travelStatusAnswers = currentAnswers;
+                parsedData.state._lastUpdate = Date.now();
+
+                localStorage.setItem("phase4Store", JSON.stringify(parsedData));
+
+                console.log(
+                  "=== Phase4QAWizard - Updated phase4Store in localStorage ===",
+                  {
+                    travelStatusAnswers: currentAnswers,
+                    timestamp: new Date().toISOString(),
+                  }
+                );
+              }
+            }
+          } catch (error) {
+            console.error("Error updating phase4Store in localStorage:", error);
+          }
+        }
       }
 
-      console.log('=== Phase4QAWizard - handleSelect EXIT ===', {
+      console.log("=== Phase4QAWizard - handleSelect EXIT ===", {
         questionId,
         value,
         currentAnswers,
@@ -219,7 +354,7 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
       return (
         wizardAnswers
           .find((a) => a.questionId === questionId)
-          ?.value?.toString() || ''
+          ?.value?.toString() || ""
       );
     },
     [wizardAnswers]
@@ -228,11 +363,23 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
   // Handle completion of the wizard
   const handleComplete = useCallback(
     (answers: Answer[]) => {
-      console.log('=== Phase4QAWizard - handleComplete START ===', {
+      console.log("=== Phase4QAWizard - handleComplete START ===", {
         answers,
         wizardType,
         currentStep,
         visibleQuestions,
+        currentAnswers:
+          wizardType === "travel_status"
+            ? phase4Store.travelStatusAnswers
+            : phase4Store.informedDateAnswers,
+        showingSuccess:
+          wizardType === "travel_status"
+            ? phase4Store.travelStatusShowingSuccess
+            : phase4Store.informedDateShowingSuccess,
+        isValid:
+          wizardType === "travel_status"
+            ? phase4Store.travelStatusIsValid
+            : phase4Store.informedDateIsValid,
         timestamp: new Date().toISOString(),
       });
 
@@ -240,11 +387,11 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
       if (currentStep === visibleQuestions.length - 1) {
         // Get current validation states
         const currentStepValidation =
-          wizardType === 'travel_status'
+          wizardType === "travel_status"
             ? { ...phase4Store.travelStatusStepValidation }
             : { ...phase4Store.informedDateStepValidation };
         const currentStepInteraction =
-          wizardType === 'travel_status'
+          wizardType === "travel_status"
             ? { ...phase4Store.travelStatusStepInteraction }
             : { ...phase4Store.informedDateStepInteraction };
 
@@ -253,7 +400,7 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
           _lastUpdate: Date.now(),
         };
 
-        if (wizardType === 'travel_status') {
+        if (wizardType === "travel_status") {
           updates.travelStatusShowingSuccess = true;
           updates.travelStatusIsValid = true;
           updates.travelStatusStepValidation = {
@@ -283,11 +430,11 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
         // Call onComplete with current wizard's answers
         if (onComplete) {
           const currentAnswers =
-            wizardType === 'travel_status'
+            wizardType === "travel_status"
               ? phase4Store.travelStatusAnswers
               : phase4Store.informedDateAnswers;
 
-          console.log('Calling onComplete with answers:', {
+          console.log("Calling onComplete with answers:", {
             wizardType,
             answers: currentAnswers,
           });
@@ -295,7 +442,7 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
         }
 
         // Save validation state to localStorage
-        if (typeof window !== 'undefined') {
+        if (typeof window !== "undefined") {
           const validationState = {
             travelStatusStepValidation: phase4Store.travelStatusStepValidation,
             travelStatusStepInteraction:
@@ -307,16 +454,74 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
             travelStatusIsValid: phase4Store.travelStatusIsValid,
             informedDateShowingSuccess: phase4Store.informedDateShowingSuccess,
             informedDateIsValid: phase4Store.informedDateIsValid,
+            travelStatusAnswers: phase4Store.travelStatusAnswers,
+            informedDateAnswers: phase4Store.informedDateAnswers,
             _timestamp: Date.now(),
           };
+
+          console.log(
+            "=== Phase4QAWizard - handleComplete - Saving to localStorage ===",
+            {
+              wizardType,
+              validationState,
+              timestamp: new Date().toISOString(),
+            }
+          );
+
           localStorage.setItem(
-            'phase4ValidationState',
+            "phase4ValidationState",
             JSON.stringify(validationState)
           );
+
+          // Also save to phase4Store in localStorage directly
+          try {
+            const phase4StoreData = localStorage.getItem("phase4Store");
+            if (phase4StoreData) {
+              const parsedData = JSON.parse(phase4StoreData);
+              if (parsedData.state) {
+                // Update the appropriate answers based on wizard type
+                if (wizardType === "travel_status") {
+                  parsedData.state.travelStatusAnswers =
+                    phase4Store.travelStatusAnswers;
+                  parsedData.state.travelStatusShowingSuccess = true;
+                  parsedData.state.travelStatusIsValid = true;
+                  parsedData.state.travelStatusStepValidation =
+                    phase4Store.travelStatusStepValidation;
+                  parsedData.state.travelStatusStepInteraction =
+                    phase4Store.travelStatusStepInteraction;
+                } else {
+                  parsedData.state.informedDateAnswers =
+                    phase4Store.informedDateAnswers;
+                  parsedData.state.informedDateShowingSuccess = true;
+                  parsedData.state.informedDateIsValid = true;
+                  parsedData.state.informedDateStepValidation =
+                    phase4Store.informedDateStepValidation;
+                  parsedData.state.informedDateStepInteraction =
+                    phase4Store.informedDateStepInteraction;
+                }
+
+                parsedData.state._lastUpdate = Date.now();
+
+                localStorage.setItem("phase4Store", JSON.stringify(parsedData));
+
+                console.log(
+                  "=== Phase4QAWizard - handleComplete - Updated phase4Store ===",
+                  {
+                    wizardType,
+                    travelStatusAnswers: phase4Store.travelStatusAnswers,
+                    informedDateAnswers: phase4Store.informedDateAnswers,
+                    timestamp: new Date().toISOString(),
+                  }
+                );
+              }
+            }
+          } catch (error) {
+            console.error("Error updating phase4Store in localStorage:", error);
+          }
         }
       }
 
-      console.log('=== Phase4QAWizard - handleComplete END ===', {
+      console.log("=== Phase4QAWizard - handleComplete END ===", {
         wizardType,
         currentStep,
         timestamp: new Date().toISOString(),
@@ -327,7 +532,7 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
 
   // Handle going to next step
   const goToNext = useCallback(() => {
-    console.log('=== Phase4QAWizard - goToNext ENTRY ===', {
+    console.log("=== Phase4QAWizard - goToNext ENTRY ===", {
       currentStep,
       visibleQuestionsLength: visibleQuestions.length,
       isCurrentQuestionAnswered,
@@ -336,7 +541,7 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
     });
 
     if (!isCurrentQuestionAnswered) {
-      console.log('❌ Current question not answered, cannot proceed');
+      console.log("❌ Current question not answered, cannot proceed");
       return;
     }
 
@@ -345,14 +550,14 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
 
     if (!isLastStep) {
       // Just move to next question
-      console.log('Moving to next question:', { nextStep });
+      console.log("Moving to next question:", { nextStep });
       setCurrentStep(nextStep);
     } else {
-      console.log('Completing wizard section:', { wizardType });
+      console.log("Completing wizard section:", { wizardType });
 
       // Get current answers for completion
       const currentAnswers =
-        wizardType === 'travel_status'
+        wizardType === "travel_status"
           ? phase4Store.travelStatusAnswers
           : phase4Store.informedDateAnswers;
 
@@ -360,7 +565,7 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
       handleComplete(currentAnswers);
     }
 
-    console.log('=== Phase4QAWizard - goToNext EXIT ===', {
+    console.log("=== Phase4QAWizard - goToNext EXIT ===", {
       nextStep,
       isLastStep,
       wizardType,
@@ -384,7 +589,7 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
 
   // Handle going back to questions
   const handleBackToQuestions = useCallback(() => {
-    console.log('=== Phase4QAWizard - handleBackToQuestions ENTRY ===', {
+    console.log("=== Phase4QAWizard - handleBackToQuestions ENTRY ===", {
       wizardType,
       currentStep,
       validationStates: {
@@ -405,11 +610,11 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
     setCurrentStep(0);
 
     // Preserve existing flight type or default to 'direct'
-    const currentFlightType = phase4Store.selectedType || 'direct';
+    const currentFlightType = phase4Store.selectedType || "direct";
     const currentSelectedFlights = phase4Store.selectedFlights;
 
     // Reset state based on wizard type and ensure UI cleanup
-    if (wizardType === 'travel_status') {
+    if (wizardType === "travel_status") {
       phase4Store.batchUpdate({
         travelStatusAnswers: [],
         travelStatusCurrentStep: 0,
@@ -423,6 +628,52 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
         selectedFlights: currentSelectedFlights,
         _lastUpdate: Date.now(),
       });
+
+      // Update localStorage to reflect the reset
+      try {
+        // Update phase4ValidationState
+        const validationState = JSON.parse(
+          localStorage.getItem("phase4ValidationState") || "{}"
+        );
+        validationState.travelStatusAnswers = [];
+        validationState.travelStatusShowingSuccess = false;
+        validationState.travelStatusIsValid = false;
+        validationState.travelStatusStepValidation = {};
+        validationState.travelStatusStepInteraction = {};
+        validationState._timestamp = Date.now();
+
+        localStorage.setItem(
+          "phase4ValidationState",
+          JSON.stringify(validationState)
+        );
+
+        // Update phase4Store in localStorage
+        const phase4StoreData = localStorage.getItem("phase4Store");
+        if (phase4StoreData) {
+          const parsedData = JSON.parse(phase4StoreData);
+          if (parsedData.state) {
+            parsedData.state.travelStatusAnswers = [];
+            parsedData.state.travelStatusCurrentStep = 0;
+            parsedData.state.travelStatusShowingSuccess = false;
+            parsedData.state.travelStatusIsValid = false;
+            parsedData.state.travelStatusStepValidation = {};
+            parsedData.state.travelStatusStepInteraction = {};
+            parsedData.state.lastAnsweredQuestion = null;
+            parsedData.state._lastUpdate = Date.now();
+
+            localStorage.setItem("phase4Store", JSON.stringify(parsedData));
+          }
+        }
+
+        console.log(
+          "=== Phase4QAWizard - Reset travel_status in localStorage ===",
+          {
+            timestamp: new Date().toISOString(),
+          }
+        );
+      } catch (error) {
+        console.error("Error updating localStorage:", error);
+      }
     } else {
       phase4Store.batchUpdate({
         informedDateAnswers: [],
@@ -437,9 +688,55 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
         selectedFlights: currentSelectedFlights,
         _lastUpdate: Date.now(),
       });
+
+      // Update localStorage to reflect the reset
+      try {
+        // Update phase4ValidationState
+        const validationState = JSON.parse(
+          localStorage.getItem("phase4ValidationState") || "{}"
+        );
+        validationState.informedDateAnswers = [];
+        validationState.informedDateShowingSuccess = false;
+        validationState.informedDateIsValid = false;
+        validationState.informedDateStepValidation = {};
+        validationState.informedDateStepInteraction = {};
+        validationState._timestamp = Date.now();
+
+        localStorage.setItem(
+          "phase4ValidationState",
+          JSON.stringify(validationState)
+        );
+
+        // Update phase4Store in localStorage
+        const phase4StoreData = localStorage.getItem("phase4Store");
+        if (phase4StoreData) {
+          const parsedData = JSON.parse(phase4StoreData);
+          if (parsedData.state) {
+            parsedData.state.informedDateAnswers = [];
+            parsedData.state.informedDateCurrentStep = 0;
+            parsedData.state.informedDateShowingSuccess = false;
+            parsedData.state.informedDateIsValid = false;
+            parsedData.state.informedDateStepValidation = {};
+            parsedData.state.informedDateStepInteraction = {};
+            parsedData.state.lastAnsweredQuestion = null;
+            parsedData.state._lastUpdate = Date.now();
+
+            localStorage.setItem("phase4Store", JSON.stringify(parsedData));
+          }
+        }
+
+        console.log(
+          "=== Phase4QAWizard - Reset informed_date in localStorage ===",
+          {
+            timestamp: new Date().toISOString(),
+          }
+        );
+      } catch (error) {
+        console.error("Error updating localStorage:", error);
+      }
     }
 
-    console.log('=== Phase4QAWizard - handleBackToQuestions EXIT ===', {
+    console.log("=== Phase4QAWizard - handleBackToQuestions EXIT ===", {
       wizardType,
       currentStep,
       validationStates: {
@@ -459,39 +756,63 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
 
   // Get success state
   const successState = useMemo(() => {
-    console.log('=== Phase4QAWizard - Success State Check ===', {
+    console.log("=== Phase4QAWizard - Success State Check ===", {
       wizardType,
       answers: wizardAnswers,
       isShowingSuccess:
-        wizardType === 'travel_status'
+        wizardType === "travel_status"
           ? phase4Store.travelStatusShowingSuccess
           : phase4Store.informedDateShowingSuccess,
       travelStatusShowingSuccess: phase4Store.travelStatusShowingSuccess,
       informedDateShowingSuccess: phase4Store.informedDateShowingSuccess,
       travelStatusIsValid: phase4Store.travelStatusIsValid,
       informedDateIsValid: phase4Store.informedDateIsValid,
+      travelStatusAnswers: phase4Store.travelStatusAnswers,
+      informedDateAnswers: phase4Store.informedDateAnswers,
     });
 
     // Get the showing success state based on wizard type
     const isShowingSuccess =
-      wizardType === 'travel_status'
+      wizardType === "travel_status"
         ? phase4Store.travelStatusShowingSuccess
         : phase4Store.informedDateShowingSuccess;
 
     // Get the answers based on wizard type
     const answers =
-      wizardType === 'travel_status'
+      wizardType === "travel_status"
         ? phase4Store.travelStatusAnswers
         : phase4Store.informedDateAnswers;
 
     // If we don't have success state or answers, return not showing
     if (!isShowingSuccess || !answers || answers.length === 0) {
-      return { showing: false, message: '' };
+      return { showing: false, message: "" };
+    }
+
+    // For travel_status, we need to ensure we have a valid travel_status answer
+    if (wizardType === "travel_status") {
+      const hasTravelStatusAnswer = answers.some(
+        (a) => a.questionId === "travel_status"
+      );
+      if (!hasTravelStatusAnswer) {
+        return { showing: false, message: "" };
+      }
+    }
+
+    // For informed_date, we need to ensure we have either informed_date or specific_informed_date
+    if (wizardType === "informed_date") {
+      const hasInformedDateAnswer = answers.some(
+        (a) =>
+          a.questionId === "informed_date" ||
+          a.questionId === "specific_informed_date"
+      );
+      if (!hasInformedDateAnswer) {
+        return { showing: false, message: "" };
+      }
     }
 
     // Find the last answer and determine success message
     const lastAnswer = answers[answers.length - 1];
-    if (!lastAnswer) return { showing: false, message: '' };
+    if (!lastAnswer) return { showing: false, message: "" };
 
     // Find the question and option for the last answer
     const question = questions.find((q) => q.id === lastAnswer.questionId);
@@ -519,7 +840,7 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
   // Get success icon based on last answer
   const getSuccessIcon = useMemo(() => {
     const answers =
-      wizardType === 'travel_status'
+      wizardType === "travel_status"
         ? phase4Store.travelStatusAnswers
         : phase4Store.informedDateAnswers;
     const lastAnswer = answers[answers.length - 1];
@@ -554,48 +875,51 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
     <div className="space-y-8">
       <AnimatePresence mode="wait">
         {successState.showing ? (
-          <motion.div
-            key="success"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.2 }}
-            className="min-h-[300px] flex flex-col justify-center"
-          >
-            <div className="flex flex-col items-center justify-center space-y-6">
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                exit={{ scale: 0 }}
-                transition={{ delay: 0.1, duration: 0.2 }}
-                className="w-16 h-16 flex items-center justify-center text-[64px]"
-              >
-                {getSuccessIcon}
-              </motion.div>
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ delay: 0.2, duration: 0.2 }}
-                className="text-center space-y-4"
-              >
-                <h2 className="text-2xl font-bold text-gray-900">
-                  {successState.message}
-                </h2>
-                <p className="text-sm text-gray-500">
-                  {t.wizard.success.processing}
-                </p>
-                <motion.button
-                  onClick={handleBackToQuestions}
-                  className="mt-6 px-6 py-2 text-[#F54538] border border-[#F54538] rounded-md hover:bg-red-50"
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  {t.wizard.success.backToQuestions}
-                </motion.button>
-              </motion.div>
-            </div>
-          </motion.div>
+          <div className="min-h-[300px] flex flex-col justify-center">
+            <motion.div
+              key="success"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className="flex flex-col items-center justify-center space-y-6">
+                <div className="w-16 h-16 flex items-center justify-center text-[64px]">
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    exit={{ scale: 0 }}
+                    transition={{ delay: 0.1, duration: 0.2 }}
+                  >
+                    {getSuccessIcon}
+                  </motion.div>
+                </div>
+                <div className="text-center space-y-4">
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ delay: 0.2, duration: 0.2 }}
+                  >
+                    <h2 className="text-2xl font-bold text-gray-900">
+                      {successState.message}
+                    </h2>
+                    <p className="text-sm text-gray-500">
+                      {t.wizard.success.processing}
+                    </p>
+                    <div className="mt-6">
+                      <button
+                        onClick={handleBackToQuestions}
+                        className="px-6 py-2 text-[#F54538] border border-[#F54538] rounded-md hover:bg-red-50"
+                      >
+                        {t.wizard.success.backToQuestions}
+                      </button>
+                    </div>
+                  </motion.div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
         ) : (
           visibleQuestions.length > 0 &&
           currentQuestion && (
@@ -604,7 +928,7 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
               initial={{ opacity: 0, x: 50 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -50 }}
-              transition={{ duration: 0.3, ease: 'easeInOut' }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
             >
               <QuestionAnswer
                 question={currentQuestion}
@@ -616,40 +940,34 @@ export const Phase4QAWizard: React.FC<Phase4QAWizardProps> = ({
               <div className="flex justify-between mt-6">
                 <div>
                   {currentStep > 0 && (
-                    <motion.button
+                    <button
                       onClick={() => {
-                        console.log('Back button clicked');
+                        console.log("Back button clicked");
                         goToPrevious();
                       }}
                       className="px-4 py-2 text-gray-600 hover:text-gray-800"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
                     >
                       {t.wizard.navigation.back}
-                    </motion.button>
+                    </button>
                   )}
                 </div>
                 <div>
-                  <motion.button
+                  <button
                     onClick={() => {
-                      console.log('Next/Submit button clicked');
+                      console.log("Next/Submit button clicked");
                       goToNext();
                     }}
                     disabled={!isCurrentQuestionAnswered}
-                    className={`px-4 py-2 bg-[#F54538] text-white rounded-md ${
-                      !isCurrentQuestionAnswered
-                        ? 'opacity-50 cursor-not-allowed'
-                        : 'hover:bg-[#E03F33]'
+                    className={`px-4 py-2 rounded-md ${
+                      isCurrentQuestionAnswered
+                        ? "bg-[#F54538] text-white hover:bg-[#E03F33]"
+                        : "bg-gray-300 text-gray-500 cursor-not-allowed"
                     }`}
-                    whileHover={
-                      isCurrentQuestionAnswered ? { scale: 1.05 } : {}
-                    }
-                    whileTap={isCurrentQuestionAnswered ? { scale: 0.95 } : {}}
                   >
                     {currentStep < visibleQuestions.length - 1
                       ? t.wizard.navigation.next
                       : t.common.submit}
-                  </motion.button>
+                  </button>
                 </div>
               </div>
             </motion.div>

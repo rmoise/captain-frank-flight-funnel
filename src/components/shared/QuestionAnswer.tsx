@@ -1,18 +1,17 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
-import type { Question } from '@/types/experience';
-import { MoneyInput } from '@/components/MoneyInput';
-import { CustomDateInput } from '@/components/shared/CustomDateInput';
-import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
-import { useStore } from '@/lib/state/store';
-import type { ValidationStateSteps } from '@/lib/state/store';
-import { useTranslation } from '@/hooks/useTranslation';
-import { format, parseISO, isValid } from 'date-fns';
-import DatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
-import { ModularFlightSelector } from '@/components/booking/ModularFlightSelector';
+import React, { useState, useEffect, useRef } from "react";
+import { motion } from "framer-motion";
+import type { Question } from "@/types/experience";
+import { MoneyInput } from "@/components/MoneyInput";
+import { CustomDateInput } from "@/components/shared/CustomDateInput";
+import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
+import useStore from "@/lib/state/store";
+import { useTranslation } from "@/hooks/useTranslation";
+import { format, parseISO, isValid } from "date-fns";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
+import { ModularFlightSelector } from "@/components/booking/ModularFlightSelector";
 
 export interface QuestionAnswerProps {
   question: Question;
@@ -44,7 +43,7 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
   }, []);
 
   const handleMoneyInputChange = (value: string) => {
-    console.log('handleMoneyInputChange:', {
+    console.log("handleMoneyInputChange:", {
       value,
       currentLocalValue: localValue,
     });
@@ -53,9 +52,9 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
     setLocalValue(value);
 
     // Handle empty value case
-    if (!value || value === '') {
-      setLocalValue('');
-      onSelect(question.id, '');
+    if (!value || value === "") {
+      setLocalValue("");
+      onSelect(question.id, "");
       updateValidationState({
         stepValidation: {
           1: currentStep === 1 ? false : true,
@@ -63,21 +62,24 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
           3: currentStep === 3 ? false : true,
           4: currentStep === 4 ? false : true,
           5: currentStep === 5 ? false : true,
+          6: currentStep === 6 ? false : true,
+          7: currentStep === 7 ? false : true,
         },
+        _timestamp: Date.now(),
       });
       return;
     }
 
     // Don't validate while typing unless we have a complete value
-    const hasDecimalPoint = value.includes('.');
+    const hasDecimalPoint = value.includes(".");
     const decimalPlaces = hasDecimalPoint
-      ? (value.split('.')[1] || '').length
+      ? (value.split(".")[1] || "").length
       : 0;
     const isComplete = hasDecimalPoint && decimalPlaces === 2;
 
     // Only update validation state and call onSelect when we have a complete value
-    if (question.type === 'money' && isComplete) {
-      const numericValue = parseFloat(value || '0');
+    if (question.type === "money" && isComplete) {
+      const numericValue = parseFloat(value || "0");
       const isValid = numericValue > 0;
 
       // Batch our state updates
@@ -88,7 +90,10 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
           3: currentStep === 3 ? isValid : true,
           4: currentStep === 4 ? isValid : true,
           5: currentStep === 5 ? isValid : true,
+          6: currentStep === 6 ? isValid : true,
+          7: currentStep === 7 ? isValid : true,
         },
+        _timestamp: Date.now(),
       });
 
       // Always call onSelect with the current value
@@ -97,16 +102,16 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
   };
 
   const handleMoneyInputBlur = () => {
-    console.log('handleMoneyInputBlur:', { localValue });
+    console.log("handleMoneyInputBlur:", { localValue });
     setIsFocused(false);
 
-    if (!localValue || localValue === '') {
-      setLocalValue('');
+    if (!localValue || localValue === "") {
+      setLocalValue("");
       return;
     }
 
     // Parse the numeric value
-    const numericValue = parseFloat(localValue || '0');
+    const numericValue = parseFloat(localValue || "0");
 
     // Always format with 2 decimal places on blur
     const formattedValue = numericValue.toFixed(2);
@@ -121,7 +126,10 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
         3: currentStep === 3 ? isValid : true,
         4: currentStep === 4 ? isValid : true,
         5: currentStep === 5 ? isValid : true,
+        6: currentStep === 6 ? isValid : true,
+        7: currentStep === 7 ? isValid : true,
       },
+      _timestamp: Date.now(),
     });
 
     if (isValid) {
@@ -164,7 +172,7 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
         )
       );
     } catch (error) {
-      console.error('Error parsing date:', error);
+      console.error("Error parsing date:", error);
       return null;
     }
   };
@@ -173,28 +181,28 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
   const handleDateChange = (newDate: Date | null) => {
     try {
       if (!newDate) {
-        setLocalValue('');
-        onSelect(question.id, '');
+        setLocalValue("");
+        onSelect(question.id, "");
         return;
       }
 
       // Format the date in YYYY-MM-DD format
       const year = newDate.getFullYear();
-      const month = String(newDate.getMonth() + 1).padStart(2, '0');
-      const day = String(newDate.getDate()).padStart(2, '0');
+      const month = String(newDate.getMonth() + 1).padStart(2, "0");
+      const day = String(newDate.getDate()).padStart(2, "0");
       const formattedDate = `${year}-${month}-${day}`;
 
-      console.log('Formatted date:', formattedDate);
+      console.log("Formatted date:", formattedDate);
       setLocalValue(formattedDate);
       onSelect(question.id, formattedDate);
     } catch (error) {
-      console.error('Error in handleDateChange:', error);
+      console.error("Error in handleDateChange:", error);
     }
   };
 
   const renderQuestionInput = () => {
     switch (question.type) {
-      case 'radio':
+      case "radio":
         if (!question.options) {
           return null;
         }
@@ -206,12 +214,11 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
               return (
                 <div key={option.value}>
                   <label
-                    className={`flex items-center w-full p-3 rounded-lg border cursor-pointer transition-all duration-200
-                      ${
-                        isSelected
-                          ? 'border-[#F54538] bg-[#FEF2F2]'
-                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                      }`}
+                    className={`flex items-center w-full p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
+                      isSelected
+                        ? "border-[#F54538] bg-[#FEF2F2]"
+                        : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                    }`}
                   >
                     <input
                       type="radio"
@@ -221,7 +228,7 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
                       onChange={() => {
                         // Handle external links separately
                         if (option.externalLink) {
-                          window.open(option.externalLink, '_blank');
+                          window.open(option.externalLink, "_blank");
                           return;
                         }
 
@@ -240,33 +247,33 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
           </div>
         );
 
-      case 'money':
+      case "money":
         return (
           <div className="mt-4">
             <MoneyInput
               label={question.label || question.text}
-              value={localValue || ''}
+              value={localValue || ""}
               onChange={(value) => {
-                console.log('MoneyInput onChange:', {
+                console.log("MoneyInput onChange:", {
                   value,
                   currentLocalValue: localValue,
                 });
-                if (value === '+') {
-                  const currentValue = parseFloat(localValue || '0');
+                if (value === "+") {
+                  const currentValue = parseFloat(localValue || "0");
                   const newValue = (currentValue + 1).toFixed(2);
-                  console.log('Increment:', { currentValue, newValue });
+                  console.log("Increment:", { currentValue, newValue });
                   handleMoneyInputChange(newValue);
-                } else if (value === '-') {
-                  const currentValue = parseFloat(localValue || '0');
+                } else if (value === "-") {
+                  const currentValue = parseFloat(localValue || "0");
                   if (currentValue > 0) {
                     const newValue = Math.max(0, currentValue - 1).toFixed(2);
-                    console.log('Decrement:', { currentValue, newValue });
+                    console.log("Decrement:", { currentValue, newValue });
                     handleMoneyInputChange(newValue);
                   }
-                } else if (value === '') {
+                } else if (value === "") {
                   // Handle clear action
-                  setLocalValue('');
-                  onSelect(question.id, '');
+                  setLocalValue("");
+                  onSelect(question.id, "");
                   updateValidationState({
                     stepValidation: {
                       1: currentStep === 1 ? false : true,
@@ -274,16 +281,19 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
                       3: currentStep === 3 ? false : true,
                       4: currentStep === 4 ? false : true,
                       5: currentStep === 5 ? false : true,
+                      6: currentStep === 6 ? false : true,
+                      7: currentStep === 7 ? false : true,
                     },
+                    _timestamp: Date.now(),
                   });
                 } else {
-                  console.log('Direct value change:', { value });
+                  console.log("Direct value change:", { value });
                   handleMoneyInputChange(value);
                 }
               }}
               isFocused={isFocused}
               onFocus={() => {
-                console.log('MoneyInput onFocus');
+                console.log("MoneyInput onFocus");
                 setIsFocused(true);
               }}
               onBlur={handleMoneyInputBlur}
@@ -294,7 +304,7 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
           </div>
         );
 
-      case 'date':
+      case "date":
         return (
           <div className="mt-4">
             <DatePicker
@@ -310,9 +320,9 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
                     localValue
                       ? format(
                           safeParseDateToUTC(localValue) || new Date(),
-                          'dd.MM.yyyy'
+                          "dd.MM.yyyy"
                         )
-                      : ''
+                      : ""
                   }
                   onClear={() => handleDateChange(null)}
                   onClick={() => {}}
@@ -331,8 +341,8 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
                 new Date(new Date().setFullYear(new Date().getFullYear() - 3))
               }
               popperProps={{
-                strategy: 'fixed',
-                placement: 'top-start',
+                strategy: "fixed",
+                placement: "top-start",
               }}
               className="react-datepicker-popper"
               calendarClassName="custom-calendar"
@@ -347,7 +357,7 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
           </div>
         );
 
-      case 'flight_selector':
+      case "flight_selector":
         return (
           <>
             <ModularFlightSelector
@@ -356,65 +366,69 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
               currentPhase={4}
               disabled={false}
               stepNumber={
-                question.id === 'alternative_flight_airline_expense' ||
-                question.id === 'alternative_flight_own_expense'
+                question.id === "alternative_flight_airline_expense" ||
+                question.id === "alternative_flight_own_expense"
                   ? currentStep + 1
                   : 1
               }
-              setValidationState={
-                question.id === 'alternative_flight_airline_expense' ||
-                question.id === 'alternative_flight_own_expense'
-                  ? () => void 0
-                  : (state) => {
-                      // Update validation state for the correct step
-                      const stepNumber =
-                        question.id === 'alternative_flight_airline_expense' ||
-                        question.id === 'alternative_flight_own_expense'
-                          ? currentStep + 1
-                          : 1;
+              setValidationState={(updater) => {
+                // Get the current validation state
+                const prevState = {
+                  1: true,
+                  2: true,
+                  3: true,
+                  4: true,
+                  5: true,
+                  6: true,
+                  7: true,
+                };
 
-                      const validationSteps: ValidationStateSteps[] = [
-                        1, 2, 3, 4, 5,
-                      ];
-                      const stepValidation = Object.fromEntries(
-                        validationSteps.map((n) => [
-                          n,
-                          n === stepNumber
-                            ? typeof state === 'function'
-                              ? state({})[stepNumber] || false
-                              : state[stepNumber] || false
-                            : false,
-                        ])
-                      ) as Record<ValidationStateSteps, boolean>;
-                      const stepInteraction = Object.fromEntries(
-                        validationSteps.map((n) => [n, n === stepNumber])
-                      ) as Record<ValidationStateSteps, boolean>;
+                // Apply the updater to get the new state
+                const newState = updater(prevState);
 
-                      updateValidationState({
-                        stepValidation,
-                        stepInteraction,
-                        _timestamp: Date.now(),
-                      });
-                    }
-              }
-              onSelect={
-                question.id === 'alternative_flight_airline_expense' ||
-                question.id === 'alternative_flight_own_expense'
-                  ? () => void 0
-                  : (flight) => {
-                      if (flight) {
-                        // Debounce the state update to prevent infinite loops
-                        setTimeout(() => {
-                          onSelect(
-                            question.id,
-                            Array.isArray(flight)
-                              ? flight.map((f) => f.id).join(',')
-                              : flight.id
-                          );
-                        }, 0);
-                      }
-                    }
-              }
+                // Update only the current step's validation
+                const validationState = {
+                  1: currentStep === 1 ? newState[currentStep] : true,
+                  2: currentStep === 2 ? newState[currentStep] : true,
+                  3: currentStep === 3 ? newState[currentStep] : true,
+                  4: currentStep === 4 ? newState[currentStep] : true,
+                  5: currentStep === 5 ? newState[currentStep] : true,
+                  6: currentStep === 6 ? newState[currentStep] : true,
+                  7: currentStep === 7 ? newState[currentStep] : true,
+                };
+
+                updateValidationState({
+                  stepValidation: validationState,
+                  _timestamp: Date.now(),
+                });
+              }}
+              onSelect={(flight) => {
+                if (flight) {
+                  // Debounce the state update to prevent infinite loops
+                  setTimeout(() => {
+                    const flightIds = Array.isArray(flight)
+                      ? flight.map((f) => f.id).join(",")
+                      : flight.id;
+
+                    onSelect(question.id, flightIds);
+
+                    // Also update validation state
+                    const validationState = {
+                      1: currentStep === 1 ? !!flightIds : true,
+                      2: currentStep === 2 ? !!flightIds : true,
+                      3: currentStep === 3 ? !!flightIds : true,
+                      4: currentStep === 4 ? !!flightIds : true,
+                      5: currentStep === 5 ? !!flightIds : true,
+                      6: currentStep === 6 ? !!flightIds : true,
+                      7: currentStep === 7 ? !!flightIds : true,
+                    };
+                    updateValidationState({
+                      stepValidation: validationState,
+                      _timestamp: Date.now(),
+                    });
+                  }, 0);
+                }
+              }}
               onInteract={() => {}}
             />
             {question.relatedQuestions?.map((relatedQ) => (
@@ -425,9 +439,9 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
                 </h3>
                 <MoneyInput
                   label=""
-                  value={selectedOption || ''}
+                  value={selectedOption || ""}
                   onChange={(value) => onSelect(relatedQ.id, value)}
-                  placeholder={relatedQ.placeholder || 'Enter amount'}
+                  placeholder={relatedQ.placeholder || "Enter amount"}
                   required={relatedQ.required}
                   isFocused={false}
                   onFocus={() => {}}
@@ -450,34 +464,37 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
       {!hideProgress && (
         <div className="space-y-3">
           <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-            <motion.div
-              className="h-full bg-[#F54538] rounded-full"
-              initial={{ width: '0%' }}
-              animate={{
-                width:
-                  currentStep === 1 && !selectedOption
-                    ? '0%'
-                    : `${(currentStep / totalSteps) * 100}%`,
-              }}
-              transition={{ duration: 0.3, ease: 'easeOut' }}
-            />
+            <div className="h-full bg-[#F54538] rounded-full">
+              <motion.div
+                initial={{ width: "0%" }}
+                animate={{
+                  width:
+                    currentStep === 1 && !selectedOption
+                      ? "0%"
+                      : `${(currentStep / totalSteps) * 100}%`,
+                }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+                style={{ width: "100%", height: "100%" }}
+              />
+            </div>
           </div>
           {(currentStep > 1 || selectedOption) && (
-            <motion.div
-              className="text-sm text-gray-500"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-            >
-              <span>
-                {t.phases?.initialAssessment?.counter?.[
-                  totalSteps === 1 ? 'single' : 'multiple'
-                ]
-                  ?.replace('{current}', currentStep.toString())
-                  .replace('{total}', totalSteps.toString()) ||
-                  `Question ${currentStep} of ${totalSteps}`}
-              </span>
-            </motion.div>
+            <div className="text-sm text-gray-500">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3 }}
+              >
+                <span>
+                  {t.phases?.initialAssessment?.counter?.[
+                    totalSteps === 1 ? "single" : "multiple"
+                  ]
+                    ?.replace("{current}", currentStep.toString())
+                    .replace("{total}", totalSteps.toString()) ||
+                    `Question ${currentStep} of ${totalSteps}`}
+                </span>
+              </motion.div>
+            </div>
           )}
         </div>
       )}
@@ -486,7 +503,7 @@ const QuestionAnswerContent: React.FC<QuestionAnswerProps> = ({
       <div className="space-y-4">
         <h3
           className={`text-lg font-medium text-gray-900 ${
-            question.type === 'flight_selector' ? 'mb-12' : ''
+            question.type === "flight_selector" ? "mb-12" : ""
           }`}
         >
           {question.text}

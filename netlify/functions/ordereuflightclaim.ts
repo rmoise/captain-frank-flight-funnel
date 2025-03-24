@@ -1,143 +1,145 @@
-import { Handler, HandlerEvent } from '@netlify/functions';
+import { Handler, HandlerEvent } from "@netlify/functions";
 
 const API_BASE_URL =
-  'https://secure.captain-frank.net/api/services/euflightclaim';
+  "https://secure.captain-frank.net/api/services/euflightclaim";
 
 // Map of English country names to German country names
 const COUNTRY_NAME_MAP: Record<string, string> = {
-  Germany: 'Deutschland',
-  Belgium: 'Belgien',
-  Bulgaria: 'Bulgarien',
-  Denmark: 'Dänemark',
-  Estonia: 'Estland',
-  Finland: 'Finnland',
-  France: 'Frankreich',
-  Greece: 'Griechenland',
-  Ireland: 'Irland',
-  Italy: 'Italien',
-  Croatia: 'Kroatien',
-  Latvia: 'Lettland',
-  Lithuania: 'Litauen',
-  Luxembourg: 'Luxemburg',
-  Malta: 'Malta',
-  Netherlands: 'Niederlande',
-  Austria: 'Österreich',
-  Poland: 'Polen',
-  Portugal: 'Portugal',
-  Romania: 'Rumänien',
-  Sweden: 'Schweden',
-  Slovakia: 'Slowakei',
-  Slovenia: 'Slowenien',
-  Spain: 'Spanien',
-  'Czech Republic': 'Tschechien',
-  Hungary: 'Ungarn',
-  Cyprus: 'Zypern',
-  'United Kingdom': 'Großbritannien',
-  Switzerland: 'Schweiz',
-  Norway: 'Norwegen',
-  Iceland: 'Island',
-  Liechtenstein: 'Liechtenstein',
-  Egypt: 'Ägypten',
-  Argentina: 'Argentinien',
-  Australia: 'Australien',
-  Brazil: 'Brasilien',
-  Chile: 'Chile',
-  China: 'China',
-  India: 'Indien',
-  Indonesia: 'Indonesien',
-  Israel: 'Israel',
-  Japan: 'Japan',
-  Canada: 'Kanada',
-  Colombia: 'Kolumbien',
-  'Republic of Korea': 'Korea, Republik',
-  Malaysia: 'Malaysia',
-  Mexico: 'Mexiko',
-  'New Zealand': 'Neuseeland',
-  Pakistan: 'Pakistan',
-  Philippines: 'Philippinen',
-  Russia: 'Russland',
-  'Saudi Arabia': 'Saudi-Arabien',
-  Singapore: 'Singapur',
-  'South Africa': 'Südafrika',
-  Thailand: 'Thailand',
-  Turkey: 'Türkei',
-  'United Arab Emirates': 'Vereinigte Arabische Emirate',
-  'United States': 'Vereinigte Staaten',
-  Vietnam: 'Vietnam',
+  Germany: "Deutschland",
+  Belgium: "Belgien",
+  Bulgaria: "Bulgarien",
+  Denmark: "Dänemark",
+  Estonia: "Estland",
+  Finland: "Finnland",
+  France: "Frankreich",
+  Greece: "Griechenland",
+  Ireland: "Irland",
+  Italy: "Italien",
+  Croatia: "Kroatien",
+  Latvia: "Lettland",
+  Lithuania: "Litauen",
+  Luxembourg: "Luxemburg",
+  Malta: "Malta",
+  Netherlands: "Niederlande",
+  Austria: "Österreich",
+  Poland: "Polen",
+  Portugal: "Portugal",
+  Romania: "Rumänien",
+  Sweden: "Schweden",
+  Slovakia: "Slowakei",
+  Slovenia: "Slowenien",
+  Spain: "Spanien",
+  "Czech Republic": "Tschechien",
+  Hungary: "Ungarn",
+  Cyprus: "Zypern",
+  "United Kingdom": "Großbritannien",
+  Switzerland: "Schweiz",
+  Norway: "Norwegen",
+  Iceland: "Island",
+  Liechtenstein: "Liechtenstein",
+  Egypt: "Ägypten",
+  Argentina: "Argentinien",
+  Australia: "Australien",
+  Brazil: "Brasilien",
+  Chile: "Chile",
+  China: "China",
+  India: "Indien",
+  Indonesia: "Indonesien",
+  Israel: "Israel",
+  Japan: "Japan",
+  Canada: "Kanada",
+  Colombia: "Kolumbien",
+  "Republic of Korea": "Korea, Republik",
+  Malaysia: "Malaysia",
+  Mexico: "Mexiko",
+  "New Zealand": "Neuseeland",
+  Pakistan: "Pakistan",
+  Philippines: "Philippinen",
+  Russia: "Russland",
+  "Saudi Arabia": "Saudi-Arabien",
+  Singapore: "Singapur",
+  "South Africa": "Südafrika",
+  Thailand: "Thailand",
+  Turkey: "Türkei",
+  "United Arab Emirates": "Vereinigte Arabische Emirate",
+  "United States": "Vereinigte Staaten",
+  Vietnam: "Vietnam",
 };
 
 const handler: Handler = async (event: HandlerEvent) => {
-  if (event.httpMethod !== 'POST') {
+  if (event.httpMethod !== "POST") {
     return {
       statusCode: 405,
-      body: 'Method Not Allowed',
+      body: "Method Not Allowed",
     };
   }
 
   if (!event.body) {
     return {
       statusCode: 400,
-      body: JSON.stringify({ error: 'Request body is required' }),
+      body: JSON.stringify({ error: "Request body is required" }),
     };
   }
 
   try {
     const requestBody = JSON.parse(event.body);
-    console.log('Received request body:', requestBody);
+    console.log("Received request body:", requestBody);
 
     // Validate required fields
     const requiredFields = [
-      'journey_booked_flightids',
-      'journey_fact_flightids',
-      'information_received_at',
-      'journey_booked_pnr',
-      'journey_fact_type',
-      'owner_salutation',
-      'owner_firstname',
-      'owner_lastname',
-      'owner_street',
-      'owner_place',
-      'owner_city',
-      'owner_country',
-      'owner_email',
-      'contract_signature',
-      'contract_tac',
-      'contract_dp',
+      "journey_booked_flightids",
+      "journey_fact_flightids",
+      "information_received_at",
+      "journey_booked_pnr",
+      "journey_fact_type",
+      "owner_salutation",
+      "owner_firstname",
+      "owner_lastname",
+      "owner_street",
+      "owner_place",
+      "owner_city",
+      "owner_country",
+      "owner_email",
+      "contract_signature",
+      "contract_tac",
+      "contract_dp",
     ];
 
     const missingFields = requiredFields.filter((field) => !requestBody[field]);
     if (missingFields.length > 0) {
-      console.error('Missing required fields:', missingFields);
+      console.error("Missing required fields:", missingFields);
       return {
         statusCode: 400,
         body: JSON.stringify({
-          error: `Missing required fields: ${missingFields.join(', ')}`,
-          status: 'error',
+          error: `Missing required fields: ${missingFields.join(", ")}`,
+          status: "error",
         }),
       };
     }
 
     // Validate journey_fact_type
-    const validJourneyFactTypes = ['none', 'self', 'provided'];
+    const validJourneyFactTypes = ["none", "self", "provided"];
     if (!validJourneyFactTypes.includes(requestBody.journey_fact_type)) {
       return {
         statusCode: 400,
         body: JSON.stringify({
-          error: `Invalid journey_fact_type: ${requestBody.journey_fact_type}. Valid values are: ${validJourneyFactTypes.join(', ')}`,
+          error: `Invalid journey_fact_type: ${
+            requestBody.journey_fact_type
+          }. Valid values are: ${validJourneyFactTypes.join(", ")}`,
           valid_values: validJourneyFactTypes,
-          status: 'error',
+          status: "error",
         }),
       };
     }
 
     // Validate owner_salutation
-    if (!['herr', 'frau'].includes(requestBody.owner_salutation)) {
+    if (!["herr", "frau"].includes(requestBody.owner_salutation)) {
       return {
         statusCode: 400,
         body: JSON.stringify({
-          error: 'Invalid owner_salutation',
-          valid_values: ['herr', 'frau'],
-          status: 'error',
+          error: "Invalid owner_salutation",
+          valid_values: ["herr", "frau"],
+          status: "error",
         }),
       };
     }
@@ -159,51 +161,51 @@ const handler: Handler = async (event: HandlerEvent) => {
     }
 
     const apiUrl = `${API_BASE_URL}/ordereuflightclaim`;
-    console.log('Making request to:', apiUrl);
+    console.log("Making request to:", apiUrl);
 
     // Log evaluation state if available
     if (requestBody.guid || requestBody.recommendation_guid) {
-      console.log('=== EVALUATION STATE ===');
-      console.log('Evaluation GUID:', requestBody.guid);
-      console.log('Recommendation GUID:', requestBody.recommendation_guid);
-      console.log('=====================');
+      console.log("=== EVALUATION STATE ===");
+      console.log("Evaluation GUID:", requestBody.guid);
+      console.log("Recommendation GUID:", requestBody.recommendation_guid);
+      console.log("=====================");
     }
 
-    console.log('=== DETAILED REQUEST LOGGING ===');
-    console.log('Marketing Status Details:', {
+    console.log("=== DETAILED REQUEST LOGGING ===");
+    console.log("Marketing Status Details:", {
       rawValue: requestBody.arbeitsrecht_marketing_status,
       typeOfRaw: typeof requestBody.arbeitsrecht_marketing_status,
       rawValueString: String(requestBody.arbeitsrecht_marketing_status),
-      isBoolean: typeof requestBody.arbeitsrecht_marketing_status === 'boolean',
+      isBoolean: typeof requestBody.arbeitsrecht_marketing_status === "boolean",
       finalValue:
-        typeof requestBody.arbeitsrecht_marketing_status === 'boolean'
+        typeof requestBody.arbeitsrecht_marketing_status === "boolean"
           ? requestBody.arbeitsrecht_marketing_status
           : String(requestBody.arbeitsrecht_marketing_status).toLowerCase() ===
-            'true',
+            "true",
       timestamp: new Date().toISOString(),
     });
 
     // Add this new logging section
-    console.log('=== MARKETING STATUS TRANSFORMATION ===');
-    console.log('Input Value:', {
+    console.log("=== MARKETING STATUS TRANSFORMATION ===");
+    console.log("Input Value:", {
       raw: requestBody.arbeitsrecht_marketing_status,
       type: typeof requestBody.arbeitsrecht_marketing_status,
       stringified: JSON.stringify(requestBody.arbeitsrecht_marketing_status),
       fromHubSpot: true,
       isTrue:
-        typeof requestBody.arbeitsrecht_marketing_status === 'boolean'
+        typeof requestBody.arbeitsrecht_marketing_status === "boolean"
           ? requestBody.arbeitsrecht_marketing_status
           : String(requestBody.arbeitsrecht_marketing_status).toLowerCase() ===
-            'true',
+            "true",
     });
 
     const marketingStatus =
-      typeof requestBody.arbeitsrecht_marketing_status === 'boolean'
+      typeof requestBody.arbeitsrecht_marketing_status === "boolean"
         ? requestBody.arbeitsrecht_marketing_status
         : String(requestBody.arbeitsrecht_marketing_status).toLowerCase() ===
-          'true';
+          "true";
 
-    console.log('Marketing Status:', {
+    console.log("Marketing Status:", {
       inputValue: requestBody.arbeitsrecht_marketing_status,
       inputType: typeof requestBody.arbeitsrecht_marketing_status,
       finalValue: marketingStatus,
@@ -211,21 +213,21 @@ const handler: Handler = async (event: HandlerEvent) => {
       timestamp: new Date().toISOString(),
     });
 
-    console.log('Journey Booked Flight IDs:', journey_booked_flightids);
-    console.log('Journey Fact Flight IDs:', journey_fact_flightids);
+    console.log("Journey Booked Flight IDs:", journey_booked_flightids);
+    console.log("Journey Fact Flight IDs:", journey_fact_flightids);
     console.log(
-      'Journey Fact Type:',
+      "Journey Fact Type:",
       requestBody.journey_fact_type,
-      '(must be one of:',
-      validJourneyFactTypes.join(', '),
-      ')'
+      "(must be one of:",
+      validJourneyFactTypes.join(", "),
+      ")"
     );
     console.log(
-      'Information Received At:',
+      "Information Received At:",
       requestBody.information_received_at
     );
-    console.log('PNR:', requestBody.journey_booked_pnr);
-    console.log('================================');
+    console.log("PNR:", requestBody.journey_booked_pnr);
+    console.log("================================");
 
     const apiRequestBody = {
       journey_booked_flightids,
@@ -237,57 +239,57 @@ const handler: Handler = async (event: HandlerEvent) => {
       owner_firstname: requestBody.owner_firstname,
       owner_lastname: requestBody.owner_lastname,
       owner_street: requestBody.owner_street,
-      owner_place: requestBody.owner_zip || '',
+      owner_place: requestBody.owner_place,
       owner_city: requestBody.owner_city,
       owner_country,
       owner_email: requestBody.owner_email,
-      owner_phone: requestBody.owner_phone || '',
+      owner_phone: requestBody.owner_phone || "0000000000",
       arbeitsrecht_marketing_status: marketingStatus,
       contract_signature: requestBody.contract_signature,
       contract_tac: Boolean(requestBody.contract_tac),
       contract_dp: Boolean(requestBody.contract_dp),
-      lang: 'en',
+      lang: "en",
     };
 
-    console.log('API request body:', apiRequestBody);
+    console.log("API request body:", apiRequestBody);
 
     // Add detailed marketing status logging
-    console.log('=== FINAL MARKETING STATUS CHECK ===');
-    console.log('Marketing Status:', {
+    console.log("=== FINAL MARKETING STATUS CHECK ===");
+    console.log("Marketing Status:", {
       finalValue: apiRequestBody.arbeitsrecht_marketing_status,
       type: typeof apiRequestBody.arbeitsrecht_marketing_status,
       stringified: JSON.stringify(apiRequestBody.arbeitsrecht_marketing_status),
       timestamp: new Date().toISOString(),
     });
-    console.log('=================================');
+    console.log("=================================");
 
     const response = await fetch(apiUrl, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
+        "Content-Type": "application/json",
+        Accept: "application/json",
       },
       body: JSON.stringify(apiRequestBody),
     });
 
     const responseText = await response.text();
-    console.log('=== DETAILED API RESPONSE LOGGING ===');
-    console.log('Response Status:', response.status);
+    console.log("=== DETAILED API RESPONSE LOGGING ===");
+    console.log("Response Status:", response.status);
     console.log(
-      'Response Headers:',
+      "Response Headers:",
       Object.fromEntries(response.headers.entries())
     );
-    console.log('Raw Response Text:', responseText);
-    console.log('================================');
+    console.log("Raw Response Text:", responseText);
+    console.log("================================");
 
     if (!response.ok) {
       let errorMessage = `API responded with status ${response.status}`;
       try {
         const errorData = JSON.parse(responseText);
-        console.log('Parsed Error Data:', errorData);
+        console.log("Parsed Error Data:", errorData);
         errorMessage = errorData.message || errorData.error || errorMessage;
       } catch (e) {
-        console.error('Failed to parse error response:', e);
+        console.error("Failed to parse error response:", e);
       }
       throw new Error(errorMessage);
     }
@@ -296,23 +298,23 @@ const handler: Handler = async (event: HandlerEvent) => {
     try {
       result = JSON.parse(responseText);
     } catch (e) {
-      console.error('Failed to parse success response:', e);
-      throw new Error('Invalid response format from API');
+      console.error("Failed to parse success response:", e);
+      throw new Error("Invalid response format from API");
     }
 
     return {
       statusCode: 200,
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify(result),
     };
   } catch (error) {
-    console.error('Error ordering EU flight claim:', error);
+    console.error("Error ordering EU flight claim:", error);
     return {
       statusCode: 500,
       body: JSON.stringify({
-        error: error instanceof Error ? error.message : 'Internal Server Error',
+        error: error instanceof Error ? error.message : "Internal Server Error",
         details: error instanceof Error ? error.stack : undefined,
       }),
     };

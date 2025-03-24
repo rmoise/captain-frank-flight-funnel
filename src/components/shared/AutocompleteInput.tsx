@@ -23,7 +23,7 @@ const LoadingSpinner = () => (
   </div>
 );
 
-export interface Location extends LocationData {}
+export type Location = LocationData
 
 export interface AutocompleteInputProps {
   label: string;
@@ -37,6 +37,7 @@ export interface AutocompleteInputProps {
   disabled?: boolean;
   showError?: boolean;
   required?: boolean;
+  preventInitialSearch?: boolean;
 }
 
 export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
@@ -51,6 +52,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   disabled = false,
   showError = true,
   required = false,
+  preventInitialSearch = false,
 }) => {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
@@ -66,6 +68,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
     width: 0,
   });
   const prevValueRef = useRef<string | undefined>(value?.label);
+  const userInteractionRef = useRef<boolean>(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -86,6 +89,13 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   const debouncedSearch = useMemo(
     () =>
       debounce(async (term: string) => {
+        // Skip search if preventInitialSearch is true and there's no user interaction
+        if (preventInitialSearch && !userInteractionRef.current) {
+          setOptions([]);
+          setLoading(false);
+          return;
+        }
+
         // Only skip search for empty strings, allow single character searches
         if (!term.trim()) {
           setOptions([]);
@@ -104,11 +114,11 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
           setLoading(false);
         }
       }, 100), // Reduce debounce time for better responsiveness
-    [onSearch]
+    [onSearch, preventInitialSearch]
   );
 
   const handleOptionSelect = useCallback(
-    (option: LocationData, isAutoSelect: boolean = false) => {
+    (option: LocationData, isAutoSelect = false) => {
       // Prevent processing if no option is provided
       if (!option) return;
 
@@ -379,6 +389,11 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
       return;
     }
 
+    // Skip initial search if preventInitialSearch is true and there's no user interaction
+    if (preventInitialSearch && !userInteractionRef.current) {
+      return;
+    }
+
     setIsFocused(true);
     setIsOpen(true);
 
@@ -412,7 +427,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
     else if (inputValue && !options.length && !value?.label) {
       debouncedSearch(inputValue);
     }
-  }, [debouncedSearch, inputValue, options.length, onFocus, value]);
+  }, [debouncedSearch, inputValue, options.length, onFocus, value, preventInitialSearch]);
 
   // Modify the blur handler
   const handleBlur = () => {

@@ -1,15 +1,15 @@
-import React, { useState } from 'react';
-import { BottomSheet } from '@/components/shared/Sheet';
-import { useTranslation } from '@/hooks/useTranslation';
-import type { Flight } from '@/types/store';
+import React, { useState } from "react";
+import { BottomSheet } from "@/components/shared/Sheet";
+import { useTranslation } from "@/hooks/useTranslation";
+import type { Flight } from "@/types/store";
 import {
   MagnifyingGlassIcon,
   Squares2X2Icon,
   ListBulletIcon,
-} from '@heroicons/react/24/outline';
-import { PiAirplaneTakeoff } from 'react-icons/pi';
-import { format, parseISO } from 'date-fns';
-import { SecondaryButton } from '@/components/shared/SecondaryButton';
+} from "@heroicons/react/24/outline";
+import { PiAirplaneTakeoff } from "react-icons/pi";
+import { format, parseISO } from "date-fns";
+import { SecondaryButton } from "@/components/shared/SecondaryButton";
 
 export interface FlightSearchBottomSheetProps {
   isOpen: boolean;
@@ -24,13 +24,13 @@ export interface FlightSearchBottomSheetProps {
 
 // Helper function to safely format date for display
 const formatSafeDate = (date: string | Date | null): string => {
-  if (!date) return '';
+  if (!date) return "";
   try {
-    const dateObj = typeof date === 'string' ? parseISO(date) : date;
-    return format(dateObj, 'dd.MM.yyyy');
+    const dateObj = typeof date === "string" ? parseISO(date) : date;
+    return format(dateObj, "dd.MM.yyyy");
   } catch (error) {
-    console.error('Error formatting date:', error);
-    return '';
+    console.error("Error formatting date:", error);
+    return "";
   }
 };
 
@@ -47,8 +47,8 @@ export const FlightSearchBottomSheet: React.FC<
   currentPhase,
 }) => {
   const { t } = useTranslation();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [view, setView] = useState<'list' | 'card'>('card');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [view, setView] = useState<"list" | "card">("card");
 
   const filteredFlights = React.useMemo(() => {
     if (!searchTerm) return searchResults;
@@ -117,20 +117,17 @@ export const FlightSearchBottomSheet: React.FC<
               <h3 className="text-lg font-medium text-gray-900 mb-2">
                 {errorMessage}
               </h3>
-              <p className="text-gray-500 mb-6">
-                {t.flightSelector.labels.tryAdjusting}
-              </p>
-              {currentPhase !== 1 &&
-                process.env.NEXT_PUBLIC_ENV === 'development' && (
-                  <SecondaryButton
-                    onClick={() => {
-                      onClose();
-                      setIsFlightNotListedOpen(true);
-                    }}
-                  >
-                    {t.flightSelector.flightNotListed.button}
-                  </SecondaryButton>
-                )}
+              <p className="text-gray-500 mb-6">{errorMessage}</p>
+              {currentPhase !== 1 && (
+                <SecondaryButton
+                  onClick={() => {
+                    onClose();
+                    setIsFlightNotListedOpen(true);
+                  }}
+                >
+                  {t.flightSelector.flightNotListed.button}
+                </SecondaryButton>
+              )}
             </div>
           ) : filteredFlights.length === 0 ? (
             <div className="text-center py-12">
@@ -147,17 +144,16 @@ export const FlightSearchBottomSheet: React.FC<
                   ? t.flightSelector.labels.noFlightsFoundCriteria
                   : t.flightSelector.labels.tryAdjusting}
               </p>
-              {currentPhase !== 1 &&
-                process.env.NEXT_PUBLIC_ENV === 'development' && (
-                  <SecondaryButton
-                    onClick={() => {
-                      onClose();
-                      setIsFlightNotListedOpen(true);
-                    }}
-                  >
-                    {t.flightSelector.flightNotListed.button}
-                  </SecondaryButton>
-                )}
+              {currentPhase !== 1 && (
+                <SecondaryButton
+                  onClick={() => {
+                    onClose();
+                    setIsFlightNotListedOpen(true);
+                  }}
+                >
+                  {t.flightSelector.flightNotListed.button}
+                </SecondaryButton>
+              )}
             </div>
           ) : (
             <>
@@ -165,32 +161,36 @@ export const FlightSearchBottomSheet: React.FC<
                 <div className="flex items-center justify-between">
                   <h3 className="text-base font-medium text-gray-900">
                     {`${filteredFlights.length} ${
-                      t.flightSelector.labels.flightsFound.includes('Flight')
+                      t.flightSelector.labels.flightsFound.includes("Flight")
                         ? filteredFlights.length === 1
-                          ? 'Flight'
-                          : 'Flights'
+                          ? "Flight"
+                          : "Flights"
                         : filteredFlights.length === 1
-                          ? 'Flug'
-                          : 'Flüge'
-                    } ${t.flightSelector.labels.flightsFound.includes('found') ? 'found' : 'gefunden'}`}
+                        ? "Flug"
+                        : "Flüge"
+                    } ${
+                      t.flightSelector.labels.flightsFound.includes("found")
+                        ? "found"
+                        : "gefunden"
+                    }`}
                   </h3>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => setView('card')}
+                      onClick={() => setView("card")}
                       className={`p-2 rounded-lg ${
-                        view === 'card'
-                          ? 'bg-gray-100 text-gray-900'
-                          : 'text-gray-500 hover:text-gray-900'
+                        view === "card"
+                          ? "bg-gray-100 text-gray-900"
+                          : "text-gray-500 hover:text-gray-900"
                       }`}
                     >
                       <Squares2X2Icon className="w-5 h-5" />
                     </button>
                     <button
-                      onClick={() => setView('list')}
+                      onClick={() => setView("list")}
                       className={`p-2 rounded-lg ${
-                        view === 'list'
-                          ? 'bg-gray-100 text-gray-900'
-                          : 'text-gray-500 hover:text-gray-900'
+                        view === "list"
+                          ? "bg-gray-100 text-gray-900"
+                          : "text-gray-500 hover:text-gray-900"
                       }`}
                     >
                       <ListBulletIcon className="w-5 h-5" />
@@ -201,12 +201,12 @@ export const FlightSearchBottomSheet: React.FC<
 
               <div
                 className={
-                  view === 'list'
-                    ? 'flex-1'
-                    : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 px-6 pt-6'
+                  view === "list"
+                    ? "flex-1"
+                    : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 px-6 pt-6"
                 }
               >
-                {view === 'list' ? (
+                {view === "list" ? (
                   <div className="relative overflow-x-auto">
                     <table className="w-full table-fixed">
                       <thead className="bg-[#F54538]/5">
@@ -251,7 +251,7 @@ export const FlightSearchBottomSheet: React.FC<
                             key={flight.id}
                             onClick={() => onSelect(flight)}
                             className={`cursor-pointer hover:bg-gray-100 ${
-                              index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                              index % 2 === 0 ? "bg-white" : "bg-gray-50"
                             }`}
                           >
                             <td className="py-4 pl-6 pr-3">

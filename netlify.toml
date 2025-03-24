@@ -10,7 +10,7 @@
 
 [dev]
   framework = "next"
-  targetPort = 3000
+  targetPort = 3003
   port = 8888
   autoLaunch = true
   command = "npm run dev"

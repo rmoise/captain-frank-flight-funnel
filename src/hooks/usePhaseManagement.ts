@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { useStore } from '@/lib/state/store';
+import useStore from '@/lib/state/store';
 
 export const usePhaseManagement = () => {
   const { currentPhase, completedPhases, setCurrentPhase, completePhase } =

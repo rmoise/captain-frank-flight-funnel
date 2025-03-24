@@ -1,12 +1,12 @@
-'use client';
+"use client";
 
-import React, { forwardRef, useState, useEffect, useRef } from 'react';
+import React, { forwardRef, useState, useEffect, useRef } from "react";
 import {
   CalendarIcon as BaseCalendarIcon,
   XMarkIcon as BaseXMarkIcon,
-} from '@heroicons/react/24/outline';
-import { format, isValid, parseISO } from 'date-fns';
-import { useTranslation } from '@/hooks/useTranslation';
+} from "@heroicons/react/24/outline";
+import { format, isValid, parseISO } from "date-fns";
+import { useTranslation } from "@/hooks/useTranslation";
 
 const CalendarIcon = BaseCalendarIcon as React.FC<
   React.ComponentProps<typeof BaseCalendarIcon>
@@ -27,49 +27,49 @@ export interface CustomDateInputProps {
 
 // Helper function to safely parse and format dates
 const safeParseDateString = (value: string | Date | undefined): string => {
-  console.log('=== safeParseDateString ENTRY ===', {
+  console.log("=== safeParseDateString ENTRY ===", {
     value,
-    type: value instanceof Date ? 'Date' : typeof value,
+    type: value instanceof Date ? "Date" : typeof value,
     timestamp: new Date().toISOString(),
   });
 
-  if (!value) return '';
+  if (!value) return "";
 
   try {
     // If it's already in DD.MM.YYYY format, return as is
-    if (typeof value === 'string' && value.match(/^\d{2}\.\d{2}\.\d{4}$/)) {
-      console.log('Found DD.MM.YYYY format, returning as is:', value);
+    if (typeof value === "string" && value.match(/^\d{2}\.\d{2}\.\d{4}$/)) {
+      console.log("Found DD.MM.YYYY format, returning as is:", value);
       return value;
     }
 
     // If it's a Date object
     if (value instanceof Date) {
       if (!isValid(value)) {
-        console.log('Invalid Date object:', value);
-        return '';
+        console.log("Invalid Date object:", value);
+        return "";
       }
-      const formatted = format(value, 'dd.MM.yyyy');
-      console.log('Formatted Date object:', formatted);
+      const formatted = format(value, "dd.MM.yyyy");
+      console.log("Formatted Date object:", formatted);
       return formatted;
     }
 
     // If it's a string in YYYY-MM-DD format
-    if (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    if (typeof value === "string" && value.match(/^\d{4}-\d{2}-\d{2}$/)) {
       const parsedDate = parseISO(value);
       if (!isValid(parsedDate)) {
-        console.log('Invalid ISO date string:', value);
-        return '';
+        console.log("Invalid ISO date string:", value);
+        return "";
       }
-      const formatted = format(parsedDate, 'dd.MM.yyyy');
-      console.log('Formatted ISO date:', formatted);
+      const formatted = format(parsedDate, "dd.MM.yyyy");
+      console.log("Formatted ISO date:", formatted);
       return formatted;
     }
 
-    console.log('No valid format found for:', value);
-    return '';
+    console.log("No valid format found for:", value);
+    return "";
   } catch (error) {
-    console.error('Error in safeParseDateString:', error);
-    return '';
+    console.error("Error in safeParseDateString:", error);
+    return "";
   }
 };
 
@@ -82,27 +82,27 @@ export const CustomDateInput = forwardRef<
       value,
       onClick,
       onChange,
-      placeholder = 'DD.MM.YY / DD.MM.YYYY',
+      placeholder = "DD.MM.YY / DD.MM.YYYY",
       onClear,
-      label = 'Departure Date',
+      label = "Departure Date",
       disabled,
     },
     ref
   ) => {
     const { t } = useTranslation();
-    const [inputValue, setInputValue] = useState('');
+    const [inputValue, setInputValue] = useState("");
     const [isValidDate, setIsValidDate] = useState(true);
-    const [errorMessage, setErrorMessage] = useState<string>('');
-    const lastManualInput = useRef<string>('');
+    const [errorMessage, setErrorMessage] = useState<string>("");
+    const lastManualInput = useRef<string>("");
     const isCalendarSelection = useRef(false);
     const previousLength = useRef(0);
     const isInitialMount = useRef(true);
     const isManualInput = useRef(false);
 
     useEffect(() => {
-      console.log('=== CustomDateInput useEffect ENTRY ===', {
+      console.log("=== CustomDateInput useEffect ENTRY ===", {
         value,
-        type: value instanceof Date ? 'Date' : typeof value,
+        type: value instanceof Date ? "Date" : typeof value,
         isCalendarSelection: isCalendarSelection.current,
         isInitialMount: isInitialMount.current,
         isManualInput: isManualInput.current,
@@ -114,7 +114,7 @@ export const CustomDateInput = forwardRef<
 
       // Skip update if this is from manual input
       if (isManualInput.current) {
-        console.log('Skipping update due to manual input', {
+        console.log("Skipping update due to manual input", {
           lastManualInput: lastManualInput.current,
           currentValue: inputValue,
         });
@@ -124,7 +124,7 @@ export const CustomDateInput = forwardRef<
       // If we're in calendar selection mode and have a valid input, preserve it
       if (isCalendarSelection.current && inputValue && isValidDate) {
         console.log(
-          'Preserving valid input value during calendar selection:',
+          "Preserving valid input value during calendar selection:",
           inputValue
         );
         return;
@@ -133,13 +133,13 @@ export const CustomDateInput = forwardRef<
       // Don't clear the input if calendar was clicked and value is empty but we have a valid input
       if (isCalendarSelection.current && !value && inputValue && isValidDate) {
         console.log(
-          'Preserving input value during calendar selection with empty value'
+          "Preserving input value during calendar selection with empty value"
         );
         return;
       }
 
       const formattedValue = safeParseDateString(value);
-      console.log('After formatting in useEffect:', {
+      console.log("After formatting in useEffect:", {
         originalValue: value,
         formattedValue,
         lastManualInput: lastManualInput.current,
@@ -155,7 +155,7 @@ export const CustomDateInput = forwardRef<
 
       isInitialMount.current = false;
 
-      console.log('=== CustomDateInput useEffect EXIT ===', {
+      console.log("=== CustomDateInput useEffect EXIT ===", {
         newInputValue: formattedValue,
         isCalendarSelection: isCalendarSelection.current,
         isInitialMount: isInitialMount.current,
@@ -166,7 +166,7 @@ export const CustomDateInput = forwardRef<
     const validateDateFormat = (
       date: string
     ): { isValid: boolean; message: string } => {
-      if (date === '') return { isValid: true, message: '' };
+      if (date === "") return { isValid: true, message: "" };
 
       // Check for complete date format DD.MM.YY or DD.MM.YYYY
       const formatRegex = /^\d{2}\.\d{2}\.(\d{2}|\d{4})$/;
@@ -178,7 +178,7 @@ export const CustomDateInput = forwardRef<
       }
 
       // Parse the date parts
-      const [day, month, yearStr] = date.split('.').map(Number);
+      const [day, month, yearStr] = date.split(".").map(Number);
 
       // Convert 2-digit year to 4-digit year
       let year = yearStr;
@@ -201,7 +201,7 @@ export const CustomDateInput = forwardRef<
         };
       }
 
-      return { isValid, message: '' };
+      return { isValid, message: "" };
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -209,11 +209,11 @@ export const CustomDateInput = forwardRef<
       const newValue = e.target.value;
 
       // Only allow digits and dots
-      const cleanValue = newValue.replace(/[^\d.]/g, '');
+      const cleanValue = newValue.replace(/[^\d.]/g, "");
 
       // Split into parts if dots exist
-      const parts = cleanValue.split('.');
-      let formattedValue = '';
+      const parts = cleanValue.split(".");
+      let formattedValue = "";
 
       // Handle the day part (first 2 digits)
       if (parts[0]) {
@@ -223,13 +223,13 @@ export const CustomDateInput = forwardRef<
       // Handle the month part (next 2 digits)
       if (parts[1] || (parts[0] && parts[0].length > 2)) {
         const monthPart = parts[1] || parts[0].slice(2);
-        formattedValue += '.' + monthPart.slice(0, 2);
+        formattedValue += "." + monthPart.slice(0, 2);
       }
 
       // Handle the year part (remaining digits)
       if (parts[2] || (parts[1] && parts[1].length > 2)) {
         const yearPart = parts[2] || parts[1].slice(2);
-        formattedValue += '.' + yearPart.slice(0, 4);
+        formattedValue += "." + yearPart.slice(0, 4);
       }
 
       // Only show red border during typing if there was a previous error
@@ -240,7 +240,7 @@ export const CustomDateInput = forwardRef<
       }
 
       // Clear error message while typing
-      setErrorMessage('');
+      setErrorMessage("");
 
       // Update the input value
       setInputValue(formattedValue);
@@ -251,12 +251,12 @@ export const CustomDateInput = forwardRef<
         formattedValue.length === 8 || formattedValue.length === 10;
 
       // Create a synthetic event with the appropriate value
-      let eventValue = '';
+      let eventValue = "";
 
-      if (formattedValue === '') {
-        eventValue = '';
+      if (formattedValue === "") {
+        eventValue = "";
       } else if (isComplete) {
-        const [day, month, yearStr] = formattedValue.split('.').map(Number);
+        const [day, month, yearStr] = formattedValue.split(".").map(Number);
         const year =
           yearStr < 100
             ? yearStr >= 30
@@ -293,12 +293,12 @@ export const CustomDateInput = forwardRef<
         }
       } else {
         setIsValidDate(true);
-        setErrorMessage('');
+        setErrorMessage("");
       }
     };
 
     const handleCalendarClick = (e: React.MouseEvent) => {
-      console.log('=== handleCalendarClick ENTRY ===', {
+      console.log("=== handleCalendarClick ENTRY ===", {
         inputValue,
         isValidDate,
         isManualInput: isManualInput.current,
@@ -319,11 +319,11 @@ export const CustomDateInput = forwardRef<
 
       // If we have a valid date in the input, convert it to a Date object
       if (currentValue && isValidDate) {
-        const [day, month, yearStr] = currentValue.split('.').map(Number);
+        const [day, month, yearStr] = currentValue.split(".").map(Number);
         let year = yearStr;
         if (yearStr < 100) {
           year = yearStr >= 30 ? 1900 + yearStr : 2000 + yearStr;
-          console.log('Year conversion in calendar click:', {
+          console.log("Year conversion in calendar click:", {
             yearStr,
             year,
             resultingDate: new Date(year, month - 1, day),
@@ -331,7 +331,7 @@ export const CustomDateInput = forwardRef<
         }
         const dateObj = new Date(year, month - 1, day);
 
-        console.log('Calendar date conversion:', {
+        console.log("Calendar date conversion:", {
           inputValue: currentValue,
           day,
           month,
@@ -343,7 +343,7 @@ export const CustomDateInput = forwardRef<
 
         if (isValid(dateObj)) {
           const isoString = dateObj.toISOString();
-          console.log('Triggering onChange with ISO string:', isoString);
+          console.log("Triggering onChange with ISO string:", isoString);
 
           // Store the current input value
           lastManualInput.current = currentValue;
@@ -358,7 +358,7 @@ export const CustomDateInput = forwardRef<
 
           // Then open the calendar
           if (onClick && !disabled) {
-            console.log('Calling onClick handler with date:', isoString);
+            console.log("Calling onClick handler with date:", isoString);
             onClick();
           }
 
@@ -368,11 +368,11 @@ export const CustomDateInput = forwardRef<
 
       // If no valid date, just open the calendar
       if (onClick && !disabled) {
-        console.log('Calling onClick handler without date');
+        console.log("Calling onClick handler without date");
         onClick();
       }
 
-      console.log('=== handleCalendarClick EXIT ===', {
+      console.log("=== handleCalendarClick EXIT ===", {
         inputValue: currentValue,
         isValidDate,
         isManualInput: isManualInput.current,
@@ -382,7 +382,7 @@ export const CustomDateInput = forwardRef<
     };
 
     const handleClear = () => {
-      console.log('=== handleClear ENTRY ===', {
+      console.log("=== handleClear ENTRY ===", {
         currentValue: inputValue,
         isManualInput: isManualInput.current,
         isCalendarSelection: isCalendarSelection.current,
@@ -391,25 +391,25 @@ export const CustomDateInput = forwardRef<
       });
 
       isManualInput.current = true;
-      setInputValue('');
+      setInputValue("");
       setIsValidDate(true);
-      setErrorMessage('');
-      lastManualInput.current = '';
+      setErrorMessage("");
+      lastManualInput.current = "";
       previousLength.current = 0;
 
       if (onClear) {
-        console.log('Calling onClear handler');
+        console.log("Calling onClear handler");
         onClear();
       } else {
-        console.log('Triggering onChange with empty value');
+        console.log("Triggering onChange with empty value");
         const syntheticEvent = {
-          target: { value: '' },
+          target: { value: "" },
         } as React.ChangeEvent<HTMLInputElement>;
         onChange?.(syntheticEvent);
       }
 
-      console.log('=== handleClear EXIT ===', {
-        newValue: '',
+      console.log("=== handleClear EXIT ===", {
+        newValue: "",
         isManualInput: isManualInput.current,
         isCalendarSelection: isCalendarSelection.current,
         lastManualInput: lastManualInput.current,
@@ -427,7 +427,7 @@ export const CustomDateInput = forwardRef<
             onBlur={handleBlur}
             ref={ref}
             className={`peer w-full h-14 px-3 pl-10 pr-10 border ${
-              !isValidDate ? 'border-red-500' : 'border-gray-300'
+              !isValidDate ? "border-red-500" : "border-gray-300"
             } rounded-xl focus:outline-none focus:border-2 focus:border-blue-500 bg-white text-[#4B616D] hover:border-blue-500`}
             placeholder={placeholder}
             autoComplete="off"
@@ -441,7 +441,11 @@ export const CustomDateInput = forwardRef<
             type="button"
             onClick={handleCalendarClick}
             disabled={disabled}
-            className={`absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 ${disabled ? 'cursor-not-allowed opacity-50' : 'hover:text-[#F54538] cursor-pointer'} transition-colors`}
+            className={`absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 ${
+              disabled
+                ? "cursor-not-allowed opacity-50"
+                : "hover:text-[#F54538] cursor-pointer"
+            } transition-colors`}
           >
             <CalendarIcon className="w-5 h-5" />
           </button>
@@ -468,4 +472,4 @@ export const CustomDateInput = forwardRef<
   }
 );
 
-CustomDateInput.displayName = 'CustomDateInput';
+CustomDateInput.displayName = "CustomDateInput";

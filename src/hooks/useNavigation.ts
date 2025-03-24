@@ -1,5 +1,5 @@
 import { useRouter, usePathname } from 'next/navigation';
-import { useStore } from '@/lib/state/store';
+import useStore from '@/lib/state/store';
 import { useEffect } from 'react';
 
 const PHASE_PATHS = {
@@ -13,7 +13,7 @@ const PHASE_PATHS = {
   7: '/phases/claim-submitted',
 } as const;
 
-const PATH_TO_PHASE: { [key: string]: number } = {
+export const PATH_TO_PHASE: { [key: string]: number } = {
   '/phases/initial-assessment': 1,
   '/phases/compensation-estimate': 2,
   '/phases/flight-details': 3,

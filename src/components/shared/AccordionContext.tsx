@@ -39,6 +39,22 @@ export const AccordionProvider: React.FC<{
     initialActiveAccordion
   );
 
+  // Check for navigation to phase 3 flag
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const navigatingToPhase3 = localStorage.getItem('navigating_to_phase3') === 'true';
+      if (navigatingToPhase3) {
+        console.log('=== AccordionProvider - Detected Navigation to Phase 3 ===', {
+          timestamp: new Date().toISOString()
+        });
+
+        // Ensure the first accordion is open
+        setOpenAccordions(new Set(['1']));
+        setActiveAccordion('1');
+      }
+    }
+  }, []);
+
   const autoTransition = useCallback(
     (id: string, isValid: boolean) => {
       if (isValid) {

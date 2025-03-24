@@ -24,24 +24,28 @@ export const createFlightSearchSlice = (
   set: (fn: (state: StoreStateValues) => Partial<StoreStateValues>) => void
 ): FlightSearchActions => ({
   setDisplayedFlights: (flights) => {
-    set(() => ({
+    set((state) => ({
+      ...state,
       displayedFlights: flights,
       loading: false,
     }));
   },
   setFlightSearchLoading: (loading) => {
-    set(() => ({
+    set((state) => ({
+      ...state,
       loading,
     }));
   },
   setFlightSearchError: (error) => {
-    set(() => ({
+    set((state) => ({
+      ...state,
       error,
       loading: false,
     }));
   },
   clearFlightSearch: () => {
-    set(() => ({
+    set((state) => ({
+      ...state,
       displayedFlights: [],
       loading: false,
       error: null,

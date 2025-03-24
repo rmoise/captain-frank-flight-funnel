@@ -2,7 +2,7 @@ import { accordionConfig } from './accordion';
 
 export const qaWizardConfig = {
   padding: {
-    wrapper: accordionConfig.padding.content,
+    wrapper: accordionConfig?.padding?.content || 'px-4 py-4',
     content: 'px-4 py-4',
   },
   spacing: {

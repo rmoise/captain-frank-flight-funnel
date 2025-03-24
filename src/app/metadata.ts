@@ -1,6 +1,9 @@
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Captain Frank - Flight Compensation Claims',
-  description: 'Get compensation for your delayed, cancelled, or overbooked flights with Captain Frank.',
+  title: 'Captain Frank',
+  description: 'Captain Frank Flight Compensation',
+  icons: {
+    icon: '/favicon.ico', // This will use the favicon from the public directory
+  },
 };

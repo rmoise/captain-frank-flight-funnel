@@ -37,4 +37,5 @@ export interface Flight {
   dep_city?: string;
   arr_city?: string;
 }
+
 // ... existing code ...

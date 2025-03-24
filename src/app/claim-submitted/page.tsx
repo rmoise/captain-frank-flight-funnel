@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect, useCallback } from 'react';
-import { useStore } from '@/lib/state/store';
+import React, { useEffect } from 'react';
+import useStore from '@/lib/state/store';
 import { useTranslation } from '@/hooks/useTranslation';
 
 export default function ClaimSubmittedPage() {
@@ -9,13 +9,9 @@ export default function ClaimSubmittedPage() {
   const hideLoading = useStore((state) => state.hideLoading);
   const { t } = useTranslation();
 
-  const handleHideLoading = useCallback(() => {
+  useEffect(() => {
     hideLoading();
   }, [hideLoading]);
-
-  useEffect(() => {
-    handleHideLoading();
-  }, [handleHideLoading]);
 
   return (
     <div className="max-w-2xl mx-auto p-4">
@@ -47,7 +43,7 @@ export default function ClaimSubmittedPage() {
         <h3 className="text-lg font-semibold mb-4">
           {t.phases.claimSubmitted.nextSteps.title}
         </h3>
-        <ul className="list-disc list-inside text-gray-700 space-y-2">
+        <ul className="list-disc pl-5 text-gray-700 space-y-2">
           <li>{t.phases.claimSubmitted.nextSteps.review}</li>
           <li>{t.phases.claimSubmitted.nextSteps.contact}</li>
           <li>{t.phases.claimSubmitted.nextSteps.updates}</li>

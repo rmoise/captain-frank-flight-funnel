@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useStore } from '@/lib/state/store';
+import useStore from '@/lib/state/store';
 import { CheckIcon } from '@heroicons/react/24/solid';
 
 interface Phase {

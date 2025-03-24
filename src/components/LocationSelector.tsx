@@ -1,10 +1,10 @@
 'use client';
 
 import React from 'react';
-import { useStore } from '@/lib/state/store';
+import useStore from '@/lib/state/store';
 import { AutocompleteInput } from '@/components/shared/AutocompleteInput';
 import type { Airport } from '@/types/store';
-import type { Location } from '@/types/location';
+import type { Location, LocationLike } from '@/types/location';
 
 interface LocationSelectorProps {
   onSelect?: () => void;
@@ -22,15 +22,14 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
     setToLocation,
     locationError,
     setLocationError,
-    clearLocationError,
   } = useStore();
 
   const handleFromLocationChange = (location: Location | null) => {
     try {
-      setFromLocation(location ? JSON.stringify(location) : null);
+      setFromLocation(location as LocationLike);
       if (location) {
         onSelect();
-        clearLocationError?.();
+        setLocationError?.(null);
       }
     } catch (error) {
       console.error('Error setting from location:', error);
@@ -40,10 +39,10 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
 
   const handleToLocationChange = (location: Location | null) => {
     try {
-      setToLocation(location ? JSON.stringify(location) : null);
+      setToLocation(location as LocationLike);
       if (location) {
         onSelect();
-        clearLocationError?.();
+        setLocationError?.(null);
       }
     } catch (error) {
       console.error('Error setting to location:', error);

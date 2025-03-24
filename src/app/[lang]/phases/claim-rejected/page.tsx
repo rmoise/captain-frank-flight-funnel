@@ -3,12 +3,16 @@ import type { Metadata } from 'next';
 import { isValidLanguage } from '@/config/language';
 import { getTranslation } from '@/translations';
 
+export type PageProps = {
+  params?: Promise<{ lang: string }>;
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+};
+
 export async function generateMetadata({
   params,
-}: {
-  params: { lang: string };
-}): Promise<Metadata> {
-  const lang = isValidLanguage(params.lang) ? params.lang : 'de';
+}: PageProps): Promise<Metadata> {
+  const resolvedParams = await params ?? { lang: 'de' };
+  const lang = isValidLanguage(resolvedParams.lang) ? resolvedParams.lang : 'de';
   const t = getTranslation(lang);
 
   return {
@@ -17,6 +21,8 @@ export async function generateMetadata({
   };
 }
 
-export default function ClaimRejectedPage() {
+const ClaimRejectedPage = () => {
   return <ClaimRejected />;
-}
+};
+
+export default ClaimRejectedPage;

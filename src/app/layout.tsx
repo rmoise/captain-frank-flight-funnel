@@ -1,20 +1,19 @@
-'use client';
+"use client";
 
-import { Heebo } from 'next/font/google';
-import { LoadingProvider } from '@/providers/LoadingProvider';
-import { NavigationProvider } from '@/components/providers/NavigationProvider';
-import './globals.css';
-import '@/styles/autofill.css';
-import Script from 'next/script';
-import { HotjarScript } from '@/components/shared/HotjarScript';
-import { useParams } from 'next/navigation';
-import { isValidLanguage } from '@/config/language';
+import { LoadingProvider } from "@/providers/LoadingProvider";
+import { NavigationProvider } from "@/components/providers/NavigationProvider";
+import "./globals.css";
+import "@/styles/autofill.css";
+import Script from "next/script";
+import { HotjarScript } from "@/components/shared/HotjarScript";
+import { useParams } from "next/navigation";
+import { heebo } from "@/fonts";
+import { isValidLanguage } from "@/config/language";
+import dynamic from "next/dynamic";
 
-const heebo = Heebo({
-  subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700'],
-  display: 'swap',
-  variable: '--font-heebo',
+// Dynamically import DebugPanel with no SSR to avoid hydration issues
+const DebugPanel = dynamic(() => import("@/components/shared/DebugPanel"), {
+  ssr: false,
 });
 
 // Create a client component for Cookiebot
@@ -39,9 +38,9 @@ export default function RootLayout({
   const params = useParams();
   const langParam = params?.lang;
   const lang =
-    typeof langParam === 'string' && isValidLanguage(langParam)
+    typeof langParam === "string" && isValidLanguage(langParam)
       ? langParam
-      : 'de';
+      : "de";
 
   return (
     <html lang={lang} className={`${heebo.variable}`} suppressHydrationWarning>
@@ -84,12 +83,14 @@ export default function RootLayout({
             src="https://www.googletagmanager.com/ns.html?id=GTM-MBBVJT3C"
             height="0"
             width="0"
-            style={{ display: 'none', visibility: 'hidden' }}
+            style={{ display: "none", visibility: "hidden" }}
           />
         </noscript>
         <NavigationProvider>
           <LoadingProvider>
             <div className="relative w-full overflow-x-hidden">{children}</div>
+            {/* Add the debug panel but only in development environment */}
+            {process.env.NODE_ENV === "development" && <DebugPanel />}
           </LoadingProvider>
         </NavigationProvider>
       </body>

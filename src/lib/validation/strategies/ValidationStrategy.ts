@@ -1,4 +1,4 @@
-import type { ValidationState, StoreStateValues } from '../../state/types';
+import type { ValidationState, StoreStateValues } from '@/lib/state/types';
 
 export interface ValidationResult {
   isValid: boolean;

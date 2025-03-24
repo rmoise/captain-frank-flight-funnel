@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { useStore } from '@/lib/state/store';
+import useStore from '@/lib/state/store';
 import type { Answer } from '@/types/store';
 
 export const useWizardManager = (wizardId = 'default') => {
@@ -11,7 +11,6 @@ export const useWizardManager = (wizardId = 'default') => {
     wizardIsEditingMoney,
     wizardLastActiveStep,
     wizardShowingSuccess,
-    setWizardAnswers,
     batchUpdateWizardState,
   } = useStore();
 
@@ -21,10 +20,10 @@ export const useWizardManager = (wizardId = 'default') => {
     (answer: Answer) => {
       const newAnswers = [...wizardAnswers];
       newAnswers[wizardCurrentStep] = answer;
-      setWizardAnswers(newAnswers);
 
       if (wizardCurrentStep < wizardAnswers.length - 1) {
         batchUpdateWizardState({
+          wizardAnswers: newAnswers,
           wizardCurrentSteps: {
             ...wizardCurrentSteps,
             [wizardId]: wizardCurrentStep + 1,
@@ -33,6 +32,7 @@ export const useWizardManager = (wizardId = 'default') => {
         });
       } else {
         batchUpdateWizardState({
+          wizardAnswers: newAnswers,
           wizardIsCompleted: true,
           wizardShowingSuccess: true,
         });
@@ -41,7 +41,6 @@ export const useWizardManager = (wizardId = 'default') => {
     [
       wizardCurrentStep,
       wizardAnswers,
-      setWizardAnswers,
       batchUpdateWizardState,
       wizardCurrentSteps,
       wizardId,

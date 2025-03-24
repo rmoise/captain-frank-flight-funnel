@@ -1,30 +1,72 @@
-import React, { useState } from 'react';
-import { Dialog } from '@headlessui/react';
+import React, { useState, useEffect } from "react";
+import { Dialog } from "@headlessui/react";
 
 interface FlightNotListedData {
-  flightNumber: string;
-  departureDate: string;
-  departureAirport: string;
-  arrivalAirport: string;
+  salutation: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  description: string;
 }
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
+  onSubmit: (data: FlightNotListedData) => void;
+  prefilledData?: FlightNotListedData | null;
 }
 
-export const FlightNotListedModal: React.FC<Props> = ({ isOpen, onClose }) => {
+export const FlightNotListedModal: React.FC<Props> = ({
+  isOpen,
+  onClose,
+  onSubmit,
+  prefilledData = null,
+}) => {
   const [formData, setFormData] = useState<FlightNotListedData>({
-    flightNumber: '',
-    departureDate: '',
-    departureAirport: '',
-    arrivalAirport: '',
+    salutation: "",
+    firstName: "",
+    lastName: "",
+    email: "",
+    description: "",
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Update form when prefilledData changes or when modal opens
+  useEffect(() => {
+    if (isOpen && prefilledData) {
+      console.log("Prefilling form with data:", prefilledData);
+      setFormData({
+        salutation: prefilledData.salutation || "",
+        firstName: prefilledData.firstName || "",
+        lastName: prefilledData.lastName || "",
+        email: prefilledData.email || "",
+        description: prefilledData.description || "",
+      });
+    }
+  }, [isOpen, prefilledData]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle form submission
-    onClose();
+    try {
+      setIsSubmitting(true);
+      // Submit the data to the parent component
+      await onSubmit(formData);
+      // Reset form
+      setFormData({
+        salutation: "",
+        firstName: "",
+        lastName: "",
+        email: "",
+        description: "",
+      });
+      // Close the modal
+      onClose();
+    } catch (error) {
+      console.error("Error submitting flight not listed data:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const dialogTitleId = React.useId();
@@ -51,25 +93,97 @@ export const FlightNotListedModal: React.FC<Props> = ({ isOpen, onClose }) => {
             id={dialogDescriptionId}
             className="text-gray-600 mb-6"
           >
-            Please provide your flight details and we&apos;ll help you find it.
+            Please provide your contact details and flight information to help
+            us find your flight.
           </Dialog.Description>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label
-                htmlFor="flightNumber"
+                htmlFor="salutation"
                 className="block text-sm font-medium text-gray-700"
               >
-                Flight Number
+                Salutation
+              </label>
+              <select
+                id="salutation"
+                value={formData.salutation}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    salutation: e.target.value,
+                  }))
+                }
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                required
+              >
+                <option value="">Select</option>
+                <option value="herr">Mr.</option>
+                <option value="frau">Mrs.</option>
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label
+                  htmlFor="firstName"
+                  className="block text-sm font-medium text-gray-700"
+                >
+                  First Name
+                </label>
+                <input
+                  type="text"
+                  id="firstName"
+                  value={formData.firstName}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      firstName: e.target.value,
+                    }))
+                  }
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="lastName"
+                  className="block text-sm font-medium text-gray-700"
+                >
+                  Last Name
+                </label>
+                <input
+                  type="text"
+                  id="lastName"
+                  value={formData.lastName}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      lastName: e.target.value,
+                    }))
+                  }
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Email
               </label>
               <input
-                type="text"
-                id="flightNumber"
-                value={formData.flightNumber}
+                type="email"
+                id="email"
+                value={formData.email}
                 onChange={(e) =>
-                  setFormData((prev: FlightNotListedData) => ({
+                  setFormData((prev) => ({
                     ...prev,
-                    flightNumber: e.target.value,
+                    email: e.target.value,
                   }))
                 }
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
@@ -79,67 +193,23 @@ export const FlightNotListedModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
             <div>
               <label
-                htmlFor="departureDate"
+                htmlFor="description"
                 className="block text-sm font-medium text-gray-700"
               >
-                Departure Date
+                Flight Details
               </label>
-              <input
-                type="date"
-                id="departureDate"
-                value={formData.departureDate}
+              <textarea
+                id="description"
+                value={formData.description}
                 onChange={(e) =>
-                  setFormData((prev: FlightNotListedData) => ({
+                  setFormData((prev) => ({
                     ...prev,
-                    departureDate: e.target.value,
+                    description: e.target.value,
                   }))
                 }
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 min-h-[100px]"
                 required
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="departureAirport"
-                className="block text-sm font-medium text-gray-700"
-              >
-                Departure Airport
-              </label>
-              <input
-                type="text"
-                id="departureAirport"
-                value={formData.departureAirport}
-                onChange={(e) =>
-                  setFormData((prev: FlightNotListedData) => ({
-                    ...prev,
-                    departureAirport: e.target.value,
-                  }))
-                }
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                required
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="arrivalAirport"
-                className="block text-sm font-medium text-gray-700"
-              >
-                Arrival Airport
-              </label>
-              <input
-                type="text"
-                id="arrivalAirport"
-                value={formData.arrivalAirport}
-                onChange={(e) =>
-                  setFormData((prev: FlightNotListedData) => ({
-                    ...prev,
-                    arrivalAirport: e.target.value,
-                  }))
-                }
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                required
+                placeholder="Please provide details about your flight such as flight number, departure date, departure airport, and arrival airport."
               />
             </div>
 
@@ -148,14 +218,16 @@ export const FlightNotListedModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 type="button"
                 onClick={onClose}
                 className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                disabled={isSubmitting}
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-400"
+                disabled={isSubmitting}
               >
-                Submit
+                {isSubmitting ? "Submitting..." : "Submit"}
               </button>
             </div>
           </form>

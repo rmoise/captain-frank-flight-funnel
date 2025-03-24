@@ -1,4 +1,12 @@
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
+import { API_BASE_URL, standardOptionsHandler } from "../api-config";
+
+// Define config options directly in this file
+export const dynamic = "force-dynamic";
+export const dynamicParams = true;
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
+export const runtime = "edge";
 
 interface Airport {
   iata_code?: string;
@@ -22,28 +30,25 @@ interface FormattedAirport {
 
 interface ApiResponse {
   data: FormattedAirport[];
-  status: 'success' | 'error';
+  status: "success" | "error";
   message?: string;
 }
-
-const API_BASE_URL =
-  'https://secure.captain-frank.net/api/services/euflightclaim';
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const term = searchParams.get('term')?.toUpperCase();
-    const lang = searchParams.get('lang') || 'en';
+    const term = searchParams.get("term")?.toUpperCase();
+    const lang = searchParams.get("lang") || "en";
 
-    console.log('Airport search request:', { term, lang });
+    console.log("Airport search request:", { term, lang });
 
     // Return empty results for short terms
     if (!term || term.length < 3) {
       return NextResponse.json<ApiResponse>(
         {
           data: [],
-          status: 'success',
-          message: 'Bitte geben Sie mindestens 3 Zeichen ein',
+          status: "success",
+          message: "Bitte geben Sie mindestens 3 Zeichen ein",
         },
         { status: 400 }
       );
@@ -54,19 +59,19 @@ export async function GET(request: Request) {
       term: term.trim(),
       lang,
     })}`;
-    console.log('Calling Captain Frank API:', apiUrl);
+    console.log("Calling Captain Frank API:", apiUrl);
 
     const response = await fetch(apiUrl, {
-      method: 'GET',
+      method: "GET",
       headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
+        Accept: "application/json",
+        "Content-Type": "application/json",
       },
       next: { revalidate: 0 }, // Disable caching
     });
 
     if (!response.ok) {
-      console.error('API request failed:', {
+      console.error("API request failed:", {
         status: response.status,
         statusText: response.statusText,
         url: response.url,
@@ -77,36 +82,36 @@ export async function GET(request: Request) {
         return NextResponse.json<ApiResponse>(
           {
             data: [],
-            status: 'success',
-            message: 'Please refine your search term',
+            status: "success",
+            message: "Please refine your search term",
           },
           { status: 200 }
         );
       }
 
       const errorText = await response.text();
-      console.error('Error response text:', errorText);
+      console.error("Error response text:", errorText);
 
       return NextResponse.json<ApiResponse>({
         data: [],
-        status: 'error',
+        status: "error",
         message: `API request failed with status ${response.status}`,
       });
     }
 
     const responseText = await response.text();
-    console.log('Raw API response:', responseText);
+    console.log("Raw API response:", responseText);
 
     let data: Airport | Airport[] | { data: Airport[] };
     try {
       data = JSON.parse(responseText);
-      console.log('Parsed API response:', data);
+      console.log("Parsed API response:", data);
     } catch (parseError) {
-      console.error('Failed to parse API response:', parseError);
+      console.error("Failed to parse API response:", parseError);
       return NextResponse.json<ApiResponse>({
         data: [],
-        status: 'error',
-        message: 'Failed to parse API response',
+        status: "error",
+        message: "Failed to parse API response",
       });
     }
 
@@ -114,18 +119,18 @@ export async function GET(request: Request) {
     let airports: Airport[] = [];
     if (Array.isArray(data)) {
       airports = data;
-    } else if ('data' in data && Array.isArray(data.data)) {
+    } else if ("data" in data && Array.isArray(data.data)) {
       airports = data.data;
-    } else if (typeof data === 'object' && data !== null) {
+    } else if (typeof data === "object" && data !== null) {
       // If it's a single airport object, wrap it in an array
       airports = [data as Airport];
     }
 
     // Transform the data to match the expected format
     const formattedAirports: FormattedAirport[] = airports.map((airport) => ({
-      iata_code: airport.iata_code || airport.code || '',
-      name: airport.name || airport.airport || '',
-      city: airport.city || '',
+      iata_code: airport.iata_code || airport.code || "",
+      name: airport.name || airport.airport || "",
+      city: airport.city || "",
       lat: airport.lat || airport.latitude || 0,
       lng: airport.lng || airport.longitude || 0,
     }));
@@ -142,28 +147,20 @@ export async function GET(request: Request) {
 
     return NextResponse.json<ApiResponse>({
       data: formattedAirports,
-      status: 'success',
-      message: formattedAirports.length === 0 ? 'No airports found' : undefined,
+      status: "success",
+      message: formattedAirports.length === 0 ? "No airports found" : undefined,
     });
   } catch (error) {
-    console.error('Airport search error:', error);
+    console.error("Airport search error:", error);
     return NextResponse.json<ApiResponse>({
       data: [],
-      status: 'error',
+      status: "error",
       message:
-        error instanceof Error ? error.message : 'Failed to search airports',
+        error instanceof Error ? error.message : "Failed to search airports",
     });
   }
 }
 
-// Handle OPTIONS requests for CORS
 export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 204,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  });
+  return standardOptionsHandler();
 }

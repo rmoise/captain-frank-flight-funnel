@@ -3,28 +3,28 @@ import type { Metadata } from 'next';
 import { isValidLanguage } from '@/config/language';
 import dynamic from 'next/dynamic';
 
+export type PageProps = {
+  params?: Promise<{ lang: string }>;
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+};
+
 export async function generateMetadata({
-  params: { lang },
-}: {
-  params: { lang: string };
-}): Promise<Metadata> {
-  const validLang = isValidLanguage(lang) ? lang : 'de';
-  const t = await getTranslation(validLang);
+  params,
+}: PageProps): Promise<Metadata> {
+  const resolvedParams = await params ?? { lang: 'de' };
+  const lang = isValidLanguage(resolvedParams.lang) ? resolvedParams.lang : 'de';
+  const t = await getTranslation(lang);
   return {
     title: t.phases.flightDetails.title,
     description: t.phases.flightDetails.description,
   };
 }
 
-// This is a Server Component that renders the FlightDetails page
-export default function FlightDetailsPage() {
-  // Import the client component dynamically to avoid 'use client' directive issues
-  const FlightDetails = dynamic(
-    () => import('@/app/phases/flight-details/page'),
-    {
-      ssr: false, // This ensures the component only renders on the client side
-    }
-  );
+// Import the client component dynamically
+const FlightDetails = dynamic(() => import('@/app/phases/flight-details/page'), {
+  loading: () => <div>Loading...</div>
+});
 
+export default function FlightDetailsPage() {
   return <FlightDetails />;
 }

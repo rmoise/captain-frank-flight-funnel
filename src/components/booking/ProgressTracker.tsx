@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useStore } from '@/lib/state/store';
+import useStore from '@/lib/state/store';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/solid';
 import { ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from '@/hooks/useTranslation';

@@ -1,0 +1,214 @@
+          <div className="pt-8">
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                {t.phases.initialAssessment.flightDetails}
+              </h3>
+              {store.selectedType === "direct" ? (
+                store.flightSegments[0]?.selectedFlight && (
+                  <FlightPreviewCard
+                    key={`flight-preview-${store.flightSegments[0].selectedFlight.id}-0`}
+                    flight={store.flightSegments[0].selectedFlight}
+                    index={0}
+                    onEdit={() => {}} // Will implement in next iteration
+                    onDelete={() => handleFlightDelete(0)}
+                    isMultiCity={false}
+                    showConnectionInfo={false}
+                    currentPhase={currentPhase}
+                  />
+                )
+              ) : (
+                <div className="space-y-4">
+                  {store.flightSegments.map((segment, index) => (
+                    <React.Fragment
+                      key={`flight-preview-${segment.selectedFlight?.id}-${index}`}
+                    >
+                      {segment.selectedFlight && (
+                        <>
+                          <FlightPreviewCard
+                            flight={segment.selectedFlight}
+                            index={index}
+                            onEdit={() => {}} // Will implement in next iteration
+                            onDelete={() => handleFlightDelete(index)}
+                            isMultiCity={true}
+                            showConnectionInfo={index > 0}
+                            currentPhase={currentPhase}
+                          />
+                          {index < store.flightSegments.length - 1 && (
+                            <div className="h-4 border-l-2 border-dashed border-gray-300 ml-6" />
+                          )}
+                        </>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+      {currentPhase === 3 && process.env.NODE_ENV !== "production" && (
+        <div className="p-2 mt-4 bg-zinc-100 rounded-md">
+          <details>
+            <summary className="font-medium text-sm cursor-pointer">
+              Debug Tools for Phase 3
+            </summary>
+            <div className="p-2 mt-2 space-y-2 bg-white rounded-md">
+              {/* Debug state display */}
+              <div className="text-xs font-mono overflow-auto max-h-32 bg-gray-100 p-2 rounded">
+                <pre>
+                  currentPhase: {currentPhase}
+                  {"\n"}
+                  hasSelectedFlight:{" "}
+                  {store.flightSegments[0]?.selectedFlight ? "true" : "false"}
+                  {"\n"}
+                  flightNumber:{" "}
+                  {store.flightSegments[0]?.selectedFlight?.flightNumber ||
+                    "none"}
+                  {"\n"}
+                  date:{" "}
+                  {store.flightSegments[0]?.selectedFlight?.date
+                    ? JSON.stringify(
+                        store.flightSegments[0].selectedFlight.date
+                      )
+                    : "none"}
+                </pre>
+              </div>
+
+              {/* Create Phase 3 Flight button */}
+              <button
+                className="bg-blue-500 text-white px-3 py-1 text-xs rounded"
+                onClick={() => {
+                  // Create a synthetic phase 3 flight for testing
+                  const today = new Date();
+                  const day = String(today.getDate()).padStart(2, "0");
+                  const month = String(today.getMonth() + 1).padStart(2, "0");
+                  const year = today.getFullYear();
+                  const dateStr = `${day}.${month}.${year}`;
+
+                  const newFlight: Flight = {
+                    id: `debug-flight-${Date.now()}`,
+                    flightNumber: "LH123",
+                    airline: "LH",
+                    date: dateStr, // phase 3 format DD.MM.YYYY
+                    departure:
+                      store.flightSegments[0]?.fromLocation?.value || "BER",
+                    arrival:
+                      store.flightSegments[0]?.toLocation?.value || "FRA",
+                    departureCity:
+                      store.flightSegments[0]?.fromLocation?.city || "Berlin",
+                    arrivalCity:
+                      store.flightSegments[0]?.toLocation?.city || "Frankfurt",
+                    departureTime: "08:00",
+                    arrivalTime: "09:30",
+                    scheduledDepartureTime: "08:00",
+                    scheduledArrivalTime: "09:30",
+                    departureAirport:
+                      store.flightSegments[0]?.fromLocation?.value || "BER",
+                    arrivalAirport:
+                      store.flightSegments[0]?.toLocation?.value || "FRA",
+                    duration: "1h 30m",
+                    status: "scheduled",
+                    actualDeparture: null,
+                    actualArrival: null,
+                    arrivalDelay: null,
+                    stops: 0,
+                    aircraft: "A320",
+                    class: "economy",
+                    price: 0,
+                    distance: 0,
+                  };
+
+                  // Update the segments with the new flight
+                  const updatedSegments = [...store.flightSegments];
+                  if (updatedSegments[0]) {
+                    updatedSegments[0] = {
+                      ...updatedSegments[0],
+                      selectedFlight: newFlight,
+                      date: new Date(),
+                    };
+
+                    console.log("=== Debug - Creating Phase 3 Flight ===", {
+                      flight: newFlight,
+                      timestamp: new Date().toISOString(),
+                    });
+
+                    // Update stores with this data
+                    updateStores({ flightSegments: updatedSegments });
+
+                    // Also directly update flightStore
+                    flightStore.setSelectedFlights(3, [newFlight]);
+
+                    // Save to phase3State in localStorage
+                    const phase3State = {
+                      flightSegments: updatedSegments,
+                      selectedType: "direct",
+                      selectedFlights: [newFlight],
+                      fromLocation: updatedSegments[0].fromLocation,
+                      toLocation: updatedSegments[0].toLocation,
+                      timestamp: Date.now(),
+                    };
+                    localStorage.setItem(
+                      "phase3State",
+                      JSON.stringify(phase3State)
+                    );
+
+                    console.log("=== Debug - Saved Phase 3 Flight Data ===", {
+                      phase3State,
+                      timestamp: new Date().toISOString(),
+                    });
+                  }
+                }}
+              >
+                Create Phase 3 Flight
+              </button>
+
+              {/* Force reload all phase 3 data */}
+              <button
+                className="bg-amber-500 text-white px-3 py-1 text-xs rounded"
+                onClick={() => {
+                  try {
+                    const phase3StateStr = localStorage.getItem("phase3State");
+                    if (phase3StateStr) {
+                      const phase3State = JSON.parse(phase3StateStr);
+                      console.log(
+                        "=== Debug - Loading Phase 3 Data from localStorage ===",
+                        {
+                          phase3State,
+                          timestamp: new Date().toISOString(),
+                        }
+                      );
+
+                      if (phase3State.flightSegments?.length > 0) {
+                        updateStores({
+                          flightSegments: phase3State.flightSegments,
+                        });
+                      }
+
+                      if (phase3State.selectedFlights?.length > 0) {
+                        flightStore.setSelectedFlights(
+                          3,
+                          phase3State.selectedFlights
+                        );
+                      }
+                    } else {
+                      console.log(
+                        "=== Debug - No Phase 3 Data in localStorage ===",
+                        {
+                          timestamp: new Date().toISOString(),
+                        }
+                      );
+                    }
+                  } catch (e) {
+                    console.error("Error loading phase 3 data:", e);
+                  }
+                }}
+              >
+                Load Phase 3 Data from localStorage
+              </button>
+            </div>
+          </details>
+        </div>
+      )}
+    </div>
+  );
+};

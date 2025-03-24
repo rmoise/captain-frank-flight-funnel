@@ -1,18 +1,19 @@
 'use client';
 
 import React from 'react';
-import { useStore } from '@/lib/state/store';
+import useStore from '@/lib/state/store';
 import { CheckIcon } from '@heroicons/react/24/solid';
+import type { ValidationStep } from '@/lib/state/types';
 
 interface Step {
-  id: number;
+  id: ValidationStep;
   name: string;
   description?: string;
 }
 
 interface ProgressBarProps {
   steps: Step[];
-  onStepClick?: (step: number) => void;
+  onStepClick?: (step: ValidationStep) => void;
 }
 
 export const ProgressBar: React.FC<ProgressBarProps> = ({
@@ -21,7 +22,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
 }) => {
   const { currentStep, completedSteps, openSteps } = useStore();
 
-  const handleStepClick = (stepId: number) => {
+  const handleStepClick = (stepId: ValidationStep) => {
     if (!openSteps.includes(stepId) || !onStepClick) return;
     onStepClick(stepId);
   };

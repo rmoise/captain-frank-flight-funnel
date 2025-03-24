@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 
 export async function POST(request: Request) {
+  console.log('=== API ROUTE ORDER CLAIM POST METHOD CALLED ===', {
+    timestamp: new Date().toISOString(),
+  });
+
   try {
     const data = await request.json();
 
@@ -102,11 +106,12 @@ export async function POST(request: Request) {
           owner_firstname: data.owner_firstname,
           owner_lastname: data.owner_lastname,
           owner_street: data.owner_street,
-          owner_place: data.owner_zip || '',
+          owner_place: data.owner_place || '',
           owner_city: data.owner_city,
           owner_country: data.owner_country,
           owner_email: data.owner_email,
           owner_phone: data.owner_phone || '',
+          owner_marketable_status: data.owner_marketable_status,
           contract_signature: formatSignature(data.contract_signature),
           contract_tac: data.contract_tac,
           contract_dp: data.contract_dp,

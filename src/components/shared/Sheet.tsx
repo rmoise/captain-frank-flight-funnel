@@ -3,6 +3,7 @@
 import React, { useEffect } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import * as Sheet from 'vaul';
+import * as Dialog from '@radix-ui/react-dialog';
 
 interface BottomSheetProps {
   isOpen: boolean;
@@ -28,10 +29,6 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
     };
   }, [isOpen]);
 
-  const sheetId = React.useId();
-  const titleId = `${sheetId}-title`;
-  const descriptionId = `${sheetId}-description`;
-
   return (
     <Sheet.Root
       open={isOpen}
@@ -54,21 +51,10 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
             maxHeight: '98vh',
             overscrollBehavior: 'contain',
           }}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={titleId}
-          aria-describedby={descriptionId}
-          tabIndex={-1}
         >
-          <div role="document" className="flex flex-col h-full">
-          <h2 id={titleId} className="sr-only">
+          <Dialog.Title className="sr-only">
             {title || 'Dialog Content'}
-          </h2>
-          <p id={descriptionId} className="sr-only">
-              A bottom sheet dialog that slides up from the bottom of the
-              screen. Drag the handle at the top to resize or swipe down to
-              close.
-          </p>
+          </Dialog.Title>
           <div className="mx-auto w-12 h-1.5 flex-shrink-0 rounded-full bg-gray-300 mt-2 mb-4" />
           <button
             onClick={onClose}
@@ -84,7 +70,6 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
           )}
           <div className="flex-1 overflow-y-auto">
             <div className="px-4 pb-16">{children}</div>
-            </div>
           </div>
         </Sheet.Content>
       </Sheet.Portal>
