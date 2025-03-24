@@ -977,7 +977,7 @@ export default function CompensationEstimatePage() {
       }
 
       // Update the store with the completed phases
-      store.setState({
+      await store.setState({
         completedPhases: currentCompletedPhases,
         phasesCompletedViaContinue: currentPhasesCompletedViaContinue,
         currentPhase: 3,
@@ -1050,10 +1050,8 @@ export default function CompensationEstimatePage() {
       phase2StateObj._completedTimestamp = Date.now();
       localStorage.setItem("phase2State", JSON.stringify(phase2StateObj));
 
-      // Add a standalone flag that's easier to check in case JSON parsing fails
+      // Create a standalone flag file for maximum compatibility
       localStorage.setItem("phase2_explicitlyCompleted", "true");
-
-      // Also add a simple state object that's guaranteed to work
       localStorage.setItem(
         "phase2_simple",
         JSON.stringify({
@@ -1061,36 +1059,6 @@ export default function CompensationEstimatePage() {
           _timestamp: Date.now(),
         })
       );
-
-      // Log verification
-      console.log("=== Phase 2 Explicitly Completed ===", {
-        phase2StateStr:
-          JSON.stringify(phase2StateObj).substring(0, 100) + "...",
-        containsFlag: JSON.stringify(phase2StateObj).includes(
-          '"_explicitlyCompleted":true'
-        ),
-        alternativeFlag: localStorage.getItem("phase2_explicitlyCompleted"),
-        timestamp: new Date().toISOString(),
-      });
-
-      // Log the state being saved
-      console.log("=== Saving Phase 3 State ===", {
-        segments: nextPhaseState.flightSegments.map((s) => ({
-          from: s.fromLocation,
-          to: s.toLocation,
-        })),
-        timestamp: new Date().toISOString(),
-      });
-
-      localStorage.setItem("phase3State", JSON.stringify(nextPhaseState));
-
-      // Ensure store has the correct segments
-      store.setFlightSegments(nextPhaseState.flightSegments);
-
-      // CRITICAL: Add a small delay to ensure all state updates are complete before navigation
-      console.log("=== Preparing to navigate to flight-details ===", {
-        timestamp: new Date().toISOString(),
-      });
 
       // Add final verification logging for phase changes
       console.log("=== Final Phase Verification Before Navigation ===", {
@@ -1110,19 +1078,18 @@ export default function CompensationEstimatePage() {
         timestamp: new Date().toISOString(),
       });
 
-      // Use a promise with setTimeout to ensure all state updates are complete
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      // Increase the delay to ensure all state updates are complete before navigation
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
-      // Force a direct navigation to phase 3 using window.location instead of router
+      // Get the language-aware URL for navigation
       const phase3Url = getLanguageAwareUrl("/phases/flight-details", lang);
       console.log("=== Navigating to flight-details ===", {
         url: phase3Url,
+        method: "router.push",
         timestamp: new Date().toISOString(),
       });
 
-      window.location.href = phase3Url;
-
-      // As a fallback, also use the router (though this likely won't execute due to the redirect)
+      // Use the Next.js router instead of window.location.href to avoid full page reload
       router.push(phase3Url);
     } catch (error) {
       console.error("Error during transition:", error);

@@ -511,14 +511,23 @@ export const PhaseGuard: React.FC<PhaseGuardProps> = ({ phase, children }) => {
         );
         const phase2Simple = localStorage.getItem("phase2_simple");
 
+        // CRITICAL: Check if we have a navigating_to_phase3 flag
+        const isNavigatingToPhase3 =
+          localStorage.getItem("navigating_to_phase3") === "true";
+
         // Check if phase 2 is completed via continue or if it's in completed phases
+        // Also check for the explicit completion flags and navigation flag
         const isAuthorized =
           bypassCheck ||
           phase === currentPhase ||
           completedPhases.includes(phase) ||
           phase < currentPhase ||
           completedPhases.includes(2) ||
-          phasesCompletedViaContinue.includes(2);
+          phasesCompletedViaContinue.includes(2) ||
+          phase2ExplicitlyCompleted === "true" ||
+          (phase2StateObj && phase2StateObj._explicitlyCompleted) ||
+          (phase2Simple && JSON.parse(phase2Simple)._explicitlyCompleted) ||
+          isNavigatingToPhase3;
 
         console.log(
           "=== PhaseGuard - Phase 3 Authorization Check [DETAILED] ===",
@@ -535,9 +544,15 @@ export const PhaseGuard: React.FC<PhaseGuardProps> = ({ phase, children }) => {
               phase2StateObj._explicitlyCompleted,
             phase2ExplicitlyCompletedFlag: phase2ExplicitlyCompleted,
             phase2SimpleExists: !!phase2Simple,
+            isNavigatingToPhase3,
             timestamp: new Date().toISOString(),
           }
         );
+
+        // If authorized, clear the navigation flag since we've used it
+        if (isAuthorized && isNavigatingToPhase3) {
+          localStorage.removeItem("navigating_to_phase3");
+        }
 
         setIsAuthorized(isAuthorized);
         setIsLoading(false);

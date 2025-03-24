@@ -12,10 +12,6 @@ import Image from "next/image";
 import { StoreState } from "@/lib/state/types";
 import { useFlightStore } from "@/lib/state/flightStore";
 
-declare module "@/hooks/useTranslation" {
-  interface TranslationType extends Translations {}
-}
-
 interface DocumentUploadState {
   bookingConfirmation: File | null;
   cancellationNotification: File | null;
