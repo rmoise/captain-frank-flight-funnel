@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 // Helper function to convert File to base64 (client-side only)
 // For server-side we'll use a different approach
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function streamToBuffer(
   stream: ReadableStream<Uint8Array>
 ): Promise<Buffer> {
