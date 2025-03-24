@@ -43,6 +43,7 @@
     "next-intl": "^3.26.3",
     "next-sanity": "^9.8.30",
     "node-fetch": "^3.3.2",
+    "parse-multipart-data": "^1.5.0",
     "react": "^19.0.0",
     "react-datepicker": "^4.18.0",
     "react-dom": "^19.0.0",

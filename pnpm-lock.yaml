@@ -92,6 +92,9 @@ importers:
       node-fetch:
         specifier: ^3.3.2
         version: 3.3.2
+      parse-multipart-data:
+        specifier: ^1.5.0
+        version: 1.5.0
       react:
         specifier: ^19.0.0
         version: 19.0.0
@@ -5478,6 +5481,9 @@ packages:
   parse-ms@2.1.0:
     resolution: {integrity: sha512-kHt7kzLoS9VBZfUsiKjv43mr91ea+U05EyKkEtqp7vNbHxmaVuEqN7XxeEVnGrMtYOAxGrDElSi96K7EgO1zCA==}
     engines: {node: '>=6'}
+
+  parse-multipart-data@1.5.0:
+    resolution: {integrity: sha512-ck5zaMF0ydjGfejNMnlo5YU2oJ+pT+80Jb1y4ybanT27j+zbVP/jkYmCrUGsEln0Ox/hZmuvgy8Ra7AxbXP2Mw==}
 
   parse-path@7.0.1:
     resolution: {integrity: sha512-6ReLMptznuuOEzLoGEa+I1oWRSj2Zna5jLWC+l6zlfAI4dbbSaIES29ThzuPkbhNahT65dWzfoZEO6cfJw2Ksg==}
@@ -12902,6 +12908,8 @@ snapshots:
       lines-and-columns: 1.2.4
 
   parse-ms@2.1.0: {}
+
+  parse-multipart-data@1.5.0: {}
 
   parse-path@7.0.1:
     dependencies:
