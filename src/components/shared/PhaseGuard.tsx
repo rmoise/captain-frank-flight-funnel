@@ -451,12 +451,52 @@ export const PhaseGuard: React.FC<PhaseGuardProps> = ({ phase, children }) => {
       // Special case for phase 4 (trip-experience) - check if phases 1-3 are completed
       if (phase === 4) {
         const requiredPhases = [1, 2, 3];
+
+        // Check for phase3 explicit completion flags similar to how we do for phase 3
+        const phase3StateStr = localStorage.getItem("phase3State");
+        const phase3StateObj = phase3StateStr ? JSON.parse(phase3StateStr) : {};
+        const phase3ExplicitlyCompleted = localStorage.getItem(
+          "phase3_explicitlyCompleted"
+        );
+        const phase3Simple = localStorage.getItem("phase3_simple");
+        const phasesCompletedViaContinueStr = localStorage.getItem(
+          "phasesCompletedViaContinue"
+        );
+        const phasesCompletedViaContinue = phasesCompletedViaContinueStr
+          ? JSON.parse(phasesCompletedViaContinueStr)
+          : [];
+
+        // More lenient authorization check for phase 4
         const isAuthorized =
           bypassCheck ||
           phase === currentPhase ||
           completedPhases.includes(phase) ||
           phase < currentPhase ||
-          requiredPhases.every((p) => completedPhases.includes(p));
+          requiredPhases.every((p) => completedPhases.includes(p)) ||
+          completedPhases.includes(3) ||
+          phasesCompletedViaContinue.includes(3) ||
+          phase3ExplicitlyCompleted === "true" ||
+          (phase3StateObj && phase3StateObj._explicitlyCompleted) ||
+          (phase3Simple && JSON.parse(phase3Simple)._explicitlyCompleted);
+
+        console.log(
+          "=== PhaseGuard - Phase 4 Authorization Check [DETAILED] ===",
+          {
+            isAuthorized,
+            bypassCheck,
+            currentPhase,
+            completedPhases,
+            phasesCompletedViaContinue,
+            phase3Completed: completedPhases.includes(3),
+            phase3CompletedViaContinue: phasesCompletedViaContinue.includes(3),
+            phase3StateExists: !!phase3StateStr,
+            phase3StateHasExplicitlyCompleted:
+              phase3StateObj._explicitlyCompleted,
+            phase3ExplicitlyCompletedFlag: phase3ExplicitlyCompleted,
+            phase3SimpleExists: !!phase3Simple,
+            timestamp: new Date().toISOString(),
+          }
+        );
 
         setIsAuthorized(isAuthorized);
         setIsLoading(false);

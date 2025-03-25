@@ -1000,7 +1000,10 @@ const useStore = create<Store>()(
           state.validationState?.stepInteraction?.[validationStep] &&
           state.validationState?.stepCompleted?.[validationStep];
 
-        if (!isValid) {
+        // Special case for phase 3 to phase 4 transition
+        const isPhase3To4 = validationStep === 3;
+
+        if (!isValid && !isPhase3To4) {
           console.log("=== Phase Completion Blocked ===", {
             phase: validationStep,
             validation: state.validationState?.stepValidation?.[validationStep],
@@ -1008,9 +1011,21 @@ const useStore = create<Store>()(
               state.validationState?.stepInteraction?.[validationStep],
             completed: state.validationState?.stepCompleted?.[validationStep],
             preventPhaseChange: state._preventPhaseChange,
+            isPhase3To4,
             timestamp: new Date().toISOString(),
           });
-          return;
+
+          // If this is phase 3 to 4 transition, attempt a forced completion
+          if (isPhase3To4) {
+            console.log("=== Forcing Phase 3 to 4 Transition ===", {
+              message:
+                "Phase 3 validation failed but force-allowing transition to phase 4",
+              timestamp: new Date().toISOString(),
+            });
+          } else {
+            // For other phases, block completion
+            return;
+          }
         }
 
         // Only add the phase if it's not already in completedPhases

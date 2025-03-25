@@ -2258,11 +2258,18 @@ export default function TripExperiencePage(): ReactElement {
         needsUpdate = true;
       }
 
+      // Also ensure the currentPhase is set to 4
+      let updateCurrentPhase = false;
+      if (currentPhase !== 4) {
+        updateCurrentPhase = true;
+      }
+
       // Update the store if needed
-      if (needsUpdate) {
+      if (needsUpdate || updateCurrentPhase) {
         mainStore.setState({
           completedPhases,
           phasesCompletedViaContinue,
+          currentPhase: 4, // Ensure this is set to phase 4
           _lastUpdate: Date.now(),
         });
 
@@ -2275,12 +2282,14 @@ export default function TripExperiencePage(): ReactElement {
           "phasesCompletedViaContinue",
           JSON.stringify(phasesCompletedViaContinue)
         );
+        localStorage.setItem("currentPhase", "4"); // Set current phase to 4
 
         console.log(
           "=== TripExperiencePage - Updated Phase 3 completion state ===",
           {
             completedPhases,
             phasesCompletedViaContinue,
+            currentPhase: 4,
             timestamp: new Date().toISOString(),
           }
         );
