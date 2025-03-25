@@ -777,6 +777,23 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
             ? state.informedDateAnswers
             : [];
 
+          // Save flight data to preserve even when answers are reset
+          const currentSelectedFlights = [...state.selectedFlights];
+          const currentSelectedType = state.selectedType;
+          const currentDirectFlight = {...state.directFlight};
+          const currentFlightSegments = [...state.flightSegments];
+
+          // Also persist validation states if preserving answers
+          const travelStatusIsValid = preserveAnswers ? state.travelStatusIsValid : false;
+          const travelStatusShowingSuccess = preserveAnswers ? state.travelStatusShowingSuccess : false;
+          const travelStatusStepValidation = preserveAnswers ? {...state.travelStatusStepValidation} : {};
+          const travelStatusStepInteraction = preserveAnswers ? {...state.travelStatusStepInteraction} : {};
+
+          const informedDateIsValid = preserveAnswers ? state.informedDateIsValid : false;
+          const informedDateShowingSuccess = preserveAnswers ? state.informedDateShowingSuccess : false;
+          const informedDateStepValidation = preserveAnswers ? {...state.informedDateStepValidation} : {};
+          const informedDateStepInteraction = preserveAnswers ? {...state.informedDateStepInteraction} : {};
+
           // Only reset the specific QA's state
           const newState = {
             ...state,
@@ -787,12 +804,10 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
                     ? existingInformedDateAnswers
                     : [],
                   informedDateCurrentStep: 0,
-                  informedDateShowingSuccess:
-                    preserveAnswers && existingInformedDateAnswers.length > 0,
-                  informedDateIsValid:
-                    preserveAnswers && existingInformedDateAnswers.length > 0,
-                  informedDateStepValidation: {},
-                  informedDateStepInteraction: {},
+                  informedDateShowingSuccess: informedDateShowingSuccess,
+                  informedDateIsValid: informedDateIsValid,
+                  informedDateStepValidation: informedDateStepValidation,
+                  informedDateStepInteraction: informedDateStepInteraction,
                 }
               : {
                   // Reset only travel status state
@@ -800,16 +815,51 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
                     ? existingTravelStatusAnswers
                     : [],
                   travelStatusCurrentStep: 0,
-                  travelStatusShowingSuccess:
-                    preserveAnswers && existingTravelStatusAnswers.length > 0,
-                  travelStatusIsValid:
-                    preserveAnswers && existingTravelStatusAnswers.length > 0,
-                  travelStatusStepValidation: {},
-                  travelStatusStepInteraction: {},
+                  travelStatusShowingSuccess: travelStatusShowingSuccess,
+                  travelStatusIsValid: travelStatusIsValid,
+                  travelStatusStepValidation: travelStatusStepValidation,
+                  travelStatusStepInteraction: travelStatusStepInteraction,
                 }),
             lastAnsweredQuestion: null,
+            // Preserve flight data
+            selectedFlights: currentSelectedFlights,
+            selectedType: currentSelectedType,
+            directFlight: currentDirectFlight,
+            flightSegments: currentFlightSegments,
             _lastUpdate: Date.now(),
           };
+
+          // Ensure we store the state in localStorage for persistence
+          if (typeof window !== 'undefined') {
+            try {
+              // Update phase4FlightData in localStorage to ensure it's preserved
+              localStorage.setItem(
+                "phase4FlightData",
+                JSON.stringify({
+                  originalFlights: useFlightStore.getState().originalFlights,
+                  selectedFlights: currentSelectedFlights,
+                  _lastUpdate: Date.now(),
+                })
+              );
+
+              // Store alternative flights separately for redundancy
+              localStorage.setItem(
+                "phase4AlternativeFlights",
+                JSON.stringify(currentSelectedFlights)
+              );
+
+              console.log("=== Phase4Store - Persisting flight data during reset ===", {
+                selectedFlights: currentSelectedFlights.map(f => ({
+                  id: f.id,
+                  flightNumber: f.flightNumber,
+                  date: f.date
+                })),
+                timestamp: new Date().toISOString()
+              });
+            } catch (e) {
+              console.error("Error persisting flight data during reset:", e);
+            }
+          }
 
           console.log("=== Phase4Store - resetStore EXIT ===", {
             newState,
@@ -817,6 +867,8 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
             preserveAnswers,
             travelStatusAnswers: newState.travelStatusAnswers,
             informedDateAnswers: newState.informedDateAnswers,
+            selectedFlightsPreserved: newState.selectedFlights.length > 0,
+            timestamp: new Date().toISOString()
           });
 
           return newState;
