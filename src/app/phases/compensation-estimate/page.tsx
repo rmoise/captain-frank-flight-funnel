@@ -911,14 +911,25 @@ export default function CompensationEstimatePage() {
   }, []);
 
   const handleContinue = async () => {
-    if (compensationLoading || !compensationAmount) return;
+    console.log("=== CompensationEstimatePage - handleContinue Started ===", {
+      compensationLoading,
+      compensationAmount,
+      timestamp: new Date().toISOString(),
+    });
+
+    if (compensationLoading || !compensationAmount) {
+      console.log("Cannot continue - compensation is loading or not available");
+      return;
+    }
 
     try {
       // Set a flag in localStorage to indicate a forward navigation to phase 3
       localStorage.setItem("navigating_to_phase3", "true");
+      console.log("Set navigating_to_phase3 flag");
 
       // Also set a flag to ensure the accordion is opened
       localStorage.setItem("openFlightSelectionAccordion", "true");
+      console.log("Set openFlightSelectionAccordion flag");
 
       // Save the current state to localStorage
       const currentState = {
@@ -931,6 +942,7 @@ export default function CompensationEstimatePage() {
         _timestamp: Date.now(),
       };
       localStorage.setItem("phase2State", JSON.stringify(currentState));
+      console.log("Saved currentState to localStorage");
 
       // Also save to flight store to ensure data is available immediately
       try {
@@ -976,6 +988,11 @@ export default function CompensationEstimatePage() {
         currentPhasesCompletedViaContinue.push(2);
       }
 
+      console.log("Updating store with completed phases", {
+        currentCompletedPhases,
+        currentPhasesCompletedViaContinue,
+      });
+
       // Update the store with the completed phases
       await store.setState({
         completedPhases: currentCompletedPhases,
@@ -983,6 +1000,7 @@ export default function CompensationEstimatePage() {
         currentPhase: 3,
         _lastUpdate: Date.now(),
       });
+      console.log("Store updated with completed phases");
 
       // Also update localStorage directly
       localStorage.setItem(
@@ -994,6 +1012,7 @@ export default function CompensationEstimatePage() {
         JSON.stringify(currentPhasesCompletedViaContinue)
       );
       localStorage.setItem("currentPhase", "3");
+      console.log("localStorage updated with phase information");
 
       // Save state for next phase with all necessary location data
       const nextPhaseState = {
@@ -1042,6 +1061,7 @@ export default function CompensationEstimatePage() {
         _forcedByHandleContinue: true,
         phase: 3,
       };
+      console.log("Prepared nextPhaseState data");
 
       // CRITICAL: Also update phase2State with the _explicitlyCompleted flag
       const phase2StateStr = localStorage.getItem("phase2State");
@@ -1049,6 +1069,7 @@ export default function CompensationEstimatePage() {
       phase2StateObj._explicitlyCompleted = true;
       phase2StateObj._completedTimestamp = Date.now();
       localStorage.setItem("phase2State", JSON.stringify(phase2StateObj));
+      console.log("Updated phase2State with explicitlyCompleted flag");
 
       // Create a standalone flag file for maximum compatibility
       localStorage.setItem("phase2_explicitlyCompleted", "true");
@@ -1059,6 +1080,7 @@ export default function CompensationEstimatePage() {
           _timestamp: Date.now(),
         })
       );
+      console.log("Created standalone flag files for compatibility");
 
       // Add final verification logging for phase changes
       console.log("=== Final Phase Verification Before Navigation ===", {
@@ -1079,20 +1101,35 @@ export default function CompensationEstimatePage() {
       });
 
       // Increase the delay to ensure all state updates are complete before navigation
+      console.log("Waiting for state updates to complete...");
       await new Promise((resolve) => setTimeout(resolve, 300));
+      console.log("Delay completed, proceeding with navigation");
 
       // Get the language-aware URL for navigation
       const phase3Url = getLanguageAwareUrl("/phases/flight-details", lang);
       console.log("=== Navigating to flight-details ===", {
         url: phase3Url,
-        method: "router.push",
+        method: "direct navigation",
         timestamp: new Date().toISOString(),
       });
 
-      // Use the Next.js router instead of window.location.href to avoid full page reload
-      router.push(phase3Url);
+      // Use direct navigation - this is the key change that fixed the issue
+      window.location.href = phase3Url;
     } catch (error) {
       console.error("Error during transition:", error);
+
+      // Try to recover by using direct navigation
+      try {
+        const fallbackUrl = getLanguageAwareUrl("/phases/flight-details", lang);
+        console.log(
+          "Attempting recovery with direct navigation to:",
+          fallbackUrl
+        );
+        window.location.href = fallbackUrl;
+      } catch (fallbackError) {
+        console.error("Even fallback navigation failed:", fallbackError);
+        alert("Navigation failed. Please try again.");
+      }
     }
   };
 
