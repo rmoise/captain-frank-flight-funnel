@@ -33,7 +33,14 @@ const handler = async (event) => {
             body: JSON.stringify({ error: 'Search term is required' }),
         };
     }
+
     try {
+        console.log('DEBUG - Query parameters:', {
+            term,
+            lang,
+            allParams: event.queryStringParameters
+        });
+
         const apiUrl = `${API_BASE_URL}/searchairportsbyterm?term=${encodeURIComponent(term)}${lang ? `&lang=${lang}` : ''}`;
         console.log('Making request to:', apiUrl);
         const response = await fetch(apiUrl, {

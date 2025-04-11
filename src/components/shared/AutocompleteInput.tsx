@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import React, {
   useState,
@@ -6,24 +6,24 @@ import React, {
   useEffect,
   useCallback,
   useMemo,
-} from 'react';
-import { createPortal } from 'react-dom';
-import type { LocationData } from '@/types/store';
-import { debounce } from 'lodash';
-import { PiAirplaneTakeoff, PiAirplaneLanding } from 'react-icons/pi';
-import { XMarkIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
-import { useTranslation } from '@/hooks/useTranslation';
+} from "react";
+import { createPortal } from "react-dom";
+import type { LocationData } from "@/types/store";
+import { debounce } from "lodash";
+import { PiAirplaneTakeoff, PiAirplaneLanding } from "react-icons/pi";
+import { XMarkIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
+import { useTranslation } from "@/hooks/useTranslation";
 
 const LoadingSpinner = () => (
   <div className="relative w-6 h-6">
     <div
       className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-[#F54538] border-r-[#F54538]/30"
-      style={{ animationDuration: '0.8s' }}
+      style={{ animationDuration: "0.8s" }}
     />
   </div>
 );
 
-export type Location = LocationData
+export type Location = LocationData;
 
 export interface AutocompleteInputProps {
   label: string;
@@ -32,7 +32,7 @@ export interface AutocompleteInputProps {
   onSearch: (term: string) => Promise<LocationData[]>;
   onFocus?: () => Promise<LocationData[]>;
   onBlur?: () => void;
-  leftIcon?: 'departure' | 'arrival';
+  leftIcon?: "departure" | "arrival";
   error?: string;
   disabled?: boolean;
   showError?: boolean;
@@ -58,7 +58,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [options, setOptions] = useState<LocationData[]>([]);
   const [loading, setLoading] = useState(false);
-  const [inputValue, setInputValue] = useState(value?.label || '');
+  const [inputValue, setInputValue] = useState(value?.label || "");
   const [isFocused, setIsFocused] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [isTouched, setIsTouched] = useState(false);
@@ -80,11 +80,17 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   // Sync input value with external value
   useEffect(() => {
     if (!isTyping && value?.label !== prevValueRef.current) {
-      setInputValue(value?.label || '');
+      if (value?.description && value?.label) {
+        // Show formatted airport name with code
+        setInputValue(`${value.description} (${value.label})`);
+      } else {
+        // Fallback to just the label if no description is available
+        setInputValue(value?.label || "");
+      }
       setIsTyping(false);
       prevValueRef.current = value?.label;
     }
-  }, [value?.label, isTyping]);
+  }, [value?.label, value?.description, isTyping]);
 
   const debouncedSearch = useMemo(
     () =>
@@ -109,7 +115,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
           setOptions(results);
           setLoading(false);
         } catch (error) {
-          console.error('Error searching locations:', error);
+          console.error("Error searching locations:", error);
           setOptions([]);
           setLoading(false);
         }
@@ -122,134 +128,78 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
       // Prevent processing if no option is provided
       if (!option) return;
 
-      // Extract the full name and code
-      const fullName = option.dropdownLabel
-        ? option.dropdownLabel.split(' (')[0]
-        : option.description || option.label;
-      const code = option.value;
+      // Don't transform the option, use it exactly as provided by the API
+      // This preserves the original language and format
+      const selectedOption = option;
 
-      // Ensure we have a valid code
-      if (!code) {
-        console.warn('Invalid option selected:', option);
-        return;
-      }
-
-      const updatedOption = {
-        ...option,
-        label: code,
-        value: code,
-        description: fullName,
-        dropdownLabel: `${fullName} (${code})`,
-      };
-
-      // Update state based on selection type
+      // Update state
       setIsTyping(false);
       setHighlightedIndex(null);
       setIsTouched(true);
-      setInputValue(code);
 
-      if (isAutoSelect) {
-        // Keep dropdown open for auto-select
-        setIsFocused(true);
-        setIsOpen(true);
-      } else {
-        // Close dropdown for manual selection or tab
-        setIsFocused(false);
-        setIsOpen(false);
-        setOptions([]);
-        setLoading(false);
+      // Set input value for display
+      setInputValue(
+        option.dropdownLabel ||
+          `${option.description || ""} (${option.value || ""})`
+      );
 
-        // Move to next input
-        requestAnimationFrame(() => {
-          const currentInput = inputRef.current;
-          if (currentInput) {
-            const stepContainer = currentInput.closest('[data-step]');
-            if (stepContainer) {
-              const allInputs = Array.from(
-                stepContainer.querySelectorAll('input')
-              );
-              const currentIndex = allInputs.indexOf(currentInput);
-              const nextInput = allInputs[currentIndex + 1];
-              if (nextInput) {
-                nextInput.focus();
-              }
+      // Always close dropdown on selection
+      setIsFocused(false);
+      setIsOpen(false);
+      setOptions([]);
+      setLoading(false);
+
+      // Move to next input
+      requestAnimationFrame(() => {
+        const currentInput = inputRef.current;
+        if (currentInput) {
+          const stepContainer = currentInput.closest("[data-step]");
+          if (stepContainer) {
+            const allInputs = Array.from(
+              stepContainer.querySelectorAll("input")
+            );
+            const currentIndex = allInputs.indexOf(currentInput);
+            const nextInput = allInputs[currentIndex + 1];
+            if (nextInput) {
+              nextInput.focus();
             }
           }
-        });
-      }
+        }
+      });
 
-      // Trigger the onChange callback
-      onChange(updatedOption);
+      // Pass the unmodified option to onChange
+      onChange(selectedOption);
     },
     [onChange]
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Tab') {
-      // Set tab navigation flag immediately to prevent any other operations
+    if (e.key === "Tab") {
+      // Just set the tab flag but don't try to select anything
       isTabNavigatingRef.current = true;
 
-      // Cancel any pending searches immediately
-      debouncedSearch.cancel();
-
-      // If we have a 3-letter code, try to auto-select FIRST
-      if (inputValue.length === 3) {
-        const code = inputValue.toUpperCase();
-
-        // Check if it matches IATA code pattern (3 uppercase letters)
-        if (/^[A-Z]{3}$/.test(code)) {
-          e.preventDefault();
-          // Create a generic airport option - the actual name will be updated later if needed
-          const airportOption = {
-            label: code,
-            value: code,
-            description: `${code} International Airport`,
-            dropdownLabel: `${code} International Airport (${code})`,
-          };
-          handleOptionSelect(airportOption, false);
-
-          // Optionally trigger a search to update the airport name later
-          onSearch(code)
-            .then((results) => {
-              const exactMatch = results.find((r) => r.value === code);
-              if (exactMatch && !isTabNavigatingRef.current) {
-                handleOptionSelect(exactMatch, false);
-              }
-            })
-            .catch(() => {
-              // If search fails, we still have the generic airport option selected
-              console.log(
-                'Could not fetch airport details, using generic name'
-              );
-            });
-          return;
+      // Only reset if typing with no selection made
+      if (isTyping && value?.label !== inputValue) {
+        if (value?.label) {
+          // Reset to previous value
+          setInputValue(value.label);
+        } else {
+          // Clear it
+          setInputValue("");
         }
-
-        // Check for exact match in current options as fallback
-        const exactMatch = options.find((option) => option.value === code);
-        if (exactMatch) {
-          e.preventDefault();
-          handleOptionSelect(exactMatch, false);
-          return;
-        }
-      }
-
-      // Clear all states immediately
-      setIsOpen(false);
-      setHighlightedIndex(null);
-      setLoading(false);
-      setOptions([]);
-
-      // Reset input if no valid selection was made
-      if (isTyping) {
-        setInputValue(value?.label || '');
         setIsTyping(false);
       }
 
-      // Keep tab navigation flag true for longer to handle rapid tabbing
+      // Close any open dropdowns
+      setIsOpen(false);
+      setOptions([]);
+
+      // Clear the tab flag after a delay
       setTimeout(() => {
         isTabNavigatingRef.current = false;
       }, 300);
+
+      // Let the tab event continue naturally to the next field
     }
   };
 
@@ -276,6 +226,9 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
         return;
       }
 
+      // Set a flag to mark that we've had user interaction
+      userInteractionRef.current = true;
+
       // If the input is exactly 3 characters and matches an IATA code format
       if (newValue.length === 3 && /^[A-Z]{3}$/.test(newValue)) {
         // Cancel any previous search
@@ -283,81 +236,24 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
 
         let isCancelled = false;
 
-        // Try both IATA code and city name search
-        const searchWithBothMethods = async () => {
+        // Direct search with IATA code
+        const searchWithCode = async () => {
           if (isTabNavigatingRef.current) return; // Exit if tabbing
 
           setLoading(true);
           try {
-            // First try with the IATA code
-            const iataResults = await onSearch(newValue);
+            // Search with the IATA code
+            const results = await onSearch(newValue);
 
             if (!isCancelled && !isTabNavigatingRef.current) {
-              // Create a temporary option for immediate feedback
-              const tempOption = {
-                label: newValue,
-                value: newValue,
-                description: `${newValue} International Airport`,
-                dropdownLabel: `${newValue} International Airport (${newValue})`,
-              };
-
-              // If we don't have an exact match in the results, add our temporary option
-              if (!iataResults.some((r) => r.value === newValue)) {
-                iataResults.unshift(tempOption);
-              }
-
-              setOptions(iataResults);
+              // Use results directly from API without modification
+              setOptions(results);
               setIsOpen(true);
-
-              // Try to find an exact match
-              const exactMatch = iataResults.find(
-                (option) => option.value === newValue
-              );
-              if (exactMatch && !isTabNavigatingRef.current) {
-                handleOptionSelect(exactMatch, true);
-              } else {
-                // If no exact match found, use the temporary option
-                handleOptionSelect(tempOption, true);
-              }
-
-              // Try city name search as additional results
-              const cityMap: Record<string, string> = {
-                BER: 'BERLIN',
-                FRA: 'FRANKFURT',
-                MUC: 'MUNICH',
-                HAM: 'HAMBURG',
-                // Add more common city mappings if needed
-              };
-
-              const cityName = cityMap[newValue];
-              if (cityName) {
-                const cityResults = await onSearch(cityName);
-                if (!isCancelled && !isTabNavigatingRef.current) {
-                  const combinedResults = [...iataResults];
-                  cityResults.forEach((cityResult) => {
-                    if (
-                      !combinedResults.some((r) => r.value === cityResult.value)
-                    ) {
-                      combinedResults.push(cityResult);
-                    }
-                  });
-
-                  setOptions(combinedResults);
-                }
-              }
             }
           } catch (error) {
-            console.error('Error searching locations:', error);
+            console.error("Error searching locations:", error);
             if (!isCancelled && !isTabNavigatingRef.current) {
-              // Even if search fails, show temporary option
-              const tempOption = {
-                label: newValue,
-                value: newValue,
-                description: `${newValue} International Airport`,
-                dropdownLabel: `${newValue} International Airport (${newValue})`,
-              };
-              setOptions([tempOption]);
-              handleOptionSelect(tempOption, true);
+              setOptions([]);
             }
           } finally {
             if (!isCancelled && !isTabNavigatingRef.current) {
@@ -366,7 +262,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
           }
         };
 
-        searchWithBothMethods();
+        searchWithCode();
         return () => {
           isCancelled = true;
         };
@@ -417,7 +313,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
           setOptions(results);
         }
       } catch (error) {
-        console.error('Error loading initial options:', error);
+        console.error("Error loading initial options:", error);
         setOptions([]);
       } finally {
         setLoading(false);
@@ -427,50 +323,69 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
     else if (inputValue && !options.length && !value?.label) {
       debouncedSearch(inputValue);
     }
-  }, [debouncedSearch, inputValue, options.length, onFocus, value, preventInitialSearch]);
+  }, [
+    debouncedSearch,
+    inputValue,
+    options.length,
+    onFocus,
+    value,
+    preventInitialSearch,
+  ]);
 
   // Modify the blur handler
   const handleBlur = () => {
-    debouncedSearch.cancel();
-
-    if (isTabNavigatingRef.current) {
-      setIsFocused(false);
-      setIsOpen(false);
-      setHighlightedIndex(null);
-      setLoading(false);
-      setOptions([]);
-
-      if (isTyping) {
-        setInputValue(value?.label || '');
-        setIsTyping(false);
-      }
-      onBlur?.();
-      return;
-    }
-
-    // For non-tab blur, use shorter timeout
+    // Don't cancel searches immediately
+    // Let the mousedown event happen first before processing blur
     setTimeout(() => {
-      if (!isTabNavigatingRef.current) {
+      debouncedSearch.cancel();
+
+      if (isTabNavigatingRef.current) {
         setIsFocused(false);
         setIsOpen(false);
         setHighlightedIndex(null);
         setLoading(false);
+        setOptions([]);
 
         if (isTyping) {
-          setInputValue(value?.label || '');
+          if (value?.description && value?.label) {
+            // Reset to full airport name format
+            setInputValue(`${value.description} (${value.label})`);
+          } else {
+            // Fallback to just the code
+            setInputValue(value?.label || "");
+          }
           setIsTyping(false);
         }
+        return;
       }
-    }, 50);
 
-    onBlur?.();
+      // For non-tab blur, use longer timeout to allow dropdown clicks
+      setIsFocused(false);
+      setIsOpen(false);
+      setHighlightedIndex(null);
+      setLoading(false);
+
+      if (isTyping) {
+        if (value?.description && value?.label) {
+          // Reset to full airport name format
+          setInputValue(`${value.description} (${value.label})`);
+        } else {
+          // Fallback to just the code
+          setInputValue(value?.label || "");
+        }
+        setIsTyping(false);
+      }
+
+      // Call the onBlur callback provided by parent
+      onBlur?.();
+    }, 200); // Increased timeout to allow dropdown interaction
   };
 
   const handleClear = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
       onChange(null);
-      setInputValue('');
+      setInputValue("");
       setOptions([]);
       setIsOpen(false);
       setHighlightedIndex(null);
@@ -506,12 +421,12 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
     };
 
     updatePosition();
-    window.addEventListener('scroll', updatePosition);
-    window.addEventListener('resize', updatePosition);
+    window.addEventListener("scroll", updatePosition);
+    window.addEventListener("resize", updatePosition);
 
     return () => {
-      window.removeEventListener('scroll', updatePosition);
-      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener("scroll", updatePosition);
+      window.removeEventListener("resize", updatePosition);
     };
   }, [isOpen]);
 
@@ -519,7 +434,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
-      const dropdownElement = document.getElementById('autocomplete-dropdown');
+      const dropdownElement = document.getElementById("autocomplete-dropdown");
       const isClickingDropdown = dropdownElement?.contains(target);
       const isClickingInput = containerRef.current?.contains(target);
 
@@ -531,8 +446,8 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   // Cleanup on unmount
@@ -553,6 +468,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
           top: dropdownPosition.top,
           left: dropdownPosition.left,
           width: dropdownPosition.width,
+          maxWidth: "100%",
         }}
       >
         {loading ? (
@@ -562,43 +478,42 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
         ) : options.length > 0 ? (
           <ul className="py-2">
             {options.map((option, index) => {
-              // Extract the full name and code from dropdownLabel
-              const fullName = option.dropdownLabel
-                ? option.dropdownLabel.split(' (')[0]
-                : option.description || option.label;
-              const code = option.dropdownLabel
-                ? option.dropdownLabel.split(' (')[1]?.replace(')', '')
-                : option.value;
-
               const isSelected = option.value === value?.value;
 
               return (
                 <li
                   key={option.value || index}
-                  onClick={() =>
-                    option.value ? handleOptionSelect(option) : null
-                  }
-                  className={`px-4 py-2 ${
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (option.value) {
+                      handleOptionSelect(option, false);
+                    }
+                  }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (option.value) {
+                      handleOptionSelect(option, false);
+                    }
+                  }}
+                  className={`px-4 py-3 ${
                     option.value
-                      ? 'cursor-pointer hover:bg-gray-100'
-                      : 'text-gray-500 cursor-default'
-                  } ${isSelected ? 'bg-[#FEF2F2] text-[#F54538]' : ''} ${
-                    highlightedIndex === index ? 'bg-gray-100' : ''
+                      ? "cursor-pointer hover:bg-gray-100"
+                      : "text-gray-500 cursor-default"
+                  } ${isSelected ? "bg-[#FEF2F2] text-[#F54538]" : ""} ${
+                    highlightedIndex === index ? "bg-gray-100" : ""
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span
-                      className={`text-base font-medium ${isSelected ? 'text-[#F54538]' : 'text-[#4B616D]'}`}
+                  <div className="flex flex-col">
+                    <div
+                      className={`text-sm font-medium ${
+                        isSelected ? "text-[#F54538]" : "text-[#4B616D]"
+                      }`}
                     >
-                      {fullName}
-                    </span>
-                    {code && (
-                      <span
-                        className={`text-sm ml-2 ${isSelected ? 'text-[#F54538]' : 'text-gray-500'}`}
-                      >
-                        {code}
-                      </span>
-                    )}
+                      {option.description || option.label || ""}{" "}
+                      {option.value && `(${option.value})`}
+                    </div>
                   </div>
                 </li>
               );
@@ -614,67 +529,127 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
   };
 
   const inputClassName = `
-    w-full h-14 pl-12 pr-12 pt-5 pb-2
-    text-[#4B616D] ${
-      value && !isFocused && !isTyping
-        ? 'text-xl lg:text-[28px] font-medium'
-        : 'text-base font-medium'
-    } tracking-tight
+    w-full h-[64px] pl-14 pr-14 pt-6 pb-3
+    text-[#4B616D] text-sm font-medium tracking-tight
     bg-white rounded-xl
     transition-all duration-[250ms] ease-in-out
     ${
       isFocused
-        ? 'border-2 border-blue-500'
+        ? "border-2 border-blue-500"
         : error && isTouched
-          ? 'border border-[#F54538]'
-          : 'border border-[#e0e1e4] group-hover:border-blue-500'
+        ? "border border-[#F54538]"
+        : "border border-[#e0e1e4] group-hover:border-blue-500"
     }
     focus:outline-none
-    ${disabled ? 'bg-gray-100 cursor-not-allowed' : ''}
-    ${required ? 'required' : ''}
+    ${disabled ? "bg-gray-100 cursor-not-allowed" : ""}
+    ${required ? "required" : ""}
   `;
 
   const labelClassName = `
-    absolute left-12
+    absolute left-14
     transition-all duration-[200ms] cubic-bezier(0.4, 0, 0.2, 1) pointer-events-none
     text-[#9BA3AF] after:content-['*'] after:text-[#F54538] after:ml-[1px] after:align-super after:text-[10px]
     ${
       isFocused || inputValue
-        ? 'translate-y-[-8px] text-[10px] px-1 bg-white'
-        : 'translate-y-[14px] text-base'
+        ? "translate-y-[-10px] text-[10px] px-1 bg-white"
+        : "translate-y-[16px] text-base"
     }
-    ${isFocused ? 'text-[#9BA3AF]' : ''}
+    ${isFocused ? "text-[#9BA3AF]" : ""}
   `;
 
   return (
-    <div className="relative" ref={containerRef}>
-      <div className="relative p-[2px] group">
-        <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-          {leftIcon === 'departure' ? (
+    <div className="relative w-full max-w-3xl" ref={containerRef}>
+      <div className="relative p-[2px] group w-full">
+        <div className="absolute left-5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+          {leftIcon === "departure" ? (
             <PiAirplaneTakeoff size={20} />
-          ) : leftIcon === 'arrival' ? (
+          ) : leftIcon === "arrival" ? (
             <PiAirplaneLanding size={20} />
           ) : null}
         </div>
-        <input
-          ref={inputRef}
-          type="text"
-          value={inputValue}
-          onChange={handleInputChange}
-          onFocus={handleInputFocus}
-          onBlur={handleBlur}
-          onKeyDown={handleKeyDown}
-          className={inputClassName}
-          placeholder=""
-          disabled={disabled}
-          aria-invalid={
-            ((error && isTouched) || false).toString() as 'true' | 'false'
-          }
-          aria-describedby={error && isTouched ? `${label}-error` : undefined}
-        />
-        <label className={labelClassName}>{label.replace(' *', '')}</label>
+
+        {/* Custom input display for selected values */}
+        {value && value.label && !isTyping ? (
+          <div
+            className={`w-full h-[64px] pl-14 pr-14 cursor-text relative
+              bg-white rounded-xl
+              flex items-center justify-start
+              ${
+                isFocused
+                  ? "border-2 border-blue-500"
+                  : error && isTouched
+                  ? "border border-[#F54538]"
+                  : "border border-[#e0e1e4] group-hover:border-blue-500"
+              }
+              ${disabled ? "bg-gray-100 cursor-not-allowed" : ""}
+            `}
+            onClick={() => {
+              if (!disabled && inputRef.current) {
+                inputRef.current.focus();
+              }
+            }}
+          >
+            <div className="absolute left-5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+              {leftIcon === "departure" ? (
+                <PiAirplaneTakeoff size={20} />
+              ) : leftIcon === "arrival" ? (
+                <PiAirplaneLanding size={20} />
+              ) : null}
+            </div>
+            <label className="absolute top-0 left-14 -translate-y-1/2 text-[10px] text-[#9BA3AF] px-1 bg-white z-10">
+              {label.replace(" *", "")}
+            </label>
+            <div className="text-sm font-medium text-[#4B616D] whitespace-normal break-words mr-6 py-1 mt-3 mb-2 leading-[1.1]">
+              {value.description || value.label}{" "}
+              {value.value && `(${value.value})`}
+            </div>
+            <input
+              ref={inputRef}
+              type="text"
+              value={inputValue}
+              onChange={handleInputChange}
+              onFocus={handleInputFocus}
+              onBlur={handleBlur}
+              onKeyDown={handleKeyDown}
+              className="absolute opacity-0 top-0 left-0 w-full h-full"
+              placeholder=""
+              disabled={disabled}
+              aria-invalid={
+                ((error && isTouched) || false).toString() as "true" | "false"
+              }
+              aria-describedby={
+                error && isTouched ? `${label}-error` : undefined
+              }
+            />
+          </div>
+        ) : (
+          /* Regular input when typing or no value selected */
+          <input
+            ref={inputRef}
+            type="text"
+            value={inputValue}
+            onChange={handleInputChange}
+            onFocus={handleInputFocus}
+            onBlur={handleBlur}
+            onKeyDown={handleKeyDown}
+            className={inputClassName}
+            placeholder=""
+            disabled={disabled}
+            title={inputValue}
+            aria-invalid={
+              ((error && isTouched) || false).toString() as "true" | "false"
+            }
+            aria-describedby={error && isTouched ? `${label}-error` : undefined}
+          />
+        )}
+
+        {/* Only show the label for the regular input state */}
+        {!(value && value.label && !isTyping) && (
+          <label className={labelClassName}>{label.replace(" *", "")}</label>
+        )}
+
         <div
-          className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2"
+          className="absolute right-5 top-1/2 -translate-y-1/2 flex items-center gap-2"
           onClick={handleInputFocus}
         >
           {loading ? (
@@ -694,7 +669,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
               )}
               <ChevronDownIcon
                 className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${
-                  isOpen ? 'rotate-180' : ''
+                  isOpen ? "rotate-180" : ""
                 }`}
                 aria-hidden="true"
               />

@@ -878,15 +878,15 @@ const storageHelpers = {
 };
 
 export const FlightSegments: React.FC<FlightSegmentsProps> = ({
-  showFlightSearch,
-  currentPhase,
-  disabled,
-  onInteract = () => {},
+  showFlightSearch = false,
+  disabled = false,
   stepNumber,
+  currentPhase,
+  onInteract = () => {},
   setValidationState,
   setIsFlightNotListedOpen = () => {},
 }) => {
-  const { t } = useTranslation();
+  const { t, lang } = useTranslation();
   const mainStore = useStore();
   const phase4Store = usePhase4Store();
   const flightStore = useFlightStore();
@@ -1476,7 +1476,8 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
 
         const params = new URLSearchParams();
         params.append("term", term.toUpperCase());
-        params.append("lang", "en");
+        // Use current language from the translation hook instead of hardcoding
+        params.append("lang", lang || "en");
 
         const response = await fetch(
           `/.netlify/functions/searchAirports?${params.toString()}`
@@ -1552,7 +1553,7 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
         return [];
       }
     },
-    [t.common.enterMinChars]
+    [t.common.enterMinChars, lang]
   );
 
   // Effect to set segment dates from selected flights
@@ -1884,8 +1885,8 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
         date: existingDate, // Preserve the existing date
       };
 
-      // Handle linking in multi-city mode
-      if (store.selectedType === "multi") {
+      // Handle linking in multi-city mode - only when setting a location, not when clearing
+      if (store.selectedType === "multi" && location) {
         if (field === "toLocation") {
           // Forward linking: Set next segment's fromLocation
           if (index < newSegments.length - 1) {
@@ -1899,7 +1900,7 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
             };
           }
           // Only backward link if we're setting a new location (not clearing)
-          if (location && index > 0 && newSegments[index].fromLocation) {
+          if (index > 0 && newSegments[index].fromLocation) {
             const prevSegment = newSegments[index - 1];
             const prevSegmentDate = prevSegment.date; // Preserve previous segment's date
             newSegments[index - 1] = {
@@ -1922,11 +1923,7 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
             };
           }
           // Only forward link if we're setting a new location (not clearing)
-          if (
-            location &&
-            index < newSegments.length - 1 &&
-            newSegments[index].toLocation
-          ) {
+          if (index < newSegments.length - 1 && newSegments[index].toLocation) {
             const nextSegment = newSegments[index + 1];
             const nextSegmentDate = nextSegment.date; // Preserve next segment's date
             newSegments[index + 1] = {
@@ -2126,6 +2123,9 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
           _timestamp: Date.now(),
         });
       }
+
+      // Update validation state immediately
+      validate();
 
       // Notify parent of interaction
       onInteract();
@@ -3053,8 +3053,10 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
           from_iata: segment.fromLocation.value,
           to_iata: segment.toLocation.value,
           date: formattedDate,
-          lang: "en",
+          lang: lang || "en",
         });
+
+        // Lang parameter is now handled server-side
 
         const response = await fetch(
           `/.netlify/functions/searchFlights?${params.toString()}`
