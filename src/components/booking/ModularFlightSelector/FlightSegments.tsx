@@ -1269,43 +1269,311 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
       {
         segments: store.flightSegments.map((seg, idx) => ({
           segmentIndex: idx,
-          fromLocation: seg.fromLocation?.value || null,
-          toLocation: seg.toLocation?.value || null,
-          hasFromLocation: !!seg.fromLocation?.value,
-          hasToLocation: !!seg.toLocation?.value,
+          fromLocation:
+            typeof seg.fromLocation === "object" &&
+            "value" in (seg.fromLocation || {})
+              ? seg.fromLocation?.value
+              : seg.fromLocation,
+          toLocation:
+            typeof seg.toLocation === "object" &&
+            "value" in (seg.toLocation || {})
+              ? seg.toLocation?.value
+              : seg.toLocation,
+          hasFromLocation: !!seg.fromLocation,
+          hasToLocation: !!seg.toLocation,
+          fromType: typeof seg.fromLocation,
+          toType: typeof seg.toLocation,
         })),
+        selectedType: store.selectedType,
         timestamp: new Date().toISOString(),
       }
     );
 
-    // Check if we need to restore location data
-    const needLocationRestore = store.flightSegments.some((segment, idx) => {
-      // Check if locations are missing
-      const missingFrom = !segment.fromLocation?.value;
-      const missingTo = !segment.toLocation?.value;
+    // CRITICAL FIX: For phase 3, check if we need to adjust segments based on selected type
+    if (currentPhase === 3) {
+      try {
+        // Check if we need to adjust segments for direct flights
+        if (
+          store.selectedType === "direct" &&
+          store.flightSegments.length > 1
+        ) {
+          console.log(
+            "=== FlightSegments - Fixing direct flight mode (too many segments) ===",
+            {
+              currentSegments: store.flightSegments.length,
+              selectedType: "direct",
+              timestamp: new Date().toISOString(),
+            }
+          );
 
-      // Check if locations were explicitly cleared
-      const fromClearFlagKey = `locationWasCleared_phase${currentPhase}_segment${idx}_fromLocation`;
-      const toClearFlagKey = `locationWasCleared_phase${currentPhase}_segment${idx}_toLocation`;
+          // For direct flights, only keep the first segment
+          const updatedSegments = [store.flightSegments[0]];
 
-      const fromWasCleared = localStorage.getItem(fromClearFlagKey) === "true";
-      const toWasCleared = localStorage.getItem(toClearFlagKey) === "true";
+          // Update the store with the correct number of segments for direct flight
+          updateStores({ flightSegments: updatedSegments });
 
-      // Need to restore if location missing and not explicitly cleared
-      return (missingFrom && !fromWasCleared) || (missingTo && !toWasCleared);
-    });
+          // Also update localStorage
+          storageHelpers.save(currentPhase, {
+            flightSegments: updatedSegments,
+            selectedType: "direct",
+          });
 
-    if (!needLocationRestore) {
-      console.log(
-        "=== FlightSegments - No location data restoration needed ===",
-        {
-          timestamp: new Date().toISOString(),
+          console.log(
+            "=== FlightSegments - Adjusted segments for direct flight ===",
+            {
+              segmentCount: updatedSegments.length,
+              timestamp: new Date().toISOString(),
+            }
+          );
+
+          // Return early as we've handled this case
+          return;
         }
-      );
-      return;
+      } catch (error) {
+        console.error("Error adjusting segments for direct flight:", error);
+      }
     }
 
-    // Rest of location restoration logic...
+    // CRITICAL FIX: For multi-segment in Phase 3, check if we need location data restoration
+    if (
+      currentPhase === 3 &&
+      store.selectedType === "multi" &&
+      store.flightSegments.length > 0
+    ) {
+      const p3LocationMappingNeeded = store.flightSegments.some((segment) => {
+        // Check if the segment has missing or improper location format
+        const fromLocationInvalid =
+          !segment.fromLocation ||
+          (typeof segment.fromLocation === "object" &&
+            !("value" in (segment.fromLocation || {})));
+        const toLocationInvalid =
+          !segment.toLocation ||
+          (typeof segment.toLocation === "object" &&
+            !("value" in (segment.toLocation || {})));
+
+        return fromLocationInvalid || toLocationInvalid;
+      });
+
+      // Log the location validation status
+      console.log("=== FlightSegments - Location validation status ===", {
+        missingLocationsDetected: p3LocationMappingNeeded,
+        segmentCount: store.flightSegments.length,
+        selectedType: store.selectedType,
+        mainFromLocation: store.fromLocation,
+        mainToLocation: store.toLocation,
+        timestamp: new Date().toISOString(),
+      });
+
+      // If any segment has invalid locations, try to restore them
+      if (p3LocationMappingNeeded) {
+        try {
+          // Try phase 1 data first as the primary source when restoring in multi-segment mode
+          const phase1Data = localStorage.getItem("flightData_phase1");
+          const phase1State = phase1Data ? JSON.parse(phase1Data) : null;
+
+          // Then try phase 2 data
+          const phase2Data = localStorage.getItem("flightData_phase2");
+          const phase2State = phase2Data ? JSON.parse(phase2Data) : null;
+
+          if (
+            (phase1State?.flightSegments &&
+              phase1State.flightSegments.length > 0) ||
+            (phase2State?.flightSegments &&
+              phase2State.flightSegments.length > 0)
+          ) {
+            // Prefer phase 1 data in multi-segment mode, fall back to phase 2 if needed
+            const sourceState =
+              phase1State?.flightSegments &&
+              phase1State.flightSegments.length > 0
+                ? phase1State
+                : phase2State;
+
+            const sourcePhase =
+              phase1State?.flightSegments &&
+              phase1State.flightSegments.length > 0
+                ? "Phase 1"
+                : "Phase 2";
+
+            console.log(
+              `=== FlightSegments - Restoring segment locations from ${sourcePhase} ===`,
+              {
+                segmentCount: sourceState.flightSegments.length,
+                sourceLocations: sourceState.flightSegments.map(
+                  (seg: any, idx: number) => ({
+                    segmentIndex: idx,
+                    from:
+                      typeof seg.fromLocation === "object"
+                        ? seg.fromLocation?.value
+                        : seg.fromLocation,
+                    to:
+                      typeof seg.toLocation === "object"
+                        ? seg.toLocation?.value
+                        : seg.toLocation,
+                  })
+                ),
+                timestamp: new Date().toISOString(),
+              }
+            );
+
+            // Create updated segments by preserving locations from source phase
+            const updatedSegments = [...store.flightSegments].map(
+              (segment, idx) => {
+                // If we have matching segment in source, use those locations
+                if (idx < sourceState.flightSegments.length) {
+                  const sourceSegment = sourceState.flightSegments[idx];
+
+                  return {
+                    ...segment,
+                    // CRITICAL FIX: Directly use the exact source location objects without any processing
+                    // to preserve all properties including German labels
+                    fromLocation:
+                      sourceSegment?.fromLocation || segment.fromLocation,
+                    toLocation: sourceSegment?.toLocation || segment.toLocation,
+                  };
+                }
+
+                return segment;
+              }
+            );
+
+            // For multi-segment in phase 3, we need to get main locations from current store
+            const mainFromLocation =
+              typeof store.fromLocation === "object" &&
+              "value" in (store.fromLocation || {})
+                ? store.fromLocation // Use the complete object to preserve labels
+                : store.fromLocation
+                ? { value: store.fromLocation, label: store.fromLocation }
+                : null;
+
+            const mainToLocation =
+              typeof store.toLocation === "object" &&
+              "value" in (store.toLocation || {})
+                ? store.toLocation // Use the complete object to preserve labels
+                : store.toLocation
+                ? { value: store.toLocation, label: store.toLocation }
+                : null;
+
+            // Check if first segment fromLocation is completely missing
+            if (
+              mainFromLocation &&
+              updatedSegments.length > 0 &&
+              !updatedSegments[0].fromLocation
+            ) {
+              updatedSegments[0] = {
+                ...updatedSegments[0],
+                fromLocation: mainFromLocation,
+              };
+            }
+
+            // Check if last segment toLocation is completely missing
+            if (
+              mainToLocation &&
+              updatedSegments.length > 0 &&
+              !updatedSegments[updatedSegments.length - 1].toLocation
+            ) {
+              updatedSegments[updatedSegments.length - 1] = {
+                ...updatedSegments[updatedSegments.length - 1],
+                toLocation: mainToLocation,
+              };
+            }
+
+            // Ensure intermediate segments have proper from/to locations
+            for (let i = 0; i < updatedSegments.length; i++) {
+              // Copy the toLocation from previous segment to fromLocation if missing
+              if (
+                i > 0 &&
+                !updatedSegments[i].fromLocation &&
+                updatedSegments[i - 1].toLocation
+              ) {
+                updatedSegments[i] = {
+                  ...updatedSegments[i],
+                  fromLocation: updatedSegments[i - 1].toLocation,
+                };
+              }
+
+              // Copy the fromLocation from next segment to toLocation if missing
+              if (
+                i < updatedSegments.length - 1 &&
+                !updatedSegments[i].toLocation &&
+                updatedSegments[i + 1].fromLocation
+              ) {
+                updatedSegments[i] = {
+                  ...updatedSegments[i],
+                  toLocation: updatedSegments[i + 1].fromLocation,
+                };
+              }
+            }
+
+            console.log("=== FlightSegments - After Location Restoration ===", {
+              segments: updatedSegments.map((s, idx) => ({
+                segmentIndex: idx,
+                from:
+                  typeof s.fromLocation === "object"
+                    ? s.fromLocation?.value
+                    : s.fromLocation,
+                to:
+                  typeof s.toLocation === "object"
+                    ? s.toLocation?.value
+                    : s.toLocation,
+                fromType: typeof s.fromLocation,
+                toType: typeof s.toLocation,
+              })),
+              phase: currentPhase,
+              timestamp: new Date().toISOString(),
+            });
+
+            // Save to flight store
+            updateStores({ flightSegments: updatedSegments });
+
+            // Also update localStorage directly for the current phase
+            storageHelpers.save(currentPhase, {
+              flightSegments: updatedSegments,
+            });
+            console.log("=== FlightSegments - Data saved to phase 3 ===", {
+              updatedFields: ["flightSegments"],
+              timestamp: new Date().toISOString(),
+            });
+
+            // Sync with other phases for consistency
+            storageHelpers.save(1, {
+              flightSegments: updatedSegments,
+              fromLocation: store.fromLocation,
+              toLocation: store.toLocation,
+              selectedType: store.selectedType,
+            });
+            console.log("=== FlightSegments - Data synced to phase 1 ===", {
+              updatedFields: [
+                "flightSegments",
+                "fromLocation",
+                "toLocation",
+                "selectedType",
+              ],
+              timestamp: new Date().toISOString(),
+            });
+
+            storageHelpers.save(2, {
+              flightSegments: updatedSegments,
+              fromLocation: store.fromLocation,
+              toLocation: store.toLocation,
+              selectedType: store.selectedType,
+            });
+            console.log("=== FlightSegments - Data synced to phase 2 ===", {
+              updatedFields: [
+                "flightSegments",
+                "fromLocation",
+                "toLocation",
+                "selectedType",
+              ],
+              timestamp: new Date().toISOString(),
+            });
+
+            return; // Exit early after fixing the locations
+          }
+        } catch (error) {
+          console.error("Error restoring locations:", error);
+        }
+      }
+    }
   }, [currentPhase, store?.flightSegments, updateStores]);
 
   // NEW EFFECT: Fix for phase 3 selectedFlight synchronization issue
@@ -1382,12 +1650,6 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
               return {
                 ...segment,
                 selectedFlight: flight,
-                // Also ensure segment date is set
-                date:
-                  segment.date ||
-                  (flight.date
-                    ? safeParseDateString(flight.date) || null
-                    : null),
               };
             }
             return segment;
@@ -1395,35 +1657,82 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
         );
 
         console.log(
-          "=== FlightSegments - Updated segments with flight data ===",
+          "=== FlightSegments - Flights after sync with flightStore ===",
           {
-            updatedSegments: updatedSegments.map((seg: any) => ({
-              hasSelectedFlight: !!seg.selectedFlight,
-              flightId: seg.selectedFlight?.id,
-              flightNumber: seg.selectedFlight?.flightNumber,
-              date:
-                seg.date instanceof Date
-                  ? format(seg.date, "dd.MM.yyyy")
-                  : seg.date,
+            updatedSegments: updatedSegments.map((s: any, i: number) => ({
+              index: i,
+              hasSelectedFlight: !!s.selectedFlight,
+              flightId: s.selectedFlight?.id,
+              flightNumber: s.selectedFlight?.flightNumber,
             })),
             timestamp: new Date().toISOString(),
           }
         );
 
-        // Update the main store
-        updateStores({ flightSegments: updatedSegments });
+        // Update the store with the flights added
+        updateStores({
+          flightSegments: updatedSegments,
+          selectedFlights: flightData.selectedFlights,
+        });
       } catch (error) {
-        console.error("Error updating flight segments:", error);
+        console.error(
+          "Error syncing flights from flightStore to FlightSegments:",
+          error
+        );
       }
-    } else {
+    }
+  }, [currentPhase, mainStore?.flightSegments, flightStore, updateStores]);
+
+  // NEW EFFECT: Ensure direct flights only have one segment in phase 3
+  useEffect(() => {
+    // Only run in phase 3 where we need to ensure correct segment count based on flight type
+    if (currentPhase !== 3 || !store?.flightSegments) return;
+
+    // Check if we need to adjust segments for direct flights
+    if (store.selectedType === "direct" && store.flightSegments.length > 1) {
       console.log(
-        "=== FlightSegments - No flight data found in flightStore for phase 3 ===",
+        "=== FlightSegments - Ensuring direct flight has only one segment ===",
         {
+          before: store.flightSegments.length,
+          after: 1,
+          timestamp: new Date().toISOString(),
+        }
+      );
+
+      // For direct flights, only keep the first segment
+      const updatedSegments = [store.flightSegments[0]];
+
+      // Update the store with the correct number of segments
+      updateStores({ flightSegments: updatedSegments });
+
+      // Also update localStorage
+      storageHelpers.save(currentPhase, {
+        flightSegments: updatedSegments,
+        selectedType: "direct",
+      });
+
+      // Save to flightStore to ensure consistency
+      flightStore.saveFlightData(3, {
+        flightSegments: updatedSegments,
+        selectedType: "direct",
+        timestamp: Date.now(),
+      });
+
+      console.log(
+        "=== FlightSegments - Direct flight segment count adjusted ===",
+        {
+          segmentCount: updatedSegments.length,
           timestamp: new Date().toISOString(),
         }
       );
     }
-  }, [currentPhase, mainStore, flightStore, updateStores]);
+  }, [
+    currentPhase,
+    store?.selectedType,
+    store?.flightSegments,
+    updateStores,
+    flightStore,
+  ]);
 
   const handleFlightNotListed = () => {
     setIsBottomSheetOpen(false);

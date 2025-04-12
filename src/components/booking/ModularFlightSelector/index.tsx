@@ -271,8 +271,108 @@ export const ModularFlightSelector: React.FC<FlightSelectorProps> = (props) => {
     const hasPhase3Data =
       currentPhase === 4 ? false : flightStore.getFlightData(3) !== null;
 
+    // Check if we came from phase 2 with a multi-segment selection
+    let isMultiSegmentFromPhase2 = false;
+    if (currentPhase === 3 && hasPhase2Data) {
+      const phase2Data = flightStore.getFlightData(2);
+      isMultiSegmentFromPhase2 =
+        phase2Data !== null &&
+        phase2Data.selectedType === "multi" &&
+        ((Array.isArray(phase2Data.flightSegments) &&
+          phase2Data.flightSegments.length > 1) ||
+          phase2Data._isMultiSegment === true);
+
+      if (isMultiSegmentFromPhase2 && phase2Data !== null) {
+        console.log(
+          "=== ModularFlightSelector - Early Detection of Multi-segment from Phase 2 ===",
+          {
+            fromLocation: phase2Data.fromLocation,
+            toLocation: phase2Data.toLocation,
+            segmentCount: phase2Data.flightSegments?.length || 0,
+            timestamp: new Date().toISOString(),
+          }
+        );
+
+        // CRITICAL FIX: Immediately ensure phase 2 segments are preserved
+        // This happens before any other data retrieval logic
+        if (phase2Data.flightSegments && phase2Data.flightSegments.length > 1) {
+          // Copy the segments from phase 2 to phase 3
+          localStorage.setItem("_preserveMultiSegmentPhase3", "true");
+          localStorage.setItem("_wasPhase2Multi", "true");
+
+          // Create a deep copy of the segments
+          const preservedSegments = JSON.parse(
+            JSON.stringify(phase2Data.flightSegments)
+          );
+
+          // Make sure the segments are processed correctly
+          const processedSegments = preservedSegments.map((segment: any) => ({
+            fromLocation: segment.fromLocation || null,
+            toLocation: segment.toLocation || null,
+            date: segment.date || null,
+            selectedFlight: segment.selectedFlight || null,
+          }));
+
+          // Save directly to phase 3 in the flight store
+          flightStore.saveFlightData(3, {
+            selectedType: "multi",
+            _isMultiSegment: true,
+            _preserveFlightSegments: true,
+            flightSegments: processedSegments,
+            fromLocation: phase2Data.fromLocation,
+            toLocation: phase2Data.toLocation,
+            timestamp: Date.now(),
+          });
+
+          console.log(
+            "=== ModularFlightSelector - Preserved Phase 2 Segments ===",
+            {
+              segmentCount: processedSegments.length,
+              segmentDetails: processedSegments.map((s: any) => ({
+                fromLoc:
+                  typeof s.fromLocation === "string"
+                    ? s.fromLocation
+                    : s.fromLocation?.value,
+                toLoc:
+                  typeof s.toLocation === "string"
+                    ? s.toLocation
+                    : s.toLocation?.value,
+              })),
+              timestamp: new Date().toISOString(),
+            }
+          );
+
+          // Force hasCurrentPhaseData to true since we've just created the data
+          hasCurrentPhaseData = true;
+        }
+      }
+    }
+
     // Special handling for phase 3 to recover flight selections
     if (currentPhase === 3) {
+      console.log("=== ModularFlightSelector - Phase 3 Initialization ===", {
+        timestamp: new Date().toISOString(),
+      });
+
+      // Check for the multi-segment preservation flag
+      const shouldPreserveMultiSegment =
+        typeof window !== "undefined" &&
+        localStorage.getItem("_preserveMultiSegmentPhase3") === "true";
+
+      if (shouldPreserveMultiSegment) {
+        console.log(
+          "=== ModularFlightSelector - Multi-segment Preservation Flag Detected ===",
+          {
+            timestamp: new Date().toISOString(),
+          }
+        );
+      }
+
+      // For phase 3, we want to preserve the locations from the current phase data
+      // Only fall back to phase 1 if necessary
+      const phase1Data = flightStore.getFlightData(1);
+      const phase2Data = flightStore.getFlightData(2);
+
       // Try to get the saved phase 3 state from local storage first
       let recoveredFlightData = null;
 
@@ -308,6 +408,33 @@ export const ModularFlightSelector: React.FC<FlightSelectorProps> = (props) => {
 
       // If we found valid flight data with selected flights, use it
       if (recoveredFlightData) {
+        // CRITICAL FIX: If we detected multi-segment from Phase 2, preserve it
+        if (isMultiSegmentFromPhase2 && !recoveredFlightData._isMultiSegment) {
+          const originalType = recoveredFlightData.selectedType;
+          recoveredFlightData = {
+            ...recoveredFlightData,
+            selectedType: "multi",
+            _isMultiSegment: true,
+          };
+          console.log(
+            "=== ModularFlightSelector - Preserving multi-segment type from Phase 2 ===",
+            {
+              originalType,
+              newType: "multi",
+              _isMultiSegment: true,
+              isMultiSegmentFromPhase2,
+              timestamp: new Date().toISOString(),
+            }
+          );
+        } else {
+          console.log("=== ModularFlightSelector - Flight Type Status ===", {
+            selectedType: recoveredFlightData.selectedType,
+            _isMultiSegment: recoveredFlightData._isMultiSegment,
+            isMultiSegmentFromPhase2,
+            timestamp: new Date().toISOString(),
+          });
+        }
+
         // If we have a recovery source, make sure to save it to the flightStore
         flightStore.saveFlightData(3, recoveredFlightData);
 
@@ -643,7 +770,48 @@ export const ModularFlightSelector: React.FC<FlightSelectorProps> = (props) => {
 
         // Set flight segments if available
         if (dataToUse.flightSegments && dataToUse.flightSegments.length > 0) {
-          // Ensure all segments have proper location objects
+          // CRITICAL FIX: For Phase 3, ensure we don't lose segments during processing
+          // Check if we're in phase 3 and should preserve multiple segments
+          const preserveMultiSegments =
+            currentPhase === 3 &&
+            (localStorage.getItem("_preserveMultiSegmentPhase3") === "true" ||
+              localStorage.getItem("_wasPhase2Multi") === "true" ||
+              selectedType === "multi" ||
+              dataToUse._isMultiSegment === true);
+
+          // For multi-segment flights, ensure we have at least 2 segments
+          if (preserveMultiSegments && dataToUse.flightSegments.length < 2) {
+            console.log(
+              "=== ModularFlightSelector - Adding missing segments for multi-segment flight ===",
+              {
+                originalCount: dataToUse.flightSegments.length,
+                timestamp: new Date().toISOString(),
+              }
+            );
+
+            // Create a copy and add a second segment if needed
+            const enhancedSegments = [...dataToUse.flightSegments];
+
+            // Add a second segment if we only have one
+            if (enhancedSegments.length === 1) {
+              enhancedSegments.push({
+                fromLocation: enhancedSegments[0].toLocation || null,
+                toLocation: dataToUse.toLocation || null,
+                date: null,
+                selectedFlight: null,
+              });
+            }
+
+            // Update the dataToUse object
+            dataToUse = {
+              ...dataToUse,
+              flightSegments: enhancedSegments,
+              selectedType: "multi",
+              _isMultiSegment: true,
+            };
+          }
+
+          // Now process the segments normally
           const processedSegments = dataToUse.flightSegments.map(
             (segment: any, index: number) => {
               // Process from location
@@ -1321,20 +1489,69 @@ const ModularFlightSelectorContent: React.FC<
     // Special handling for phase 3 - Flight Details
     else if (currentPhase === 3) {
       console.log("=== ModularFlightSelector - Phase 3 Initialization ===", {
-        dataToUse,
         timestamp: new Date().toISOString(),
       });
+
+      // Check for the multi-segment preservation flag
+      const shouldPreserveMultiSegment =
+        typeof window !== "undefined" &&
+        localStorage.getItem("_preserveMultiSegmentPhase3") === "true";
+
+      if (shouldPreserveMultiSegment) {
+        console.log(
+          "=== ModularFlightSelector - Multi-segment Preservation Flag Detected ===",
+          {
+            timestamp: new Date().toISOString(),
+          }
+        );
+      }
 
       // For phase 3, we want to preserve the locations from the current phase data
       // Only fall back to phase 1 if necessary
       const phase1Data = flightStore.getFlightData(1);
+      const phase2Data = flightStore.getFlightData(2);
+
+      // Check if we came from phase 2 with a multi-segment selection
+      let isMultiSegmentFromPhase2 = false;
+
+      if (phase2Data) {
+        isMultiSegmentFromPhase2 =
+          phase2Data.selectedType === "multi" &&
+          ((Array.isArray(phase2Data.flightSegments) &&
+            phase2Data.flightSegments.length > 1) ||
+            phase2Data._isMultiSegment === true);
+
+        if (isMultiSegmentFromPhase2) {
+          console.log(
+            "=== ModularFlightSelector - Detected Multi-segment from Phase 2 ===",
+            {
+              fromLocation: phase2Data.fromLocation,
+              toLocation: phase2Data.toLocation,
+              segmentCount: phase2Data.flightSegments?.length || 0,
+              timestamp: new Date().toISOString(),
+            }
+          );
+
+          // CRITICAL FIX: Immediately enforce multi-segment type in the store to prevent override
+          if (mainStore) {
+            mainStore.setSelectedType("multi");
+
+            // Create a special flag to prevent override during later initialization
+            localStorage.setItem("_preserveMultiSegmentPhase3", "true");
+          }
+        }
+      }
 
       console.log(
         "=== ModularFlightSelector - Phase 3 Using Phase 1 Data ===",
         {
           hasPhase1Data: !!phase1Data,
+          hasPhase2Data: !!phase2Data,
+          isMultiSegmentFromPhase2,
           phase1FromLocation: phase1Data?.fromLocation,
           phase1ToLocation: phase1Data?.toLocation,
+          phase2FromLocation: phase2Data?.fromLocation,
+          phase2ToLocation: phase2Data?.toLocation,
           currentFromLocation: dataToUse?.fromLocation,
           currentToLocation: dataToUse?.toLocation,
           timestamp: new Date().toISOString(),
@@ -1343,8 +1560,72 @@ const ModularFlightSelectorContent: React.FC<
 
       if (mainStore) {
         // Determine if we should use direct or multi based on saved data
-        const flightType =
-          dataToUse?.selectedType || phase1Data?.selectedType || "direct";
+        // CRITICAL FIX: If we came from phase 2 with a multi-segment selection OR
+        // if the preservation flag is set, always use "multi" regardless of dataToUse
+        const shouldUseMultiSegment =
+          isMultiSegmentFromPhase2 ||
+          (typeof window !== "undefined" &&
+            localStorage.getItem("_preserveMultiSegmentPhase3") === "true");
+
+        // NEW FIX: Check if there's an explicit direct flight selection from phase 1
+        // If user has explicitly selected direct in phase 1, we need to respect that over
+        // any automatic multi-segment detection, so we can clear the preservation flag
+        if (
+          phase1Data?.selectedType === "direct" &&
+          typeof window !== "undefined" &&
+          localStorage.getItem("_preserveMultiSegmentPhase3") === "true"
+        ) {
+          localStorage.removeItem("_preserveMultiSegmentPhase3");
+          console.log(
+            "=== ModularFlightSelector - Cleared multi-segment preservation flag ===",
+            {
+              reason: "explicit_direct_selection_from_phase1",
+              timestamp: new Date().toISOString(),
+            }
+          );
+        }
+
+        // Check again for flag after potential removal
+        const preservationFlagActive =
+          typeof window !== "undefined" &&
+          localStorage.getItem("_preserveMultiSegmentPhase3") === "true";
+
+        // If user explicitly selected direct in phase 1, respect that selection
+        // unless we're explicitly preserving multi-segment from phase 2
+        const shouldRespectDirectFromPhase1 =
+          phase1Data?.selectedType === "direct" && !preservationFlagActive;
+
+        const flightType = shouldRespectDirectFromPhase1
+          ? "direct"
+          : shouldUseMultiSegment && preservationFlagActive
+          ? "multi"
+          : dataToUse?.selectedType || phase1Data?.selectedType || "direct";
+
+        console.log("=== ModularFlightSelector - Flight Type Decision ===", {
+          finalType: flightType,
+          isMultiSegmentFromPhase2,
+          shouldRespectDirectFromPhase1,
+          preservationFlagActive,
+          phase1Type: phase1Data?.selectedType,
+          dataToUseType: dataToUse?.selectedType,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Clear any preservation flag if we're explicitly using direct
+        if (
+          flightType === "direct" &&
+          typeof window !== "undefined" &&
+          localStorage.getItem("_preserveMultiSegmentPhase3") === "true"
+        ) {
+          localStorage.removeItem("_preserveMultiSegmentPhase3");
+          console.log(
+            "=== ModularFlightSelector - Cleared multi-segment preservation flag ===",
+            {
+              reason: "explicit_direct_selection",
+              timestamp: new Date().toISOString(),
+            }
+          );
+        }
 
         // Check if we have explicit null values in the segments
         const hasExplicitNullFromLocation =
@@ -1380,7 +1661,8 @@ const ModularFlightSelectorContent: React.FC<
               )
             );
 
-        if (flightType === "direct") {
+        // CRITICAL FIX: Only create direct flight if flightType is direct AND we're not preserving multi-segment from phase 2
+        if (flightType === "direct" && !isMultiSegmentFromPhase2) {
           // For direct flights, create a single segment
           const directSegment = {
             fromLocation: fromLocationObj,
@@ -1423,7 +1705,7 @@ const ModularFlightSelectorContent: React.FC<
             timestamp: Date.now(),
           });
         } else {
-          // For multi-segment flights, use the existing segments if available
+          // For multi-segment flights, use the existing segments if available or force creation of multi-segments
           let multiSegments;
 
           if (
@@ -1458,27 +1740,111 @@ const ModularFlightSelectorContent: React.FC<
                 };
               }
             );
+          } else if (
+            isMultiSegmentFromPhase2 &&
+            phase2Data &&
+            Array.isArray(phase2Data.flightSegments) &&
+            phase2Data.flightSegments.length > 1
+          ) {
+            // We have multi-segment from phase 2 but only one segment in the current data
+            // Use the segments from phase 2
+            multiSegments = phase2Data.flightSegments.map(
+              (segment: any, index: number) => {
+                // Check if this segment has explicit null values
+                const hasNullFromLocation = segment.fromLocation === null;
+                const hasNullToLocation = segment.toLocation === null;
+
+                return {
+                  ...segment,
+                  fromLocation: hasNullFromLocation
+                    ? null
+                    : ensureLocationObject(
+                        segment.fromLocation,
+                        index === 0 ? emptyLocation : emptyLocation
+                      ),
+                  toLocation: hasNullToLocation
+                    ? null
+                    : ensureLocationObject(
+                        segment.toLocation,
+                        index === phase2Data.flightSegments.length - 1
+                          ? emptyLocation
+                          : emptyLocation
+                      ),
+                  selectedFlight: segment.selectedFlight || null,
+                  date: segment.date || null,
+                };
+              }
+            );
+
+            console.log(
+              "=== ModularFlightSelector - Using Phase 2 Multi-segments ===",
+              {
+                segmentCount: multiSegments.length,
+                segments: multiSegments.map((seg: any) => ({
+                  fromLocation:
+                    typeof seg.fromLocation === "string"
+                      ? seg.fromLocation
+                      : seg.fromLocation?.value,
+                  toLocation:
+                    typeof seg.toLocation === "string"
+                      ? seg.toLocation
+                      : seg.toLocation?.value,
+                })),
+                timestamp: new Date().toISOString(),
+              }
+            );
           } else {
-            // Create new segments if none exist
+            // CRITICAL FIX: Create at least two segments for a multi-segment flight
+            // even if isMultiSegmentFromPhase2 is true but phase2Data segments are not available
             const intermediateLocationObj = ensureLocationObject(
               emptyLocation,
               emptyLocation
             );
 
+            // If we're coming from phase 2 with multi-segment, use phase 2 locations if available
+            const sourceFromLocation =
+              isMultiSegmentFromPhase2 && phase2Data?.fromLocation
+                ? phase2Data.fromLocation
+                : fromLocationObj;
+
+            const sourceToLocation =
+              isMultiSegmentFromPhase2 && phase2Data?.toLocation
+                ? phase2Data.toLocation
+                : toLocationObj;
+
             multiSegments = [
               {
-                fromLocation: fromLocationObj,
+                fromLocation: sourceFromLocation,
                 toLocation: intermediateLocationObj,
                 selectedFlight: null,
                 date: null,
               },
               {
                 fromLocation: intermediateLocationObj,
-                toLocation: toLocationObj,
+                toLocation: sourceToLocation,
                 selectedFlight: null,
                 date: null,
               },
             ];
+
+            console.log(
+              "=== ModularFlightSelector - Created new multi-segments ===",
+              {
+                isMultiFromPhase2: isMultiSegmentFromPhase2,
+                segmentCount: multiSegments.length,
+                segments: multiSegments.map((seg: any) => ({
+                  fromLocation:
+                    typeof seg.fromLocation === "string"
+                      ? seg.fromLocation
+                      : seg.fromLocation?.value,
+                  toLocation:
+                    typeof seg.toLocation === "string"
+                      ? seg.toLocation
+                      : seg.toLocation?.value,
+                })),
+                timestamp: new Date().toISOString(),
+              }
+            );
           }
 
           mainStore.setSelectedType("multi");
@@ -2120,6 +2486,7 @@ const ModularFlightSelectorContent: React.FC<
           selectedFlight: null,
           selectedFlights: [],
           _lastUpdate: Date.now(),
+          _isMultiSegment: type === "multi",
         });
 
         // Also update flightStore for all phases 1-3 to ensure consistency
@@ -2131,6 +2498,7 @@ const ModularFlightSelectorContent: React.FC<
               selectedFlight: null,
               selectedFlights: [],
               _lastUpdate: Date.now(),
+              _isMultiSegment: type === "multi",
             });
           }
         });
@@ -2148,9 +2516,24 @@ const ModularFlightSelectorContent: React.FC<
               selectedType: type,
               flightSegments: newSegments,
               selectedFlights: [],
+              _isMultiSegment: type === "multi",
               timestamp: Date.now(),
             })
           );
+
+          // CRITICAL FIX: If this is phase 1 and user has explicitly chosen direct flight,
+          // clear the multi-segment preservation flag to prevent it from being forced to multi in phase 3
+          if (currentPhase === 1 && type === "direct") {
+            localStorage.removeItem("_preserveMultiSegmentPhase3");
+            localStorage.removeItem("_wasPhase2Multi");
+            console.log(
+              "=== ModularFlightSelector - Explicitly cleared multi-segment flags ===",
+              {
+                selectedType: type,
+                timestamp: new Date().toISOString(),
+              }
+            );
+          }
         }
       }
 
