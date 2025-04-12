@@ -803,7 +803,72 @@ export default function FlightDetailsPage() {
               store.setToLocation(phase2State.toLocation);
             }
 
+            // CRITICAL FIX: Explicitly check if Phase 2 was using multi-segment BEFORE doing any other data processing
+            const wasPhase2Multi =
+              phase2State.selectedType === "multi" ||
+              (phase2State.flightSegments &&
+                phase2State.flightSegments.length > 1);
+
+            // Get phase 1 data for direct flight detection
+            const phase1Data = flightStore.getFlightData(1);
+
+            if (wasPhase2Multi) {
+              console.log(
+                "=== CRITICAL FIX: Detected multi-segment in Phase 2 ===",
+                {
+                  selectedType: phase2State.selectedType,
+                  segmentCount: phase2State.flightSegments?.length || 0,
+                  timestamp: new Date().toISOString(),
+                }
+              );
+
+              // Set LOCAL STORAGE flags to ensure persistence
+              localStorage.setItem("_wasPhase2Multi", "true");
+              localStorage.setItem("_preserveMultiSegmentPhase3", "true");
+
+              // Force the store to use multi-segment before saving data
+              store.setSelectedType("multi");
+
+              // Make sure we have at least 2 segments
+              if (
+                !phase2State.flightSegments ||
+                phase2State.flightSegments.length < 2
+              ) {
+                const segments = [...(phase2State.flightSegments || [])];
+
+                // If we have no segments, create a first one with the from location
+                if (segments.length === 0) {
+                  segments.push({
+                    fromLocation: phase2State.fromLocation,
+                    toLocation: null,
+                    date: null,
+                    selectedFlight: null,
+                  });
+                }
+
+                // Always ensure we have a second segment
+                if (segments.length === 1) {
+                  segments.push({
+                    fromLocation: segments[0].toLocation || null,
+                    toLocation: phase2State.toLocation,
+                    date: null,
+                    selectedFlight: null,
+                  });
+                }
+
+                // Set these segments to the store
+                store.setFlightSegments(segments);
+              }
+            }
+
             // Make sure these recovered locations are saved for next time
+            // CRITICAL FIX: Ensure we use the correct selectedType from our detection
+            const finalSelectedType = wasPhase2Multi
+              ? "multi"
+              : phase1Data?.selectedType === "direct"
+              ? "direct"
+              : store.selectedType || phase2State.selectedType || "direct";
+
             const finalData = {
               fromLocation: store.fromLocation || phase2State.fromLocation,
               toLocation: store.toLocation || phase2State.toLocation,
@@ -811,18 +876,27 @@ export default function FlightDetailsPage() {
                 store.flightSegments?.length > 0
                   ? store.flightSegments
                   : phase2State.flightSegments || [],
-              selectedType:
-                store.selectedType || phase2State.selectedType || "direct",
+              selectedType: finalSelectedType,
+              _isMultiSegment: finalSelectedType === "multi",
+              _preserveFlightSegments: finalSelectedType === "multi",
               timestamp: Date.now(),
             };
 
             // Save to both flightStore and localStorage
             flightStore.saveFlightData(3, finalData);
-            localStorage.setItem("phase3State", JSON.stringify(finalData));
+            localStorage.setItem(
+              "phase3State",
+              JSON.stringify({
+                ...finalData,
+                _wasPhase2Multi: wasPhase2Multi,
+              })
+            );
 
             console.log("=== Saved final recovery data ===", {
               hasFromLocation: !!finalData.fromLocation,
               hasToLocation: !!finalData.toLocation,
+              selectedType: finalData.selectedType,
+              _isMultiSegment: finalData._isMultiSegment,
               timestamp: new Date().toISOString(),
             });
           }
@@ -985,6 +1059,12 @@ export default function FlightDetailsPage() {
           ...initialFlightStoreData,
           selectedFlights: updatedSelectedFlights,
           flightSegments: updatedFlightSegments,
+          // Preserve the selectedType from the initial data
+          selectedType: initialFlightStoreData.selectedType,
+          // Set the preserve flag to avoid losing multi-segment information
+          _preserveFlightSegments:
+            initialFlightStoreData.selectedType === "multi",
+          _isMultiSegment: initialFlightStoreData.selectedType === "multi",
           timestamp: Date.now(),
         });
 
@@ -1053,6 +1133,30 @@ export default function FlightDetailsPage() {
 
         // Get current store state
         const currentState = useStore.getState();
+
+        // Check if we came from phase 2 with a multi-segment selection
+        const phase2StateStr = localStorage.getItem("phase2State");
+        let isMultiSegmentFromPhase2 = false;
+
+        if (phase2StateStr) {
+          try {
+            const parsedPhase2State = JSON.parse(phase2StateStr);
+            isMultiSegmentFromPhase2 =
+              parsedPhase2State.selectedType === "multi" &&
+              parsedPhase2State.flightSegments?.length > 1;
+
+            if (isMultiSegmentFromPhase2) {
+              console.log(
+                "=== Detected Forward Navigation from Phase 2 to Phase 3 ===",
+                {
+                  timestamp: new Date().toISOString(),
+                }
+              );
+            }
+          } catch (e) {
+            console.error("Error parsing phase2State:", e);
+          }
+        }
 
         // Check if we need to fetch data from flightStore
         let flightStoreData: {
@@ -1150,12 +1254,33 @@ export default function FlightDetailsPage() {
 
           // Make sure to update the selectedType if it's multi-segment
           if (
-            flightStoreData.selectedType === "multi" &&
-            finalFlightSegments.length > 1
+            (flightStoreData.selectedType === "multi" &&
+              finalFlightSegments.length > 1) ||
+            finalFlightSegments.length > 1 ||
+            isMultiSegmentFromPhase2
           ) {
             // Only update if the current type is not already 'multi'
             if (store.selectedType !== "multi") {
+              console.log(
+                "=== Flight Details - Setting flight type to multi ===",
+                {
+                  reason: isMultiSegmentFromPhase2
+                    ? "phase2_was_multi"
+                    : "has_multiple_segments",
+                  segmentCount: finalFlightSegments.length,
+                  timestamp: new Date().toISOString(),
+                }
+              );
+
               store.setSelectedType("multi");
+
+              // Also ensure that flightStore has the correct type
+              flightStore.saveFlightData(3, {
+                selectedType: "multi",
+                _isMultiSegment: true,
+                _preserveFlightSegments: true,
+                timestamp: Date.now(),
+              });
             }
           }
         }
@@ -1297,6 +1422,178 @@ export default function FlightDetailsPage() {
 
     initializePhase();
   }, [setCurrentPhase, flightStore]);
+
+  // Initialize flight segments when data is available
+  useEffect(() => {
+    if (!flightStore || isInitializedRef.current) return;
+
+    // Get current flight data
+    const currentFlightData = flightStore.getFlightData(3);
+
+    console.log("=== Flight Details - Using Flight Store Segments ===", {
+      segmentCount: currentFlightData?.flightSegments?.length || 0,
+      selectedType: currentFlightData?.selectedType || "unknown",
+      segmentDetails:
+        currentFlightData?.flightSegments?.map((seg: FlightSegmentData) => ({
+          fromLocation:
+            typeof seg.fromLocation === "string"
+              ? seg.fromLocation
+              : seg.fromLocation?.value,
+          toLocation:
+            typeof seg.toLocation === "string"
+              ? seg.toLocation
+              : seg.toLocation?.value,
+        })) || [],
+      timestamp: new Date().toISOString(),
+    });
+
+    // CRITICAL FIX: Check for multi-segment data from Phase 2
+    const checkPhase2MultiSegment = () => {
+      try {
+        const phase2StateStr = localStorage.getItem("phase2State");
+        if (phase2StateStr) {
+          const phase2State = JSON.parse(phase2StateStr);
+          const isMultiFromPhase2 =
+            phase2State.selectedType === "multi" ||
+            (phase2State.flightSegments &&
+              phase2State.flightSegments.length > 1);
+
+          if (isMultiFromPhase2) {
+            console.log(
+              "=== CRITICAL FIX: Detected multi-segment in Phase 2 ===",
+              {
+                selectedType: phase2State.selectedType,
+                segmentCount: phase2State.flightSegments?.length || 0,
+                timestamp: new Date().toISOString(),
+              }
+            );
+
+            // Set a strong preservation flag - this is our definitive signal
+            localStorage.setItem("_wasPhase2Multi", "true");
+            localStorage.setItem("_preserveMultiSegmentPhase3", "true");
+
+            // Force multi-segment in both the store and flightStore
+            store.setSelectedType("multi");
+
+            // CRITICAL FIX: Copy all flight segments from Phase 2 to Phase 3
+            const segments = [...(phase2State.flightSegments || [])];
+
+            // Ensure we have complete segment data, fix any partial segments
+            if (segments.length > 0) {
+              // Clean up segments to ensure they have proper structure
+              const cleanedSegments = segments.map((segment) => ({
+                fromLocation: segment.fromLocation || null,
+                toLocation: segment.toLocation || null,
+                date: segment.date || null,
+                selectedFlight: segment.selectedFlight || null,
+              }));
+
+              // If somehow we only have one segment but it's marked as multi, add a second segment
+              if (cleanedSegments.length === 1) {
+                cleanedSegments.push({
+                  fromLocation: cleanedSegments[0].toLocation || null,
+                  toLocation:
+                    phase2State.toLocation || store.toLocation || null,
+                  date: null,
+                  selectedFlight: null,
+                });
+              }
+
+              // Update store with these segments
+              store.setFlightSegments(cleanedSegments);
+
+              // Save to flight store to ensure consistency across all components
+              flightStore.saveFlightData(3, {
+                selectedType: "multi",
+                _isMultiSegment: true,
+                flightSegments: cleanedSegments,
+                _preserveFlightSegments: true,
+                fromLocation: phase2State.fromLocation || store.fromLocation,
+                toLocation: phase2State.toLocation || store.toLocation,
+                timestamp: Date.now(),
+              });
+
+              console.log(
+                "=== Flight Details - Preserved Phase 2 flight segments ===",
+                {
+                  segmentCount: cleanedSegments.length,
+                  segments: cleanedSegments.map((s) => ({
+                    fromLoc:
+                      typeof s.fromLocation === "string"
+                        ? s.fromLocation
+                        : s.fromLocation?.value,
+                    toLoc:
+                      typeof s.toLocation === "string"
+                        ? s.toLocation
+                        : s.toLocation?.value,
+                  })),
+                  timestamp: new Date().toISOString(),
+                }
+              );
+            } else {
+              // Fallback if no segments found
+              flightStore.saveFlightData(3, {
+                selectedType: "multi",
+                _isMultiSegment: true,
+                _preserveFlightSegments: true,
+                timestamp: Date.now(),
+              });
+            }
+
+            return true;
+          }
+        }
+        return false;
+      } catch (error) {
+        console.error("Error checking Phase 2 multi-segment:", error);
+        return false;
+      }
+    };
+
+    // First check if the preservation flag is already set
+    const preservationFlagSet =
+      localStorage.getItem("_preserveMultiSegmentPhase3") === "true";
+
+    // If flag is set or we detect multi-segment from Phase 2, ensure it's preserved
+    if (preservationFlagSet || checkPhase2MultiSegment()) {
+      // Only create default segments if we don't already have them from Phase 2
+      if ((currentFlightData?.flightSegments?.length || 0) < 2) {
+        const segments = [...(currentFlightData?.flightSegments || [])];
+        if (segments.length === 0) {
+          // Create first segment with from location
+          segments.push({
+            fromLocation: currentFlightData?.fromLocation || store.fromLocation,
+            toLocation: null,
+            date: null,
+            selectedFlight: null,
+          });
+        }
+
+        // Ensure we have a second segment
+        if (segments.length === 1) {
+          // Add second segment with to location
+          segments.push({
+            fromLocation: segments[0].toLocation || null,
+            toLocation: currentFlightData?.toLocation || store.toLocation,
+            date: null,
+            selectedFlight: null,
+          });
+
+          // Update store with these segments
+          store.setFlightSegments(segments);
+
+          // Update flight store to ensure consistency
+          flightStore.saveFlightData(3, {
+            selectedType: "multi",
+            _isMultiSegment: true,
+            flightSegments: segments,
+            _preserveFlightSegments: true,
+            timestamp: Date.now(),
+          });
+        }
+      }
+    }
+  }, [flightStore, store]);
 
   // Fallback effect to ensure locations are loaded from phase2 if needed
   useEffect(() => {
@@ -2606,7 +2903,50 @@ export default function FlightDetailsPage() {
 
     // Get all possible sources with detailed logging
     const sources = [
-      // Current UI state (highest priority)
+      // Phase 2 state (highest priority for multi-segment flights)
+      (() => {
+        const phase2State = localStorage.getItem("phase2State");
+        if (phase2State) {
+          try {
+            const parsedState = JSON.parse(phase2State);
+            if (
+              parsedState.fromLocation &&
+              parsedState.toLocation &&
+              parsedState.selectedType === "multi" &&
+              parsedState.flightSegments &&
+              parsedState.flightSegments.length > 1
+            ) {
+              console.log("=== Store - Found Valid Location Source ===", {
+                source: "phase2State",
+                fromLocation:
+                  typeof parsedState.fromLocation === "string"
+                    ? parsedState.fromLocation
+                    : parsedState.fromLocation?.value,
+                toLocation:
+                  typeof parsedState.toLocation === "string"
+                    ? parsedState.toLocation
+                    : parsedState.toLocation?.value,
+                selectedType: parsedState.selectedType,
+                hasFlightSegments: !!parsedState.flightSegments,
+                segmentCount: parsedState.flightSegments?.length || 0,
+                timestamp: new Date().toISOString(),
+              });
+              return {
+                fromLocation: parsedState.fromLocation,
+                toLocation: parsedState.toLocation,
+                flightSegments: parsedState.flightSegments || [],
+                selectedType: "multi",
+                source: "phase2State",
+              } as LocationSource;
+            }
+          } catch (e) {
+            console.error("Error parsing phase2State:", e);
+          }
+        }
+        return null;
+      })(),
+
+      // Current UI state (next priority)
       (() => {
         // Check if we have current UI state in localStorage
         const currentUIState = localStorage.getItem("currentUIState");
@@ -2636,13 +2976,17 @@ export default function FlightDetailsPage() {
         return null;
       })(),
 
-      // Phase 2 state (second priority)
+      // Phase 2 state (second priority for direct flights)
       (() => {
         const phase2State = localStorage.getItem("phase2State");
         if (phase2State) {
           try {
             const parsedState = JSON.parse(phase2State);
-            if (parsedState.fromLocation && parsedState.toLocation) {
+            if (
+              parsedState.fromLocation &&
+              parsedState.toLocation &&
+              parsedState.selectedType !== "multi"
+            ) {
               return {
                 fromLocation: parsedState.fromLocation,
                 toLocation: parsedState.toLocation,
@@ -2791,261 +3135,80 @@ export default function FlightDetailsPage() {
           typeof validSource.toLocation === "string"
             ? validSource.toLocation
             : validSource.toLocation?.value,
-        selectedType: validSource.selectedType || "direct",
-        hasFlightSegments:
-          Array.isArray(validSource.flightSegments) &&
-          validSource.flightSegments.length > 0,
+        selectedType: validSource.selectedType,
+        hasFlightSegments: !!validSource.flightSegments,
+        segmentCount: validSource.flightSegments?.length || 0,
         timestamp: new Date().toISOString(),
       });
 
-      // Process locations if they're strings
+      // Process the locations to ensure they have the right format
       const processLocation = (
         location: any
       ): (string & LocationLike) | null => {
         if (!location) return null;
-        if (typeof location === "string") {
-          // If it's a simple airport code, create a LocationLike object
-          if (/^[A-Z]{3}$/.test(location)) {
-            return Object.assign(String(location), {
+
+        try {
+          // If it's a string (e.g., "BER"), create a Location object
+          if (typeof location === "string") {
+            console.log("=== processLocation - Airport Code Input ===", {
+              input: location,
+              result: String(location),
+              timestamp: new Date().toISOString(),
+            });
+
+            const locationObj = {
               value: location,
               label: location,
-              description: location,
               city: location,
-              dropdownLabel: location,
-            });
-          }
-          // Only try to parse if it looks like a JSON string
-          try {
-            const parsed = location.startsWith("{")
-              ? JSON.parse(location)
-              : location;
-            return Object.assign(String(parsed.value || location), {
-              value: parsed.value || location,
-              label: parsed.label || location,
-              description: parsed.description || location,
-              city: parsed.city || location,
-              dropdownLabel: parsed.dropdownLabel || location,
-            });
-          } catch (e) {
-            console.error("Error parsing location:", e);
-            return Object.assign(String(location), {
-              value: location,
-              label: location,
               description: location,
-              city: location,
               dropdownLabel: location,
-            });
+            };
+
+            // Use the Object.assign trick to satisfy TS
+            return Object.assign(String(location), locationObj);
           }
+          // If it's already a LocationLike object with a value field
+          else if (location && typeof location === "object" && location.value) {
+            console.log("=== processLocation - Location Object Input ===", {
+              input: location.value,
+              result: String(location.value),
+              timestamp: new Date().toISOString(),
+            });
+
+            // Create a new location object with string as the prototype
+            const locationObj = {
+              value: location.value,
+              label: location.label || location.value,
+              city: location.city || location.value,
+              description: location.description || location.value,
+              dropdownLabel: location.dropdownLabel || location.value,
+            };
+
+            // Use the Object.assign trick to satisfy TS
+            return Object.assign(String(location.value), locationObj);
+          }
+        } catch (error) {
+          console.error("Error processing location:", error);
         }
-        // If it's already an object, convert it to string & LocationLike
-        return Object.assign(String(location.value || ""), {
-          value: location.value || "",
-          label: location.label || "",
-          description: location.description || "",
-          city: location.city || "",
-          dropdownLabel: location.dropdownLabel || "",
-        });
+
+        return null;
       };
 
-      // Process the locations
-      const processedFromLocation = processLocation(validSource.fromLocation);
-      const processedToLocation = processLocation(validSource.toLocation);
-
-      // Process flight segments if available
-      let processedFlightSegments: any[] = [];
-      const hasValidFlightSegments =
-        validSource.flightSegments !== undefined &&
-        validSource.flightSegments !== null &&
-        Array.isArray(validSource.flightSegments) &&
-        validSource.flightSegments.length > 0;
-
-      if (hasValidFlightSegments && validSource.selectedType === "multi") {
-        // We've already checked that flightSegments is an array and has items
-        const segments = validSource.flightSegments as any[];
-        processedFlightSegments = segments.map((segment: any) => ({
-          ...segment,
-          fromLocation: processLocation(segment.fromLocation),
-          toLocation: processLocation(segment.toLocation),
-          date: segment.date ? segment.date : null,
-          selectedFlight: segment.selectedFlight || null,
-        }));
-      } else {
-        // Default to a single segment if no segments are available
-        processedFlightSegments = [
-          {
-            fromLocation: processedFromLocation,
-            toLocation: processedToLocation,
-            date: null,
-            selectedFlight: null,
-          },
-        ];
-      }
-
+      // Process and return the locations
       return {
-        fromLocation: processedFromLocation,
-        toLocation: processedToLocation,
+        fromLocation: processLocation(validSource.fromLocation),
+        toLocation: processLocation(validSource.toLocation),
         selectedType: validSource.selectedType || "direct",
-        flightSegments: processedFlightSegments,
+        flightSegments: validSource.flightSegments || [],
       };
     }
 
-    // If no valid source is found, check if we have any data in the store
-    console.log("=== No valid location source found ===", {
-      timestamp: new Date().toISOString(),
-      availableSources: sources.length,
-    });
-
-    // Try to get data directly from the store as a fallback
-    if (store.fromLocation || store.toLocation) {
-      console.log("=== Using store locations as fallback ===", {
-        fromLocation: store.fromLocation?.value,
-        toLocation: store.toLocation?.value,
-        timestamp: new Date().toISOString(),
-      });
-
-      // Process the locations from the store
-      const processedFromLocation = store.fromLocation
-        ? ensureStringAndLocationLike(store.fromLocation)
-        : null;
-      const processedToLocation = store.toLocation
-        ? ensureStringAndLocationLike(store.toLocation)
-        : null;
-
-      // Use store flight segments if available
-      let processedFlightSegments: any[] = [];
-      if (
-        store.selectedType === "multi" &&
-        store.flightSegments &&
-        store.flightSegments.length > 0
-      ) {
-        processedFlightSegments = store.flightSegments.map((segment) => ({
-          fromLocation: segment.fromLocation
-            ? ensureStringAndLocationLike(segment.fromLocation)
-            : null,
-          toLocation: segment.toLocation
-            ? ensureStringAndLocationLike(segment.toLocation)
-            : null,
-          date: segment.date,
-          selectedFlight: segment.selectedFlight,
-        }));
-      } else {
-        // Default to a single segment
-        processedFlightSegments = [
-          {
-            fromLocation: processedFromLocation,
-            toLocation: processedToLocation,
-            date: null,
-            selectedFlight: null,
-          },
-        ];
-      }
-
-      return {
-        fromLocation: processedFromLocation,
-        toLocation: processedToLocation,
-        selectedType: store.selectedType || "direct",
-        flightSegments: processedFlightSegments,
-      };
-    }
-
-    // If we still don't have valid data, check localStorage directly
-    try {
-      const phase2State = localStorage.getItem("phase2State");
-      if (phase2State) {
-        const parsedState = JSON.parse(phase2State);
-        if (parsedState.fromLocation || parsedState.toLocation) {
-          console.log("=== Using localStorage as last resort ===", {
-            fromLocation:
-              typeof parsedState.fromLocation === "string"
-                ? parsedState.fromLocation
-                : parsedState.fromLocation?.value,
-            toLocation:
-              typeof parsedState.toLocation === "string"
-                ? parsedState.toLocation
-                : parsedState.toLocation?.value,
-            timestamp: new Date().toISOString(),
-          });
-
-          // Process the locations
-          const processLocation = (
-            location: any
-          ): (string & LocationLike) | null => {
-            if (!location) return null;
-            if (typeof location === "string") {
-              return Object.assign(String(location), {
-                value: location,
-                label: location,
-                description: location,
-                city: location,
-                dropdownLabel: location,
-              });
-            }
-            return Object.assign(String(location.value || ""), {
-              value: location.value || "",
-              label: location.label || location.value || "",
-              description: location.description || location.value || "",
-              city: location.city || location.value || "",
-              dropdownLabel: location.dropdownLabel || location.value || "",
-            });
-          };
-
-          const processedFromLocation = processLocation(
-            parsedState.fromLocation
-          );
-          const processedToLocation = processLocation(parsedState.toLocation);
-
-          // Process flight segments if available
-          let processedFlightSegments: any[] = [];
-          if (
-            parsedState.selectedType === "multi" &&
-            parsedState.flightSegments &&
-            parsedState.flightSegments.length > 0
-          ) {
-            processedFlightSegments = parsedState.flightSegments.map(
-              (segment: any) => ({
-                fromLocation: processLocation(segment.fromLocation),
-                toLocation: processLocation(segment.toLocation),
-                date: segment.date,
-                selectedFlight: segment.selectedFlight,
-              })
-            );
-          } else {
-            // Default to a single segment
-            processedFlightSegments = [
-              {
-                fromLocation: processedFromLocation,
-                toLocation: processedToLocation,
-                date: null,
-                selectedFlight: null,
-              },
-            ];
-          }
-
-          return {
-            fromLocation: processedFromLocation,
-            toLocation: processedToLocation,
-            selectedType: parsedState.selectedType || "direct",
-            flightSegments: processedFlightSegments,
-          };
-        }
-      }
-    } catch (error) {
-      console.error("Error parsing localStorage data:", error);
-    }
-
-    // If all else fails, return null values
+    // Fall back to null values if no valid source is found
     return {
       fromLocation: null,
       toLocation: null,
       selectedType: "direct",
-      flightSegments: [
-        {
-          fromLocation: null,
-          toLocation: null,
-          date: null,
-          selectedFlight: null,
-        },
-      ],
+      flightSegments: [],
     };
   };
 
