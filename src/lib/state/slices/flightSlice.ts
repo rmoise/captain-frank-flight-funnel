@@ -1,8 +1,13 @@
-import type { Flight } from '@/types/store';
-import type { LocationLike } from '@/types/location';
-import { validateFlightSelection } from '../validationHelpers';
-import type { StoreState, FlightSegment, ValidationStep, FlightSlice as CoreFlightSlice } from '../types';
-import type { ValidationStore } from './validationSlice';
+import type { Flight } from "@/types/store";
+import type { LocationLike } from "@/types/location";
+import { validateFlightSelection } from "../validationHelpers";
+import type {
+  StoreState,
+  FlightSegment,
+  ValidationStep,
+  FlightSlice as CoreFlightSlice,
+} from "../types";
+import type { ValidationStore } from "./validationSlice";
 
 // Use the core FlightSlice type to ensure consistency
 export type FlightSlice = CoreFlightSlice;
@@ -12,16 +17,22 @@ const createStateUpdate = (
   state: ValidationStore & FlightSlice,
   updates: Partial<FlightSlice>
 ): Partial<StoreState> => {
-  const fromLocationValue = asLocationLike(updates.fromLocation ?? state.fromLocation);
-  const toLocationValue = asLocationLike(updates.toLocation ?? state.toLocation);
+  const fromLocationValue = asLocationLike(
+    updates.fromLocation ?? state.fromLocation
+  );
+  const toLocationValue = asLocationLike(
+    updates.toLocation ?? state.toLocation
+  );
 
   // Process segments to ensure correct typing
-  const processedSegments = (updates.flightSegments || state.flightSegments).map(segment => ({
+  const processedSegments = (
+    updates.flightSegments || state.flightSegments
+  ).map((segment) => ({
     ...segment,
     fromLocation: asLocationLike(segment.fromLocation),
     toLocation: asLocationLike(segment.toLocation),
     date: segment.date instanceof Date ? segment.date : null,
-    selectedFlight: segment.selectedFlight
+    selectedFlight: segment.selectedFlight,
   }));
 
   const newState = {
@@ -30,14 +41,24 @@ const createStateUpdate = (
     flightSegments: processedSegments,
     fromLocation: fromLocationValue,
     toLocation: toLocationValue,
-    selectedDate: updates.selectedDate instanceof Date ? updates.selectedDate : state.selectedDate,
+    selectedDate:
+      updates.selectedDate instanceof Date
+        ? updates.selectedDate
+        : state.selectedDate,
     _lastUpdate: Date.now(),
     hasValidLocations: !!(fromLocationValue && toLocationValue),
-    hasValidFlights: !!(updates.selectedFlights && updates.selectedFlights.length > 0 || state.selectedFlights.length > 0),
+    hasValidFlights: !!(
+      (updates.selectedFlights && updates.selectedFlights.length > 0) ||
+      state.selectedFlights.length > 0
+    ),
   } as unknown as Partial<StoreState>;
 
   const isValid = validateFlightSelection(state);
-  const validationUpdate = createValidationUpdate(state, isValid, state.currentPhase);
+  const validationUpdate = createValidationUpdate(
+    state,
+    isValid,
+    state.currentPhase
+  );
 
   return {
     ...newState,
@@ -61,12 +82,12 @@ const createValidationUpdate = (
       },
     },
     completedSteps: isValid
-      ? Array.from(new Set([...state.completedSteps, currentPhase])).sort(
+      ? (Array.from(new Set([...state.completedSteps, currentPhase])).sort(
           (a, b) => a - b
-        ) as ValidationStep[]
-      : state.completedSteps.filter(
+        ) as ValidationStep[])
+      : (state.completedSteps.filter(
           (step) => step !== currentPhase
-        ) as ValidationStep[],
+        ) as ValidationStep[]),
   } as Partial<StoreState>;
 };
 
@@ -76,13 +97,17 @@ const asLocationLike = (location: unknown): (string & LocationLike) | null => {
 
   // If it's already a string & LocationLike object, return as is
   if (
-    typeof location === 'object' &&
+    typeof location === "object" &&
     location !== null &&
-    'value' in location &&
-    typeof (location as LocationLike).value === 'string'
+    "value" in location &&
+    typeof (location as LocationLike).value === "string"
   ) {
     const typedLocation = location as LocationLike;
-    const value = typedLocation.value || typedLocation.label || typedLocation.description || '';
+    const value =
+      typedLocation.value ||
+      typedLocation.label ||
+      typedLocation.description ||
+      "";
     return {
       ...typedLocation,
       value,
@@ -92,10 +117,10 @@ const asLocationLike = (location: unknown): (string & LocationLike) | null => {
   }
 
   // If it's a string, try to parse it as JSON first
-  if (typeof location === 'string') {
+  if (typeof location === "string") {
     try {
       const parsed = JSON.parse(location);
-      if (typeof parsed === 'object' && parsed !== null && 'value' in parsed) {
+      if (typeof parsed === "object" && parsed !== null && "value" in parsed) {
         return asLocationLike(parsed); // Recursively handle parsed object
       }
       // If parsing succeeds but doesn't give us a location object,
@@ -119,102 +144,180 @@ const asLocationLike = (location: unknown): (string & LocationLike) | null => {
 };
 
 // Helper function to process location data consistently
-export const processLocation = (location: unknown): (string & LocationLike) | null => {
+export const processLocation = (
+  location: unknown
+): (string & LocationLike) | null => {
   if (!location) return null;
 
   // If it's already a string & LocationLike object, ensure all properties are preserved
   if (
-    typeof location === 'object' &&
+    typeof location === "object" &&
     location !== null &&
-    'value' in location &&
-    typeof (location as LocationLike).value === 'string'
+    "value" in location &&
+    typeof (location as LocationLike).value === "string"
   ) {
     const typedLocation = location as LocationLike;
-    const value = typedLocation.value || '';
+    const value = typedLocation.value || "";
 
-    // Create a new string object with LocationLike properties
-    const result = Object.assign(String(value), {
-      value,
-      label: typedLocation.label || value,
-      description: typedLocation.description || value,
-      city: typedLocation.city || value,
-      dropdownLabel: typedLocation.dropdownLabel || value,
-      toString: () => value,
-      valueOf: () => value,
-    } as LocationLike);
+    // Extract all original properties we need to preserve
+    const {
+      label = value,
+      description = value,
+      city = value,
+      dropdownLabel = value,
+      // Extract any other LocationLike properties
+      ...otherProps
+    } = typedLocation;
 
-    // Log the processed location
-    console.log('=== processLocation - Object Input ===', {
-      input: location,
-      result,
-      timestamp: new Date().toISOString()
+    // Instead of using Object.assign on a String object, create a custom object
+    // with all required properties that also behaves like a string
+    const safeProps = Object.entries(otherProps)
+      .filter(([key]) => !["toString", "valueOf"].includes(key))
+      .reduce((obj, [key, val]) => ({ ...obj, [key]: val }), {});
+
+    // Create a wrapper object that will convert to string when needed
+    const result = Object.create(String.prototype, {
+      ...Object.getOwnPropertyDescriptors({
+        ...safeProps,
+        value,
+        label,
+        description,
+        city,
+        dropdownLabel,
+        length: { value: value.length, writable: false, configurable: true },
+        toString: function () {
+          return value;
+        },
+        valueOf: function () {
+          return value;
+        },
+      }),
+      // Define primitive value for the string behavior
+      [Symbol.toPrimitive]: {
+        value: function () {
+          return value;
+        },
+        writable: true,
+        configurable: true,
+      },
     });
 
-    return result;
+    // Log the processed location
+    console.log("=== processLocation - Object Input ===", {
+      input: location,
+      result,
+      timestamp: new Date().toISOString(),
+    });
+
+    return result as string & LocationLike;
   }
 
   // If it's a string, handle it appropriately
-  if (typeof location === 'string') {
+  if (typeof location === "string") {
     const value = location.trim();
 
-    // If it's a simple airport code, create a LocationLike object
+    // If it's a simple airport code, create a LocationLike object with proper string behavior
     if (/^[A-Z]{3}$/.test(value)) {
-      const result = Object.assign(String(value), {
+      const result = Object.create(String.prototype, {
+        ...Object.getOwnPropertyDescriptors({
+          value,
+          label: value,
+          description: value,
+          city: value,
+          dropdownLabel: value,
+          length: { value: value.length, writable: false, configurable: true },
+          toString: {
+            value: function () {
+              return value;
+            },
+            writable: true,
+            configurable: true,
+          },
+          valueOf: {
+            value: function () {
+              return value;
+            },
+            writable: true,
+            configurable: true,
+          },
+        }),
+        [Symbol.toPrimitive]: {
+          value: function () {
+            return value;
+          },
+          writable: true,
+          configurable: true,
+        },
+      });
+
+      // Log the processed location
+      console.log("=== processLocation - Airport Code Input ===", {
+        input: location,
+        result,
+        timestamp: new Date().toISOString(),
+      });
+
+      return result as string & LocationLike;
+    }
+
+    // Only try to parse if it looks like a JSON string
+    if (value.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(value);
+        return processLocation(parsed); // Recursively process parsed object
+      } catch (e) {
+        console.error("Error parsing location string:", e);
+      }
+    }
+
+    // If all else fails, create a basic location object from the string
+    const result = Object.create(String.prototype, {
+      ...Object.getOwnPropertyDescriptors({
         value,
         label: value,
         description: value,
         city: value,
         dropdownLabel: value,
-        toString: () => value,
-        valueOf: () => value,
-      } as LocationLike);
-
-      // Log the processed location
-      console.log('=== processLocation - Airport Code Input ===', {
-        input: location,
-        result,
-        timestamp: new Date().toISOString()
-      });
-
-      return result;
-    }
-
-    // Only try to parse if it looks like a JSON string
-    if (value.startsWith('{')) {
-      try {
-        const parsed = JSON.parse(value);
-        return processLocation(parsed); // Recursively process parsed object
-      } catch (e) {
-        console.error('Error parsing location string:', e);
-      }
-    }
-
-    // If all else fails, create a basic location object from the string
-    const result = Object.assign(String(value), {
-      value,
-      label: value,
-      description: value,
-      city: value,
-      dropdownLabel: value,
-      toString: () => value,
-      valueOf: () => value,
-    } as LocationLike);
-
-    // Log the processed location
-    console.log('=== processLocation - String Input ===', {
-      input: location,
-      result,
-      timestamp: new Date().toISOString()
+        length: { value: value.length, writable: false, configurable: true },
+        toString: {
+          value: function () {
+            return value;
+          },
+          writable: true,
+          configurable: true,
+        },
+        valueOf: {
+          value: function () {
+            return value;
+          },
+          writable: true,
+          configurable: true,
+        },
+      }),
+      [Symbol.toPrimitive]: {
+        value: function () {
+          return value;
+        },
+        writable: true,
+        configurable: true,
+      },
     });
 
-    return result;
+    // Log the processed location
+    console.log("=== processLocation - String Input ===", {
+      input: location,
+      result,
+      timestamp: new Date().toISOString(),
+    });
+
+    return result as string & LocationLike;
   }
 
   // Log unhandled input type
-  console.warn('=== processLocation - Unhandled Input Type ===', {
+  console.warn("=== processLocation - Unhandled Input Type ===", {
     input: location,
     type: typeof location,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 
   return null;
@@ -222,7 +325,7 @@ export const processLocation = (location: unknown): (string & LocationLike) | nu
 
 export interface FlightActions {
   setFlightState: (updates: Partial<FlightSlice>) => void;
-  setSelectedType: (type: 'direct' | 'multi') => void;
+  setSelectedType: (type: "direct" | "multi") => void;
   setFromLocation: (location: LocationLike | null) => void;
   setToLocation: (location: LocationLike | null) => void;
   setSelectedDate: (date: Date | null) => void;
@@ -242,7 +345,9 @@ export interface FlightActions {
 }
 
 export const createFlightSlice = (
-  set: (fn: (state: ValidationStore & FlightSlice) => Partial<StoreState>) => void,
+  set: (
+    fn: (state: ValidationStore & FlightSlice) => Partial<StoreState>
+  ) => void,
   get: () => ValidationStore & FlightSlice
 ): FlightActions => ({
   setFlightState: (updates) => {
@@ -251,12 +356,14 @@ export const createFlightSlice = (
     const toLocationValue = asLocationLike(updates.toLocation);
 
     // Process segments to ensure correct typing
-    const processedSegments = (updates.flightSegments || state.flightSegments).map(segment => ({
+    const processedSegments = (
+      updates.flightSegments || state.flightSegments
+    ).map((segment) => ({
       ...segment,
       fromLocation: asLocationLike(segment.fromLocation),
       toLocation: asLocationLike(segment.toLocation),
       date: segment.date,
-      selectedFlight: segment.selectedFlight
+      selectedFlight: segment.selectedFlight,
     }));
 
     const newState = {
@@ -274,7 +381,11 @@ export const createFlightSlice = (
     } as Partial<StoreState>;
 
     const isValid = validateFlightSelection(state);
-    const validationUpdate = createValidationUpdate(state, isValid, state.currentPhase);
+    const validationUpdate = createValidationUpdate(
+      state,
+      isValid,
+      state.currentPhase
+    );
 
     set(() => ({
       ...newState,
@@ -307,7 +418,7 @@ export const createFlightSlice = (
   setSelectedFlight: (flight) => {
     const state = get();
 
-    if (state.selectedType === 'direct') {
+    if (state.selectedType === "direct") {
       const updatedDirectFlight = {
         ...state.directFlight,
         selectedFlight: flight,
@@ -364,10 +475,12 @@ export const createFlightSlice = (
           3: isValid,
         },
         completedSteps: isValid
-          ? Array.from(new Set([...state.completedSteps, 3 as ValidationStep])).sort(
-              (a, b) => a - b
-            ) as ValidationStep[]
-          : state.completedSteps.filter((step) => step !== 3) as ValidationStep[],
+          ? (Array.from(
+              new Set([...state.completedSteps, 3 as ValidationStep])
+            ).sort((a, b) => a - b) as ValidationStep[])
+          : (state.completedSteps.filter(
+              (step) => step !== 3
+            ) as ValidationStep[]),
       }));
     }
   },
@@ -378,17 +491,17 @@ export const createFlightSlice = (
       const cleanedFlights = flights.filter((flight): flight is Flight => {
         if (!flight) return false;
         return (
-          typeof flight.id === 'string' &&
-          typeof flight.flightNumber === 'string' &&
-          typeof flight.airline === 'string' &&
-          typeof flight.departureCity === 'string' &&
-          typeof flight.arrivalCity === 'string' &&
-          typeof flight.departureTime === 'string' &&
-          typeof flight.arrivalTime === 'string' &&
-          typeof flight.departure === 'string' &&
-          typeof flight.arrival === 'string' &&
-          typeof flight.duration === 'string' &&
-          typeof flight.date === 'string'
+          typeof flight.id === "string" &&
+          typeof flight.flightNumber === "string" &&
+          typeof flight.airline === "string" &&
+          typeof flight.departureCity === "string" &&
+          typeof flight.arrivalCity === "string" &&
+          typeof flight.departureTime === "string" &&
+          typeof flight.arrivalTime === "string" &&
+          typeof flight.departure === "string" &&
+          typeof flight.arrival === "string" &&
+          typeof flight.duration === "string" &&
+          typeof flight.date === "string"
         );
       });
 
@@ -458,7 +571,7 @@ export const createFlightSlice = (
 
     // Ensure we have at least 2 segments and no more than 4 segments in multi mode
     let updatedSegments = segments;
-    if (state.selectedType === 'multi') {
+    if (state.selectedType === "multi") {
       if (segments.length < 2) {
         updatedSegments = [
           ...segments,
@@ -576,15 +689,17 @@ export const createFlightSlice = (
       toLocation: toLocationValue,
     };
 
-    set(() => createStateUpdate(state, {
-      directFlight: updatedDirectFlight,
-      _lastUpdate: Date.now(),
-    }));
+    set(() =>
+      createStateUpdate(state, {
+        directFlight: updatedDirectFlight,
+        _lastUpdate: Date.now(),
+      })
+    );
   },
 });
 
 export const initialFlightState: FlightSlice = {
-  selectedType: 'direct',
+  selectedType: "direct",
   directFlight: {
     fromLocation: null,
     toLocation: null,

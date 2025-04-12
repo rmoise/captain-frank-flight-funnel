@@ -145,14 +145,27 @@ export const useFlightStore = create<FlightStore>()(
                   : Array.isArray(safeData.flightSegments)
                   ? safeData.flightSegments
                   : JSON.parse(JSON.stringify(currentPhaseData.flightSegments)),
-              fromLocation: processLocation(
-                safeData.fromLocation ||
-                  JSON.parse(JSON.stringify(currentPhaseData.fromLocation))
-              ),
-              toLocation: processLocation(
-                safeData.toLocation ||
-                  JSON.parse(JSON.stringify(currentPhaseData.toLocation))
-              ),
+              // Special handling for phase 1 to prevent nulling out locations
+              fromLocation:
+                phase === 1 &&
+                !safeData.fromLocation &&
+                currentPhaseData.fromLocation
+                  ? processLocation(currentPhaseData.fromLocation) // Keep existing in phase 1
+                  : processLocation(
+                      safeData.fromLocation ||
+                        JSON.parse(
+                          JSON.stringify(currentPhaseData.fromLocation)
+                        )
+                    ),
+              toLocation:
+                phase === 1 &&
+                !safeData.toLocation &&
+                currentPhaseData.toLocation
+                  ? processLocation(currentPhaseData.toLocation) // Keep existing in phase 1
+                  : processLocation(
+                      safeData.toLocation ||
+                        JSON.parse(JSON.stringify(currentPhaseData.toLocation))
+                    ),
               timestamp: data.timestamp || Date.now(),
               _isMultiSegment:
                 data._isMultiSegment !== undefined
