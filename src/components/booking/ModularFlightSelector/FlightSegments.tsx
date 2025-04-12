@@ -2473,11 +2473,14 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
       date,
     };
 
+    // Store ISO date string for localStorage serialization consistency
+    const isoDate = date ? date.toISOString() : null;
+
     console.log("=== handleDateChange - Updated Segment ===", {
       updatedSegment: {
         fromLocation: segments[segmentIndex].fromLocation?.value,
         toLocation: segments[segmentIndex].toLocation?.value,
-        date: date ? format(date, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") : "null",
+        date: isoDate,
       },
       segmentDateType: date ? typeof date : "null",
       phase: currentPhase,
@@ -2489,7 +2492,7 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
       // Update phase4Store
       phase4Store.batchUpdate({
         flightSegments: segments,
-        selectedDate: date,
+        selectedDate: date, // Use the date object directly
         _lastUpdate: Date.now(),
       });
 
@@ -2519,31 +2522,57 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
       // Normal handling for phases 1-3
       store.setFlightSegments(segments);
 
-      // Update flightStore with phase marker
+      // Update flightStore with phase marker and ensure we save the date object directly
       flightStore.saveFlightData(currentPhase, {
         flightSegments: segments,
-        selectedDate: date ? format(date, "yyyy-MM-dd") : null,
+        selectedDate: isoDate,
         timestamp: Date.now(),
       });
     }
 
-    // Clear the date flag in localStorage to avoid restoration
-    clearDateFlags(currentPhase, segmentIndex);
-
-    // When date is selected in multi-segment mode, update local cache
-    if (store?.selectedType === "multi") {
-      const segmentDateKey = `dateCache_phase${currentPhase}_segment${segmentIndex}`;
-      if (date) {
-        localStorage.setItem(segmentDateKey, date.toISOString());
-      } else {
-        localStorage.removeItem(segmentDateKey);
+    // Only clear flags when date is explicitly set to null
+    if (date === null) {
+      clearDateFlags(currentPhase, segmentIndex);
+    } else {
+      // Remove any clear flags since we now have a date
+      const dateClearFlagKey = `dateWasCleared_phase${currentPhase}_segment${segmentIndex}`;
+      if (localStorage.getItem(dateClearFlagKey)) {
+        localStorage.removeItem(dateClearFlagKey);
+        console.log(`=== handleDateChange - Removed clear date flag ===`, {
+          key: dateClearFlagKey,
+          timestamp: new Date().toISOString(),
+        });
       }
+    }
+
+    // When date is selected, update local cache with explicit ISO format
+    const segmentDateKey = `dateCache_phase${currentPhase}_segment${segmentIndex}`;
+    const segmentDateExactKey = `exactDate_phase${currentPhase}_segment${segmentIndex}`;
+
+    if (date) {
+      // Store in a consistent ISO format for better persistence
+      localStorage.setItem(segmentDateKey, date.toISOString());
+      localStorage.setItem(segmentDateExactKey, date.toISOString());
+
+      console.log("=== handleDateChange - Saved date to localStorage ===", {
+        segmentIndex,
+        date: date.toISOString(),
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      localStorage.removeItem(segmentDateKey);
+      localStorage.removeItem(segmentDateExactKey);
     }
 
     // Update date picker state
     if (date) {
       const newParsedDates = [...parsedDates];
       newParsedDates[segmentIndex] = date;
+      setParsedDates(newParsedDates);
+    } else if (parsedDates[segmentIndex]) {
+      // Clear from parsed dates if previously had a value
+      const newParsedDates = [...parsedDates];
+      newParsedDates[segmentIndex] = null;
       setParsedDates(newParsedDates);
     }
 
@@ -3949,6 +3978,37 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
                         })()}
                         label={t.flightSelector.labels.departureDate}
                         disabled={disabled}
+                        onClear={() => {
+                          console.log(
+                            "=== DatePicker - Date Cleared Explicitly ===",
+                            {
+                              index,
+                              phase: currentPhase,
+                              timestamp: new Date().toISOString(),
+                            }
+                          );
+
+                          // 1. Update parsed dates array to reflect cleared state
+                          const newParsedDates = [...parsedDates];
+                          newParsedDates[index] = null;
+                          setParsedDates(newParsedDates);
+
+                          // 2. Set the cleared flag in localStorage
+                          const dateClearFlagKey = `dateWasCleared_phase${currentPhase}_segment${index}`;
+                          localStorage.setItem(dateClearFlagKey, "true");
+
+                          // 3. Call handleDateChange with null to update all stores
+                          handleDateChange(null, index);
+
+                          // 4. Clear date cache for multi-city segments
+                          if (store?.selectedType === "multi") {
+                            const segmentDateKey = `dateCache_phase${currentPhase}_segment${index}`;
+                            localStorage.removeItem(segmentDateKey);
+                          }
+
+                          // 5. Force validation
+                          validate();
+                        }}
                       />
                     }
                     dateFormat="dd.MM.yyyy"

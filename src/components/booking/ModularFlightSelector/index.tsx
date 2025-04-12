@@ -1424,12 +1424,26 @@ const ModularFlightSelectorContent: React.FC<
     // Special handling for phase 1
     if (currentPhase === 1) {
       console.log("=== ModularFlightSelector - Phase 1 Initialization ===", {
-        dataToUse,
         timestamp: new Date().toISOString(),
       });
 
-      // Initialize with empty locations instead of hardcoded defaults
-      if (mainStore) {
+      // Try to get existing phase 1 data from localStorage or flightStore
+      const existingPhase1State = localStorage.getItem("phase1State");
+      const existingPhase1Data = existingPhase1State
+        ? JSON.parse(existingPhase1State)
+        : flightStore.getFlightData(1);
+
+      const hasExistingLocations =
+        existingPhase1Data &&
+        (existingPhase1Data.fromLocation ||
+          existingPhase1Data.toLocation ||
+          (existingPhase1Data.flightSegments &&
+            existingPhase1Data.flightSegments.length > 0 &&
+            (existingPhase1Data.flightSegments[0].fromLocation ||
+              existingPhase1Data.flightSegments[0].toLocation)));
+
+      // Only initialize with empty locations if no existing locations are found
+      if (mainStore && !hasExistingLocations) {
         // Determine if we should use direct or multi based on saved data
         const flightType = dataToUse?.selectedType || "direct";
 
@@ -1484,6 +1498,20 @@ const ModularFlightSelectorContent: React.FC<
             }
           );
         }
+      } else if (mainStore && hasExistingLocations) {
+        // If we have existing phase 1 data, use it but don't reset the locations
+        console.log(
+          "=== ModularFlightSelector - Preserving existing Phase 1 locations ===",
+          {
+            fromLocation:
+              existingPhase1Data.fromLocation?.value ||
+              existingPhase1Data.flightSegments?.[0]?.fromLocation?.value,
+            toLocation:
+              existingPhase1Data.toLocation?.value ||
+              existingPhase1Data.flightSegments?.[0]?.toLocation?.value,
+            timestamp: new Date().toISOString(),
+          }
+        );
       }
     }
     // Special handling for phase 3 - Flight Details

@@ -27,6 +27,7 @@ import { formatDateForDisplay } from "@/utils/dateUtils";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { useMemo } from "react";
 import { UserIcon } from "@heroicons/react/24/solid";
+import { format, isValid } from "date-fns";
 
 // Define FlightData interface here based on the structure used in the file
 interface FlightData {
@@ -60,30 +61,179 @@ const ensureStringAndLocationLike = (
   location: LocationLike | null
 ): (string & LocationLike) | null => {
   if (!location) return null;
-  const stringLocation = location.value || "";
-  return Object.assign(String(stringLocation), {
-    value: location.value || "",
-    label: location.label || "",
-    description: location.description || "",
-    city: location.city || "",
-    dropdownLabel: location.dropdownLabel || "",
-  }) as string & LocationLike;
+
+  try {
+    // If it's a string, handle directly
+    if (typeof location === "string") {
+      const value = String(location).trim();
+      // Create a wrapper object that will convert to string when needed
+      const result = Object.create(String.prototype, {
+        ...Object.getOwnPropertyDescriptors({
+          value,
+          label: value,
+          city: value,
+          description: value,
+          dropdownLabel: value,
+          length: { value: value.length, writable: false, configurable: true },
+          toString: {
+            value: function () {
+              return value;
+            },
+            writable: true,
+            configurable: true,
+          },
+          valueOf: {
+            value: function () {
+              return value;
+            },
+            writable: true,
+            configurable: true,
+          },
+        }),
+        [Symbol.toPrimitive]: {
+          value: function () {
+            return value;
+          },
+          writable: true,
+          configurable: true,
+        },
+      });
+
+      return result as string & LocationLike;
+    }
+
+    // For objects with a value property
+    const value = String(location.value || "").trim();
+
+    // Extract all original properties we need to preserve
+    const {
+      label = value,
+      description = value,
+      city = value,
+      dropdownLabel = value,
+      // Extract any other LocationLike properties
+      ...otherProps
+    } = location;
+
+    // Filter out any methods that would conflict with String prototype
+    const safeProps = Object.entries(otherProps)
+      .filter(([key]) => !["toString", "valueOf"].includes(key))
+      .reduce((obj, [key, val]) => ({ ...obj, [key]: val }), {});
+
+    // Create a wrapper object that will convert to string when needed
+    const result = Object.create(String.prototype, {
+      ...Object.getOwnPropertyDescriptors({
+        ...safeProps,
+        value,
+        label,
+        description,
+        city,
+        dropdownLabel,
+        length: { value: value.length, writable: false, configurable: true },
+        toString: {
+          value: function () {
+            return value;
+          },
+          writable: true,
+          configurable: true,
+        },
+        valueOf: {
+          value: function () {
+            return value;
+          },
+          writable: true,
+          configurable: true,
+        },
+      }),
+      [Symbol.toPrimitive]: {
+        value: function () {
+          return value;
+        },
+        writable: true,
+        configurable: true,
+      },
+    });
+
+    return result as string & LocationLike;
+  } catch (error) {
+    console.error("Error in ensureStringAndLocationLike:", error);
+    return null;
+  }
+};
+
+// Helper function to clear deleted flights when page is reloaded
+const clearDeletedFlightsOnLoad = () => {
+  if (typeof window !== "undefined") {
+    // Check if this is a page reload rather than a navigation
+    const isPageReload =
+      !localStorage.getItem("navigating_to_phase3") &&
+      !localStorage.getItem("navigating_back_to_phase2");
+
+    if (isPageReload) {
+      console.log(
+        "=== Flight Details - Page reload detected, clearing deleted flights ===",
+        {
+          timestamp: new Date().toISOString(),
+        }
+      );
+
+      // Clear the deleted flights tracking to prevent issues on reload
+      localStorage.removeItem("phase3_deleted_flights");
+    }
+  }
 };
 
 // Helper function to parse dates in flight segments
 const parseFlightSegmentDates = (segments: any[]): any[] => {
   if (!segments || !Array.isArray(segments)) return segments;
 
-  return segments.map((segment) => {
+  return segments.map((segment, index) => {
     if (!segment) return segment;
 
-    // Convert date strings to Date objects
-    let parsedDate = null;
-    let parsedSelectedFlight = segment.selectedFlight
-      ? { ...segment.selectedFlight }
-      : null;
+    // Check if date was explicitly cleared for this segment
+    const dateClearFlagKey = `dateWasCleared_phase3_segment${index}`;
+    const wasDateExplicitlyCleared =
+      localStorage.getItem(dateClearFlagKey) === "true";
 
-    if (segment.date) {
+    // Log when we're respecting a cleared date flag
+    if (wasDateExplicitlyCleared) {
+      console.log(
+        `=== parseFlightSegmentDates - Respecting cleared date flag for segment ${index} ===`,
+        {
+          timestamp: new Date().toISOString(),
+        }
+      );
+    }
+
+    // First try to get date from our special exactDate localStorage key (highest priority)
+    let parsedDate = null;
+    const exactDateKey = `exactDate_phase3_segment${index}`;
+    const exactDateStr = localStorage.getItem(exactDateKey);
+
+    if (exactDateStr && !wasDateExplicitlyCleared) {
+      try {
+        const exactDate = new Date(exactDateStr);
+        if (!isNaN(exactDate.getTime())) {
+          console.log(
+            `=== parseFlightSegmentDates - Using exact date from localStorage for segment ${index} ===`,
+            {
+              exactDateStr,
+              parsedDate: exactDate,
+              timestamp: new Date().toISOString(),
+            }
+          );
+          parsedDate = exactDate;
+        }
+      } catch (error) {
+        console.error(
+          `Error parsing exact date from localStorage for segment ${index}:`,
+          error
+        );
+      }
+    }
+
+    // If we don't have a parsedDate yet, try segment.date
+    if (!parsedDate && segment.date && !wasDateExplicitlyCleared) {
       try {
         if (typeof segment.date === "string") {
           // Handle dd.MM.yyyy format
@@ -91,7 +241,7 @@ const parseFlightSegmentDates = (segments: any[]): any[] => {
             const [day, month, year] = segment.date.split(".").map(Number);
             parsedDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
           }
-          // Handle ISO date format
+          // Handle ISO format
           else if (segment.date.includes("T") || segment.date.includes("-")) {
             parsedDate = new Date(segment.date);
           }
@@ -120,8 +270,43 @@ const parseFlightSegmentDates = (segments: any[]): any[] => {
       }
     }
 
-    // Also parse selectedFlight date if present
-    if (parsedSelectedFlight && parsedSelectedFlight.date) {
+    // As a fallback, try the segment-specific cache from localStorage
+    if (!parsedDate && !wasDateExplicitlyCleared) {
+      const dateCacheKey = `dateCache_phase3_segment${index}`;
+      const cachedDateStr = localStorage.getItem(dateCacheKey);
+
+      if (cachedDateStr) {
+        try {
+          const cachedDate = new Date(cachedDateStr);
+          if (!isNaN(cachedDate.getTime())) {
+            console.log(
+              `=== parseFlightSegmentDates - Using cached date from localStorage for segment ${index} ===`,
+              {
+                cachedDateStr,
+                parsedDate: cachedDate,
+                timestamp: new Date().toISOString(),
+              }
+            );
+            parsedDate = cachedDate;
+          }
+        } catch (error) {
+          console.error(
+            `Error parsing cached date from localStorage for segment ${index}:`,
+            error
+          );
+        }
+      }
+    }
+
+    // Also parse selectedFlight date if present and date wasn't explicitly cleared
+    let parsedSelectedFlight = segment.selectedFlight
+      ? { ...segment.selectedFlight }
+      : null;
+    if (
+      parsedSelectedFlight &&
+      parsedSelectedFlight.date &&
+      !wasDateExplicitlyCleared
+    ) {
       try {
         if (typeof parsedSelectedFlight.date === "string") {
           let parsedFlightDate = null;
@@ -134,7 +319,7 @@ const parseFlightSegmentDates = (segments: any[]): any[] => {
               Date.UTC(year, month - 1, day, 12, 0, 0, 0)
             );
           }
-          // Handle ISO date format
+          // Handle ISO format
           else if (
             parsedSelectedFlight.date.includes("T") ||
             parsedSelectedFlight.date.includes("-")
@@ -161,9 +346,31 @@ const parseFlightSegmentDates = (segments: any[]): any[] => {
           parsedSelectedFlight.date
         );
       }
+    } else if (wasDateExplicitlyCleared && parsedSelectedFlight) {
+      // If date was explicitly cleared, also clear the selectedFlight date
+      parsedSelectedFlight = {
+        ...parsedSelectedFlight,
+        date: null,
+      };
+      console.log(
+        `=== parseFlightSegmentDates - Clearing selectedFlight date for segment ${index} due to cleared flag ===`,
+        {
+          timestamp: new Date().toISOString(),
+        }
+      );
     }
 
-    // We explicitly don't set a fallback date per user request
+    // If we have a date from exactDateKey but no date in segment, or segment date was cleared
+    // prefer the exactDateKey version
+    if (parsedDate && (!segment.date || wasDateExplicitlyCleared)) {
+      console.log(
+        `=== parseFlightSegmentDates - Setting segment date from localStorage for segment ${index} ===`,
+        {
+          parsedDate,
+          timestamp: new Date().toISOString(),
+        }
+      );
+    }
 
     return {
       ...segment,
@@ -235,6 +442,9 @@ export default function FlightDetailsPage() {
       // Skip initialization if already initialized
       if (dataLoaded) return;
 
+      // Clear deleted flights on page reload to prevent losing segments
+      clearDeletedFlightsOnLoad();
+
       // Try to get phase 3 state from localStorage
       let storedPhase3State = null;
       let storedFlightStoreData = null;
@@ -281,119 +491,65 @@ export default function FlightDetailsPage() {
               if (sharedFlightData.flightSegments?.length > 0) {
                 const processedSegments = sharedFlightData.flightSegments.map(
                   (segment: any) => {
-                    // Parse segment date
-                    let parsedDate = null;
+                    // Process date field to ensure it's a valid Date object
                     if (segment.date) {
-                      try {
-                        if (typeof segment.date === "string") {
-                          // Handle DD.MM.YYYY format
-                          if (segment.date.match(/^\d{2}\.\d{2}\.\d{4}$/)) {
+                      // Try parsing the date if it's a string
+                      if (typeof segment.date === "string") {
+                        // For ISO format (most reliable)
+                        if (
+                          segment.date.includes("T") ||
+                          segment.date.includes("-")
+                        ) {
+                          try {
+                            const parsed = new Date(segment.date);
+                            if (isValid(parsed)) {
+                              segment.date = parsed;
+                              console.log(
+                                "=== Flight Details - Parsed ISO date from shared data ===",
+                                {
+                                  original: segment.date,
+                                  parsed: format(parsed, "yyyy-MM-dd"),
+                                  timestamp: new Date().toISOString(),
+                                }
+                              );
+                            }
+                          } catch (e) {
+                            console.warn("Failed to parse date:", segment.date);
+                          }
+                        }
+                        // For DD.MM.YYYY format
+                        else if (segment.date.match(/^\d{2}\.\d{2}\.\d{4}$/)) {
+                          try {
                             const [day, month, year] = segment.date
                               .split(".")
                               .map(Number);
-                            parsedDate = new Date(
-                              Date.UTC(year, month - 1, day, 12, 0, 0, 0)
-                            );
-                            console.log(
-                              `Parsed DD.MM.YYYY date: ${segment.date} to:`,
-                              parsedDate
-                            );
-                          }
-                          // Handle ISO format
-                          else if (
-                            segment.date.includes("T") ||
-                            segment.date.includes("-")
-                          ) {
-                            parsedDate = new Date(segment.date);
-                            console.log(
-                              `Parsed ISO date: ${segment.date} to:`,
-                              parsedDate
-                            );
-                          }
-                        } else if (segment.date instanceof Date) {
-                          parsedDate = segment.date;
-                        }
-                      } catch (error) {
-                        console.error("Error parsing segment date:", error);
-                      }
-                    }
-
-                    // Parse selected flight date if present
-                    let selectedFlight = segment.selectedFlight
-                      ? { ...segment.selectedFlight }
-                      : null;
-                    if (selectedFlight && selectedFlight.date) {
-                      try {
-                        if (typeof selectedFlight.date === "string") {
-                          // Handle DD.MM.YYYY format
-                          if (
-                            selectedFlight.date.match(/^\d{2}\.\d{2}\.\d{4}$/)
-                          ) {
-                            const [day, month, year] = selectedFlight.date
-                              .split(".")
-                              .map(Number);
-                            const flightDate = new Date(
-                              Date.UTC(year, month - 1, day, 12, 0, 0, 0)
-                            );
-                            selectedFlight.date = flightDate;
-                            console.log(
-                              `Parsed selected flight DD.MM.YYYY date: ${selectedFlight.date} to:`,
-                              flightDate
-                            );
-                          }
-                          // Handle ISO format
-                          else if (
-                            selectedFlight.date.includes("T") ||
-                            selectedFlight.date.includes("-")
-                          ) {
-                            const flightDate = new Date(selectedFlight.date);
-                            selectedFlight.date = flightDate;
-                            console.log(
-                              `Parsed selected flight ISO date: ${selectedFlight.date} to:`,
-                              flightDate
-                            );
+                            const parsed = new Date(year, month - 1, day);
+                            if (isValid(parsed)) {
+                              segment.date = parsed;
+                              console.log(
+                                "=== Flight Details - Parsed DD.MM.YYYY date from shared data ===",
+                                {
+                                  original: segment.date,
+                                  parsed: format(parsed, "yyyy-MM-dd"),
+                                  timestamp: new Date().toISOString(),
+                                }
+                              );
+                            }
+                          } catch (e) {
+                            console.warn("Failed to parse date:", segment.date);
                           }
                         }
-                      } catch (error) {
-                        console.error("Error parsing flight date:", error);
                       }
                     }
-
-                    // If the segment has no date but the flight does, use the flight's date
-                    if (!parsedDate && selectedFlight?.date instanceof Date) {
-                      parsedDate = selectedFlight.date;
-                      console.log("Using flight date for segment:", parsedDate);
-                    }
-
-                    // Handle locations if they're strings
-                    const fromLocation =
-                      typeof segment.fromLocation === "string"
-                        ? {
-                            value: segment.fromLocation,
-                            label: segment.fromLocation,
-                            city: segment.fromLocation,
-                            description: segment.fromLocation,
-                            dropdownLabel: segment.fromLocation,
-                          }
-                        : segment.fromLocation;
-
-                    const toLocation =
-                      typeof segment.toLocation === "string"
-                        ? {
-                            value: segment.toLocation,
-                            label: segment.toLocation,
-                            city: segment.toLocation,
-                            description: segment.toLocation,
-                            dropdownLabel: segment.toLocation,
-                          }
-                        : segment.toLocation;
 
                     return {
                       ...segment,
-                      fromLocation,
-                      toLocation,
-                      date: parsedDate,
-                      selectedFlight,
+                      fromLocation: ensureStringAndLocationLike(
+                        segment.fromLocation
+                      ),
+                      toLocation: ensureStringAndLocationLike(
+                        segment.toLocation
+                      ),
                     };
                   }
                 );
@@ -675,6 +831,65 @@ export default function FlightDetailsPage() {
         console.error("Error during data recovery:", error);
       }
 
+      // Check if phase 2 has multi-segment that we need to preserve
+      try {
+        const phase2StateStr = localStorage.getItem("phase2State");
+        if (phase2StateStr) {
+          const phase2State = JSON.parse(phase2StateStr);
+          if (
+            phase2State?.selectedType === "multi" &&
+            phase2State?.flightSegments?.length > 1 &&
+            (!storedPhase3State?.flightSegments ||
+              storedPhase3State.flightSegments.length <
+                phase2State.flightSegments.length)
+          ) {
+            console.log(
+              "=== Flight Details - Found multi-segment in Phase 2 ===",
+              {
+                phase2SegmentCount: phase2State.flightSegments.length,
+                phase3SegmentCount:
+                  storedPhase3State?.flightSegments?.length || 0,
+                timestamp: new Date().toISOString(),
+              }
+            );
+
+            // Process phase2 segments (with dates and locations)
+            const processedSegments = parseFlightSegmentDates(
+              phase2State.flightSegments
+            );
+
+            // Create a new combined state using phase2 segments but preserving any data from phase3
+            const combinedState = {
+              ...storedPhase3State,
+              selectedType: "multi",
+              flightSegments: processedSegments,
+              _preserveFlightSegments: true,
+              _lastUpdate: Date.now(),
+            };
+
+            // Update storedPhase3State with this combined data
+            storedPhase3State = combinedState;
+
+            // Save the combined state back to localStorage and flightStore
+            localStorage.setItem("phase3State", JSON.stringify(combinedState));
+            flightStore.saveFlightData(3, {
+              ...combinedState,
+              timestamp: Date.now(),
+            });
+
+            console.log(
+              "=== Flight Details - Preserved multi-segments from Phase 2 ===",
+              {
+                segmentCount: processedSegments.length,
+                timestamp: new Date().toISOString(),
+              }
+            );
+          }
+        }
+      } catch (error) {
+        console.error("Error preserving multi-segment flights:", error);
+      }
+
       // Now prioritize which data source to use based on completeness
       // We prefer flightStore data if it has selected flights
       if (
@@ -792,15 +1007,140 @@ export default function FlightDetailsPage() {
               }
             );
 
-            // Recovery: update the store with any locations from phase2
+            // Define a helper to ensure consistent location processing
+            const processAndSetLocation = (
+              locationValue: any,
+              setLocationFn: (location: any) => void
+            ) => {
+              // Handle string locations
+              if (typeof locationValue === "string") {
+                const value = locationValue.trim();
+                // Create a properly extended string object
+                const locationObj = Object.create(String.prototype, {
+                  ...Object.getOwnPropertyDescriptors({
+                    value,
+                    label: value,
+                    city: value,
+                    description: value,
+                    dropdownLabel: value,
+                    length: {
+                      value: value.length,
+                      writable: false,
+                      configurable: true,
+                    },
+                    toString: {
+                      value: function () {
+                        return value;
+                      },
+                      writable: true,
+                      configurable: true,
+                    },
+                    valueOf: {
+                      value: function () {
+                        return value;
+                      },
+                      writable: true,
+                      configurable: true,
+                    },
+                  }),
+                  [Symbol.toPrimitive]: {
+                    value: function () {
+                      return value;
+                    },
+                    writable: true,
+                    configurable: true,
+                  },
+                });
+                setLocationFn(locationObj);
+                return locationObj;
+              }
+              // Handle location objects
+              else if (
+                locationValue &&
+                typeof locationValue === "object" &&
+                locationValue.value
+              ) {
+                const value = locationValue.value.trim();
+
+                // Extract properties
+                const {
+                  label = value,
+                  description = value,
+                  city = value,
+                  dropdownLabel = value,
+                  ...otherProps
+                } = locationValue;
+
+                // Filter out any methods that would conflict with String prototype
+                const safeProps = Object.entries(otherProps)
+                  .filter(([key]) => !["toString", "valueOf"].includes(key))
+                  .reduce((obj, [key, val]) => ({ ...obj, [key]: val }), {});
+
+                // Create a proper location object
+                const locationObj = Object.create(String.prototype, {
+                  ...Object.getOwnPropertyDescriptors({
+                    ...safeProps,
+                    value,
+                    label,
+                    description,
+                    city,
+                    dropdownLabel,
+                    length: {
+                      value: value.length,
+                      writable: false,
+                      configurable: true,
+                    },
+                    toString: {
+                      value: function () {
+                        return value;
+                      },
+                      writable: true,
+                      configurable: true,
+                    },
+                    valueOf: {
+                      value: function () {
+                        return value;
+                      },
+                      writable: true,
+                      configurable: true,
+                    },
+                  }),
+                  [Symbol.toPrimitive]: {
+                    value: function () {
+                      return value;
+                    },
+                    writable: true,
+                    configurable: true,
+                  },
+                });
+                setLocationFn(locationObj);
+                return locationObj;
+              }
+              return null;
+            };
+
+            // Process fromLocation if needed
+            let processedFromLocation = null;
             if (phase2State?.fromLocation && !store.fromLocation) {
               console.log("=== Final fromLocation recovery from phase2 ===");
-              store.setFromLocation(phase2State.fromLocation);
+              processedFromLocation = processAndSetLocation(
+                phase2State.fromLocation,
+                (loc) => store.setFromLocation(loc)
+              );
+            } else if (store.fromLocation) {
+              processedFromLocation = store.fromLocation;
             }
 
+            // Process toLocation if needed
+            let processedToLocation = null;
             if (phase2State?.toLocation && !store.toLocation) {
               console.log("=== Final toLocation recovery from phase2 ===");
-              store.setToLocation(phase2State.toLocation);
+              processedToLocation = processAndSetLocation(
+                phase2State.toLocation,
+                (loc) => store.setToLocation(loc)
+              );
+            } else if (store.toLocation) {
+              processedToLocation = store.toLocation;
             }
 
             // CRITICAL FIX: Explicitly check if Phase 2 was using multi-segment BEFORE doing any other data processing
@@ -839,7 +1179,8 @@ export default function FlightDetailsPage() {
                 // If we have no segments, create a first one with the from location
                 if (segments.length === 0) {
                   segments.push({
-                    fromLocation: phase2State.fromLocation,
+                    fromLocation:
+                      processedFromLocation || phase2State.fromLocation,
                     toLocation: null,
                     date: null,
                     selectedFlight: null,
@@ -850,7 +1191,7 @@ export default function FlightDetailsPage() {
                 if (segments.length === 1) {
                   segments.push({
                     fromLocation: segments[0].toLocation || null,
-                    toLocation: phase2State.toLocation,
+                    toLocation: processedToLocation || phase2State.toLocation,
                     date: null,
                     selectedFlight: null,
                   });
@@ -870,27 +1211,23 @@ export default function FlightDetailsPage() {
               : store.selectedType || phase2State.selectedType || "direct";
 
             const finalData = {
-              fromLocation: store.fromLocation || phase2State.fromLocation,
-              toLocation: store.toLocation || phase2State.toLocation,
+              fromLocation:
+                processedFromLocation ||
+                store.fromLocation ||
+                phase2State.fromLocation,
+              toLocation:
+                processedToLocation ||
+                store.toLocation ||
+                phase2State.toLocation,
               flightSegments:
-                store.flightSegments?.length > 0
-                  ? store.flightSegments
-                  : phase2State.flightSegments || [],
+                store.flightSegments || phase2State.flightSegments || [],
               selectedType: finalSelectedType,
-              _isMultiSegment: finalSelectedType === "multi",
-              _preserveFlightSegments: finalSelectedType === "multi",
+              _isMultiSegment: wasPhase2Multi,
+              _preserveFlightSegments: true,
               timestamp: Date.now(),
             };
 
-            // Save to both flightStore and localStorage
             flightStore.saveFlightData(3, finalData);
-            localStorage.setItem(
-              "phase3State",
-              JSON.stringify({
-                ...finalData,
-                _wasPhase2Multi: wasPhase2Multi,
-              })
-            );
 
             console.log("=== Saved final recovery data ===", {
               hasFromLocation: !!finalData.fromLocation,
@@ -1450,103 +1787,172 @@ export default function FlightDetailsPage() {
     // CRITICAL FIX: Check for multi-segment data from Phase 2
     const checkPhase2MultiSegment = () => {
       try {
+        // Check if we need to ensure multi-segment data is properly preserved
         const phase2StateStr = localStorage.getItem("phase2State");
+
         if (phase2StateStr) {
           const phase2State = JSON.parse(phase2StateStr);
-          const isMultiFromPhase2 =
-            phase2State.selectedType === "multi" ||
-            (phase2State.flightSegments &&
-              phase2State.flightSegments.length > 1);
 
-          if (isMultiFromPhase2) {
+          console.log("=== Checking Phase 2 State for Multi-Segment Data ===", {
+            phase2SelectedType: phase2State?.selectedType,
+            phase2SegmentCount: phase2State?.flightSegments?.length,
+            phase3SegmentCount: store?.flightSegments?.length,
+            timestamp: new Date().toISOString(),
+          });
+
+          if (
+            phase2State?.selectedType === "multi" &&
+            phase2State?.flightSegments?.length > 1 &&
+            (!store?.flightSegments ||
+              store.flightSegments.length < phase2State.flightSegments.length)
+          ) {
             console.log(
               "=== CRITICAL FIX: Detected multi-segment in Phase 2 ===",
               {
                 selectedType: phase2State.selectedType,
-                segmentCount: phase2State.flightSegments?.length || 0,
+                segmentCount: phase2State.flightSegments.length,
+                phase3SegmentCount: store?.flightSegments?.length,
                 timestamp: new Date().toISOString(),
               }
             );
 
-            // Set a strong preservation flag - this is our definitive signal
-            localStorage.setItem("_wasPhase2Multi", "true");
-            localStorage.setItem("_preserveMultiSegmentPhase3", "true");
+            // Process dates in phase2State segments
+            const parsedSegments = phase2State.flightSegments.map(
+              (segment: any, index: number) => {
+                // Check if date was explicitly cleared for this segment
+                const dateClearFlagKey = `dateWasCleared_phase3_segment${index}`;
+                const wasDateExplicitlyCleared =
+                  localStorage.getItem(dateClearFlagKey) === "true";
 
-            // Force multi-segment in both the store and flightStore
-            store.setSelectedType("multi");
+                // Parse segment date if it wasn't explicitly cleared
+                let parsedDate = null;
+                if (segment.date && !wasDateExplicitlyCleared) {
+                  try {
+                    if (typeof segment.date === "string") {
+                      // Handle dd.MM.yyyy format
+                      if (segment.date.match(/^\d{2}\.\d{2}\.\d{4}$/)) {
+                        const [day, month, year] = segment.date
+                          .split(".")
+                          .map(Number);
+                        parsedDate = new Date(
+                          Date.UTC(year, month - 1, day, 12, 0, 0, 0)
+                        );
+                      }
+                      // Handle ISO format
+                      else if (
+                        segment.date.includes("T") ||
+                        segment.date.includes("-")
+                      ) {
+                        parsedDate = new Date(segment.date);
+                      }
+                    } else if (segment.date instanceof Date) {
+                      parsedDate = segment.date;
+                    }
+                  } catch (error) {
+                    console.error("Error parsing date:", error);
+                  }
+                } else if (wasDateExplicitlyCleared) {
+                  console.log(
+                    `=== Phase 2 to 3 Migration - Respecting cleared date flag for segment ${index} ===`,
+                    { timestamp: new Date().toISOString() }
+                  );
+                }
 
-            // CRITICAL FIX: Copy all flight segments from Phase 2 to Phase 3
-            const segments = [...(phase2State.flightSegments || [])];
+                return {
+                  ...segment,
+                  date: parsedDate,
+                };
+              }
+            );
 
-            // Ensure we have complete segment data, fix any partial segments
-            if (segments.length > 0) {
-              // Clean up segments to ensure they have proper structure
-              const cleanedSegments = segments.map((segment) => ({
-                fromLocation: segment.fromLocation || null,
-                toLocation: segment.toLocation || null,
-                date: segment.date || null,
-                selectedFlight: segment.selectedFlight || null,
-              }));
+            // Get the current segments
+            let currentSegments = store?.flightSegments || [];
 
-              // If somehow we only have one segment but it's marked as multi, add a second segment
-              if (cleanedSegments.length === 1) {
-                cleanedSegments.push({
-                  fromLocation: cleanedSegments[0].toLocation || null,
-                  toLocation:
-                    phase2State.toLocation || store.toLocation || null,
-                  date: null,
-                  selectedFlight: null,
-                });
+            // If we already have some segments, try to preserve their data while ensuring
+            // we have the correct number of segments
+            if (currentSegments.length > 0) {
+              // Create a new array with all segments from phase 2
+              const updatedSegments = [...parsedSegments];
+
+              // For any segments that exist in both arrays, preserve the data from current segments
+              // particularly dates that may have been set in phase 3
+              for (
+                let i = 0;
+                i < Math.min(currentSegments.length, updatedSegments.length);
+                i++
+              ) {
+                if (currentSegments[i]?.date) {
+                  updatedSegments[i] = {
+                    ...updatedSegments[i],
+                    date: currentSegments[i].date,
+                  };
+                }
+
+                if (currentSegments[i]?.selectedFlight) {
+                  updatedSegments[i] = {
+                    ...updatedSegments[i],
+                    selectedFlight: currentSegments[i].selectedFlight,
+                  };
+                }
               }
 
-              // Update store with these segments
-              store.setFlightSegments(cleanedSegments);
-
-              // Save to flight store to ensure consistency across all components
-              flightStore.saveFlightData(3, {
-                selectedType: "multi",
-                _isMultiSegment: true,
-                flightSegments: cleanedSegments,
-                _preserveFlightSegments: true,
-                fromLocation: phase2State.fromLocation || store.fromLocation,
-                toLocation: phase2State.toLocation || store.toLocation,
-                timestamp: Date.now(),
-              });
-
-              console.log(
-                "=== Flight Details - Preserved Phase 2 flight segments ===",
-                {
-                  segmentCount: cleanedSegments.length,
-                  segments: cleanedSegments.map((s) => ({
-                    fromLoc:
-                      typeof s.fromLocation === "string"
-                        ? s.fromLocation
-                        : s.fromLocation?.value,
-                    toLoc:
-                      typeof s.toLocation === "string"
-                        ? s.toLocation
-                        : s.toLocation?.value,
-                  })),
-                  timestamp: new Date().toISOString(),
-                }
-              );
+              // Use the updated segments
+              currentSegments = updatedSegments;
             } else {
-              // Fallback if no segments found
-              flightStore.saveFlightData(3, {
-                selectedType: "multi",
-                _isMultiSegment: true,
-                _preserveFlightSegments: true,
-                timestamp: Date.now(),
-              });
+              // If there are no current segments, use all the segments from phase 2
+              currentSegments = parsedSegments;
             }
 
-            return true;
+            // Update the current phase store
+            store.batchUpdateWizardState({
+              selectedType: "multi",
+              flightSegments: currentSegments,
+              _lastUpdate: Date.now(),
+            });
+
+            // Save to flightStore with a preserve flag
+            flightStore.saveFlightData(3, {
+              flightSegments: currentSegments,
+              selectedType: "multi",
+              fromLocation: store.fromLocation,
+              toLocation: store.toLocation,
+              timestamp: Date.now(),
+              _preserveFlightSegments: true,
+              _isMultiSegment: true,
+            });
+
+            // Also save to localStorage for redundancy
+            localStorage.setItem(
+              "phase3State",
+              JSON.stringify({
+                flightSegments: currentSegments,
+                selectedType: "multi",
+                fromLocation: store.fromLocation,
+                toLocation: store.toLocation,
+                _preserveFlightSegments: true,
+                _isMultiSegment: true,
+                timestamp: Date.now(),
+              })
+            );
+
+            console.log("=== Saved final recovery data ===", {
+              hasFromLocation: !!store.fromLocation,
+              hasToLocation: !!store.toLocation,
+              selectedType: "multi",
+              _isMultiSegment: true,
+              segmentCount: currentSegments.length,
+              timestamp: new Date().toISOString(),
+            });
+
+            // Trigger a re-render by updating the state
+            setTimeout(() => {
+              setDataLoaded(false);
+              setDataLoaded(true);
+            }, 0);
           }
         }
-        return false;
       } catch (error) {
-        console.error("Error checking Phase 2 multi-segment:", error);
-        return false;
+        console.error("Error in checkPhase2MultiSegment:", error);
       }
     };
 
@@ -1611,29 +2017,186 @@ export default function FlightDetailsPage() {
         if (phase2StateStr) {
           const phase2State = JSON.parse(phase2StateStr);
 
+          // Process the locations to ensure they have the right format
+          const processRecoveredLocation = (
+            location: any
+          ): (string & LocationLike) | null => {
+            if (!location) return null;
+
+            try {
+              // If it's a string (e.g., "BER"), create a Location object
+              if (typeof location === "string") {
+                console.log(
+                  "=== Final location recovery - Airport Code Input ===",
+                  {
+                    input: location,
+                    result: String(location),
+                    timestamp: new Date().toISOString(),
+                  }
+                );
+
+                const value = location.trim();
+                const result = Object.create(String.prototype, {
+                  ...Object.getOwnPropertyDescriptors({
+                    value,
+                    label: value,
+                    city: value,
+                    description: value,
+                    dropdownLabel: value,
+                    length: {
+                      value: value.length,
+                      writable: false,
+                      configurable: true,
+                    },
+                    toString: {
+                      value: function () {
+                        return value;
+                      },
+                      writable: true,
+                      configurable: true,
+                    },
+                    valueOf: {
+                      value: function () {
+                        return value;
+                      },
+                      writable: true,
+                      configurable: true,
+                    },
+                  }),
+                  [Symbol.toPrimitive]: {
+                    value: function () {
+                      return value;
+                    },
+                    writable: true,
+                    configurable: true,
+                  },
+                });
+
+                return result as string & LocationLike;
+              }
+              // If it's already a LocationLike object with a value field
+              else if (
+                location &&
+                typeof location === "object" &&
+                location.value
+              ) {
+                console.log(
+                  "=== Final location recovery - Location Object Input ===",
+                  {
+                    input: location.value,
+                    result: String(location.value),
+                    timestamp: new Date().toISOString(),
+                  }
+                );
+
+                const value = location.value.trim();
+
+                // Extract all original properties we need to preserve
+                const {
+                  label = value,
+                  description = value,
+                  city = value,
+                  dropdownLabel = value,
+                  // Extract any other LocationLike properties
+                  ...otherProps
+                } = location;
+
+                // Filter out any methods that would conflict with String prototype
+                const safeProps = Object.entries(otherProps)
+                  .filter(([key]) => !["toString", "valueOf"].includes(key))
+                  .reduce((obj, [key, val]) => ({ ...obj, [key]: val }), {});
+
+                // Create a wrapper object that will convert to string when needed
+                const result = Object.create(String.prototype, {
+                  ...Object.getOwnPropertyDescriptors({
+                    ...safeProps,
+                    value,
+                    label,
+                    description,
+                    city,
+                    dropdownLabel,
+                    length: {
+                      value: value.length,
+                      writable: false,
+                      configurable: true,
+                    },
+                    toString: {
+                      value: function () {
+                        return value;
+                      },
+                      writable: true,
+                      configurable: true,
+                    },
+                    valueOf: {
+                      value: function () {
+                        return value;
+                      },
+                      writable: true,
+                      configurable: true,
+                    },
+                  }),
+                  [Symbol.toPrimitive]: {
+                    value: function () {
+                      return value;
+                    },
+                    writable: true,
+                    configurable: true,
+                  },
+                });
+
+                return result as string & LocationLike;
+              }
+            } catch (error) {
+              console.error(
+                "Error in final location recovery processing:",
+                error
+              );
+            }
+
+            return null;
+          };
+
           if (phase2State.fromLocation && !store.fromLocation) {
-            console.log(
-              "Recovering fromLocation from phase2State in fallback effect"
+            console.log("=== Final fromLocation recovery from phase2 ===");
+            const processedFromLocation = processRecoveredLocation(
+              phase2State.fromLocation
             );
-            store.setFromLocation(phase2State.fromLocation);
+            if (processedFromLocation) {
+              store.setFromLocation(processedFromLocation);
+            }
           }
 
           if (phase2State.toLocation && !store.toLocation) {
-            console.log(
-              "Recovering toLocation from phase2State in fallback effect"
+            console.log("=== Final toLocation recovery from phase2 ===");
+            const processedToLocation = processRecoveredLocation(
+              phase2State.toLocation
             );
-            store.setToLocation(phase2State.toLocation);
+            if (processedToLocation) {
+              store.setToLocation(processedToLocation);
+            }
           }
 
           // Also ensure this data is saved in flightStore for next time
           flightStore.saveFlightData(3, {
-            fromLocation: phase2State.fromLocation || store.fromLocation,
-            toLocation: phase2State.toLocation || store.toLocation,
+            fromLocation:
+              store.fromLocation ||
+              processRecoveredLocation(phase2State.fromLocation),
+            toLocation:
+              store.toLocation ||
+              processRecoveredLocation(phase2State.toLocation),
             flightSegments:
               flightSegments.length > 0
                 ? flightSegments
                 : phase2State.flightSegments,
             timestamp: Date.now(),
+          });
+
+          console.log("=== Saved final recovery data ===", {
+            hasFromLocation: !!store.fromLocation,
+            hasToLocation: !!store.toLocation,
+            selectedType: phase2State.selectedType || "direct",
+            _isMultiSegment: phase2State.selectedType === "multi",
+            timestamp: new Date().toISOString(),
           });
         }
       } catch (error) {
@@ -3156,16 +3719,44 @@ export default function FlightDetailsPage() {
               timestamp: new Date().toISOString(),
             });
 
-            const locationObj = {
-              value: location,
-              label: location,
-              city: location,
-              description: location,
-              dropdownLabel: location,
-            };
+            const value = location.trim();
+            const result = Object.create(String.prototype, {
+              ...Object.getOwnPropertyDescriptors({
+                value,
+                label: value,
+                city: value,
+                description: value,
+                dropdownLabel: value,
+                length: {
+                  value: value.length,
+                  writable: false,
+                  configurable: true,
+                },
+                toString: {
+                  value: function () {
+                    return value;
+                  },
+                  writable: true,
+                  configurable: true,
+                },
+                valueOf: {
+                  value: function () {
+                    return value;
+                  },
+                  writable: true,
+                  configurable: true,
+                },
+              }),
+              [Symbol.toPrimitive]: {
+                value: function () {
+                  return value;
+                },
+                writable: true,
+                configurable: true,
+              },
+            });
 
-            // Use the Object.assign trick to satisfy TS
-            return Object.assign(String(location), locationObj);
+            return result as string & LocationLike;
           }
           // If it's already a LocationLike object with a value field
           else if (location && typeof location === "object" && location.value) {
@@ -3175,17 +3766,62 @@ export default function FlightDetailsPage() {
               timestamp: new Date().toISOString(),
             });
 
-            // Create a new location object with string as the prototype
-            const locationObj = {
-              value: location.value,
-              label: location.label || location.value,
-              city: location.city || location.value,
-              description: location.description || location.value,
-              dropdownLabel: location.dropdownLabel || location.value,
-            };
+            const value = location.value.trim();
 
-            // Use the Object.assign trick to satisfy TS
-            return Object.assign(String(location.value), locationObj);
+            // Extract all original properties we need to preserve
+            const {
+              label = value,
+              description = value,
+              city = value,
+              dropdownLabel = value,
+              // Extract any other LocationLike properties
+              ...otherProps
+            } = location;
+
+            // Filter out any methods that would conflict with String prototype
+            const safeProps = Object.entries(otherProps)
+              .filter(([key]) => !["toString", "valueOf"].includes(key))
+              .reduce((obj, [key, val]) => ({ ...obj, [key]: val }), {});
+
+            // Create a wrapper object that will convert to string when needed
+            const result = Object.create(String.prototype, {
+              ...Object.getOwnPropertyDescriptors({
+                ...safeProps,
+                value,
+                label,
+                description,
+                city,
+                dropdownLabel,
+                length: {
+                  value: value.length,
+                  writable: false,
+                  configurable: true,
+                },
+                toString: {
+                  value: function () {
+                    return value;
+                  },
+                  writable: true,
+                  configurable: true,
+                },
+                valueOf: {
+                  value: function () {
+                    return value;
+                  },
+                  writable: true,
+                  configurable: true,
+                },
+              }),
+              [Symbol.toPrimitive]: {
+                value: function () {
+                  return value;
+                },
+                writable: true,
+                configurable: true,
+              },
+            });
+
+            return result as string & LocationLike;
           }
         } catch (error) {
           console.error("Error processing location:", error);
@@ -3211,6 +3847,13 @@ export default function FlightDetailsPage() {
       flightSegments: [],
     };
   };
+
+  // Set a flag to preserve multi-segment data just before rendering the component
+  useEffect(() => {
+    if (typeof window !== "undefined" && mounted) {
+      localStorage.setItem("_preserveMultiSegmentPhase3", "true");
+    }
+  }, [mounted]);
 
   // Modified loading state display
   if (!mounted) {

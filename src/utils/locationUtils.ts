@@ -108,7 +108,9 @@ export const processLocation = (
       airport: location.airport || locValue,
       dropdownLabel:
         location.dropdownLabel ||
-        (location.city ? `${location.city} (${locValue})` : locValue),
+        (location.city && location.city !== locValue
+          ? `${location.city} (${locValue})`
+          : locValue),
     });
   }
 

@@ -4,6 +4,8 @@ import { produce } from "immer";
 import { processLocation } from "./slices/flightSlice";
 import type { Flight, FlightSegmentData } from "@/types/store";
 import type { LocationLike } from "@/types/location";
+import { format } from "date-fns";
+import { isValid } from "date-fns";
 
 interface FlightData {
   selectedFlights: Flight[];
@@ -49,10 +51,17 @@ const createEmptyFlightData = (): FlightData => ({
   selectedFlights: [],
   selectedDate: null,
   selectedType: "direct",
+  flightSegments: [
+    {
+      fromLocation: null,
+      toLocation: null,
+      selectedFlight: null,
+      date: null,
+    },
+  ],
   fromLocation: null,
   toLocation: null,
   timestamp: Date.now(),
-  flightSegments: [],
   _preserveFlightSegments: false,
   _isMultiSegment: false,
 });
@@ -65,6 +74,109 @@ const initialState = {
   _lastUpdate: 0,
   _silentUpdate: false,
   selectedFlights: {},
+};
+
+// Helper to ensure dates are properly parsed when loaded from localStorage
+const ensureDatesAreParsed = (data: FlightData): FlightData => {
+  if (!data) return data;
+
+  // Deep copy to avoid mutation issues
+  const processedData = JSON.parse(JSON.stringify(data));
+
+  // Synchronize locations for direct flights
+  if (
+    processedData.selectedType === "direct" &&
+    processedData.flightSegments &&
+    processedData.flightSegments.length > 0
+  ) {
+    // Ensure main toLocation is valid
+    if (
+      !processedData.toLocation &&
+      processedData.flightSegments[0]?.toLocation
+    ) {
+      console.log(
+        "=== Flight Store - Recovering toLocation from first segment ===",
+        {
+          segmentToLocation: processedData.flightSegments[0].toLocation,
+          timestamp: new Date().toISOString(),
+        }
+      );
+      processedData.toLocation = processedData.flightSegments[0].toLocation;
+    }
+
+    // Ensure segment toLocation is valid
+    if (
+      processedData.toLocation &&
+      !processedData.flightSegments[0].toLocation
+    ) {
+      console.log(
+        "=== Flight Store - Recovering segment toLocation from main toLocation ===",
+        {
+          mainToLocation: processedData.toLocation,
+          timestamp: new Date().toISOString(),
+        }
+      );
+      processedData.flightSegments[0].toLocation = processedData.toLocation;
+    }
+
+    // Always ensure the segment's locations match the main locations for direct flights
+    processedData.flightSegments[0].fromLocation = processedData.fromLocation;
+    processedData.flightSegments[0].toLocation = processedData.toLocation;
+  }
+
+  // Process dates for all flight segments
+  if (
+    processedData.flightSegments &&
+    Array.isArray(processedData.flightSegments)
+  ) {
+    // Process each segment date
+    processedData.flightSegments = processedData.flightSegments.map(
+      (segment: any) => {
+        // Skip segments without date
+        if (!segment.date) return segment;
+
+        // Convert string dates to Date objects for consistency
+        if (typeof segment.date === "string") {
+          // Check for ISO format (contains T or -)
+          if (segment.date.includes("T") || segment.date.includes("-")) {
+            try {
+              const parsed = new Date(segment.date);
+              if (isValid(parsed)) {
+                segment.date = parsed;
+                console.log("=== Flight Store - Parsed ISO date ===", {
+                  original: segment.date,
+                  parsed: format(parsed, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"),
+                  timestamp: new Date().toISOString(),
+                });
+              }
+            } catch (e) {
+              console.warn("Failed to parse date:", segment.date);
+            }
+          }
+          // Handle DD.MM.YYYY format
+          else if (segment.date.match(/^\d{2}\.\d{2}\.\d{4}$/)) {
+            try {
+              const [day, month, year] = segment.date.split(".").map(Number);
+              const parsed = new Date(year, month - 1, day);
+              if (isValid(parsed)) {
+                segment.date = parsed;
+                console.log("=== Flight Store - Parsed DD.MM.YYYY date ===", {
+                  original: segment.date,
+                  parsed: format(parsed, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"),
+                  timestamp: new Date().toISOString(),
+                });
+              }
+            } catch (e) {
+              console.warn("Failed to parse date:", segment.date);
+            }
+          }
+        }
+        return segment;
+      }
+    );
+  }
+
+  return processedData;
 };
 
 export const useFlightStore = create<FlightStore>()(
@@ -204,6 +316,12 @@ export const useFlightStore = create<FlightStore>()(
                     date: null,
                   },
                 ];
+              }
+
+              // Ensure that segment's toLocation is always synchronized with the main toLocation
+              if (processedData.flightSegments[0]) {
+                processedData.flightSegments[0].toLocation =
+                  processedData.toLocation;
               }
 
               console.log(
@@ -400,7 +518,7 @@ export const useFlightStore = create<FlightStore>()(
         });
       },
 
-      getFlightData: (phase: number) => {
+      getFlightData: (phase: number): FlightData | null => {
         const state = get();
         if (state._isUpdating) return null; // Prevent recursive updates
 
@@ -492,7 +610,8 @@ export const useFlightStore = create<FlightStore>()(
           }
         }
 
-        return data || null;
+        // Ensure dates are properly parsed when getting flight data
+        return ensureDatesAreParsed(data || createEmptyFlightData());
       },
 
       getSelectedFlights: (phase: number) => {
