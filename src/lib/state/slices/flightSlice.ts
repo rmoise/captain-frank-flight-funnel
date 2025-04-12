@@ -419,10 +419,40 @@ export const createFlightSlice = (
     const state = get();
 
     if (state.selectedType === "direct") {
+      // Process the direct flight case
       const updatedDirectFlight = {
         ...state.directFlight,
         selectedFlight: flight,
       };
+
+      // Only update fromLocation and toLocation if they don't exist or don't match the flight
+      if (flight) {
+        // Only update the location if needed
+        if (
+          !state.directFlight.fromLocation ||
+          state.directFlight.fromLocation.value !== flight.departureCity
+        ) {
+          updatedDirectFlight.fromLocation = processLocation({
+            value: flight.departureCity,
+            label: flight.departureCity,
+            description: flight.departureAirport || flight.departureCity,
+            city: flight.departureCity,
+          });
+        }
+
+        // Only update the location if needed
+        if (
+          !state.directFlight.toLocation ||
+          state.directFlight.toLocation.value !== flight.arrivalCity
+        ) {
+          updatedDirectFlight.toLocation = processLocation({
+            value: flight.arrivalCity,
+            label: flight.arrivalCity,
+            description: flight.arrivalAirport || flight.arrivalCity,
+            city: flight.arrivalCity,
+          });
+        }
+      }
 
       set((state) => ({
         ...state,
@@ -442,10 +472,42 @@ export const createFlightSlice = (
         selectedFlight: null,
       };
 
-      updatedFlightSegments[state.currentSegmentIndex] = {
+      // Create the updated segment
+      const updatedSegment = {
         ...currentSegment,
         selectedFlight: flight,
       };
+
+      // Only update the locations if a flight is selected and the locations don't match
+      if (flight) {
+        // Only update the fromLocation if needed
+        if (
+          !currentSegment.fromLocation ||
+          currentSegment.fromLocation.value !== flight.departureCity
+        ) {
+          updatedSegment.fromLocation = processLocation({
+            value: flight.departureCity,
+            label: flight.departureCity,
+            description: flight.departureAirport || flight.departureCity,
+            city: flight.departureCity,
+          });
+        }
+
+        // Only update the toLocation if needed
+        if (
+          !currentSegment.toLocation ||
+          currentSegment.toLocation.value !== flight.arrivalCity
+        ) {
+          updatedSegment.toLocation = processLocation({
+            value: flight.arrivalCity,
+            label: flight.arrivalCity,
+            description: flight.arrivalAirport || flight.arrivalCity,
+            city: flight.arrivalCity,
+          });
+        }
+      }
+
+      updatedFlightSegments[state.currentSegmentIndex] = updatedSegment;
 
       const updatedSelectedFlights = updatedFlightSegments
         .map((segment) => segment.selectedFlight)
@@ -514,23 +576,38 @@ export const createFlightSlice = (
         const flightDate = new Date(matchingFlight.date);
         flightDate.setHours(12, 0, 0, 0); // Set to noon to avoid timezone issues
 
+        // Process fromLocation and toLocation using existing utility to maintain consistency
+        // Use existing segment locations if they match the flight's departure/arrival cities
+        const fromLocation =
+          segment.fromLocation &&
+          segment.fromLocation.value === matchingFlight.departureCity
+            ? segment.fromLocation // Keep existing location if matches
+            : processLocation({
+                value: matchingFlight.departureCity,
+                label: matchingFlight.departureCity,
+                description:
+                  matchingFlight.departureAirport ||
+                  matchingFlight.departureCity,
+                city: matchingFlight.departureCity,
+              });
+
+        const toLocation =
+          segment.toLocation &&
+          segment.toLocation.value === matchingFlight.arrivalCity
+            ? segment.toLocation // Keep existing location if matches
+            : processLocation({
+                value: matchingFlight.arrivalCity,
+                label: matchingFlight.arrivalCity,
+                description:
+                  matchingFlight.arrivalAirport || matchingFlight.arrivalCity,
+                city: matchingFlight.arrivalCity,
+              });
+
         return {
           ...segment,
           selectedFlight: matchingFlight,
-          fromLocation: {
-            value: matchingFlight.departureCity,
-            label: matchingFlight.departureCity,
-            description:
-              matchingFlight.departureAirport || matchingFlight.departureCity,
-            city: matchingFlight.departureCity,
-          },
-          toLocation: {
-            value: matchingFlight.arrivalCity,
-            label: matchingFlight.arrivalCity,
-            description:
-              matchingFlight.arrivalAirport || matchingFlight.arrivalCity,
-            city: matchingFlight.arrivalCity,
-          },
+          fromLocation,
+          toLocation,
           date: flightDate,
         };
       });
@@ -679,8 +756,29 @@ export const createFlightSlice = (
 
   setDirectFlight: (flight: Partial<FlightSegment>) => {
     const state = get();
-    const fromLocationValue = asLocationLike(flight.fromLocation);
-    const toLocationValue = asLocationLike(flight.toLocation);
+
+    // Only process locations if they've changed
+    const fromLocationValue =
+      flight.fromLocation !== undefined && flight.fromLocation !== null
+        ? state.directFlight.fromLocation &&
+          typeof flight.fromLocation === "object" &&
+          "value" in flight.fromLocation &&
+          flight.fromLocation.value !== null &&
+          state.directFlight.fromLocation.value === flight.fromLocation.value
+          ? state.directFlight.fromLocation // Keep existing if values match
+          : asLocationLike(flight.fromLocation)
+        : state.directFlight.fromLocation;
+
+    const toLocationValue =
+      flight.toLocation !== undefined && flight.toLocation !== null
+        ? state.directFlight.toLocation &&
+          typeof flight.toLocation === "object" &&
+          "value" in flight.toLocation &&
+          flight.toLocation.value !== null &&
+          state.directFlight.toLocation.value === flight.toLocation.value
+          ? state.directFlight.toLocation // Keep existing if values match
+          : asLocationLike(flight.toLocation)
+        : state.directFlight.toLocation;
 
     const updatedDirectFlight = {
       ...state.directFlight,

@@ -2778,24 +2778,49 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
       // Keep the existing date if there is one
       const existingDate = updatedSegments[segmentIndex].date;
 
-      updatedSegments[segmentIndex] = {
+      // Import processLocation function from flightSlice
+      const { processLocation } = require("@/lib/state/slices/flightSlice");
+
+      // Create updated segment with preserved locations
+      const updatedSegment = {
         ...updatedSegments[segmentIndex],
         selectedFlight: formattedFlight,
-        fromLocation: {
-          value: flight.departureCity,
-          label: flight.departureCity,
-          description: flight.departureAirport,
-          city: flight.departureCity,
-        },
-        toLocation: {
-          value: flight.arrivalCity,
-          label: flight.arrivalCity,
-          description: flight.arrivalAirport,
-          city: flight.arrivalCity,
-        },
         // Preserve the existing date if there is one, otherwise use the flight date if available
         date: existingDate || (flight.date ? new Date(flight.date) : null),
       };
+
+      // Only update locations if needed - check if they match the flight's departure/arrival cities
+      const flightDeparture = {
+        value: flight.departureCity,
+        label: flight.departureCity,
+        description: flight.departureAirport,
+        city: flight.departureCity,
+      };
+
+      const flightArrival = {
+        value: flight.arrivalCity,
+        label: flight.arrivalCity,
+        description: flight.arrivalAirport,
+        city: flight.arrivalCity,
+      };
+
+      // If there's no existing fromLocation or it has a different value, only then update it
+      if (
+        !updatedSegment.fromLocation ||
+        updatedSegment.fromLocation.value !== flight.departureCity
+      ) {
+        updatedSegment.fromLocation = processLocation(flightDeparture);
+      }
+
+      // If there's no existing toLocation or it has a different value, only then update it
+      if (
+        !updatedSegment.toLocation ||
+        updatedSegment.toLocation.value !== flight.arrivalCity
+      ) {
+        updatedSegment.toLocation = processLocation(flightArrival);
+      }
+
+      updatedSegments[segmentIndex] = updatedSegment;
 
       // Log updated segment
       console.log("=== handleFlightSelect - After Update ===", {
@@ -2817,15 +2842,23 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
         selectedType === "multi" &&
         segmentIndex < updatedSegments.length - 1
       ) {
-        updatedSegments[segmentIndex + 1] = {
-          ...updatedSegments[segmentIndex + 1],
-          fromLocation: {
-            value: flight.arrivalCity,
-            label: flight.arrivalCity,
-            description: flight.arrivalAirport,
-            city: flight.arrivalCity,
-          },
-        };
+        const nextSegment = updatedSegments[segmentIndex + 1];
+        // Only update if needed
+        if (
+          !nextSegment.fromLocation ||
+          nextSegment.fromLocation.value !== flight.arrivalCity
+        ) {
+          // Create updated next segment with preserved properties
+          updatedSegments[segmentIndex + 1] = {
+            ...nextSegment,
+            fromLocation: processLocation({
+              value: flight.arrivalCity,
+              label: flight.arrivalCity,
+              description: flight.arrivalAirport,
+              city: flight.arrivalCity,
+            }),
+          };
+        }
       }
 
       // Get all selected flights
