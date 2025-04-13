@@ -1,4 +1,11 @@
-import React, { useCallback, useState, useEffect } from "react";
+import React, {
+  useCallback,
+  useState,
+  useEffect,
+  useRef,
+  Fragment,
+  ReactElement,
+} from "react";
 import { AutocompleteInput } from "@/components/shared/AutocompleteInput";
 import { CustomDateInput } from "@/components/shared/CustomDateInput";
 import { useTranslation } from "@/hooks/useTranslation";
@@ -16,6 +23,9 @@ import { usePhase4Store } from "@/lib/state/phase4Store";
 import { useFlightStore } from "@/lib/state/flightStore";
 import { useFlightValidation } from "@/hooks/useFlightValidation";
 import type { LocationLike } from "@/types/location";
+import { FlightSegmentData } from "@/types/store";
+import { processLocation } from "@/lib/state/slices/flightSlice";
+import { getAirportCitySync } from "@/utils/locationUtils";
 
 interface Airport {
   iata_code: string;
@@ -411,7 +421,8 @@ const clearLocationFlags = (
     // Otherwise, clear all location flags for this phase
     for (let i = 0; i < 10; i++) {
       // Assuming max 10 segments
-      ["fromLocation", "toLocation"].forEach((field) => {
+      const fields = ["fromLocation", "toLocation"];
+      fields.forEach((field) => {
         const locationClearFlagKey = `locationWasCleared_phase${phase}_segment${i}_${field}`;
         if (localStorage.getItem(locationClearFlagKey)) {
           localStorage.removeItem(locationClearFlagKey);
@@ -427,7 +438,175 @@ const clearLocationFlags = (
   }
 };
 
-// Helper function to safely access and update localStorage
+// Helper function to completely clear all location data when switching flight types
+const clearAllLocationData = (phase: number) => {
+  try {
+    console.log(
+      `=== FlightSegments - Clearing all location data for flight type switch ===`,
+      {
+        phase,
+        timestamp: new Date().toISOString(),
+      }
+    );
+
+    // Clear all segment data in localStorage for this phase
+    const storageKeys = Object.keys(localStorage);
+
+    // Clear any keys related to flight segments for this phase
+    storageKeys.forEach((key) => {
+      if (
+        key.includes(`flightSegment_phase${phase}`) ||
+        key.includes(`flightData_phase${phase}`) ||
+        key.includes(`locationWasCleared_phase${phase}`) ||
+        key.includes(`dateWasCleared_phase${phase}`)
+      ) {
+        localStorage.removeItem(key);
+        console.log(`=== FlightSegments - Removed storage key ===`, {
+          key,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    });
+
+    // Also remove any cached locations in session storage
+    const sessionKeys = Object.keys(sessionStorage);
+    sessionKeys.forEach((key) => {
+      if (key.includes(`location_phase${phase}`)) {
+        sessionStorage.removeItem(key);
+        console.log(`=== FlightSegments - Removed session storage key ===`, {
+          key,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    });
+  } catch (error) {
+    console.error("Error clearing all location data:", error);
+  }
+};
+
+// A utility function to clean up potentially orphaned location data on unmount
+const cleanupLocationStorage = () => {
+  try {
+    console.log(`=== FlightSegments - Running location storage cleanup ===`, {
+      timestamp: new Date().toISOString(),
+    });
+
+    // Clean up flags that might be left behind
+    const allKeys = Object.keys(localStorage).filter(
+      (key) =>
+        key.includes("locationWasCleared_") ||
+        key.includes("flight") ||
+        key.includes("location_")
+    );
+
+    // Check each storage key that has a "was cleared" flag
+    // to see if the corresponding data was actually removed
+    allKeys.forEach((key) => {
+      if (key.includes("locationWasCleared_")) {
+        // Extract phase, segment and field info
+        const parts = key.split("_");
+        if (parts.length >= 3) {
+          const phasePart = parts[1]; // e.g. "phase1"
+          const segmentPart = parts[2]; // e.g. "segment0"
+          const fieldPart = parts[3]; // e.g. "fromLocation"
+
+          if (phasePart && segmentPart && fieldPart) {
+            const phase = phasePart.replace("phase", "");
+            const segment = segmentPart.replace("segment", "");
+            const field = fieldPart;
+
+            // Check phase state to ensure this location is really cleared
+            try {
+              const phaseStateKey = `phase${phase}State`;
+              const phaseStateData = localStorage.getItem(phaseStateKey);
+
+              if (phaseStateData) {
+                const state = JSON.parse(phaseStateData);
+                // Check if the segment exists and the field should be null
+                if (
+                  state.flightSegments &&
+                  Array.isArray(state.flightSegments) &&
+                  state.flightSegments[Number(segment)] &&
+                  state.flightSegments[Number(segment)][field]
+                ) {
+                  // Location exists in state but has a clear flag - force clear it
+                  state.flightSegments[Number(segment)][field] = null;
+
+                  // If this is the first/last segment, also clear the root location
+                  if (
+                    (Number(segment) === 0 && field === "fromLocation") ||
+                    (field === "toLocation" &&
+                      Number(segment) === state.flightSegments.length - 1)
+                  ) {
+                    state[field] = null;
+                  }
+
+                  localStorage.setItem(phaseStateKey, JSON.stringify(state));
+                  console.log(
+                    `=== FlightSegments - Cleanup: Cleared orphaned location ===`,
+                    {
+                      phase,
+                      segment,
+                      field,
+                      timestamp: new Date().toISOString(),
+                    }
+                  );
+                }
+              }
+            } catch (error) {
+              console.error(`Cleanup: Error checking phase state data:`, error);
+            }
+
+            // Also check flight data storage
+            try {
+              const flightDataKey = `flightData_phase${phase}`;
+              const flightData = localStorage.getItem(flightDataKey);
+
+              if (flightData) {
+                const data = JSON.parse(flightData);
+                if (
+                  data.flightSegments &&
+                  Array.isArray(data.flightSegments) &&
+                  data.flightSegments[Number(segment)] &&
+                  data.flightSegments[Number(segment)][field]
+                ) {
+                  // Force clear the location
+                  data.flightSegments[Number(segment)][field] = null;
+
+                  // If this is the first/last segment, also clear the root location
+                  if (
+                    (Number(segment) === 0 && field === "fromLocation") ||
+                    (field === "toLocation" &&
+                      Number(segment) === data.flightSegments.length - 1)
+                  ) {
+                    data[field] = null;
+                  }
+
+                  localStorage.setItem(flightDataKey, JSON.stringify(data));
+                  console.log(
+                    `=== FlightSegments - Cleanup: Cleared orphaned flight data location ===`,
+                    {
+                      phase,
+                      segment,
+                      field,
+                      timestamp: new Date().toISOString(),
+                    }
+                  );
+                }
+              }
+            } catch (error) {
+              console.error(`Error checking flight data:`, error);
+            }
+          }
+        }
+      }
+    });
+  } catch (error) {
+    console.error("Error during location storage cleanup:", error);
+  }
+};
+
+// Storage helpers to manage localStorage for flight segments
 const storageHelpers = {
   // Save flight data to localStorage
   save: (phase: number, data: any) => {
@@ -439,349 +618,108 @@ const storageHelpers = {
       const existingRaw = localStorage.getItem(key);
       const existing = existingRaw ? JSON.parse(existingRaw) : {};
 
-      // Check if we need to preserve dates - this ensures dates don't get accidentally cleared
+      // Process segments to respect the dateWasCleared flags
       if (data.flightSegments && Array.isArray(data.flightSegments)) {
-        // Create flags to track if we're restoring data
-        let restoredAnyDates = false;
-        let restoredAnyLocations = false;
-
-        // Look for date and location data in both existing and new flightSegments
         data.flightSegments = data.flightSegments.map(
           (segment: any, index: number) => {
-            let updatedSegment = { ...segment };
+            // Check if this date was explicitly cleared
+            const dateClearFlagKey = `dateWasCleared_phase${phase}_segment${index}`;
+            const wasDateExplicitlyCleared =
+              localStorage.getItem(dateClearFlagKey) === "true";
 
-            // Restore dates if needed
-            if (
-              !segment.date &&
-              existing.flightSegments &&
-              Array.isArray(existing.flightSegments) &&
-              index < existing.flightSegments.length &&
-              existing.flightSegments[index]?.date
-            ) {
-              // Check if this date was explicitly cleared
-              const dateClearFlagKey = `dateWasCleared_phase${phase}_segment${index}`;
-              const wasDateExplicitlyCleared =
-                localStorage.getItem(dateClearFlagKey) === "true";
+            // If date was explicitly cleared, always ensure it's null
+            if (wasDateExplicitlyCleared) {
+              console.log(
+                `=== FlightSegments Storage Helper - Enforcing cleared date for segment ${index} ===`,
+                {
+                  timestamp: new Date().toISOString(),
+                }
+              );
 
-              if (!wasDateExplicitlyCleared) {
-                // Restore the date from localStorage
-                restoredAnyDates = true;
-
-                console.log(
-                  `=== FlightSegments - Restoring date from localStorage for segment ${index} ===`,
-                  {
-                    date: existing.flightSegments[index].date,
-                    timestamp: new Date().toISOString(),
-                  }
-                );
-
-                updatedSegment.date = existing.flightSegments[index].date;
-              }
+              return {
+                ...segment,
+                date: null,
+                // Also clear selectedFlight date
+                selectedFlight: segment.selectedFlight
+                  ? { ...segment.selectedFlight, date: null }
+                  : null,
+              };
             }
 
-            // Restore fromLocation if needed
-            if (
-              (!segment.fromLocation || !segment.fromLocation.value) &&
-              existing.flightSegments &&
-              Array.isArray(existing.flightSegments) &&
-              index < existing.flightSegments.length &&
-              existing.flightSegments[index]?.fromLocation?.value
-            ) {
-              // Check if this location was explicitly cleared
-              const locationClearFlagKey = `locationWasCleared_phase${phase}_segment${index}_fromLocation`;
-              const wasLocationExplicitlyCleared =
-                localStorage.getItem(locationClearFlagKey) === "true";
-
-              if (!wasLocationExplicitlyCleared) {
-                // Restore the location from localStorage
-                restoredAnyLocations = true;
-
-                console.log(
-                  `=== FlightSegments - Restoring fromLocation from localStorage for segment ${index} ===`,
-                  {
-                    location: existing.flightSegments[index].fromLocation,
-                    timestamp: new Date().toISOString(),
-                  }
-                );
-
-                updatedSegment.fromLocation =
-                  existing.flightSegments[index].fromLocation;
-              }
-            }
-
-            // Restore toLocation if needed
-            if (
-              (!segment.toLocation || !segment.toLocation.value) &&
-              existing.flightSegments &&
-              Array.isArray(existing.flightSegments) &&
-              index < existing.flightSegments.length &&
-              existing.flightSegments[index]?.toLocation?.value
-            ) {
-              // Check if this location was explicitly cleared
-              const locationClearFlagKey = `locationWasCleared_phase${phase}_segment${index}_toLocation`;
-              const wasLocationExplicitlyCleared =
-                localStorage.getItem(locationClearFlagKey) === "true";
-
-              if (!wasLocationExplicitlyCleared) {
-                // Restore the location from localStorage
-                restoredAnyLocations = true;
-
-                console.log(
-                  `=== FlightSegments - Restoring toLocation from localStorage for segment ${index} ===`,
-                  {
-                    location: existing.flightSegments[index].toLocation,
-                    timestamp: new Date().toISOString(),
-                  }
-                );
-
-                updatedSegment.toLocation =
-                  existing.flightSegments[index].toLocation;
-              }
-            }
-
-            return updatedSegment;
+            return segment;
           }
         );
-
-        // Log if we restored any data
-        if (restoredAnyDates) {
-          console.log(
-            `=== FlightSegments - Restored dates from localStorage ===`,
-            {
-              phase,
-              timestamp: new Date().toISOString(),
-            }
-          );
-        }
-
-        if (restoredAnyLocations) {
-          console.log(
-            `=== FlightSegments - Restored locations from localStorage ===`,
-            {
-              phase,
-              timestamp: new Date().toISOString(),
-            }
-          );
-        }
       }
 
-      // Update with new data
-      localStorage.setItem(
-        key,
-        JSON.stringify({
-          ...existing,
-          ...data,
-          _timestamp: Date.now(),
-        })
-      );
+      // Save to localStorage with merged data
+      localStorage.setItem(key, JSON.stringify({ ...existing, ...data }));
 
-      console.log(`=== FlightSegments - Data saved to phase ${phase} ===`, {
-        updatedFields: Object.keys(data),
+      console.log(`=== FlightSegments - Saved data to localStorage ===`, {
+        phase,
+        segmentCount: data.flightSegments?.length,
         timestamp: new Date().toISOString(),
       });
-
-      // Keep phases 1-3 in sync if this is one of those phases
-      if (phase <= 3) {
-        // Find which other phases to sync to
-        const syncPhases = [1, 2, 3].filter((p) => p !== phase);
-
-        // Sync the data to these phases
-        syncPhases.forEach((syncPhase) => {
-          // Only sync specific fields that should be shared across phases
-          const syncData = {
-            flightSegments: data.flightSegments,
-            fromLocation: data.fromLocation,
-            toLocation: data.toLocation,
-            _timestamp: Date.now(),
-          };
-
-          // IMPORTANT: Don't call save recursively to avoid infinite loops
-          // Just update the storage directly
-          const syncKey = `flightData_phase${syncPhase}`;
-          const syncExistingRaw = localStorage.getItem(syncKey);
-          const syncExisting = syncExistingRaw
-            ? JSON.parse(syncExistingRaw)
-            : {};
-
-          localStorage.setItem(
-            syncKey,
-            JSON.stringify({
-              ...syncExisting,
-              ...syncData,
-              _timestamp: Date.now(),
-            })
-          );
-
-          console.log(
-            `=== FlightSegments - Data synced to phase ${syncPhase} ===`,
-            {
-              updatedFields: Object.keys(syncData),
-              timestamp: new Date().toISOString(),
-            }
-          );
-        });
-      }
-
-      return true;
     } catch (error) {
       console.error("Error saving to localStorage:", error);
-      return false;
     }
   },
 
-  // Clear flight data from localStorage
   clear: (phase: number, segmentIndex?: number, skipSync = false) => {
     try {
-      console.log(`=== FlightSegments - Clear localStorage ===`, {
+      console.log(`=== FlightSegments - Clearing localStorage data ===`, {
         phase,
         segmentIndex,
         skipSync,
         timestamp: new Date().toISOString(),
       });
 
+      let anyChange = false;
+
       // Keys to check
-      const keys = [
-        `flightData_phase${phase}`,
+      const keysToCheck = [
+        `phase${phase}SelectedFlights`,
         `phase${phase}State`,
         `phase${phase}FlightData`,
-        `dateCache_phase${phase}`,
-        `locationCache_phase${phase}`,
+        `flightData_phase${phase}`,
       ];
 
-      // Process each storage key
-      let anyChange = false;
-      let flightIdToDelete: string | undefined = undefined;
-
-      // First get the flight ID if we need to update the deleted list
-      if (segmentIndex !== undefined) {
-        for (const key of keys) {
-          const dataRaw = localStorage.getItem(key);
-          if (!dataRaw) continue;
-
-          try {
-            const data = JSON.parse(dataRaw);
-            if (
-              data.flightSegments &&
-              Array.isArray(data.flightSegments) &&
-              segmentIndex < data.flightSegments.length
-            ) {
-              const flight = data.flightSegments[segmentIndex]?.selectedFlight;
-              if (flight?.id) {
-                flightIdToDelete = flight.id;
-                break;
-              }
-            }
-          } catch (e) {
-            console.error(`Error checking flight ID in ${key}:`, e);
+      // Find all dynamic segment keys
+      if (typeof localStorage !== "undefined") {
+        const storageKeys = Object.keys(localStorage);
+        storageKeys.forEach((key) => {
+          if (key.includes(`flightSegment_phase${phase}`)) {
+            keysToCheck.push(key);
           }
-        }
+        });
       }
 
-      // If we found a flight ID, add it to the deleted flights list
-      if (flightIdToDelete) {
+      // Process each key
+      keysToCheck.forEach((key) => {
         try {
-          const deletedFlightsKey = `phase${phase}_deleted_flights`;
-          const existingDeletedRaw = localStorage.getItem(deletedFlightsKey);
-          const deletedFlightIds = existingDeletedRaw
-            ? JSON.parse(existingDeletedRaw)
-            : [];
+          const value = localStorage.getItem(key);
+          if (!value) return;
 
-          if (!deletedFlightIds.includes(flightIdToDelete)) {
-            deletedFlightIds.push(flightIdToDelete);
-            localStorage.setItem(
-              deletedFlightsKey,
-              JSON.stringify(deletedFlightIds)
-            );
-
-            console.log(
-              `=== FlightSegments - Added flight ${flightIdToDelete} to deleted flights ===`,
-              {
-                phase,
-                deletedFlightIds,
-                timestamp: new Date().toISOString(),
-              }
-            );
-          }
-        } catch (e) {
-          console.error("Error updating deleted flights list:", e);
-        }
-      }
-
-      // Also clear any date and location flags to ensure proper restoration
-      clearDateFlags(phase, segmentIndex);
-      clearLocationFlags(phase, segmentIndex);
-
-      // Process each storage key
-      keys.forEach((key) => {
-        const dataRaw = localStorage.getItem(key);
-        if (!dataRaw) return;
-
-        try {
-          const data = JSON.parse(dataRaw);
+          let data = JSON.parse(value);
           let modified = false;
 
-          // Option 1: If segment index is provided, clear just that segment's flight data
-          if (
-            segmentIndex !== undefined &&
-            data.flightSegments &&
-            Array.isArray(data.flightSegments) &&
-            segmentIndex < data.flightSegments.length
-          ) {
-            // Get info about the flight being removed for logging
-            const flightBeingRemoved =
-              data.flightSegments[segmentIndex]?.selectedFlight;
-            const flightId = flightBeingRemoved?.id;
-
-            // Clear the selected flight from the segment
-            if (data.flightSegments[segmentIndex].selectedFlight) {
-              // Create a deep copy of the segment array and the specific segment to modify
-              const updatedSegments = JSON.parse(
-                JSON.stringify(data.flightSegments)
-              );
-              updatedSegments[segmentIndex].selectedFlight = null;
-              data.flightSegments = updatedSegments;
-              modified = true;
-
-              console.log(
-                `=== FlightSegments - Cleared flight from segment ${segmentIndex} in ${key} ===`,
-                {
-                  flightId,
-                  timestamp: new Date().toISOString(),
-                }
-              );
-            }
-
-            // Also filter the selectedFlights array if it exists
+          // Option 1: Clear specific segment
+          if (segmentIndex !== undefined && data.flightSegments) {
+            const segments = data.flightSegments;
             if (
-              flightId &&
-              data.selectedFlights &&
-              Array.isArray(data.selectedFlights)
+              segments &&
+              Array.isArray(segments) &&
+              segmentIndex < segments.length &&
+              segments[segmentIndex]?.selectedFlight
             ) {
-              const originalLength = data.selectedFlights.length;
-              data.selectedFlights = data.selectedFlights.filter(
-                (flight: any) => flight?.id !== flightId
-              );
-
-              if (data.selectedFlights.length !== originalLength) {
-                modified = true;
-                console.log(
-                  `=== FlightSegments - Removed flight from selectedFlights in ${key} ===`,
-                  {
-                    flightId,
-                    originalCount: originalLength,
-                    newCount: data.selectedFlights.length,
-                    timestamp: new Date().toISOString(),
-                  }
-                );
-              }
-            }
-
-            // If this is the selectedFlight, clear it
-            if (flightId && data.selectedFlight?.id === flightId) {
-              data.selectedFlight = null;
+              const flightId = segments[segmentIndex].selectedFlight.id;
+              segments[segmentIndex] = {
+                ...segments[segmentIndex],
+                selectedFlight: null,
+              };
+              data.flightSegments = segments;
               modified = true;
               console.log(
-                `=== FlightSegments - Cleared selectedFlight in ${key} ===`,
+                `=== FlightSegments - Cleared segment ${segmentIndex} flight in ${key} ===`,
                 {
                   flightId,
                   timestamp: new Date().toISOString(),
@@ -791,6 +729,7 @@ const storageHelpers = {
           }
           // Option 2: Clear all flight data
           else if (segmentIndex === undefined) {
+            // Clear flights completely
             if (data.selectedFlight) {
               const flightId = data.selectedFlight.id;
               data.selectedFlight = null;
@@ -858,6 +797,50 @@ const storageHelpers = {
         }
       });
 
+      // Clear date and location clear flags where appropriate
+      if (segmentIndex === undefined) {
+        // If clearing all data, also clear all date and location clear flags
+        if (typeof localStorage !== "undefined") {
+          const allKeys = Object.keys(localStorage);
+          const flagKeys = allKeys.filter(
+            (key) =>
+              key.includes(`dateWasCleared_phase${phase}`) ||
+              key.includes(`locationWasCleared_phase${phase}`)
+          );
+
+          if (flagKeys.length > 0) {
+            flagKeys.forEach((key) => {
+              localStorage.removeItem(key);
+              console.log(`=== FlightSegments - Removed flag ===`, {
+                key,
+                timestamp: new Date().toISOString(),
+              });
+            });
+            anyChange = true;
+          }
+        }
+      } else if (segmentIndex !== undefined) {
+        // If clearing specific segment, clear its date and location flags
+        const dateClearFlagKey = `dateWasCleared_phase${phase}_segment${segmentIndex}`;
+        const fromLocationClearFlagKey = `locationWasCleared_phase${phase}_segment${segmentIndex}_fromLocation`;
+        const toLocationClearFlagKey = `locationWasCleared_phase${phase}_segment${segmentIndex}_toLocation`;
+
+        [
+          dateClearFlagKey,
+          fromLocationClearFlagKey,
+          toLocationClearFlagKey,
+        ].forEach((key) => {
+          if (localStorage.getItem(key)) {
+            localStorage.removeItem(key);
+            console.log(`=== FlightSegments - Removed segment flag ===`, {
+              key,
+              timestamp: new Date().toISOString(),
+            });
+            anyChange = true;
+          }
+        });
+      }
+
       // Sync with other phases if needed
       if (!skipSync && [1, 2, 3].includes(phase)) {
         // Find which other phases to sync to
@@ -886,6 +869,16 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
   setValidationState,
   setIsFlightNotListedOpen = () => {},
 }) => {
+  console.log("=== FlightSegments - Component Initialization ===", {
+    showFlightSearch,
+    disabled,
+    stepNumber,
+    currentPhase,
+    timestamp: new Date().toISOString(),
+    navigationFlag: localStorage.getItem("navigation_in_progress"),
+    navigatingToPhase3: localStorage.getItem("navigating_to_phase3"),
+  });
+
   const { t, lang } = useTranslation();
   const mainStore = useStore();
   const phase4Store = usePhase4Store();
@@ -901,6 +894,15 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
 
   // Get the appropriate store based on phase
   const store = currentPhase === 4 ? phase4Store : mainStore;
+
+  // Use the global cleanupLocationStorage function defined at the top of the file
+  // Add cleanup effect to run on component unmount
+  useEffect(() => {
+    return () => {
+      // Clean up any orphaned location data when component unmounts
+      cleanupLocationStorage();
+    };
+  }, []);
 
   const updateStores = useCallback(
     (updates: {
@@ -1318,6 +1320,14 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
             selectedType: "direct",
           });
 
+          // Save to flightStore with the preserve flag to prevent further modifications
+          flightStore.saveFlightData(currentPhase, {
+            flightSegments: updatedSegments,
+            selectedType: "direct",
+            _preserveFlightSegments: true,
+            timestamp: Date.now(),
+          });
+
           console.log(
             "=== FlightSegments - Adjusted segments for direct flight ===",
             {
@@ -1683,55 +1693,147 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
     }
   }, [currentPhase, mainStore?.flightSegments, flightStore, updateStores]);
 
-  // NEW EFFECT: Ensure direct flights only have one segment in phase 3
-  useEffect(() => {
-    // Only run in phase 3 where we need to ensure correct segment count based on flight type
-    if (currentPhase !== 3 || !store?.flightSegments) return;
+  // CRITICAL FIX: Create a unified segment update function to ensure centralized updates
+  const updateSegmentsAndStores = useCallback(
+    (
+      updatedSegments: FlightSegmentData[],
+      options: { preserveSegments?: boolean; updateLocalStorage?: boolean } = {}
+    ) => {
+      const { preserveSegments = true, updateLocalStorage = true } = options;
 
-    // Check if we need to adjust segments for direct flights
-    if (store.selectedType === "direct" && store.flightSegments.length > 1) {
-      console.log(
-        "=== FlightSegments - Ensuring direct flight has only one segment ===",
-        {
-          before: store.flightSegments.length,
-          after: 1,
-          timestamp: new Date().toISOString(),
-        }
-      );
+      console.log("=== FlightSegments - Unified segment update ===", {
+        segmentCount: updatedSegments.length,
+        preserveSegments,
+        timestamp: new Date().toISOString(),
+      });
 
-      // For direct flights, only keep the first segment
-      const updatedSegments = [store.flightSegments[0]];
-
-      // Update the store with the correct number of segments
+      // Update the store with the correct segments
       updateStores({ flightSegments: updatedSegments });
 
-      // Also update localStorage
-      storageHelpers.save(currentPhase, {
-        flightSegments: updatedSegments,
-        selectedType: "direct",
-      });
+      // Also update localStorage if needed
+      if (updateLocalStorage) {
+        storageHelpers.save(currentPhase, {
+          flightSegments: updatedSegments,
+          selectedType: store.selectedType,
+        });
+      }
 
-      // Save to flightStore to ensure consistency
-      flightStore.saveFlightData(3, {
-        flightSegments: updatedSegments,
-        selectedType: "direct",
-        timestamp: Date.now(),
-      });
+      // Save to flightStore with the preserve flag to prevent further modifications
+      if (preserveSegments) {
+        flightStore.saveFlightData(currentPhase, {
+          flightSegments: updatedSegments,
+          selectedType: store.selectedType,
+          _preserveFlightSegments: true,
+          timestamp: Date.now(),
+        });
+      }
+    },
+    [currentPhase, updateStores, store.selectedType]
+  );
 
+  // Define the flight type enforcement function
+  const enforceFlightTypeRules = useCallback(
+    (
+      selectedType: "direct" | "multi",
+      segments: FlightSegmentData[]
+    ): FlightSegmentData[] => {
+      // Clear all location data when enforcing flight type rules to prevent data persistence issues
+      clearAllLocationData(currentPhase);
+
+      if (!segments || !Array.isArray(segments) || segments.length === 0) {
+        console.log(
+          "=== FlightSegments - Creating default segment structure ===",
+          {
+            selectedType,
+            timestamp: new Date().toISOString(),
+          }
+        );
+
+        // Create basic segments with from/to locations
+        if (selectedType === "direct") {
+          return [
+            {
+              fromLocation: processLocation(store.fromLocation),
+              toLocation: processLocation(store.toLocation),
+              selectedFlight: null,
+              date: null,
+            },
+          ];
+        } else {
+          return [
+            {
+              fromLocation: processLocation(store.fromLocation),
+              toLocation: null,
+              selectedFlight: null,
+              date: null,
+            },
+            {
+              fromLocation: null,
+              toLocation: processLocation(store.toLocation),
+              selectedFlight: null,
+              date: null,
+            },
+          ];
+        }
+      }
+
+      // If we already have segments, preserve them without changes
       console.log(
-        "=== FlightSegments - Direct flight segment count adjusted ===",
+        "=== FlightSegments - Preserving existing segment structure ===",
         {
-          segmentCount: updatedSegments.length,
+          selectedType,
+          segmentCount: segments.length,
           timestamp: new Date().toISOString(),
         }
       );
+
+      return segments;
+    },
+    [store.fromLocation, store.toLocation, currentPhase]
+  );
+
+  // CRITICAL FIX: Single useEffect to handle flight segment structure
+  useEffect(() => {
+    if (!store?.flightSegments) return;
+
+    try {
+      // Check if we need to create default segments (only if no segments exist)
+      if (!store.flightSegments.length) {
+        console.log("=== FlightSegments - Creating default segments ===", {
+          selectedType: store.selectedType,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Create default segments based on selected type
+        const newSegments = enforceFlightTypeRules(
+          store.selectedType,
+          [] // Empty array to force creation of default segments
+        );
+
+        // Use the updateStores helper to update all relevant stores
+        updateStores({ flightSegments: newSegments });
+
+        console.log("=== FlightSegments - Created default segments ===", {
+          count: newSegments.length,
+          timestamp: new Date().toISOString(),
+        });
+      } else {
+        console.log("=== FlightSegments - Segment sync effect starting ===", {
+          segmentCount: store.flightSegments.length,
+          selectedType: store.selectedType,
+          timestamp: new Date().toISOString(),
+        });
+
+        console.log("=== FlightSegments - No updates needed for segments ===");
+      }
+    } catch (error) {
+      console.error("Error handling flight segments:", error);
     }
   }, [
-    currentPhase,
     store?.selectedType,
     store?.flightSegments,
+    enforceFlightTypeRules,
     updateStores,
-    flightStore,
   ]);
 
   const handleFlightNotListed = () => {
@@ -2118,6 +2220,14 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
       if (!store?.flightSegments) return;
       const newSegments = [...store.flightSegments];
 
+      console.log(`=== FlightSegments - Location change started ===`, {
+        location,
+        field,
+        index,
+        isClearing: !location,
+        timestamp: new Date().toISOString(),
+      });
+
       // For multi-city mode, validate that departure city matches previous arrival city
       if (
         store.selectedType === "multi" &&
@@ -2129,12 +2239,25 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
         if (previousSegment.selectedFlight) {
           const prevArrivalCity = previousSegment.selectedFlight.arrivalCity;
           const newDepartureCity =
-            location.city || location.description || location.label;
+            location.city ||
+            (location.value && /^[A-Z]{3}$/.test(location.value)
+              ? getAirportCitySync(location.value)
+              : location.description || location.label);
 
           if (
             prevArrivalCity.toLowerCase() !== newDepartureCity.toLowerCase()
           ) {
-            // Don't update if cities don't match
+            // Don't update if cities don't match - log this event for debugging
+            console.log(
+              `=== FlightSegments - City mismatch prevented location update ===`,
+              {
+                prevArrivalCity,
+                newDepartureCity,
+                index,
+                field,
+                timestamp: new Date().toISOString(),
+              }
+            );
             return;
           }
         }
@@ -2146,8 +2269,162 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
       // If clearing a location, set the locationWasCleared flag
       if (!location) {
         try {
+          // ** ENHANCED CLEARING LOGIC **
+          console.log(
+            `=== FlightSegments - Performing complete location clear ===`,
+            {
+              phase: currentPhase,
+              segment: index,
+              field,
+              timestamp: new Date().toISOString(),
+            }
+          );
+
+          // 1. Set the clear flag
           const locationClearFlagKey = `locationWasCleared_phase${currentPhase}_segment${index}_${field}`;
           localStorage.setItem(locationClearFlagKey, "true");
+
+          // 2. Clear all phase state data for this location
+          const clearAllPhases = [1, 2, 3, 4];
+
+          clearAllPhases.forEach((phase) => {
+            // Clear in all phase data
+            try {
+              const phaseStateKey = `phase${phase}State`;
+              const existingPhaseState = localStorage.getItem(phaseStateKey);
+
+              if (existingPhaseState) {
+                const phaseStateData = JSON.parse(existingPhaseState);
+
+                // Clear at root level if it's the main location
+                if (
+                  (index === 0 && field === "fromLocation") ||
+                  (field === "toLocation" && index === newSegments.length - 1)
+                ) {
+                  phaseStateData[field] = null;
+                }
+
+                // Clear in all segments
+                if (
+                  phaseStateData.flightSegments &&
+                  Array.isArray(phaseStateData.flightSegments) &&
+                  index < phaseStateData.flightSegments.length
+                ) {
+                  phaseStateData.flightSegments[index][field] = null;
+                }
+
+                localStorage.setItem(
+                  phaseStateKey,
+                  JSON.stringify(phaseStateData)
+                );
+
+                console.log(
+                  `=== FlightSegments - Cleared location in phase${phase} state ===`,
+                  {
+                    field,
+                    index,
+                    timestamp: new Date().toISOString(),
+                  }
+                );
+              }
+            } catch (error) {
+              console.error(
+                `Error clearing location in phase${phase} state:`,
+                error
+              );
+            }
+
+            // Clear in flight data
+            try {
+              const flightDataKey = `flightData_phase${phase}`;
+              const existingFlightData = localStorage.getItem(flightDataKey);
+
+              if (existingFlightData) {
+                const flightData = JSON.parse(existingFlightData);
+
+                // Clear at root level
+                if (
+                  (index === 0 && field === "fromLocation") ||
+                  (field === "toLocation" && index === newSegments.length - 1)
+                ) {
+                  flightData[field] = null;
+                }
+
+                // Clear in segments
+                if (
+                  flightData.flightSegments &&
+                  Array.isArray(flightData.flightSegments) &&
+                  index < flightData.flightSegments.length
+                ) {
+                  flightData.flightSegments[index][field] = null;
+                }
+
+                localStorage.setItem(flightDataKey, JSON.stringify(flightData));
+
+                console.log(
+                  `=== FlightSegments - Cleared location in flight data for phase${phase} ===`,
+                  {
+                    field,
+                    index,
+                    timestamp: new Date().toISOString(),
+                  }
+                );
+              }
+            } catch (error) {
+              console.error(
+                `Error clearing location in flight data for phase${phase}:`,
+                error
+              );
+            }
+          });
+
+          // 3. Clear all segment cache keys
+          const allKeys = Object.keys(localStorage);
+          const segmentKeys = allKeys.filter(
+            (key) =>
+              key.includes(`flightSegment_`) && key.includes(`segment${index}`)
+          );
+
+          segmentKeys.forEach((key) => {
+            try {
+              const segmentData = JSON.parse(localStorage.getItem(key) || "{}");
+              if (segmentData) {
+                segmentData[field] = null;
+                localStorage.setItem(key, JSON.stringify(segmentData));
+                console.log(
+                  `=== FlightSegments - Cleared location in segment cache ===`,
+                  {
+                    key,
+                    field,
+                    timestamp: new Date().toISOString(),
+                  }
+                );
+              }
+            } catch (error) {
+              console.error(`Error updating segment cache ${key}:`, error);
+            }
+          });
+
+          // 4. Clear from sessionStorage
+          if (typeof sessionStorage !== "undefined") {
+            const sessionKeys = Object.keys(sessionStorage);
+            const locationKeys = sessionKeys.filter(
+              (key) =>
+                key.includes(`location_`) &&
+                (key.includes(`segment${index}`) || key.includes(field))
+            );
+
+            locationKeys.forEach((key) => {
+              sessionStorage.removeItem(key);
+              console.log(
+                `=== FlightSegments - Removed cached location from sessionStorage ===`,
+                {
+                  key,
+                  timestamp: new Date().toISOString(),
+                }
+              );
+            });
+          }
 
           console.log(`=== FlightSegments - Set location clear flag ===`, {
             segmentIndex: index,
@@ -2194,252 +2471,91 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
         date: existingDate, // Preserve the existing date
       };
 
-      // Handle linking in multi-city mode - only when setting a location, not when clearing
-      if (store.selectedType === "multi" && location) {
-        if (field === "toLocation") {
-          // Forward linking: Set next segment's fromLocation
-          if (index < newSegments.length - 1) {
-            const nextSegment = newSegments[index + 1];
-            const nextSegmentDate = nextSegment.date; // Preserve next segment's date
-            newSegments[index + 1] = {
-              ...nextSegment, // Preserve all existing data
-              fromLocation: location,
-              date: nextSegmentDate, // Keep the date
-              ...(currentPhase !== 4 && { selectedFlight: null }), // Only clear selected flight in non-phase-4
-            };
+      // If this is a direct flight, update both locations for consistency
+      if (store.selectedType === "direct" && newSegments.length === 1) {
+        if (field === "fromLocation") {
+          // Update the store's global fromLocation
+          updateStores({
+            flightSegments: newSegments,
+          });
+          // Also update the main store's fromLocation directly when needed
+          if (currentPhase !== 4 && mainStore.setFromLocation) {
+            mainStore.setFromLocation(location);
           }
-          // Only backward link if we're setting a new location (not clearing)
-          if (index > 0 && newSegments[index].fromLocation) {
-            const prevSegment = newSegments[index - 1];
-            const prevSegmentDate = prevSegment.date; // Preserve previous segment's date
-            newSegments[index - 1] = {
-              ...prevSegment, // Preserve all existing data
-              toLocation: newSegments[index].fromLocation,
-              date: prevSegmentDate, // Keep the date
-              ...(currentPhase !== 4 && { selectedFlight: null }), // Only clear selected flight in non-phase-4
-            };
+        } else if (field === "toLocation") {
+          // Update the store's global toLocation
+          updateStores({
+            flightSegments: newSegments,
+          });
+          // Also update the main store's toLocation directly when needed
+          if (currentPhase !== 4 && mainStore.setToLocation) {
+            mainStore.setToLocation(location);
           }
-        } else if (field === "fromLocation") {
-          // Backward linking: Set previous segment's toLocation
-          if (index > 0) {
-            const prevSegment = newSegments[index - 1];
-            const prevSegmentDate = prevSegment.date; // Preserve previous segment's date
-            newSegments[index - 1] = {
-              ...prevSegment, // Preserve all existing data
-              toLocation: location,
-              date: prevSegmentDate, // Keep the date
-              ...(currentPhase !== 4 && { selectedFlight: null }), // Only clear selected flight in non-phase-4
-            };
-          }
-          // Only forward link if we're setting a new location (not clearing)
-          if (index < newSegments.length - 1 && newSegments[index].toLocation) {
-            const nextSegment = newSegments[index + 1];
-            const nextSegmentDate = nextSegment.date; // Preserve next segment's date
-            newSegments[index + 1] = {
-              ...nextSegment, // Preserve all existing data
-              fromLocation: newSegments[index].toLocation,
-              date: nextSegmentDate, // Keep the date
-              ...(currentPhase !== 4 && { selectedFlight: null }), // Only clear selected flight in non-phase-4
-            };
+        }
+      } else {
+        // For multi flights, update the store with segment changes
+        updateStores({
+          flightSegments: newSegments,
+        });
+
+        // Additional special handling for multi-city location propagation
+        if (store.selectedType === "multi") {
+          // If changing the destination of one segment, update the departure of the next segment
+          if (field === "toLocation" && index < newSegments.length - 1) {
+            // Update the next segment's fromLocation to match this segment's toLocation
+            const nextSegmentIndex = index + 1;
+
+            // First check if we need to update (don't override existing different value)
+            const shouldUpdate =
+              !newSegments[nextSegmentIndex].fromLocation ||
+              newSegments[nextSegmentIndex].fromLocation?.value ===
+                newSegments[index].toLocation?.value;
+
+            if (location && shouldUpdate) {
+              // Copy this segment's destination to the next segment's origin
+              newSegments[nextSegmentIndex] = {
+                ...newSegments[nextSegmentIndex],
+                fromLocation: location,
+              };
+
+              // Update stores with this change as well
+              updateStores({
+                flightSegments: newSegments,
+              });
+
+              console.log(
+                `=== FlightSegments - Propagated location to next segment ===`,
+                {
+                  sourceSegment: index,
+                  targetSegment: nextSegmentIndex,
+                  location: location.value || location.label,
+                  timestamp: new Date().toISOString(),
+                }
+              );
+            }
           }
         }
       }
 
-      // Update stores
-      updateStores({ flightSegments: newSegments });
-
-      // Save to localStorage
-      storageHelpers.save(currentPhase, {
-        flightSegments: newSegments,
-        // For the root level location, update if it's the first or last segment
-        ...(index === 0 &&
-          field === "fromLocation" && {
-            fromLocation: location,
-          }),
-        ...(index === newSegments.length - 1 &&
-          field === "toLocation" && {
-            toLocation: location,
-          }),
+      // Always trigger the validation after making changes
+      requestAnimationFrame(() => {
+        if (validate) {
+          validate();
+        }
       });
 
-      // Update location in localStorage for this phase
-      try {
-        const phaseStateKey = `phase${currentPhase}State`;
-        const existingPhaseState = localStorage.getItem(phaseStateKey);
-
-        if (existingPhaseState) {
-          const phaseStateData = JSON.parse(existingPhaseState);
-
-          // Update the root level locations
-          if (index === 0 && field === "fromLocation") {
-            phaseStateData.fromLocation = location;
-          }
-
-          if (index === newSegments.length - 1 && field === "toLocation") {
-            phaseStateData.toLocation = location;
-          }
-
-          // If there are flight segments, update their locations
-          if (
-            phaseStateData.flightSegments &&
-            Array.isArray(phaseStateData.flightSegments)
-          ) {
-            if (index < phaseStateData.flightSegments.length) {
-              phaseStateData.flightSegments[index] = {
-                ...phaseStateData.flightSegments[index],
-                [field]: location,
-              };
-            }
-          }
-
-          localStorage.setItem(phaseStateKey, JSON.stringify(phaseStateData));
-
-          console.log(
-            "=== FlightSegments - Updated location data in localStorage ===",
-            {
-              index,
-              field,
-              locationValue: location?.value,
-              timestamp: new Date().toISOString(),
-            }
-          );
-        }
-      } catch (error) {
-        console.error("Error saving location data to localStorage:", error);
-      }
-
-      // Update validation state
-      if (mainStore.updateValidationState) {
-        // For phase 1, validate all segments must have both locations and proper city connections
-        const isSegmentValid =
-          currentPhase === 1
-            ? newSegments.every((segment, segmentIndex) => {
-                // Each segment must have both locations
-                const hasLocations = !!(
-                  segment.fromLocation && segment.toLocation
-                );
-
-                // Skip connection validation for first segment
-                if (segmentIndex === 0) return hasLocations;
-
-                // For subsequent segments, validate city connections
-                const prevSegment = newSegments[segmentIndex - 1];
-                if (!prevSegment.toLocation || !segment.fromLocation)
-                  return false;
-
-                const prevCity =
-                  prevSegment.toLocation.city ||
-                  prevSegment.toLocation.description ||
-                  prevSegment.toLocation.label;
-                const currentCity =
-                  segment.fromLocation.city ||
-                  segment.fromLocation.description ||
-                  segment.fromLocation.label;
-
-                return (
-                  hasLocations &&
-                  prevCity.toLowerCase() === currentCity.toLowerCase()
-                );
-              })
-            : !!(
-                newSegments[index].fromLocation && newSegments[index].toLocation
-              );
-
-        // Check if all required segments have flights selected for phase 3
-        const selectedFlights = newSegments
-          .map((segment) => segment.selectedFlight)
-          .filter((flight): flight is Flight => flight !== null);
-
-        const isMultiCityValid =
-          store.selectedType === "multi"
-            ? selectedFlights.length === newSegments.length // All segments must have flights
-            : selectedFlights.length > 0; // Direct flight just needs one selection
-
-        // Preserve existing validation state for other phases
-        const existingValidationState =
-          mainStore.validationState?.stepValidation || {};
-        const existingInteractionState =
-          mainStore.validationState?.stepInteraction || {};
-
-        const stepValidation = {
-          ...existingValidationState,
-          1: isSegmentValid,
-          2: existingValidationState[2] ?? false,
-          3:
-            currentPhase === 3
-              ? isMultiCityValid
-              : existingValidationState[3] ?? false,
-          4:
-            currentPhase === 4
-              ? isMultiCityValid
-              : existingValidationState[4] ?? false,
-          5: existingValidationState[5] ?? false,
-        };
-
-        const stepInteraction = {
-          ...existingInteractionState,
-          1: true,
-          2: existingInteractionState[2] ?? false,
-          3: currentPhase === 3 ? true : existingInteractionState[3] ?? false,
-          4: currentPhase === 4 ? true : existingInteractionState[4] ?? false,
-          5: existingInteractionState[5] ?? false,
-        };
-
-        // Save validation state to localStorage for all phases
-        const stateToSave = {
-          flightSegments: newSegments.map((segment) => ({
-            ...segment,
-            date: segment.date ? formatDateForDisplay(segment.date) : null,
-            selectedFlight: segment.selectedFlight,
-            fromLocation: segment.fromLocation,
-            toLocation: segment.toLocation,
-          })),
-          selectedType: store.selectedType,
-          currentPhase: currentPhase,
-          validationState: {
-            isFlightValid:
-              currentPhase === 3 || currentPhase === 4
-                ? isMultiCityValid
-                : isSegmentValid,
-            stepValidation,
-            stepInteraction,
-            _timestamp: Date.now(),
-          },
-        };
-
-        // Save state for current phase
-        localStorage.setItem(
-          `phase${currentPhase}State`,
-          JSON.stringify(stateToSave)
-        );
-
-        // Also save state for phase 1 to ensure validation persists
-        if (currentPhase !== 1) {
-          const phase1State = {
-            ...stateToSave,
-            currentPhase: 1,
-          };
-          localStorage.setItem("phase1State", JSON.stringify(phase1State));
-        }
-
-        mainStore.updateValidationState({
-          isFlightValid:
-            currentPhase === 3 || currentPhase === 4
-              ? isMultiCityValid
-              : isSegmentValid,
-          stepValidation,
-          stepInteraction,
-          _timestamp: Date.now(),
-        });
-      }
-
-      // Update validation state immediately
-      validate();
-
-      // Notify parent of interaction
+      // Tell parent that interaction happened
       onInteract();
     },
-    [store, currentPhase, updateStores, mainStore?.updateValidationState]
+    [
+      currentPhase,
+      onInteract,
+      store?.flightSegments,
+      store?.selectedType,
+      updateStores,
+      validate,
+      mainStore,
+    ]
   );
 
   const handleDateChange = (date: Date | null, segmentIndex: number) => {
@@ -2530,10 +2646,37 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
       });
     }
 
-    // Only clear flags when date is explicitly set to null
+    // Handle explicit date clearing vs. setting
     if (date === null) {
+      // When date is explicitly cleared
       clearDateFlags(currentPhase, segmentIndex);
+
+      // Actively remove date from all cache locations
+      const dateKeysToRemove = [
+        `dateCache_phase${currentPhase}_segment${segmentIndex}`,
+        `exactDate_phase${currentPhase}_segment${segmentIndex}`,
+      ];
+
+      dateKeysToRemove.forEach((key) => {
+        localStorage.removeItem(key);
+        console.log(`=== handleDateChange - Removed date cache ===`, {
+          key,
+          segmentIndex,
+          phase: currentPhase,
+          timestamp: new Date().toISOString(),
+        });
+      });
+
+      // Set the cleared flag
+      const dateClearFlagKey = `dateWasCleared_phase${currentPhase}_segment${segmentIndex}`;
+      localStorage.setItem(dateClearFlagKey, "true");
+      console.log(`=== handleDateChange - Set date clear flag ===`, {
+        key: dateClearFlagKey,
+        segmentIndex,
+        timestamp: new Date().toISOString(),
+      });
     } else {
+      // When date is explicitly set
       // Remove any clear flags since we now have a date
       const dateClearFlagKey = `dateWasCleared_phase${currentPhase}_segment${segmentIndex}`;
       if (localStorage.getItem(dateClearFlagKey)) {
@@ -2543,13 +2686,11 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
           timestamp: new Date().toISOString(),
         });
       }
-    }
 
-    // When date is selected, update local cache with explicit ISO format
-    const segmentDateKey = `dateCache_phase${currentPhase}_segment${segmentIndex}`;
-    const segmentDateExactKey = `exactDate_phase${currentPhase}_segment${segmentIndex}`;
+      // Ensure we store the date in localStorage directly
+      const segmentDateKey = `dateCache_phase${currentPhase}_segment${segmentIndex}`;
+      const segmentDateExactKey = `exactDate_phase${currentPhase}_segment${segmentIndex}`;
 
-    if (date) {
       // Store in a consistent ISO format for better persistence
       localStorage.setItem(segmentDateKey, date.toISOString());
       localStorage.setItem(segmentDateExactKey, date.toISOString());
@@ -2559,9 +2700,6 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
         date: date.toISOString(),
         timestamp: new Date().toISOString(),
       });
-    } else {
-      localStorage.removeItem(segmentDateKey);
-      localStorage.removeItem(segmentDateExactKey);
     }
 
     // Update date picker state
@@ -3573,6 +3711,13 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
     [store?.flightSegments, t.flightSelector.errors, parsedDates]
   );
 
+  // Use the global cleanupLocationStorage function from the top of the file
+  useEffect(() => {
+    return () => {
+      cleanupLocationStorage();
+    };
+  }, []);
+
   if (!store?.flightSegments) return null;
 
   return (
@@ -3624,103 +3769,108 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
                 <div className="relative date-picker-input w-full">
-                  <DatePicker
-                    selected={(() => {
-                      // PHASE 4 SPECIAL HANDLING - Reset date to null for alternative flights
-                      if (currentPhase === 4) {
-                        // If we are in Phase 4 and need a fresh date, return null to force date selection
-                        const travelStatus =
-                          phase4Store?.travelStatusAnswers?.find?.(
-                            (a) => a.questionId === "travel_status"
-                          )?.value;
+                  {(() => {
+                    // Calculate selected date value
+                    let selectedDate: Date | null = null;
 
-                        const needsAlternativeFlight =
-                          travelStatus === "provided" ||
-                          travelStatus === "took_alternative_own";
+                    // PHASE 4 SPECIAL HANDLING - Reset date to null for alternative flights
+                    if (currentPhase === 4) {
+                      // If we are in Phase 4 and need a fresh date, return null to force date selection
+                      const travelStatus =
+                        phase4Store?.travelStatusAnswers?.find?.(
+                          (a) => a.questionId === "travel_status"
+                        )?.value;
 
-                        if (needsAlternativeFlight && !parsedDates[index]) {
+                      const needsAlternativeFlight =
+                        travelStatus === "provided" ||
+                        travelStatus === "took_alternative_own";
+
+                      if (needsAlternativeFlight && !parsedDates[index]) {
+                        console.log(
+                          "=== DatePicker - Phase 4 Alternative Flight - Forcing null date ===",
+                          {
+                            index,
+                            timestamp: new Date().toISOString(),
+                          }
+                        );
+                        selectedDate = null;
+                      }
+                    }
+
+                    // For all other cases, proceed with normal date handling
+                    if (!selectedDate && parsedDates[index]) {
+                      selectedDate = parsedDates[index];
+                    }
+
+                    // First check segment.date
+                    if (
+                      !selectedDate &&
+                      segment.date &&
+                      typeof segment.date === "object" &&
+                      isValid(segment.date as Date)
+                    ) {
+                      console.log("=== DatePicker - Using segment.date ===", {
+                        date: segment.date,
+                        index,
+                        timestamp: new Date().toISOString(),
+                      });
+                      selectedDate = segment.date as Date;
+                    }
+
+                    // Try to parse segment.date as a string
+                    if (!selectedDate && segment.date) {
+                      const dateStr = String(segment.date);
+
+                      // Check if it's in dd.MM.yyyy format
+                      if (
+                        typeof dateStr === "string" &&
+                        dateStr.match(/^\d{2}\.\d{2}\.\d{4}$/)
+                      ) {
+                        const [day, month, year] = dateStr
+                          .split(".")
+                          .map(Number);
+                        const parsedDate = new Date(
+                          Date.UTC(year, month - 1, day, 12, 0, 0, 0)
+                        );
+
+                        if (isValid(parsedDate)) {
                           console.log(
-                            "=== DatePicker - Phase 4 Alternative Flight - Forcing null date ===",
+                            "=== DatePicker - Parsed dd.MM.yyyy string ===",
                             {
+                              originalString: dateStr,
+                              parsedDate,
                               index,
                               timestamp: new Date().toISOString(),
                             }
                           );
-                          return null;
+                          selectedDate = parsedDate;
                         }
                       }
 
-                      // For all other cases, proceed with normal date handling
-                      if (parsedDates[index]) {
-                        return parsedDates[index];
-                      }
-
-                      // First check segment.date
+                      // Check if it's an ISO date string
                       if (
-                        segment.date &&
-                        typeof segment.date === "object" &&
-                        isValid(segment.date as Date)
+                        !selectedDate &&
+                        typeof dateStr === "string" &&
+                        (dateStr.includes("T") || dateStr.includes("-"))
                       ) {
-                        console.log("=== DatePicker - Using segment.date ===", {
-                          date: segment.date,
-                          index,
-                          timestamp: new Date().toISOString(),
-                        });
-                        return segment.date as Date;
+                        const parsedDate = parseISO(dateStr);
+
+                        if (isValid(parsedDate)) {
+                          console.log(
+                            "=== DatePicker - Parsed ISO string ===",
+                            {
+                              originalString: dateStr,
+                              parsedDate,
+                              index,
+                              timestamp: new Date().toISOString(),
+                            }
+                          );
+                          selectedDate = parsedDate;
+                        }
                       }
 
-                      // Try to parse segment.date as a string
-                      if (segment.date) {
-                        const dateStr = String(segment.date);
-
-                        // Check if it's in dd.MM.yyyy format
-                        if (
-                          typeof dateStr === "string" &&
-                          dateStr.match(/^\d{2}\.\d{2}\.\d{4}$/)
-                        ) {
-                          const [day, month, year] = dateStr
-                            .split(".")
-                            .map(Number);
-                          const parsedDate = new Date(
-                            Date.UTC(year, month - 1, day, 12, 0, 0, 0)
-                          );
-
-                          if (isValid(parsedDate)) {
-                            console.log(
-                              "=== DatePicker - Parsed dd.MM.yyyy string ===",
-                              {
-                                originalString: dateStr,
-                                parsedDate,
-                                index,
-                                timestamp: new Date().toISOString(),
-                              }
-                            );
-                            return parsedDate;
-                          }
-                        }
-
-                        // Check if it's an ISO date string
-                        if (
-                          typeof dateStr === "string" &&
-                          (dateStr.includes("T") || dateStr.includes("-"))
-                        ) {
-                          const parsedDate = parseISO(dateStr);
-
-                          if (isValid(parsedDate)) {
-                            console.log(
-                              "=== DatePicker - Parsed ISO string ===",
-                              {
-                                originalString: dateStr,
-                                parsedDate,
-                                index,
-                                timestamp: new Date().toISOString(),
-                              }
-                            );
-                            return parsedDate;
-                          }
-                        }
-
-                        // As a fallback, try safeParseDateString
+                      // As a fallback, try safeParseDateString
+                      if (!selectedDate) {
                         const parsed = safeParseDateString(dateStr);
                         if (parsed) {
                           console.log(
@@ -3732,34 +3882,36 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
                               timestamp: new Date().toISOString(),
                             }
                           );
-                          return parsed;
+                          selectedDate = parsed;
                         }
                       }
+                    }
 
-                      // Finally, check if the flight has a date
-                      if (segment.selectedFlight?.date) {
-                        const flightDate = segment.selectedFlight.date;
-                        console.log(
-                          "=== DatePicker - Using selectedFlight.date ===",
-                          {
-                            flightDate,
-                            index,
-                            timestamp: new Date().toISOString(),
-                          }
-                        );
-
-                        if (typeof flightDate === "string") {
-                          const parsed = safeParseDateString(flightDate);
-                          if (parsed) return parsed;
-                        } else if (
-                          flightDate &&
-                          typeof flightDate === "object" &&
-                          isValid(flightDate as Date)
-                        ) {
-                          return flightDate as Date;
+                    // Finally, check if the flight has a date
+                    if (!selectedDate && segment.selectedFlight?.date) {
+                      const flightDate = segment.selectedFlight.date;
+                      console.log(
+                        "=== DatePicker - Using selectedFlight.date ===",
+                        {
+                          flightDate,
+                          index,
+                          timestamp: new Date().toISOString(),
                         }
-                      }
+                      );
 
+                      if (typeof flightDate === "string") {
+                        const parsed = safeParseDateString(flightDate);
+                        if (parsed) selectedDate = parsed;
+                      } else if (
+                        flightDate &&
+                        typeof flightDate === "object" &&
+                        isValid(flightDate as Date)
+                      ) {
+                        selectedDate = flightDate as Date;
+                      }
+                    }
+
+                    if (!selectedDate) {
                       console.log("=== DatePicker - No valid date found ===", {
                         index,
                         segmentDate: segment.date,
@@ -3768,10 +3920,40 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
                           : "null",
                         timestamp: new Date().toISOString(),
                       });
+                    }
 
-                      return undefined;
-                    })()}
-                    onChange={(date: Date | null) => {
+                    // Calculate date input value
+                    let dateInputValue = "";
+                    if (parsedDates[index]) {
+                      console.log(
+                        "=== DatePicker - Using parsedDates state ===",
+                        {
+                          date: format(
+                            parsedDates[index] as Date,
+                            "dd.MM.yyyy"
+                          ),
+                          index,
+                          timestamp: new Date().toISOString(),
+                        }
+                      );
+                      dateInputValue = format(
+                        parsedDates[index] as Date,
+                        "dd.MM.yyyy"
+                      );
+                    }
+
+                    // Calculate openToDate
+                    const openToDate =
+                      parsedDates[index] ||
+                      (segment.date
+                        ? typeof segment.date === "object" &&
+                          isValid(segment.date as Date)
+                          ? (segment.date as Date)
+                          : safeParseDateString(segment.date)
+                        : undefined);
+
+                    // Handle onChange
+                    const handleDatePickerChange = (date: Date | null) => {
                       console.log("=== DatePicker onChange ===", {
                         date,
                         segmentDate: segment.date,
@@ -3790,260 +3972,102 @@ export const FlightSegments: React.FC<FlightSegmentsProps> = ({
                       }
 
                       handleDateChange(date, index);
-                    }}
-                    customInput={
-                      <CustomDateInput
-                        value={(() => {
-                          // Check for shared flight data flag which might indicate special formatting
-                          const isSharedFlight =
-                            localStorage.getItem("_sharedFlightData") ===
-                              "true" ||
-                            localStorage.getItem("_dataFromSharedLink") ===
-                              "true";
+                    };
 
-                          // 1. First priority: Check parsedDates state (most reliable source)
-                          if (
-                            parsedDates[index] &&
-                            isValid(parsedDates[index])
-                          ) {
-                            console.log(
-                              `=== DatePicker - Using parsedDates state ===`,
-                              {
-                                date: format(parsedDates[index], "dd.MM.yyyy"),
-                                index,
-                                timestamp: new Date().toISOString(),
-                              }
-                            );
-                            return format(parsedDates[index], "dd.MM.yyyy");
-                          }
+                    // Handle clear
+                    const handleClear = () => {
+                      console.log(
+                        "=== DatePicker - Date Cleared Explicitly ===",
+                        {
+                          index,
+                          phase: currentPhase,
+                          timestamp: new Date().toISOString(),
+                        }
+                      );
 
-                          // 2. Second priority: Check segment.selectedFlight.date (high reliability)
-                          if (segment.selectedFlight?.date) {
-                            // Handle Date objects
-                            if (
-                              typeof segment.selectedFlight.date === "object" &&
-                              segment.selectedFlight.date !== null &&
-                              "getTime" in segment.selectedFlight.date
-                            ) {
-                              const flightDate = segment.selectedFlight
-                                .date as Date;
-                              if (isValid(flightDate)) {
-                                console.log(
-                                  `=== DatePicker - Using selectedFlight Date object ===`,
-                                  {
-                                    date: format(flightDate, "dd.MM.yyyy"),
-                                    index,
-                                    timestamp: new Date().toISOString(),
-                                  }
-                                );
-                                return format(flightDate, "dd.MM.yyyy");
-                              }
-                            }
+                      // 1. Update parsed dates array to reflect cleared state
+                      const newParsedDates = [...parsedDates];
+                      newParsedDates[index] = null;
+                      setParsedDates(newParsedDates);
 
-                            // Handle string dates (especially from shared links)
-                            const flightDateStr = String(
-                              segment.selectedFlight.date
-                            );
+                      // 2. Set the cleared flag in localStorage
+                      const dateClearFlagKey = `dateWasCleared_phase${currentPhase}_segment${index}`;
+                      localStorage.setItem(dateClearFlagKey, "true");
 
-                            // Check for dd.MM.yyyy format
-                            if (flightDateStr.match(/^\d{2}\.\d{2}\.\d{4}$/)) {
-                              console.log(
-                                `=== DatePicker - Using selectedFlight DD.MM.YYYY string ===`,
-                                {
-                                  date: flightDateStr,
-                                  index,
-                                  timestamp: new Date().toISOString(),
-                                }
-                              );
-                              return flightDateStr;
-                            }
+                      // 3. Call handleDateChange with null to update all stores
+                      handleDateChange(null, index);
 
-                            // Try parsing ISO format
-                            try {
-                              if (
-                                flightDateStr.includes("T") ||
-                                flightDateStr.includes("-")
-                              ) {
-                                const parsed = parseISO(flightDateStr);
-                                if (isValid(parsed)) {
-                                  console.log(
-                                    `=== DatePicker - Parsed selectedFlight ISO string ===`,
-                                    {
-                                      original: flightDateStr,
-                                      parsed: format(parsed, "dd.MM.yyyy"),
-                                      index,
-                                      timestamp: new Date().toISOString(),
-                                    }
-                                  );
-                                  return format(parsed, "dd.MM.yyyy");
-                                }
-                              }
-                            } catch (e) {
-                              console.warn(
-                                "Failed to parse selectedFlight.date:",
-                                flightDateStr
-                              );
-                            }
-                          }
+                      // 4. Clear ALL date caches for this segment
+                      const cacheKeysToRemove = [
+                        `dateCache_phase${currentPhase}_segment${index}`,
+                        `exactDate_phase${currentPhase}_segment${index}`,
+                      ];
 
-                          // 3. Third priority: Check segment.date
-                          if (segment.date) {
-                            // Handle Date objects
-                            if (
-                              typeof segment.date === "object" &&
-                              segment.date !== null &&
-                              "getTime" in segment.date
-                            ) {
-                              const segmentDate = segment.date as Date;
-                              if (isValid(segmentDate)) {
-                                console.log(
-                                  `=== DatePicker - Using segment.date Date object ===`,
-                                  {
-                                    date: format(segmentDate, "dd.MM.yyyy"),
-                                    index,
-                                    timestamp: new Date().toISOString(),
-                                  }
-                                );
-                                return format(segmentDate, "dd.MM.yyyy");
-                              }
-                            }
-
-                            // Handle string dates
-                            const segmentDateStr = String(segment.date);
-
-                            // Check for dd.MM.yyyy format
-                            if (segmentDateStr.match(/^\d{2}\.\d{2}\.\d{4}$/)) {
-                              console.log(
-                                `=== DatePicker - Using segment.date DD.MM.YYYY string ===`,
-                                {
-                                  date: segmentDateStr,
-                                  index,
-                                  timestamp: new Date().toISOString(),
-                                }
-                              );
-                              return segmentDateStr;
-                            }
-
-                            // Try parsing ISO format
-                            try {
-                              if (
-                                segmentDateStr.includes("T") ||
-                                segmentDateStr.includes("-")
-                              ) {
-                                const parsed = parseISO(segmentDateStr);
-                                if (isValid(parsed)) {
-                                  console.log(
-                                    `=== DatePicker - Parsed segment.date ISO string ===`,
-                                    {
-                                      original: segmentDateStr,
-                                      parsed: format(parsed, "dd.MM.yyyy"),
-                                      index,
-                                      timestamp: new Date().toISOString(),
-                                    }
-                                  );
-                                  return format(parsed, "dd.MM.yyyy");
-                                }
-                              }
-                            } catch (e) {
-                              console.warn(
-                                "Failed to parse segment.date:",
-                                segmentDateStr
-                              );
-                            }
-                          }
-
-                          // No valid date found
+                      cacheKeysToRemove.forEach((key) => {
+                        try {
+                          localStorage.removeItem(key);
                           console.log(
-                            "=== DatePicker - No valid date found ===",
+                            `=== DatePicker - Removed date cache ===`,
                             {
-                              index,
-                              segment: segment
-                                ? {
-                                    fromLocation: segment.fromLocation?.value,
-                                    toLocation: segment.toLocation?.value,
-                                    date: segment.date,
-                                    selectedFlight: segment.selectedFlight
-                                      ? {
-                                          id: segment.selectedFlight.id,
-                                          date: segment.selectedFlight.date,
-                                        }
-                                      : null,
-                                  }
-                                : null,
-                              timestamp: new Date().toISOString(),
-                            }
-                          );
-
-                          return "";
-                        })()}
-                        label={t.flightSelector.labels.departureDate}
-                        disabled={disabled}
-                        onClear={() => {
-                          console.log(
-                            "=== DatePicker - Date Cleared Explicitly ===",
-                            {
+                              key,
                               index,
                               phase: currentPhase,
                               timestamp: new Date().toISOString(),
                             }
                           );
+                        } catch (error) {
+                          console.error(
+                            `Error removing date cache key ${key}:`,
+                            error
+                          );
+                        }
+                      });
 
-                          // 1. Update parsed dates array to reflect cleared state
-                          const newParsedDates = [...parsedDates];
-                          newParsedDates[index] = null;
-                          setParsedDates(newParsedDates);
+                      // 5. Force validation
+                      validate();
+                    };
 
-                          // 2. Set the cleared flag in localStorage
-                          const dateClearFlagKey = `dateWasCleared_phase${currentPhase}_segment${index}`;
-                          localStorage.setItem(dateClearFlagKey, "true");
-
-                          // 3. Call handleDateChange with null to update all stores
-                          handleDateChange(null, index);
-
-                          // 4. Clear date cache for multi-city segments
-                          if (store?.selectedType === "multi") {
-                            const segmentDateKey = `dateCache_phase${currentPhase}_segment${index}`;
-                            localStorage.removeItem(segmentDateKey);
-                          }
-
-                          // 5. Force validation
-                          validate();
-                        }}
+                    // Create the custom input element
+                    const customInput = (
+                      <CustomDateInput
+                        value={dateInputValue}
+                        label={t.flightSelector.labels.departureDate}
+                        disabled={disabled}
+                        onClear={handleClear}
                       />
-                    }
-                    dateFormat="dd.MM.yyyy"
-                    showMonthDropdown
-                    showYearDropdown
-                    dropdownMode="select"
-                    isClearable={false}
-                    placeholderText="DD.MM.YY / DD.MM.YYYY"
-                    shouldCloseOnSelect={true}
-                    maxDate={new Date()}
-                    minDate={
-                      new Date(
-                        new Date().setFullYear(new Date().getFullYear() - 3)
-                      )
-                    }
-                    openToDate={
-                      // Use parsedDates[index] first if available
-                      parsedDates[index] ||
-                      (segment.date
-                        ? typeof segment.date === "object" &&
-                          isValid(segment.date as Date)
-                          ? (segment.date as Date)
-                          : safeParseDateString(segment.date)
-                        : undefined)
-                    }
-                    disabledKeyboardNavigation
-                    preventOpenOnFocus
-                    popperProps={{
-                      strategy: "fixed",
-                      placement: "top-start",
-                    }}
-                    className="react-datepicker-popper"
-                    calendarClassName="custom-calendar"
-                    disabled={disabled}
-                  />
+                    );
+
+                    return (
+                      <DatePicker
+                        selected={selectedDate}
+                        onChange={handleDatePickerChange}
+                        customInput={customInput}
+                        dateFormat="dd.MM.yyyy"
+                        showMonthDropdown
+                        showYearDropdown
+                        dropdownMode="select"
+                        isClearable={false}
+                        placeholderText="DD.MM.YY / DD.MM.YYYY"
+                        shouldCloseOnSelect={true}
+                        maxDate={new Date()}
+                        minDate={
+                          new Date(
+                            new Date().setFullYear(new Date().getFullYear() - 3)
+                          )
+                        }
+                        openToDate={openToDate}
+                        disabledKeyboardNavigation
+                        preventOpenOnFocus
+                        popperProps={{
+                          strategy: "fixed",
+                          placement: "top-start",
+                        }}
+                        className="react-datepicker-popper"
+                        calendarClassName="custom-calendar"
+                        disabled={disabled}
+                      />
+                    );
+                  })()}
                 </div>
                 <button
                   onClick={() => {

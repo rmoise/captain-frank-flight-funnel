@@ -1,5 +1,5 @@
-import type { Flight } from './store';
-import type { LocationLike } from './location';
+import type { Flight } from "./store";
+import type { LocationLike } from "./location";
 
 export interface FlightSearchRequest {
   from_iata: string;
@@ -20,8 +20,8 @@ export const formatFlightSearchRequest = (
   params: Partial<FlightSearchRequest>
 ): FlightSearchRequest => {
   return {
-    from_iata: params.from_iata || '',
-    to_iata: params.to_iata || '',
+    from_iata: params.from_iata || "",
+    to_iata: params.to_iata || "",
     flight_date: params.flight_date,
     flight_number: params.flight_number,
   };
@@ -29,17 +29,17 @@ export const formatFlightSearchRequest = (
 
 // Helper function to format API response to match our store's Flight type
 export const formatFlightSearchResponse = (data: any): Flight => {
-  const flightNumber = data.flightnumber_iata || '';
+  const flightNumber = data.flightnumber_iata || "";
   const airline = flightNumber.substring(0, 2);
-  const departureCity = data.dep_iata || '';
-  const arrivalCity = data.arr_iata || '';
-  const departureTime = data.dep_time_sched || '';
-  const arrivalTime = data.arr_time_sched || '';
-  const date = data.flight_date || '';
-  const status = data.status || 'scheduled';
+  const departureCity = data.dep_iata || "";
+  const arrivalCity = data.arr_iata || "";
+  const departureTime = data.dep_time_sched || "";
+  const arrivalTime = data.arr_time_sched || "";
+  const date = data.flight_date || "";
+  const status = data.status || "scheduled";
 
   return {
-    id: data.id?.toString() || '',
+    id: data.id?.toString() || "",
     flightNumber,
     airline,
     departureCity,
@@ -48,10 +48,10 @@ export const formatFlightSearchResponse = (data: any): Flight => {
     arrivalTime,
     departure: departureCity,
     arrival: arrivalCity,
-    duration: '',
+    duration: "",
     stops: 0,
-    aircraft: data.aircraft_type || 'Unknown',
-    class: 'economy',
+    aircraft: data.aircraft_type || "Unknown",
+    class: "economy",
     date,
     price: 0,
     status,

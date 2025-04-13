@@ -1,8 +1,9 @@
-'use client';
+"use client";
 
-import React from 'react';
-import { AutocompleteInput } from '@/components/shared/AutocompleteInput';
-import type { LocationData } from '@/types/store';
+import React from "react";
+import { AutocompleteInput } from "@/components/shared/AutocompleteInput";
+import type { LocationData } from "@/types/store";
+import { getAirportCitySync } from "@/utils/locationUtils";
 
 interface Airport {
   iata_code: string;
@@ -38,28 +39,40 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
       const response = await fetch(
         `/api/searchairportsbyterm?${new URLSearchParams({
           term,
-          lang: 'en',
+          lang: "en",
         })}`
       );
 
       if (!response.ok) {
-        throw new Error('Failed to fetch airports');
+        throw new Error("Failed to fetch airports");
       }
 
       const data = await response.json();
       const airports = data.data || [];
 
-      // Map the airports to LocationData format
-      const mappedAirports = airports.map((airport: Airport) => ({
-        value: airport.iata_code,
-        label: airport.iata_code,
-        description: airport.city || '',
-        city: airport.city || '',
-        dropdownLabel: `${airport.name} (${airport.iata_code})`,
-      }));
+      // Use the airport data directly from the API without modifications
+      // This preserves all original properties including city names
+      const mappedAirports = airports.map((airport: Airport) => {
+        // Also populate the global cache with each airport code
+        if (airport.iata_code && /^[A-Z]{3}$/.test(airport.iata_code)) {
+          // Call getAirportCitySync to populate the cache (don't need to await the result)
+          getAirportCitySync(airport.iata_code, "en");
+        }
+
+        return {
+          value: airport.iata_code,
+          label: airport.iata_code,
+          description: airport.city || airport.name,
+          city: airport.city || "",
+          name: airport.name || "",
+          dropdownLabel: `${airport.name || airport.city || ""} (${
+            airport.iata_code
+          })`,
+        };
+      });
 
       // If we have an exact IATA code match and it's in the results,
-      // select it automatically
+      // we can still prioritize it without modifying the data
       if (isExactIataCode) {
         const exactMatch = mappedAirports.find(
           (airport: { value: string }) => airport.value === term
@@ -71,7 +84,7 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
 
       return mappedAirports;
     } catch (error) {
-      console.error('Error searching airports:', error);
+      console.error("Error searching airports:", error);
       return [];
     }
   };

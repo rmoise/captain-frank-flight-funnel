@@ -31,47 +31,37 @@ export function ContinueButton({
   const handleClick = useCallback(
     async (e: React.MouseEvent<HTMLButtonElement>) => {
       console.log("=== Continue Button Click ===");
-      console.log("Button State:", { disabled, isLoading, hasClicked });
+      console.log("Button State:", {
+        disabled,
+        isLoading,
+        hasClicked,
+      });
 
-      // Prevent default behavior to avoid form submission
-      e.preventDefault();
-      e.stopPropagation();
-
+      // Only proceed if the button is not disabled, not loading, and hasn't been clicked
       if (disabled || isLoading || hasClicked) {
-        console.log(
-          "Button is disabled, loading, or already clicked - ignoring click"
-        );
+        console.log("Button click ignored due to state conditions");
         return;
       }
 
-      // Set flags to prevent multiple clicks
-      setHasClicked(true);
+      // Set loading state and clicked state
       setInternalIsLoading(true);
+      setHasClicked(true);
       console.log("Internal loading state set to true, hasClicked set to true");
-
-      // Add a small delay to ensure UI updates before the onClick handler runs
-      await new Promise((resolve) => setTimeout(resolve, 100));
 
       try {
         console.log("About to execute onClick handler");
-        if (onClick) {
-          await onClick(e);
-        }
+        // Execute the onClick handler provided by the parent component
+        await onClick(e);
         console.log("onClick handler completed successfully");
       } catch (error) {
         console.error("Error in onClick handler:", error);
-      } finally {
-        // We don't reset the clicked state to ensure the button remains disabled
-        // even if the loading state is cleared
-
-        // Add a delay before allowing the button to be clicked again in case
-        // navigation didn't occur
-        setTimeout(() => {
-          setInternalIsLoading(false);
-          setHasClicked(false);
-          console.log("Internal loading state reset after delay");
-        }, 2000);
       }
+
+      // Reset the loading state after a delay
+      setTimeout(() => {
+        setInternalIsLoading(false);
+        console.log("Internal loading state reset after delay");
+      }, 200);
 
       console.log("=== End Continue Button Click ===");
     },

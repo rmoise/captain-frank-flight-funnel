@@ -149,67 +149,41 @@ export const processLocation = (
 ): (string & LocationLike) | null => {
   if (!location) return null;
 
-  // If it's already a string & LocationLike object, ensure all properties are preserved
+  // If it's already a string & LocationLike object with a value property,
+  // preserve it EXACTLY as is without any transformations or manipulation
   if (
     typeof location === "object" &&
     location !== null &&
     "value" in location &&
     typeof (location as LocationLike).value === "string"
   ) {
-    const typedLocation = location as LocationLike;
-    const value = typedLocation.value || "";
+    // CRITICAL: Return the exact same object reference without any manipulation
+    // This ensures display names and all properties are preserved exactly as they were
+    const locationObj = location as LocationLike;
 
-    // Extract all original properties we need to preserve
-    const {
-      label = value,
-      description = value,
-      city = value,
-      dropdownLabel = value,
-      // Extract any other LocationLike properties
-      ...otherProps
-    } = typedLocation;
+    // Ensure city property exists with value property
+    if (!locationObj.city) {
+      (locationObj as any).city = locationObj.value;
 
-    // Instead of using Object.assign on a String object, create a custom object
-    // with all required properties that also behaves like a string
-    const safeProps = Object.entries(otherProps)
-      .filter(([key]) => !["toString", "valueOf"].includes(key))
-      .reduce((obj, [key, val]) => ({ ...obj, [key]: val }), {});
+      console.log("=== processLocation - Added missing city property ===", {
+        value: locationObj.value,
+        city: locationObj.city,
+        timestamp: new Date().toISOString(),
+      });
+    }
 
-    // Create a wrapper object that will convert to string when needed
-    const result = Object.create(String.prototype, {
-      ...Object.getOwnPropertyDescriptors({
-        ...safeProps,
-        value,
-        label,
-        description,
-        city,
-        dropdownLabel,
-        length: { value: value.length, writable: false, configurable: true },
-        toString: function () {
-          return value;
-        },
-        valueOf: function () {
-          return value;
-        },
-      }),
-      // Define primitive value for the string behavior
-      [Symbol.toPrimitive]: {
-        value: function () {
-          return value;
-        },
-        writable: true,
-        configurable: true,
-      },
-    });
+    console.log(
+      "=== processLocation - Preserving Existing Location Object ===",
+      {
+        input: `${(location as LocationLike).value}`,
+        preservingOriginal: true,
+        city: (location as LocationLike).city,
+        timestamp: new Date().toISOString(),
+      }
+    );
 
-    // Log the processed location
-    console.log("=== processLocation - Object Input ===", {
-      input: location,
-      result,
-      timestamp: new Date().toISOString(),
-    });
-
-    return result as string & LocationLike;
+    // Cast to string & LocationLike without manipulating the object
+    return location as string & LocationLike;
   }
 
   // If it's a string, handle it appropriately
@@ -253,7 +227,8 @@ export const processLocation = (
       // Log the processed location
       console.log("=== processLocation - Airport Code Input ===", {
         input: location,
-        result,
+        value: value,
+        city: value,
         timestamp: new Date().toISOString(),
       });
 
@@ -306,7 +281,8 @@ export const processLocation = (
     // Log the processed location
     console.log("=== processLocation - String Input ===", {
       input: location,
-      result,
+      value: value,
+      city: value,
       timestamp: new Date().toISOString(),
     });
 
@@ -342,6 +318,7 @@ export interface FlightActions {
   updateFlightDetails: (flight: Flight) => void;
   setLocationError: (error: string | null) => void;
   clearLocationError: () => void;
+  setMultiFlight: (index: number, flight: Partial<FlightSegment>) => void;
 }
 
 export const createFlightSlice = (
@@ -395,7 +372,82 @@ export const createFlightSlice = (
 
   setSelectedType: (type) => {
     const state = get();
-    set(() => createStateUpdate(state, { selectedType: type }));
+
+    // When changing flight type, clear localStorage data to prevent persistence issues
+    try {
+      console.log(`=== FlightSlice - Changing flight type ===`, {
+        from: state.selectedType,
+        to: type,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Only clear if type is actually changing
+      if (state.selectedType !== type) {
+        // Clear all phase-related localStorage data
+        const phase = state.currentPhase;
+        const storageKeys = Object.keys(localStorage);
+
+        // Clear any keys related to flight segments or locations for this phase
+        storageKeys.forEach(key => {
+          if (key.includes(`flightSegment_phase${phase}`) ||
+              key.includes(`flightData_phase${phase}`) ||
+              key.includes(`locationWasCleared_phase${phase}`) ||
+              key.includes(`dateWasCleared_phase${phase}`)) {
+            localStorage.removeItem(key);
+            console.log(`=== FlightSlice - Removed storage key for type change ===`, {
+              key,
+              timestamp: new Date().toISOString(),
+            });
+          }
+        });
+
+        // Also remove any cached locations in session storage
+        if (typeof sessionStorage !== 'undefined') {
+          const sessionKeys = Object.keys(sessionStorage);
+          sessionKeys.forEach(key => {
+            if (key.includes(`location_phase${phase}`)) {
+              sessionStorage.removeItem(key);
+              console.log(`=== FlightSlice - Removed session storage key for type change ===`, {
+                key,
+                timestamp: new Date().toISOString(),
+              });
+            }
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error clearing storage data on flight type change:", error);
+    }
+
+    // Create new segments structure based on new type
+    const newSegments = type === "direct"
+      ? [{
+          fromLocation: state.fromLocation,
+          toLocation: state.toLocation,
+          date: null,
+          selectedFlight: null
+        }]
+      : [
+          {
+            fromLocation: state.fromLocation,
+            toLocation: null,
+            date: null,
+            selectedFlight: null
+          },
+          {
+            fromLocation: null,
+            toLocation: state.toLocation,
+            date: null,
+            selectedFlight: null
+          }
+        ];
+
+    set(() => createStateUpdate(state, {
+      selectedType: type,
+      flightSegments: newSegments,
+      selectedFlight: null,
+      selectedFlights: []
+    }));
   },
 
   setFromLocation: (location: LocationLike | null) => {
@@ -757,28 +809,24 @@ export const createFlightSlice = (
   setDirectFlight: (flight: Partial<FlightSegment>) => {
     const state = get();
 
-    // Only process locations if they've changed
+    // Process locations carefully to preserve all data
     const fromLocationValue =
       flight.fromLocation !== undefined && flight.fromLocation !== null
-        ? state.directFlight.fromLocation &&
-          typeof flight.fromLocation === "object" &&
-          "value" in flight.fromLocation &&
-          flight.fromLocation.value !== null &&
-          state.directFlight.fromLocation.value === flight.fromLocation.value
-          ? state.directFlight.fromLocation // Keep existing if values match
-          : asLocationLike(flight.fromLocation)
+        ? processLocation(flight.fromLocation) // Use processLocation which now preserves objects
         : state.directFlight.fromLocation;
 
     const toLocationValue =
       flight.toLocation !== undefined && flight.toLocation !== null
-        ? state.directFlight.toLocation &&
-          typeof flight.toLocation === "object" &&
-          "value" in flight.toLocation &&
-          flight.toLocation.value !== null &&
-          state.directFlight.toLocation.value === flight.toLocation.value
-          ? state.directFlight.toLocation // Keep existing if values match
-          : asLocationLike(flight.toLocation)
+        ? processLocation(flight.toLocation) // Use processLocation which now preserves objects
         : state.directFlight.toLocation;
+
+    console.log("Setting direct flight with locations:", {
+      fromBefore: state.directFlight.fromLocation,
+      fromAfter: fromLocationValue,
+      toBefore: state.directFlight.toLocation,
+      toAfter: toLocationValue,
+      phase: state.currentPhase,
+    });
 
     const updatedDirectFlight = {
       ...state.directFlight,
@@ -790,6 +838,50 @@ export const createFlightSlice = (
     set(() =>
       createStateUpdate(state, {
         directFlight: updatedDirectFlight,
+        _lastUpdate: Date.now(),
+      })
+    );
+  },
+
+  setMultiFlight: (index: number, flight: Partial<FlightSegment>) => {
+    const state = get();
+    const existingFlights = [...state.flightSegments];
+    const existingFlight = existingFlights[index] || {};
+
+    // Process locations carefully to preserve all data
+    const fromLocationValue =
+      flight.fromLocation !== undefined && flight.fromLocation !== null
+        ? processLocation(flight.fromLocation)
+        : existingFlight.fromLocation;
+
+    const toLocationValue =
+      flight.toLocation !== undefined && flight.toLocation !== null
+        ? processLocation(flight.toLocation)
+        : existingFlight.toLocation;
+
+    console.log("Setting multi flight with locations:", {
+      index,
+      fromBefore: existingFlight.fromLocation,
+      fromAfter: fromLocationValue,
+      toBefore: existingFlight.toLocation,
+      toAfter: toLocationValue,
+      phase: state.currentPhase,
+    });
+
+    const updatedFlight = {
+      ...existingFlight,
+      ...flight,
+      fromLocation: fromLocationValue,
+      toLocation: toLocationValue,
+    };
+
+    set(() =>
+      createStateUpdate(state, {
+        flightSegments: [
+          ...existingFlights.slice(0, index),
+          updatedFlight,
+          ...existingFlights.slice(index + 1),
+        ],
         _lastUpdate: Date.now(),
       })
     );

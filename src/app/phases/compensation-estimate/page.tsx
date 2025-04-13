@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { PhaseNavigation } from "@/components/PhaseNavigation";
 import { SpeechBubble } from "@/components/SpeechBubble";
 import { BackButton } from "@/components/shared/BackButton";
@@ -9,15 +10,15 @@ import { PhaseGuard } from "@/components/shared/PhaseGuard";
 import { useTranslation } from "@/hooks/useTranslation";
 import { useFlightStore } from "@/lib/state/flightStore";
 import useStore, { getLanguageAwareUrl } from "@/lib/state/store";
-import { useRouter } from "next/navigation";
 import type { ValidationStep } from "@/lib/state/types";
-import type { Flight } from "@/types/store";
+import type { Flight, FlightSegmentData } from "@/types/store";
 import type { LocationLike } from "@/types/location";
 import { Card } from "@/components/shared/Card";
 import { formatCurrency } from "@/utils/currency";
 import { formatDate } from "@/utils/date";
-import { getLocationCity } from "@/utils/airport";
-import { FlightSegmentData } from "@/types/store";
+import Image from "next/image";
+import { processLocation } from "@/lib/state/slices/flightSlice";
+import { getAirportCitySync } from "@/utils/locationUtils";
 
 type LocationData = {
   value: string;
@@ -28,6 +29,22 @@ type LocationData = {
 };
 
 type LocationType = LocationData | string | null;
+
+type NavigationStateWithFlag = {
+  _navigationInitiated?: boolean;
+  [key: string]: any;
+};
+
+const clearNavigationFlags = () => {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("navigation_in_progress");
+    localStorage.removeItem("navigation_initiated");
+    localStorage.removeItem("navigating_to_phase3");
+    console.log("=== Cleared navigation flags ===", {
+      timestamp: new Date().toISOString(),
+    });
+  }
+};
 
 export default function CompensationEstimatePage() {
   const router = useRouter();
@@ -40,6 +57,11 @@ export default function CompensationEstimatePage() {
     Array<{ departureCity: string; arrivalCity: string }>
   >([]);
   const initializationRef = React.useRef(false);
+  const [airportData, setAirportData] = useState<
+    Record<string, { city: string; name: string; iata_code: string }>
+  >({});
+  const [isContinueClicked, setIsContinueClicked] = useState<boolean>(false);
+  const [isNavigating, setIsNavigating] = useState(false);
 
   const {
     fromLocation,
@@ -74,10 +96,139 @@ export default function CompensationEstimatePage() {
     compensationError: string | null;
   };
 
+  // Clear any stale navigation locks on component mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      // Check if there's a stale navigation lock
+      if (localStorage.getItem("navigation_in_progress") === "true") {
+        console.log(
+          "=== CompensationEstimatePage - Clearing stale navigation lock ===",
+          {
+            timestamp: new Date().toISOString(),
+          }
+        );
+        clearNavigationFlags();
+      }
+    }
+  }, []);
+
   // Set isClient to true on mount
   useEffect(() => {
     setIsClient(true);
   }, []);
+
+  // Fetch airport data for all locations on mount
+  useEffect(() => {
+    const fetchAirportData = async () => {
+      if (!isClient) return;
+
+      // Collect all airport codes from segments
+      const airportCodes = new Set<string>();
+
+      // Add from and to locations
+      if (
+        fromLocation &&
+        typeof fromLocation === "string" &&
+        /^[A-Z]{3}$/.test(fromLocation)
+      ) {
+        airportCodes.add(fromLocation);
+      } else if (
+        fromLocation &&
+        typeof fromLocation !== "string" &&
+        fromLocation.value &&
+        /^[A-Z]{3}$/.test(fromLocation.value)
+      ) {
+        airportCodes.add(fromLocation.value);
+      }
+
+      if (
+        toLocation &&
+        typeof toLocation === "string" &&
+        /^[A-Z]{3}$/.test(toLocation)
+      ) {
+        airportCodes.add(toLocation);
+      } else if (
+        toLocation &&
+        typeof toLocation !== "string" &&
+        toLocation.value &&
+        /^[A-Z]{3}$/.test(toLocation.value)
+      ) {
+        airportCodes.add(toLocation.value);
+      }
+
+      // Add segment locations
+      flightSegments.forEach((segment) => {
+        if (segment.fromLocation) {
+          const fromCode =
+            typeof segment.fromLocation === "string"
+              ? segment.fromLocation
+              : segment.fromLocation.value;
+
+          if (fromCode && /^[A-Z]{3}$/.test(fromCode)) {
+            airportCodes.add(fromCode);
+          }
+        }
+
+        if (segment.toLocation) {
+          const toCode =
+            typeof segment.toLocation === "string"
+              ? segment.toLocation
+              : segment.toLocation.value;
+
+          if (toCode && /^[A-Z]{3}$/.test(toCode)) {
+            airportCodes.add(toCode);
+          }
+        }
+      });
+
+      // Fetch each airport's data
+      const airportDetailsMap: Record<
+        string,
+        { city: string; name: string; iata_code: string }
+      > = {};
+
+      // Create promises for all airport code fetches
+      const fetchPromises = Array.from(airportCodes).map(async (code) => {
+        try {
+          const response = await fetch(
+            `/api/searchairportsbyterm?term=${code}&lang=${lang}`
+          );
+          if (response.ok) {
+            const data = await response.json();
+            if (
+              data.status === "success" &&
+              data.data &&
+              data.data.length > 0
+            ) {
+              // Save the first match for this code
+              airportDetailsMap[code] = data.data[0];
+
+              // Also populate the global cache with a call to getAirportCitySync
+              // This ensures the cache is populated for other components to use
+              await getAirportCitySync(code, lang);
+            }
+          }
+        } catch (error) {
+          console.error(`Error fetching details for airport ${code}:`, error);
+        }
+      });
+
+      // Wait for all fetches to complete
+      await Promise.all(fetchPromises);
+
+      // Update state with all the airport data
+      setAirportData(airportDetailsMap);
+      console.log("=== Fetched Airport Data ===", {
+        airportCount: Object.keys(airportDetailsMap).length,
+        airports: Object.keys(airportDetailsMap),
+        timestamp: new Date().toISOString(),
+      });
+    };
+
+    if (isInitialized) {
+      fetchAirportData();
+    }
+  }, [isClient, isInitialized, fromLocation, toLocation, flightSegments, lang]);
 
   // Helper function to extract location value
   const getLocationValue = (location: LocationType): string | null => {
@@ -93,53 +244,39 @@ export default function CompensationEstimatePage() {
   ): string | null => {
     if (!location) return null;
 
-    // If it's a location object with a city property, use that
-    if (typeof location === "object" && location.city) {
-      return location.city;
+    // Use the processLocation function from flightSlice for consistent handling
+    const processedLocation = processLocation(location);
+    if (processedLocation) {
+      // If location has a dropdownLabel, use that (contains full name + code format)
+      if (processedLocation.dropdownLabel) {
+        return processedLocation.dropdownLabel;
+      }
+
+      // If location has a label and value, format it as "Label (CODE)"
+      if (processedLocation.label && processedLocation.value) {
+        return `${processedLocation.label} (${processedLocation.value})`;
+      }
+
+      // Check if we have data from our API fetch
+      if (processedLocation.value && airportData[processedLocation.value]) {
+        const airport = airportData[processedLocation.value];
+        return `${airport.city || airport.name} (${airport.iata_code})`;
+      }
+
+      // Use the synchronous version that returns from cache
+      // This will not make an API call, just return from cache or the code itself
+      if (
+        processedLocation.value &&
+        /^[A-Z]{3}$/.test(processedLocation.value)
+      ) {
+        return getAirportCitySync(processedLocation.value, lang);
+      }
+
+      // Fallback to just returning the value (usually the airport code)
+      return processedLocation.value;
     }
 
-    // If it's a string (airport code) or location object without city,
-    // try to extract a readable name
-    const code =
-      typeof location === "string" ? location : location.value || null;
-
-    // Map of common airport codes to city names
-    const airportCityMap: Record<string, string> = {
-      BER: "Berlin",
-      FRA: "Frankfurt",
-      MUC: "Munich",
-      HAM: "Hamburg",
-      DUS: "Düsseldorf",
-      STR: "Stuttgart",
-      CGN: "Cologne",
-      LHR: "London",
-      CDG: "Paris",
-      FCO: "Rome",
-      MAD: "Madrid",
-      AMS: "Amsterdam",
-      BCN: "Barcelona",
-      VIE: "Vienna",
-      ZRH: "Zurich",
-      BRU: "Brussels",
-      ATH: "Athens",
-      LIS: "Lisbon",
-      OSL: "Oslo",
-      ARN: "Stockholm",
-      CPH: "Copenhagen",
-      HEL: "Helsinki",
-      JFK: "New York",
-      LAX: "Los Angeles",
-      ORD: "Chicago",
-      DFW: "Dallas",
-      DXB: "Dubai",
-      SIN: "Singapore",
-      HKG: "Hong Kong",
-      NRT: "Tokyo",
-      SYD: "Sydney",
-    };
-
-    // Return the city name if we have it in our map, otherwise return the code
-    return code && airportCityMap[code] ? airportCityMap[code] : code;
+    return null;
   };
 
   // Subscribe to store changes to maintain phase 2
@@ -645,6 +782,32 @@ export default function CompensationEstimatePage() {
           completedPhases: store.getState().completedPhases,
           timestamp: new Date().toISOString(),
         });
+
+        // Save phase completion status to localStorage directly
+        try {
+          localStorage.setItem("phase2Completed", "true");
+
+          // Get existing completed phases
+          const completedPhasesStr = localStorage.getItem("completedPhases");
+          const currentCompletedPhases = completedPhasesStr
+            ? JSON.parse(completedPhasesStr)
+            : [];
+
+          // Add phase 2 if not already included
+          if (!currentCompletedPhases.includes(2)) {
+            const newCompletedPhases = [...currentCompletedPhases, 2];
+            localStorage.setItem(
+              "completedPhases",
+              JSON.stringify(newCompletedPhases)
+            );
+          }
+
+          console.log(
+            "Successfully updated phase completion status in localStorage"
+          );
+        } catch (e) {
+          console.error("Error updating phase completion status", e);
+        }
       } catch (error) {
         console.error("Error initializing phase:", error);
         router.push(getLanguageAwareUrl("/phases/initial-assessment", lang));
@@ -870,6 +1033,14 @@ export default function CompensationEstimatePage() {
       sessionStorage.removeItem("detected_phase_reversion_2");
       sessionStorage.removeItem("phase_state_updated_2");
 
+      // Clear any stale navigation lock that might prevent continue button from working
+      if (localStorage.getItem("navigation_in_progress") === "true") {
+        console.log("=== Clearing stale navigation lock on mount ===", {
+          timestamp: new Date().toISOString(),
+        });
+        localStorage.removeItem("navigation_in_progress");
+      }
+
       console.log("=== Cleaned up navigation detection flags ===", {
         timestamp: new Date().toISOString(),
       });
@@ -910,227 +1081,129 @@ export default function CompensationEstimatePage() {
     };
   }, []);
 
-  const handleContinue = async () => {
-    console.log("=== CompensationEstimatePage - handleContinue Started ===", {
-      compensationLoading,
-      compensationAmount,
-      timestamp: new Date().toISOString(),
-    });
+  // Clear stale navigation locks on mount
+  useEffect(() => {
+    // Check for stale navigation locks
+    const navigationInProgress =
+      localStorage.getItem("navigation_in_progress") === "true";
+    const lockTimestamp = parseInt(
+      localStorage.getItem("navigation_lock_timestamp") || "0"
+    );
+    const currentTime = Date.now();
+    const lockAge = currentTime - lockTimestamp;
 
-    if (compensationLoading || !compensationAmount) {
-      console.log("Cannot continue - compensation is loading or not available");
+    // If there's a stale lock (older than 30 seconds or invalid timestamp), clear it
+    if (navigationInProgress && (isNaN(lockTimestamp) || lockAge > 30000)) {
+      console.log(
+        "=== CompensationEstimatePage - Clearing stale navigation lock on mount ===",
+        {
+          timestamp: new Date().toISOString(),
+          lockTimestamp: new Date(lockTimestamp).toISOString(),
+          lockAge: Math.floor(lockAge / 1000) + " seconds",
+        }
+      );
+
+      // Clear navigation flags
+      localStorage.removeItem("navigation_in_progress");
+      localStorage.removeItem("navigation_lock_timestamp");
+      localStorage.removeItem("navigation_initiated");
+      localStorage.removeItem("navigating_to_phase3");
+      localStorage.removeItem("navigation_timestamp");
+      localStorage.removeItem("navigatingToFlightDetails");
+      localStorage.removeItem("navigateToFlightDetails");
+    }
+  }, []);
+
+  const handleContinue = () => {
+    console.log("=== Handle Continue START ===");
+
+    // Check if navigation is already in progress
+    if (localStorage.getItem("navigation_in_progress") === "true") {
+      console.log("=== Navigation already in progress, ignoring click ===");
       return;
     }
 
-    try {
-      // Set a flag in localStorage to indicate a forward navigation to phase 3
-      localStorage.setItem("navigating_to_phase3", "true");
-      console.log("Set navigating_to_phase3 flag");
-
-      // Also set a flag to ensure the accordion is opened
-      localStorage.setItem("openFlightSelectionAccordion", "true");
-      console.log("Set openFlightSelectionAccordion flag");
-
-      // Save the current state to localStorage
-      const currentState = {
-        fromLocation: store.fromLocation,
-        toLocation: store.toLocation,
-        selectedType: store.selectedType,
-        directFlight: store.directFlight,
-        flightSegments: store.flightSegments,
-        validationState: store.validationState,
-        _timestamp: Date.now(),
-      };
-      localStorage.setItem("phase2State", JSON.stringify(currentState));
-      console.log("Saved currentState to localStorage");
-
-      // Also save to flight store to ensure data is available immediately
-      try {
-        // Save to flight store for phase 3
-        await flightStore.saveFlightData(3, {
-          fromLocation: store.fromLocation,
-          toLocation: store.toLocation,
-          selectedType: store.selectedType,
-          flightSegments: store.flightSegments.map((segment) => ({
-            fromLocation: segment.fromLocation,
-            toLocation: segment.toLocation,
-            date: segment.date,
-            selectedFlight: segment.selectedFlight,
-          })),
-          _preserveFlightSegments: true,
-          _isMultiSegment: store.selectedType === "multi",
-          timestamp: Date.now(),
-        });
-
-        console.log("=== Forward Navigation - Saved to FlightStore ===", {
-          phase: 3,
-          fromLocation: store.fromLocation?.value,
-          toLocation: store.toLocation?.value,
-          timestamp: new Date().toISOString(),
-        });
-      } catch (error) {
-        console.error("Error saving to flight store:", error);
-      }
-
-      // Mark phase 2 as completed
-      const currentCompletedPhases = [...store.completedPhases];
-      const currentPhasesCompletedViaContinue = [
-        ...store.phasesCompletedViaContinue,
-      ];
-
-      // Add phase 2 to completed phases if not already there
-      if (!currentCompletedPhases.includes(2)) {
-        currentCompletedPhases.push(2);
-      }
-
-      // Add phase 2 to phases completed via continue if not already there
-      if (!currentPhasesCompletedViaContinue.includes(2)) {
-        currentPhasesCompletedViaContinue.push(2);
-      }
-
-      console.log("Updating store with completed phases", {
-        currentCompletedPhases,
-        currentPhasesCompletedViaContinue,
-      });
-
-      // Update the store with the completed phases
-      await store.setState({
-        completedPhases: currentCompletedPhases,
-        phasesCompletedViaContinue: currentPhasesCompletedViaContinue,
-        currentPhase: 3,
-        _lastUpdate: Date.now(),
-      });
-      console.log("Store updated with completed phases");
-
-      // Also update localStorage directly
-      localStorage.setItem(
-        "completedPhases",
-        JSON.stringify(currentCompletedPhases)
+    // Check if compensation is loading or not available
+    if (compensationLoading || !compensationAmount) {
+      console.log(
+        "=== Cannot continue - compensation loading or not available ==="
       );
-      localStorage.setItem(
-        "phasesCompletedViaContinue",
-        JSON.stringify(currentPhasesCompletedViaContinue)
-      );
-      localStorage.setItem("currentPhase", "3");
-      console.log("localStorage updated with phase information");
-
-      // Save state for next phase with all necessary location data
-      const nextPhaseState = {
-        fromLocation:
-          typeof fromLocation === "string"
-            ? { value: fromLocation, city: fromLocation }
-            : {
-                value: fromLocation?.value || "",
-                city: fromLocation?.city || "",
-                ...fromLocation,
-              },
-        toLocation:
-          typeof toLocation === "string"
-            ? { value: toLocation, city: toLocation }
-            : {
-                value: toLocation?.value || "",
-                city: toLocation?.city || "",
-                ...toLocation,
-              },
-        selectedType,
-        flightSegments: flightSegments.map((segment) => ({
-          ...segment,
-          fromLocation:
-            typeof segment.fromLocation === "string"
-              ? { value: segment.fromLocation, city: segment.fromLocation }
-              : {
-                  value: segment.fromLocation?.value || "",
-                  city: segment.fromLocation?.city || "",
-                  ...segment.fromLocation,
-                },
-          toLocation:
-            typeof segment.toLocation === "string"
-              ? { value: segment.toLocation, city: segment.toLocation }
-              : {
-                  value: segment.toLocation?.value || "",
-                  city: segment.toLocation?.city || "",
-                  ...segment.toLocation,
-                },
-          selectedFlight: segment.selectedFlight,
-          date: segment.date,
-        })),
-        compensationAmount,
-        cityData,
-        _explicitlyCompleted: true,
-        _completedTimestamp: Date.now(),
-        _forcedByHandleContinue: true,
-        phase: 3,
-      };
-      console.log("Prepared nextPhaseState data");
-
-      // CRITICAL: Also update phase2State with the _explicitlyCompleted flag
-      const phase2StateStr = localStorage.getItem("phase2State");
-      const phase2StateObj = phase2StateStr ? JSON.parse(phase2StateStr) : {};
-      phase2StateObj._explicitlyCompleted = true;
-      phase2StateObj._completedTimestamp = Date.now();
-      localStorage.setItem("phase2State", JSON.stringify(phase2StateObj));
-      console.log("Updated phase2State with explicitlyCompleted flag");
-
-      // Create a standalone flag file for maximum compatibility
-      localStorage.setItem("phase2_explicitlyCompleted", "true");
-      localStorage.setItem(
-        "phase2_simple",
-        JSON.stringify({
-          _explicitlyCompleted: true,
-          _timestamp: Date.now(),
-        })
-      );
-      console.log("Created standalone flag files for compatibility");
-
-      // Add final verification logging for phase changes
-      console.log("=== Final Phase Verification Before Navigation ===", {
-        completedPhases: JSON.parse(
-          localStorage.getItem("completedPhases") || "[]"
-        ),
-        phasesCompletedViaContinue: JSON.parse(
-          localStorage.getItem("phasesCompletedViaContinue") || "[]"
-        ),
-        currentPhase: localStorage.getItem("currentPhase"),
-        phase2ExplicitlyCompleted: localStorage.getItem(
-          "phase2_explicitlyCompleted"
-        ),
-        phase2StateHasExplicitlyCompletedFlag: JSON.parse(
-          localStorage.getItem("phase2State") || "{}"
-        ),
-        timestamp: new Date().toISOString(),
-      });
-
-      // Increase the delay to ensure all state updates are complete before navigation
-      console.log("Waiting for state updates to complete...");
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      console.log("Delay completed, proceeding with navigation");
-
-      // Get the language-aware URL for navigation
-      const phase3Url = getLanguageAwareUrl("/phases/flight-details", lang);
-      console.log("=== Navigating to flight-details ===", {
-        url: phase3Url,
-        method: "direct navigation",
-        timestamp: new Date().toISOString(),
-      });
-
-      // Use direct navigation - this is the key change that fixed the issue
-      window.location.href = phase3Url;
-    } catch (error) {
-      console.error("Error during transition:", error);
-
-      // Try to recover by using direct navigation
-      try {
-        const fallbackUrl = getLanguageAwareUrl("/phases/flight-details", lang);
-        console.log(
-          "Attempting recovery with direct navigation to:",
-          fallbackUrl
-        );
-        window.location.href = fallbackUrl;
-      } catch (fallbackError) {
-        console.error("Even fallback navigation failed:", fallbackError);
-        alert("Navigation failed. Please try again.");
-      }
+      return;
     }
+
+    // Set component state to disable button
+    setIsNavigating(true);
+
+    // Clear any stale navigation locks first
+    localStorage.removeItem("navigation_in_progress");
+
+    // Set navigation lock to prevent duplicate clicks
+    localStorage.setItem("navigation_in_progress", "true");
+    console.log("=== Navigation lock set ===");
+
+    // Save the flag that we're about to navigate to flight details
+    localStorage.setItem("fresh_navigation", "true");
+    console.log("=== Fresh navigation flag set ===");
+
+    // Save current state to localStorage (flight store)
+    console.log("=== Saving Flight Store State ===", {
+      phase2Completed: true,
+      selectedFlightNumber: selectedType,
+      selectedAirline:
+        selectedType === "multi"
+          ? flightSegments[0].selectedFlight?.airline
+          : null,
+      selectedDateStr: selectedType === "multi" ? flightSegments[0].date : null,
+      numberOfPassengers: selectedType === "multi" ? flightSegments.length : 1,
+      departureAirport:
+        selectedType === "multi" ? flightSegments[0].fromLocation : null,
+      arrivalAirport:
+        selectedType === "multi"
+          ? flightSegments[flightSegments.length - 1].toLocation
+          : null,
+      compensation: compensationAmount,
+    });
+
+    // Save phase completion status to localStorage directly
+    try {
+      localStorage.setItem("phase2Completed", "true");
+
+      // Get existing completed phases
+      const completedPhasesStr = localStorage.getItem("completedPhases");
+      const currentCompletedPhases = completedPhasesStr
+        ? JSON.parse(completedPhasesStr)
+        : [];
+
+      // Add phase 2 if not already included
+      if (!currentCompletedPhases.includes(2)) {
+        const newCompletedPhases = [...currentCompletedPhases, 2];
+        localStorage.setItem(
+          "completedPhases",
+          JSON.stringify(newCompletedPhases)
+        );
+      }
+
+      console.log(
+        "Successfully updated phase completion status in localStorage"
+      );
+    } catch (e) {
+      console.error("Error updating phase completion status", e);
+    }
+
+    // Add a small delay to ensure state updates are processed before navigating
+    console.log("=== Delaying navigation by 100ms to ensure state updates ===");
+    setTimeout(() => {
+      console.log("=== Navigating to flight details ===");
+      router.push("/phases/flight-details");
+    }, 100);
+
+    // Set a safety timeout to clear the navigation lock if navigation fails
+    setTimeout(() => {
+      console.log("=== Safety timeout clearing navigation locks ===");
+      localStorage.removeItem("navigation_in_progress");
+    }, 5000);
+
+    console.log("=== Handle Continue END ===");
   };
 
   const handleBack = () => {
@@ -1445,12 +1518,9 @@ export default function CompensationEstimatePage() {
                             {t.phases.compensationEstimate.flightSummary.from}
                           </p>
                           <p className="font-medium">
-                            {typeof fromLocation === "string"
-                              ? getLocationCity(fromLocation, lang)
-                              : fromLocation?.city ||
-                                getLocationCity(fromLocation, lang) ||
-                                t.phases.compensationEstimate.flightSummary
-                                  .noFlightDetails}
+                            {getLocationCity(fromLocation, lang) ||
+                              t.phases.compensationEstimate.flightSummary
+                                .noFlightDetails}
                           </p>
                         </div>
                         <div>
@@ -1458,12 +1528,9 @@ export default function CompensationEstimatePage() {
                             {t.phases.compensationEstimate.flightSummary.to}
                           </p>
                           <p className="font-medium">
-                            {typeof toLocation === "string"
-                              ? getLocationCity(toLocation, lang)
-                              : toLocation?.city ||
-                                getLocationCity(toLocation, lang) ||
-                                t.phases.compensationEstimate.flightSummary
-                                  .noFlightDetails}
+                            {getLocationCity(toLocation, lang) ||
+                              t.phases.compensationEstimate.flightSummary
+                                .noFlightDetails}
                           </p>
                         </div>
                       </>
@@ -1538,8 +1605,13 @@ export default function CompensationEstimatePage() {
               />
               <ContinueButton
                 onClick={handleContinue}
-                isLoading={compensationLoading}
-                text={t.phases.compensationEstimate.navigation.continue}
+                isLoading={compensationLoading || isNavigating}
+                disabled={isNavigating}
+                text={
+                  isNavigating
+                    ? "Navigating..."
+                    : t.phases.compensationEstimate.navigation.continue
+                }
               />
             </div>
           </div>

@@ -1415,34 +1415,56 @@ const useStore = create<Store>()(
           const now = Date.now();
           const typedLocation = location as (string & LocationLike) | null;
 
-          // Save to phase1State immediately
+          // Save to all phase states immediately to ensure sync
           try {
-            const phase1State = localStorage.getItem("phase1State");
-            const updatedPhase1State = phase1State
-              ? {
-                  ...JSON.parse(phase1State),
-                  fromLocation: typedLocation,
-                  _timestamp: now,
+            const phases = [1, 2, 3];
+            phases.forEach((phase) => {
+              const phaseStateKey = `phase${phase}State`;
+              const phaseState = localStorage.getItem(phaseStateKey);
+              const updatedPhaseState = phaseState
+                ? {
+                    ...JSON.parse(phaseState),
+                    fromLocation: typedLocation,
+                    _timestamp: now,
+                  }
+                : {
+                    fromLocation: typedLocation,
+                    toLocation: state.toLocation,
+                    _timestamp: now,
+                  };
+              localStorage.setItem(
+                phaseStateKey,
+                JSON.stringify(updatedPhaseState)
+              );
+
+              console.log(
+                `=== Store - Updated fromLocation in ${phaseStateKey} ===`,
+                {
+                  fromLocation: typedLocation?.value || null,
+                  timestamp: new Date().toISOString(),
                 }
-              : {
-                  fromLocation: typedLocation,
-                  toLocation: state.toLocation,
-                  _timestamp: now,
-                };
-            localStorage.setItem(
-              "phase1State",
-              JSON.stringify(updatedPhase1State)
-            );
+              );
+            });
           } catch (error) {
-            console.error("Error updating phase1State:", error);
+            console.error("Error updating phase states:", error);
           }
 
-          // Update flight store
-          useFlightStore.getState().saveFlightData(state.currentPhase, {
-            fromLocation: typedLocation,
-            toLocation: state.toLocation,
-            selectedType: state.selectedType,
-            timestamp: now,
+          // Update flight store for ALL phases
+          const flightStore = useFlightStore.getState();
+
+          // Create a batch of promises to update all phases
+          const updatePromises = [1, 2, 3].map((phase) =>
+            flightStore.saveFlightData(phase, {
+              fromLocation: typedLocation,
+              toLocation: state.toLocation,
+              selectedType: state.selectedType,
+              timestamp: now,
+            })
+          );
+
+          // Execute all promises
+          Promise.all(updatePromises).catch((error) => {
+            console.error("Error syncing fromLocation across phases:", error);
           });
 
           // Clear validation state for flight selection if location is removed
@@ -1491,34 +1513,56 @@ const useStore = create<Store>()(
           const now = Date.now();
           const typedLocation = location as (string & LocationLike) | null;
 
-          // Save to phase1State immediately
+          // Save to all phase states immediately to ensure sync
           try {
-            const phase1State = localStorage.getItem("phase1State");
-            const updatedPhase1State = phase1State
-              ? {
-                  ...JSON.parse(phase1State),
-                  toLocation: typedLocation,
-                  _timestamp: now,
+            const phases = [1, 2, 3];
+            phases.forEach((phase) => {
+              const phaseStateKey = `phase${phase}State`;
+              const phaseState = localStorage.getItem(phaseStateKey);
+              const updatedPhaseState = phaseState
+                ? {
+                    ...JSON.parse(phaseState),
+                    toLocation: typedLocation,
+                    _timestamp: now,
+                  }
+                : {
+                    fromLocation: state.fromLocation,
+                    toLocation: typedLocation,
+                    _timestamp: now,
+                  };
+              localStorage.setItem(
+                phaseStateKey,
+                JSON.stringify(updatedPhaseState)
+              );
+
+              console.log(
+                `=== Store - Updated toLocation in ${phaseStateKey} ===`,
+                {
+                  toLocation: typedLocation?.value || null,
+                  timestamp: new Date().toISOString(),
                 }
-              : {
-                  fromLocation: state.fromLocation,
-                  toLocation: typedLocation,
-                  _timestamp: now,
-                };
-            localStorage.setItem(
-              "phase1State",
-              JSON.stringify(updatedPhase1State)
-            );
+              );
+            });
           } catch (error) {
-            console.error("Error updating phase1State:", error);
+            console.error("Error updating phase states:", error);
           }
 
-          // Update flight store
-          useFlightStore.getState().saveFlightData(state.currentPhase, {
-            fromLocation: state.fromLocation,
-            toLocation: typedLocation,
-            selectedType: state.selectedType,
-            timestamp: now,
+          // Update flight store for ALL phases
+          const flightStore = useFlightStore.getState();
+
+          // Create a batch of promises to update all phases
+          const updatePromises = [1, 2, 3].map((phase) =>
+            flightStore.saveFlightData(phase, {
+              fromLocation: state.fromLocation,
+              toLocation: typedLocation,
+              selectedType: state.selectedType,
+              timestamp: now,
+            })
+          );
+
+          // Execute all promises
+          Promise.all(updatePromises).catch((error) => {
+            console.error("Error syncing toLocation across phases:", error);
           });
 
           // Clear validation state for flight selection if location is removed

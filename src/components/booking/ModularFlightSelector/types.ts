@@ -1,6 +1,6 @@
-import type { Flight } from '@/types/store';
-import type { Store } from '@/lib/state/store';
-import type { Phase4State, Phase4Actions } from '@/lib/state/phase4Store';
+import type { Flight } from "@/types/store";
+import type { Store } from "@/lib/state/store";
+import type { Phase4State, Phase4Actions } from "@/lib/state/phase4Store";
 
 export interface FlightSelectorProps {
   showFlightSearch?: boolean;

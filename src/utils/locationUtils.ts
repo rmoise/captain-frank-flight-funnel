@@ -94,6 +94,15 @@ export const processLocation = (
       return null;
     }
 
+    // Get the city, default to the value if not present
+    const locCity = location.city || locValue;
+
+    // Generate dropdown label without duplication
+    // If city is the same as value (e.g., BER is the same as BER), don't add parentheses
+    const dropdownLabel =
+      location.dropdownLabel ||
+      (locCity && locCity !== locValue ? `${locCity} (${locValue})` : locValue);
+
     console.log("=== processLocation - Object Input ===", {
       input: `Object with value: ${locValue}`,
       result: "LocationObject",
@@ -104,13 +113,9 @@ export const processLocation = (
       value: locValue,
       label: location.label || locValue,
       description: location.description || locValue,
-      city: location.city || locValue,
+      city: locCity,
       airport: location.airport || locValue,
-      dropdownLabel:
-        location.dropdownLabel ||
-        (location.city && location.city !== locValue
-          ? `${location.city} (${locValue})`
-          : locValue),
+      dropdownLabel: dropdownLabel,
     });
   }
 
@@ -176,4 +181,74 @@ export const ensureSegmentLocations = (segment: any): any => {
 export const isValidLocation = (location: any): boolean => {
   const processed = processLocation(location);
   return Boolean(processed && processed.value);
+};
+
+/**
+ * Gets city name from an airport code synchronously
+ * This is a simple implementation that just returns the code itself
+ * since we don't have access to the full airport database in this context
+ *
+ * @param airportCode - Airport IATA code (e.g., "BER")
+ * @param lang - Optional language code
+ * @returns The city name or the airport code if not found
+ */
+export const getAirportCitySync = (
+  airportCode: string,
+  lang?: string
+): string => {
+  // Check for cached airport data in localStorage
+  // The API should be storing airport names in localStorage when they're fetched
+  try {
+    if (typeof window !== "undefined") {
+      const cacheKey = `airport_${airportCode}_${lang || "en"}`;
+      const cachedData = localStorage.getItem(cacheKey);
+
+      if (cachedData) {
+        try {
+          const parsed = JSON.parse(cachedData);
+          if (parsed && parsed.name) {
+            return `${parsed.name} (${airportCode})`;
+          }
+        } catch (e) {
+          console.error("Error parsing cached airport data:", e);
+        }
+      }
+
+      // Also check for recently used locations that might have the full name
+      const recentLocationsKey = "recent_locations";
+      const recentLocations = localStorage.getItem(recentLocationsKey);
+      if (recentLocations) {
+        try {
+          const locations = JSON.parse(recentLocations);
+          const matchingLocation = locations.find(
+            (loc: any) => loc.value === airportCode || loc.label === airportCode
+          );
+
+          if (matchingLocation && matchingLocation.dropdownLabel) {
+            return matchingLocation.dropdownLabel;
+          } else if (matchingLocation && matchingLocation.description) {
+            return `${matchingLocation.description} (${airportCode})`;
+          }
+        } catch (e) {
+          console.error("Error parsing recent locations:", e);
+        }
+      }
+    }
+  } catch (e) {
+    console.error("Error accessing localStorage for airport data:", e);
+  }
+
+  // For simplicity just return the airport code directly when no cache is available
+  // This is a fallback implementation
+  console.log(
+    "=== getAirportCitySync - Getting city for airport (no cache found) ===",
+    {
+      airportCode,
+      lang: lang || "default",
+      result: airportCode,
+      timestamp: new Date().toISOString(),
+    }
+  );
+
+  return airportCode;
 };

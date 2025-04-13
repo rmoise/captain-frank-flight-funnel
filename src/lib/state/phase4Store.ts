@@ -780,19 +780,35 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
           // Save flight data to preserve even when answers are reset
           const currentSelectedFlights = [...state.selectedFlights];
           const currentSelectedType = state.selectedType;
-          const currentDirectFlight = {...state.directFlight};
+          const currentDirectFlight = { ...state.directFlight };
           const currentFlightSegments = [...state.flightSegments];
 
           // Also persist validation states if preserving answers
-          const travelStatusIsValid = preserveAnswers ? state.travelStatusIsValid : false;
-          const travelStatusShowingSuccess = preserveAnswers ? state.travelStatusShowingSuccess : false;
-          const travelStatusStepValidation = preserveAnswers ? {...state.travelStatusStepValidation} : {};
-          const travelStatusStepInteraction = preserveAnswers ? {...state.travelStatusStepInteraction} : {};
+          const travelStatusIsValid = preserveAnswers
+            ? state.travelStatusIsValid
+            : false;
+          const travelStatusShowingSuccess = preserveAnswers
+            ? state.travelStatusShowingSuccess
+            : false;
+          const travelStatusStepValidation = preserveAnswers
+            ? { ...state.travelStatusStepValidation }
+            : {};
+          const travelStatusStepInteraction = preserveAnswers
+            ? { ...state.travelStatusStepInteraction }
+            : {};
 
-          const informedDateIsValid = preserveAnswers ? state.informedDateIsValid : false;
-          const informedDateShowingSuccess = preserveAnswers ? state.informedDateShowingSuccess : false;
-          const informedDateStepValidation = preserveAnswers ? {...state.informedDateStepValidation} : {};
-          const informedDateStepInteraction = preserveAnswers ? {...state.informedDateStepInteraction} : {};
+          const informedDateIsValid = preserveAnswers
+            ? state.informedDateIsValid
+            : false;
+          const informedDateShowingSuccess = preserveAnswers
+            ? state.informedDateShowingSuccess
+            : false;
+          const informedDateStepValidation = preserveAnswers
+            ? { ...state.informedDateStepValidation }
+            : {};
+          const informedDateStepInteraction = preserveAnswers
+            ? { ...state.informedDateStepInteraction }
+            : {};
 
           // Only reset the specific QA's state
           const newState = {
@@ -830,7 +846,7 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
           };
 
           // Ensure we store the state in localStorage for persistence
-          if (typeof window !== 'undefined') {
+          if (typeof window !== "undefined") {
             try {
               // Update phase4FlightData in localStorage to ensure it's preserved
               localStorage.setItem(
@@ -848,14 +864,17 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
                 JSON.stringify(currentSelectedFlights)
               );
 
-              console.log("=== Phase4Store - Persisting flight data during reset ===", {
-                selectedFlights: currentSelectedFlights.map(f => ({
-                  id: f.id,
-                  flightNumber: f.flightNumber,
-                  date: f.date
-                })),
-                timestamp: new Date().toISOString()
-              });
+              console.log(
+                "=== Phase4Store - Persisting flight data during reset ===",
+                {
+                  selectedFlights: currentSelectedFlights.map((f) => ({
+                    id: f.id,
+                    flightNumber: f.flightNumber,
+                    date: f.date,
+                  })),
+                  timestamp: new Date().toISOString(),
+                }
+              );
             } catch (e) {
               console.error("Error persisting flight data during reset:", e);
             }
@@ -868,7 +887,7 @@ export const usePhase4Store = create<Phase4State & Phase4Actions>()(
             travelStatusAnswers: newState.travelStatusAnswers,
             informedDateAnswers: newState.informedDateAnswers,
             selectedFlightsPreserved: newState.selectedFlights.length > 0,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
           });
 
           return newState;

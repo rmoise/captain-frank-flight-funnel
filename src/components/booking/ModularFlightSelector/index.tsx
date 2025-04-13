@@ -530,6 +530,90 @@ export const ModularFlightSelector: React.FC<FlightSelectorProps> = (props) => {
           };
         }
 
+        // For phase 3, check for flight type from phase 1 and use it if available
+        if (currentPhase === 3) {
+          // Try to get the flight type from phase 1
+          let phase1FlightType: "direct" | "multi" | undefined;
+          try {
+            // First check flightStore
+            const phase1StoreData = flightStore.getFlightData(1);
+            if (phase1StoreData?.selectedType) {
+              phase1FlightType = phase1StoreData.selectedType;
+            }
+
+            // If not in flightStore, check localStorage
+            if (!phase1FlightType) {
+              const phase1Data = localStorage.getItem("flightData_phase1");
+              if (phase1Data) {
+                const parsedData = JSON.parse(phase1Data);
+                if (parsedData.selectedType) {
+                  phase1FlightType = parsedData.selectedType;
+                }
+              }
+            }
+
+            if (phase1FlightType) {
+              console.log(
+                "=== Found Phase 1 Flight Type from localStorage ===",
+                {
+                  selectedType: phase1FlightType,
+                  timestamp: new Date().toISOString(),
+                }
+              );
+
+              // Update dataToUse with the flight type from phase 1
+              dataToUse = {
+                ...dataToUse,
+                selectedType: phase1FlightType,
+                _isMultiSegment: phase1FlightType === "multi",
+              };
+
+              // Also adjust segments to match the flight type
+              if (
+                phase1FlightType === "direct" &&
+                dataToUse.flightSegments.length > 1
+              ) {
+                dataToUse.flightSegments = [
+                  {
+                    fromLocation:
+                      dataToUse.fromLocation ||
+                      dataToUse.flightSegments[0]?.fromLocation,
+                    toLocation:
+                      dataToUse.toLocation ||
+                      dataToUse.flightSegments[0]?.toLocation,
+                    selectedFlight: null,
+                    date: null,
+                  },
+                ];
+              } else if (
+                phase1FlightType === "multi" &&
+                dataToUse.flightSegments.length < 2
+              ) {
+                dataToUse.flightSegments = [
+                  {
+                    fromLocation:
+                      dataToUse.fromLocation ||
+                      dataToUse.flightSegments[0]?.fromLocation,
+                    toLocation: null,
+                    selectedFlight: null,
+                    date: null,
+                  },
+                  {
+                    fromLocation: null,
+                    toLocation:
+                      dataToUse.toLocation ||
+                      dataToUse.flightSegments[0]?.toLocation,
+                    selectedFlight: null,
+                    date: null,
+                  },
+                ];
+              }
+            }
+          } catch (e) {
+            console.error("Error reading phase 1 flight type:", e);
+          }
+        }
+
         console.log(
           `[ModularFlightSelector] Using localStorage data for phase ${currentPhase}`,
           {

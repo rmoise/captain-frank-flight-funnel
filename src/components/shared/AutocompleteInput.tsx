@@ -13,6 +13,7 @@ import { debounce } from "lodash";
 import { PiAirplaneTakeoff, PiAirplaneLanding } from "react-icons/pi";
 import { XMarkIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
 import { useTranslation } from "@/hooks/useTranslation";
+import { getAirportCitySync } from "@/utils/locationUtils";
 
 const LoadingSpinner = () => (
   <div className="relative w-6 h-6">
@@ -511,8 +512,12 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
                         isSelected ? "text-[#F54538]" : "text-[#4B616D]"
                       }`}
                     >
-                      {option.description || option.label || ""}{" "}
-                      {option.value && `(${option.value})`}
+                      {option.dropdownLabel ||
+                        (option.value && /^[A-Z]{3}$/.test(option.value)
+                          ? getAirportCitySync(option.value)
+                          : `${option.description || option.label || ""} ${
+                              option.value ? `(${option.value})` : ""
+                            }`)}
                     </div>
                   </div>
                 </li>
@@ -600,8 +605,12 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
               {label.replace(" *", "")}
             </label>
             <div className="text-sm font-medium text-[#4B616D] whitespace-normal break-words mr-6 py-1 mt-3 mb-2 leading-[1.1]">
-              {value.description || value.label}{" "}
-              {value.value && `(${value.value})`}
+              {value.dropdownLabel ||
+                (value.value && /^[A-Z]{3}$/.test(value.value)
+                  ? getAirportCitySync(value.value)
+                  : `${value.description || value.label} ${
+                      value.value ? `(${value.value})` : ""
+                    }`)}
             </div>
             <input
               ref={inputRef}
