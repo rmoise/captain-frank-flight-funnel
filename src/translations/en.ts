@@ -189,7 +189,7 @@ export const en: Translations = {
       whatHappenedSubtitle:
         'Did you have a connecting flight? Then please enter your flights under "Multi-Stop".',
       flightDetailsDescription:
-        "Did you have a flight? Please provide your flight details",
+        'Did you have a connecting flight? Then please enter your flights under "Multi-Stop".',
       step: "Step",
       wizard: {
         title: "What happened with your flight?",

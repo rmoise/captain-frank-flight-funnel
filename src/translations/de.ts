@@ -202,7 +202,7 @@ export const de: Translations = {
       whatHappenedSubtitle:
         'Hattest du einen Anschlussflug? Dann gebe bitte deine Flüge unter "Multi-Stopp" ein.',
       flightDetailsDescription:
-        "Hattest du einen Flug? Gib bitte deine Flugdaten an",
+        'Hattest du einen Anschlussflug? Dann gebe bitte deine Flüge unter "Multi-Stopp" ein.',
       wizard: {
         title: "Was ist mit deinem Flug passiert?",
         description:
