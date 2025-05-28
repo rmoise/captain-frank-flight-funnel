@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server';
-import type { FlightNotListedData } from '@/components/booking/FlightNotListedForm';
+import { NextResponse } from "next/server";
+import type { FlightNotListedData } from "@/components/shared/ModularFlightSelector/FlightNotListedForm";
 
 export async function POST(request: Request) {
   try {
@@ -14,7 +14,7 @@ export async function POST(request: Request) {
       !data.description
     ) {
       return NextResponse.json(
-        { error: 'All fields are required' },
+        { error: "All fields are required" },
         { status: 400 }
       );
     }
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(data.email)) {
       return NextResponse.json(
-        { error: 'Invalid email format' },
+        { error: "Invalid email format" },
         { status: 400 }
       );
     }
@@ -43,16 +43,16 @@ export async function POST(request: Request) {
     // });
 
     // For now, just log the data
-    console.log('Missing flight report received:', data);
+    console.log("Missing flight report received:", data);
 
     return NextResponse.json(
-      { message: 'Flight report submitted successfully' },
+      { message: "Flight report submitted successfully" },
       { status: 200 }
     );
   } catch (error) {
-    console.error('Error processing missing flight submission:', error);
+    console.error("Error processing missing flight submission:", error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }

@@ -1,15 +1,15 @@
-import type { Flight } from '@/types/store';
+import type { Flight } from "@/store/types";
 
 export interface EvaluateRequest {
   journey_booked_flightids: string[];
   journey_fact_flightids: string[];
   information_received_at: string;
   travel_status?: string;
-  journey_fact_type: 'none' | 'self' | 'provided';
+  journey_fact_type: "none" | "self" | "provided";
 }
 
 export interface EvaluateResponse {
-  status: 'accept' | 'reject';
+  status: "accept" | "reject";
   guid?: string;
   recommendation_guid?: string;
   contract?: {
@@ -22,14 +22,14 @@ export interface EvaluateResponse {
 export class EvaluateService {
   private static getJourneyFactType(
     travelStatus: string | undefined
-  ): 'none' | 'self' | 'provided' {
+  ): "none" | "self" | "provided" {
     switch (travelStatus) {
-      case 'provided':
-        return 'provided';
-      case 'self':
-        return 'self';
+      case "provided":
+        return "provided";
+      case "self":
+        return "self";
       default:
-        return 'none';
+        return "none";
     }
   }
 
@@ -40,20 +40,20 @@ export class EvaluateService {
     informedDate: string
   ): Promise<EvaluateResponse> {
     // Log input data for debugging
-    console.log('=== Evaluating Claim ===', {
+    console.log("=== Evaluating Claim ===", {
       originalFlights: originalFlights.map((f) => ({
         id: f.id,
         flightNumber: f.flightNumber,
-        departureCity: f.departureCity,
-        arrivalCity: f.arrivalCity,
-        date: f.date,
+        departureCity: f.from?.name || f.from?.iata || "Unknown",
+        arrivalCity: f.to?.name || f.to?.iata || "Unknown",
+        date: f.departureTime,
       })),
       selectedFlights: selectedFlights.map((f) => ({
         id: f.id,
         flightNumber: f.flightNumber,
-        departureCity: f.departureCity,
-        arrivalCity: f.arrivalCity,
-        date: f.date,
+        departureCity: f.from?.name || f.from?.iata || "Unknown",
+        arrivalCity: f.to?.name || f.to?.iata || "Unknown",
+        date: f.departureTime,
       })),
       travelStatus,
       informedDate,
@@ -63,18 +63,18 @@ export class EvaluateService {
     const validOriginalFlights = originalFlights.filter(
       (f): f is Flight =>
         f !== null &&
-        typeof f.id === 'string' &&
+        typeof f.id === "string" &&
         f.id.length > 0 &&
-        typeof f.flightNumber === 'string' &&
+        typeof f.flightNumber === "string" &&
         f.flightNumber.length > 0
     );
 
     const validSelectedFlights = selectedFlights.filter(
       (f): f is Flight =>
         f !== null &&
-        typeof f.id === 'string' &&
+        typeof f.id === "string" &&
         f.id.length > 0 &&
-        typeof f.flightNumber === 'string' &&
+        typeof f.flightNumber === "string" &&
         f.flightNumber.length > 0
     );
 
@@ -84,7 +84,7 @@ export class EvaluateService {
         // For multi-city flights, we want to keep all segments even if they have the same ID
         // Only deduplicate if the exact same flight (same ID and date) appears multiple times
         const isDuplicate = acc.some(
-          (f) => f.id === flight.id && f.date === flight.date
+          (f) => f.id === flight.id && f.departureTime === flight.departureTime
         );
         if (!isDuplicate) {
           acc.push(flight);
@@ -97,7 +97,7 @@ export class EvaluateService {
     const uniqueSelectedFlights = validSelectedFlights.reduce(
       (acc: Flight[], flight) => {
         const isDuplicate = acc.some(
-          (f) => f.id === flight.id && f.date === flight.date
+          (f) => f.id === flight.id && f.departureTime === flight.departureTime
         );
         if (!isDuplicate) {
           acc.push(flight);
@@ -112,9 +112,9 @@ export class EvaluateService {
     const request: EvaluateRequest = {
       journey_booked_flightids: uniqueOriginalFlights.map((f) => String(f.id)),
       journey_fact_flightids:
-        journeyFactType === 'provided'
+        journeyFactType === "provided"
           ? uniqueSelectedFlights.map((f) => String(f.id))
-          : journeyFactType === 'self'
+          : journeyFactType === "self"
           ? uniqueOriginalFlights.map((f) => String(f.id))
           : [],
       information_received_at: informedDate,
@@ -123,21 +123,21 @@ export class EvaluateService {
     };
 
     // Log request for debugging
-    console.log('=== Evaluate Request Details ===', {
+    console.log("=== Evaluate Request Details ===", {
       request,
       uniqueOriginalFlights: uniqueOriginalFlights.map((f) => ({
         id: f.id,
         flightNumber: f.flightNumber,
-        departureCity: f.departureCity,
-        arrivalCity: f.arrivalCity,
-        date: f.date,
+        departureCity: f.from?.name || f.from?.iata || "Unknown",
+        arrivalCity: f.to?.name || f.to?.iata || "Unknown",
+        date: f.departureTime,
       })),
       uniqueSelectedFlights: uniqueSelectedFlights.map((f) => ({
         id: f.id,
         flightNumber: f.flightNumber,
-        departureCity: f.departureCity,
-        arrivalCity: f.arrivalCity,
-        date: f.date,
+        departureCity: f.from?.name || f.from?.iata || "Unknown",
+        arrivalCity: f.to?.name || f.to?.iata || "Unknown",
+        date: f.departureTime,
       })),
       journeyFactType,
       travelStatus,
@@ -146,43 +146,43 @@ export class EvaluateService {
     // Validate request
     if (request.journey_booked_flightids.length === 0) {
       console.error(
-        'No valid flight IDs found in original flights',
+        "No valid flight IDs found in original flights",
         originalFlights
       );
-      throw new Error('No valid flight IDs found in original flights');
+      throw new Error("No valid flight IDs found in original flights");
     }
 
     if (
-      journeyFactType === 'provided' &&
+      journeyFactType === "provided" &&
       request.journey_fact_flightids.length === 0
     ) {
       console.error(
-        'No valid flight IDs found in selected flights',
+        "No valid flight IDs found in selected flights",
         selectedFlights
       );
-      throw new Error('No valid flight IDs found in selected flights');
+      throw new Error("No valid flight IDs found in selected flights");
     }
 
     // Make API call
-    console.log('Making evaluate API call with request:', request);
-    const response = await fetch('/api/evaluateeuflightclaim', {
-      method: 'POST',
+    console.log("Making evaluate API call with request:", request);
+    const response = await fetch("/api/evaluateeuflightclaim", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify(request),
     });
 
     if (!response.ok) {
-      console.error('Evaluate API call failed:', {
+      console.error("Evaluate API call failed:", {
         status: response.status,
         statusText: response.statusText,
       });
-      throw new Error('Failed to evaluate claim');
+      throw new Error("Failed to evaluate claim");
     }
 
     const result = await response.json();
-    console.log('=== Evaluate Response Details ===', {
+    console.log("=== Evaluate Response Details ===", {
       rawResponse: result,
       status: result.data?.status,
       contract: result.data?.contract,
@@ -192,11 +192,11 @@ export class EvaluateService {
     // Ensure we have a valid response
     if (
       !result.data ||
-      typeof result.data.status === 'undefined' ||
-      !['accept', 'reject'].includes(result.data.status)
+      typeof result.data.status === "undefined" ||
+      !["accept", "reject"].includes(result.data.status)
     ) {
-      console.error('Invalid evaluation response:', result);
-      throw new Error('Invalid evaluation response received');
+      console.error("Invalid evaluation response:", result);
+      throw new Error("Invalid evaluation response received");
     }
 
     return {

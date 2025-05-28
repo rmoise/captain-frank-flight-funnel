@@ -1,9 +1,9 @@
-import { de } from './de';
-import { en } from './en';
-import type { SupportedLanguage } from '@/config/language';
-import type { Translations } from './types';
+import { de } from "./de";
+import { en } from "./en";
+import type { Locale } from "@/config/language";
+import type { Translations } from "./types";
 
-export const translations: Record<SupportedLanguage, Translations> = {
+export const translations: Record<Locale, Translations> = {
   de,
   en,
 } as const;
@@ -11,5 +11,10 @@ export const translations: Record<SupportedLanguage, Translations> = {
 export type TranslationType = typeof de;
 export type TranslationKey = keyof TranslationType;
 
-export const getTranslation = (lang: SupportedLanguage): Translations =>
+export const getTranslation = (lang: Locale): Translations =>
   translations[lang];
+
+// Default to English translations if no language is provided
+export const getTranslations = (lang?: Locale): Translations => {
+  return translations[lang || "en"];
+};

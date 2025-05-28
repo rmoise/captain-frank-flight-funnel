@@ -2,15 +2,17 @@
 
 import React, { useState, useCallback, useEffect } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
-import useStore from "@/lib/state/store";
+import { useStore } from "@/store";
 import { useTranslation } from "@/hooks/useTranslation";
 import { PhaseGuard } from "@/components/shared/PhaseGuard";
-import { SpeechBubble } from "@/components/SpeechBubble";
-import { ContinueButton } from "@/components/shared/ContinueButton";
-import { Translations } from "@/translations/types";
+import { ContinueButton } from "@/components/ui/button/ContinueButton";
+import { SpeechBubble } from "@/components/ui/display/SpeechBubble";
 import Image from "next/image";
-import { StoreState } from "@/lib/state/types";
-import { useFlightStore } from "@/lib/state/flightStore";
+import {
+  EvaluationContract,
+  Phase4FlightSegment,
+} from "@/store/slices/phase4Slice";
+import type { FlightSegment } from "@/types/shared/flight";
 
 interface DocumentUploadState {
   bookingConfirmation: File | null;
@@ -35,21 +37,55 @@ interface DocumentUploadState {
 
 const CLAIM_SUBMITTED_PHASE = 7;
 
+// Helper function to convert FlightSegment to Phase4FlightSegment
+const convertToPhase4FlightSegment = (
+  segment: FlightSegment
+): Phase4FlightSegment => {
+  return {
+    fromLocation: segment.origin || null,
+    toLocation: segment.destination || null,
+    date: segment.departureTime || null,
+    selectedFlight: null, // Set default value
+  };
+};
+
+// Helper function to ensure we're working with Phase4FlightSegment
+const ensurePhase4FlightSegment = (segment: any): Phase4FlightSegment => {
+  if (
+    segment &&
+    "fromLocation" in segment &&
+    "toLocation" in segment &&
+    "date" in segment
+  ) {
+    // It's already a Phase4FlightSegment
+    return segment as Phase4FlightSegment;
+  } else if (segment && "origin" in segment && "destination" in segment) {
+    // It's a FlightSegment, so convert it
+    return convertToPhase4FlightSegment(segment as FlightSegment);
+  } else {
+    // Create an empty Phase4FlightSegment
+    return {
+      fromLocation: null,
+      toLocation: null,
+      date: null,
+      selectedFlight: null,
+    };
+  }
+};
+
 export default function ClaimSubmittedPage() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
   const lang = params?.lang?.toString() || "de";
   const { t } = useTranslation();
-  const personalDetails = useStore(
-    (state: StoreState) => state.personalDetails
-  );
+  const personalDetails = useStore((state) => state.user.details);
 
   // Get claim ID from URL or use a default for testing
   const urlClaimId = searchParams?.get("claim_id");
   // Use URL claim ID, or check for the deal_id in hub store
   const hubspotDealId = useStore(
-    (state: StoreState) => state.evaluationResult?.guid
+    (state) => state.phase4.evaluationResultContract?.guid
   );
 
   // In development mode, provide a default claim ID for testing
@@ -91,6 +127,8 @@ export default function ClaimSubmittedPage() {
     showSuccessAnimation: false,
   });
 
+  const [showRestartModal, setShowRestartModal] = useState(false);
+
   useEffect(() => {
     console.log("Debug sharing:", {
       claimId,
@@ -101,37 +139,32 @@ export default function ClaimSubmittedPage() {
     if (claimId && personalDetails?.email) {
       // Create a turbo link that will prefill flight details but exclude personal info
       // Include essential flight data in query parameters or path to be used in phase 1
-      const flightStore = useFlightStore.getState();
       const storeState = useStore.getState();
 
-      // Import the phase4Store to get its data
+      // Get phase4 data directly from the main store
       let phase4Data = null;
       try {
-        // Dynamic import for the phase4Store to get trip experience data
-        const { usePhase4Store } = require("@/lib/state/phase4Store");
-        const phase4State = usePhase4Store.getState();
-
-        // Extract relevant data from phase4Store
+        // Extract relevant data from phase4 state in the main store
         phase4Data = {
-          travelStatusAnswers: phase4State.travelStatusAnswers || [],
-          informedDateAnswers: phase4State.informedDateAnswers || [],
-          selectedFlights: phase4State.selectedFlights || [],
+          travelStatusAnswers: storeState.phase4?.travelStatusAnswers || [],
+          informedDateAnswers: storeState.phase4?.informedDateAnswers || [],
+          selectedFlights: storeState.phase4?.selectedFlights || [],
         };
 
         console.log("Phase 4 data for sharing:", phase4Data);
       } catch (error) {
-        console.error("Error getting phase4Store data:", error);
+        console.error("Error getting phase4 data:", error);
       }
 
       // Get flight data from both stores
-      const flightData = flightStore.flightData[1] || {};
+      const flightPhase1Data = storeState.flight.phaseData?.[1] || {};
 
       // Also get Phase 3 data specifically
-      const phase3Data = flightStore.flightData[3] || {};
-      console.log("Phase 3 data for sharing:", phase3Data);
+      const flightPhase3Data = storeState.flight.phaseData?.[3] || {};
+      console.log("Phase 3 data for sharing:", flightPhase3Data);
 
       // Ensure we have the selected flights from phase 3
-      const phase3SelectedFlights = phase3Data.selectedFlights || [];
+      const phase3SelectedFlights = flightPhase3Data.selectedFlights || [];
 
       // Helper function to format dates in a consistent format for sharing
       const formatDateForSharing = (date: any): string | null => {
@@ -173,21 +206,25 @@ export default function ClaimSubmittedPage() {
 
       // Process flight segments to ensure dates are properly formatted
       const processedFlightSegments = (
-        flightData.flightSegments ||
-        storeState.flightSegments ||
+        flightPhase1Data.segments ||
+        storeState.flight.segments ||
         []
       ).map((segment, index) => {
+        // Ensure we're working with Phase4FlightSegment
+        const phase4Segment = ensurePhase4FlightSegment(segment);
+
         // Format date if it exists
-        const formattedDate = formatDateForSharing(segment.date);
+        const formattedDate = formatDateForSharing(phase4Segment.date);
 
         // First try to get the selected flight from the segment itself
-        let processedSelectedFlight = segment.selectedFlight
+        let processedSelectedFlight = phase4Segment.selectedFlight
           ? {
-              ...segment.selectedFlight,
+              ...phase4Segment.selectedFlight,
               // Ensure the flight's date is also formatted
               date:
-                formatDateForSharing(segment.selectedFlight.date) ||
-                formattedDate,
+                formatDateForSharing(
+                  phase4Segment.selectedFlight.departureTime
+                ) || formattedDate,
             }
           : null;
 
@@ -197,17 +234,19 @@ export default function ClaimSubmittedPage() {
           if (phase3Flight) {
             processedSelectedFlight = {
               ...phase3Flight,
-              date: formatDateForSharing(phase3Flight.date) || formattedDate,
+              date:
+                formatDateForSharing(phase3Flight.departureTime) ||
+                formattedDate,
             };
             console.log(`Added phase 3 flight to segment ${index}:`, {
               flightNumber: phase3Flight.flightNumber,
-              date: formatDateForSharing(phase3Flight.date),
+              date: formatDateForSharing(phase3Flight.departureTime),
             });
           }
         }
 
         return {
-          ...segment,
+          ...phase4Segment,
           date: formattedDate,
           selectedFlight: processedSelectedFlight,
         };
@@ -215,16 +254,16 @@ export default function ClaimSubmittedPage() {
 
       // Prepare serializable flight data (only what's needed for prefilling)
       const prefilledData = {
-        fromLocation: flightData.fromLocation || storeState.fromLocation,
-        toLocation: flightData.toLocation || storeState.toLocation,
+        fromLocation:
+          (flightPhase1Data as any).fromLocation ||
+          storeState.phase4.fromLocation,
+        toLocation:
+          (flightPhase1Data as any).toLocation || storeState.phase4.toLocation,
         selectedType:
-          flightData.selectedType || storeState.selectedType || "direct",
+          flightPhase1Data.type || storeState.flight.type || "direct",
         flightSegments: processedFlightSegments,
-        // Add wizard answers data for prefilling QAs
-        wizardAnswers: storeState.wizardAnswers || [],
-        // Include Phase 4 data if available
+        wizardAnswers: storeState.wizard.answers || [],
         phase4Data: phase4Data,
-        // Explicitly include phase 3 data
         phase3Data: {
           selectedFlights: phase3SelectedFlights,
         },
@@ -234,7 +273,7 @@ export default function ClaimSubmittedPage() {
       };
 
       console.log("Prepared flight data for sharing:", {
-        segments: processedFlightSegments.map((seg) => ({
+        segments: processedFlightSegments.map((seg: any) => ({
           from: seg.fromLocation?.value,
           to: seg.toLocation?.value,
           date: seg.date,
@@ -425,7 +464,7 @@ export default function ClaimSubmittedPage() {
         setState((prev) => ({
           ...prev,
           error:
-            t.phases.documentUpload.errors.noBookingConfirmation ||
+            t("phases.documentUpload.errors.noBookingConfirmation") ||
             "Please upload a booking confirmation file",
         }));
         return;
@@ -588,7 +627,7 @@ export default function ClaimSubmittedPage() {
 
   // Add this function for testing
   const setTestPersonalDetails = useCallback(() => {
-    useStore.setState((state: StoreState) => ({
+    useStore.setState((state: any) => ({
       ...state,
       personalDetails: {
         firstName: "Test",
@@ -606,18 +645,34 @@ export default function ClaimSubmittedPage() {
 
   const handleCheckAnotherFlight = useCallback(() => {
     // Clear all state except personal details and terms acceptance
-    useStore.setState((state: StoreState) => ({
-      ...state,
-      selectedFlights: [],
-      bookingNumber: undefined,
-      signature: undefined,
-      hasSignature: false,
-      validationState: {
-        ...state.validationState,
-        isSignatureValid: false,
-      },
-      currentPhase: 1,
-    }));
+    useStore.setState((state: any) => {
+      // Import the ValidationPhase enum to get the correct type
+      const { ValidationPhase } = require("@/types/shared/validation");
+
+      return {
+        ...state,
+        flight: {
+          ...state.flight,
+          selectedFlights: {},
+          bookingNumber: undefined,
+        },
+        user: {
+          ...state.user,
+          signature: null,
+        },
+        validation: {
+          ...state.validation,
+          stepValidation: {
+            ...state.validation.stepValidation,
+            [ValidationPhase.STEP_1]: false,
+          },
+        },
+        navigation: {
+          ...state.navigation,
+          currentPhase: ValidationPhase.INITIAL_ASSESSMENT,
+        },
+      };
+    });
 
     // Clear localStorage except personal details and terms
     const personalDetails = localStorage.getItem("personalDetails");
@@ -637,14 +692,18 @@ export default function ClaimSubmittedPage() {
   const renderUploadArea = (
     type: "bookingConfirmation" | "cancellationNotification"
   ) => {
-    const file = state[type];
-    const preview = state.previews[type];
-    const draggedFile = state.draggedFiles[type];
-    const isLoading = state.isLoading && state.currentUploadType === type;
-    const isUploadSuccess =
-      state.uploadSuccess && state.lastUploadedType === type;
-    const showSuccessAnimation =
-      state.showSuccessAnimation && state.lastUploadedType === type;
+    const currentFile = state[type];
+    const previewUrl = state.previews[type];
+    const isDraggedOver = state.draggedFiles[type] !== null;
+
+    const title =
+      type === "bookingConfirmation"
+        ? t("phases.documentUpload.bookingConfirmation.title")
+        : t("phases.documentUpload.cancellationNotification.title");
+    const description =
+      type === "bookingConfirmation"
+        ? t("phases.documentUpload.bookingConfirmation.description")
+        : t("phases.documentUpload.cancellationNotification.description");
 
     return (
       <div
@@ -662,19 +721,21 @@ export default function ClaimSubmittedPage() {
           id={type}
         />
         <label htmlFor={type} className="cursor-pointer block w-full">
-          {file && !showSuccessAnimation ? (
+          {currentFile && !state.showSuccessAnimation ? (
             <div className="text-center">
-              {preview ? (
+              {previewUrl ? (
                 <>
-                  {file.type === "application/pdf" ? (
+                  {currentFile.type === "application/pdf" ? (
                     <div
                       className={`w-[200px] h-[160px] relative mx-auto ${
-                        isUploadSuccess ? "animate-fade-out" : ""
+                        state.uploadSuccess && state.lastUploadedType === type
+                          ? "animate-fade-out"
+                          : ""
                       }`}
                     >
-                      {typeof preview === "string" && (
+                      {typeof previewUrl === "string" && (
                         <iframe
-                          src={preview}
+                          src={previewUrl}
                           className="w-full h-full border border-gray-200 rounded-lg"
                           title="PDF preview"
                         />
@@ -683,13 +744,24 @@ export default function ClaimSubmittedPage() {
                   ) : (
                     <div
                       className={`relative w-[200px] h-[160px] mx-auto flex items-center justify-center ${
-                        isUploadSuccess ? "animate-fade-out" : ""
+                        state.uploadSuccess && state.lastUploadedType === type
+                          ? "animate-fade-out"
+                          : ""
                       }`}
                     >
-                      {typeof preview === "string" && (
+                      {typeof previewUrl === "string" && (
                         <Image
-                          src={preview}
-                          alt={file.name || "Image preview"}
+                          src={previewUrl}
+                          alt={
+                            currentFile.name ||
+                            (type === "bookingConfirmation"
+                              ? t(
+                                  "phases.documentUpload.bookingConfirmation.title"
+                                )
+                              : t(
+                                  "phases.documentUpload.cancellationNotification.title"
+                                ))
+                          }
                           className="max-h-32 rounded-lg object-contain"
                           width={200}
                           height={160}
@@ -697,7 +769,7 @@ export default function ClaimSubmittedPage() {
                       )}
                     </div>
                   )}
-                  <p className="text-[#4B626D] mb-3">{file.name}</p>
+                  <p className="text-[#4B626D] mb-3">{currentFile.name}</p>
                   <div className="flex justify-center items-center gap-4">
                     <button
                       onClick={(e) => {
@@ -705,9 +777,11 @@ export default function ClaimSubmittedPage() {
                         handleFileUpload(type, null);
                       }}
                       className="text-red-500"
-                      disabled={isLoading}
+                      disabled={
+                        state.isLoading && state.currentUploadType === type
+                      }
                     >
-                      {t.phases.documentUpload.remove}
+                      {t("phases.documentUpload.remove")}
                     </button>
                     <button
                       onClick={(e) => {
@@ -715,9 +789,12 @@ export default function ClaimSubmittedPage() {
                         uploadFile(type);
                       }}
                       className="px-4 py-2 bg-[#F54538] text-white rounded-lg hover:bg-[#D03C32]"
-                      disabled={isLoading || isUploadSuccess}
+                      disabled={
+                        state.isLoading ||
+                        (state.uploadSuccess && state.lastUploadedType === type)
+                      }
                     >
-                      {isLoading ? (
+                      {state.isLoading ? (
                         <span className="flex items-center">
                           <svg
                             className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
@@ -741,7 +818,8 @@ export default function ClaimSubmittedPage() {
                           </svg>
                           {"Uploading..."}
                         </span>
-                      ) : isUploadSuccess ? (
+                      ) : state.uploadSuccess &&
+                        state.lastUploadedType === type ? (
                         <span className="flex items-center">
                           <svg
                             className="mr-1 h-4 w-4 text-white"
@@ -759,7 +837,7 @@ export default function ClaimSubmittedPage() {
                           {"Uploaded"}
                         </span>
                       ) : (
-                        t.phases.documentUpload.submit
+                        t("phases.documentUpload.submit")
                       )}
                     </button>
                   </div>
@@ -768,7 +846,7 @@ export default function ClaimSubmittedPage() {
                 <div>Loading preview...</div>
               )}
             </div>
-          ) : showSuccessAnimation ? (
+          ) : state.showSuccessAnimation ? (
             <div className="min-h-[300px] flex flex-col justify-center">
               <div className="text-center">
                 <div className="flex flex-col items-center justify-center space-y-6">
@@ -792,12 +870,12 @@ export default function ClaimSubmittedPage() {
                   <div className="text-center space-y-4">
                     <h2 className="text-2xl font-bold text-gray-900">
                       {type === "bookingConfirmation"
-                        ? t.phases.documentUpload.submit &&
-                          t.phases.documentUpload.submit === "Upload"
+                        ? t("phases.documentUpload.submit") &&
+                          t("phases.documentUpload.submit") === "Upload"
                           ? "Upload Successful!"
                           : "Erfolgreich hochgeladen!"
-                        : t.phases.documentUpload.submit &&
-                          t.phases.documentUpload.submit === "Upload"
+                        : t("phases.documentUpload.submit") &&
+                          t("phases.documentUpload.submit") === "Upload"
                         ? "Upload Successful!"
                         : "Erfolgreich hochgeladen!"}
                     </h2>
@@ -828,7 +906,7 @@ export default function ClaimSubmittedPage() {
             </div>
           ) : (
             <div className="flex flex-col items-center">
-              {draggedFile ? (
+              {isDraggedOver ? (
                 <>
                   <div className="text-green-500 mb-4">
                     <svg
@@ -845,11 +923,16 @@ export default function ClaimSubmittedPage() {
                       />
                     </svg>
                   </div>
-                  <p className="text-gray-500 mb-2">{draggedFile.name}</p>
+                  <p className="text-gray-500 mb-2">
+                    {state.draggedFiles[type]?.name || "File ready to drop"}
+                  </p>
                   <button
                     onClick={(e) => {
                       e.preventDefault();
-                      handleFileUpload(type, draggedFile);
+                      const draggedFile = state.draggedFiles[type];
+                      if (draggedFile) {
+                        handleFileUpload(type, draggedFile);
+                      }
                     }}
                     className="px-4 py-2 bg-[#F54538] text-white rounded-lg hover:bg-[#D03C32]"
                   >
@@ -871,12 +954,7 @@ export default function ClaimSubmittedPage() {
                       d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
                     />
                   </svg>
-                  <p className="text-gray-500 mb-2">
-                    {type === "bookingConfirmation"
-                      ? t.phases.documentUpload.bookingConfirmation.description
-                      : t.phases.documentUpload.cancellationNotification
-                          .description}
-                  </p>
+                  <p className="text-gray-500 mb-2">{description}</p>
                   <p className="text-sm text-gray-400 mb-2">
                     Drag and drop your file here or
                   </p>
@@ -887,7 +965,7 @@ export default function ClaimSubmittedPage() {
                     }}
                     className="px-4 py-2 bg-[#F54538] text-white rounded-lg hover:bg-[#D03C32] mb-2"
                   >
-                    {t.phases.documentUpload.upload}
+                    {t("phases.documentUpload.upload")}
                   </button>
                   <p className="text-xs text-gray-400">
                     Accepted files: PDF, JPEG, PNG
@@ -1088,8 +1166,45 @@ export default function ClaimSubmittedPage() {
     return null;
   }
 
+  const handleRestartConfirm = () => {
+    // Call global reset function
+    const { actions } = useStore.getState();
+    actions.global.resetAll();
+
+    // Navigate to initial assessment
+    window.location.href = "/en/phases/initial-assessment";
+  };
+
   return (
     <PhaseGuard phase={CLAIM_SUBMITTED_PHASE}>
+      {/* Restart Confirmation Modal */}
+      {showRestartModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md mx-4 shadow-xl">
+            <h3 className="text-lg font-semibold mb-4">
+              {t("phases.claimSubmitted.navigation.title")}
+            </h3>
+            <p className="text-gray-600 mb-6">
+              {t("phases.claimSubmitted.navigation.confirmMessage")}
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowRestartModal(false)}
+                className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                onClick={handleRestartConfirm}
+                className="px-4 py-2 bg-[#F54538] text-white rounded-lg hover:bg-[#E03F33] transition-colors"
+              >
+                {t("phases.claimSubmitted.navigation.restart")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-3xl mx-auto px-4">
         {process.env.NEXT_PUBLIC_ENV === "development" && (
           <button
@@ -1104,43 +1219,43 @@ export default function ClaimSubmittedPage() {
         <div className="text-center mb-6">
           <span className="text-5xl mb-4 block">🎉</span>
           <h1 className="text-3xl font-bold mb-8">
-            {t.phases.claimSubmitted.title}
+            {t("phases.claimSubmitted.title")}
           </h1>
         </div>
 
         {/* Speech bubble with Captain Frank avatar */}
         <SpeechBubble
           message={
-            t.phases.claimSubmitted.thankYou.replace(
+            t("phases.claimSubmitted.thankYou").replace(
               "{firstName}",
               personalDetails?.firstName || ""
             ) +
             "\n\n" +
-            t.phases.claimSubmitted.description +
+            t("phases.claimSubmitted.description") +
             "\n\n" +
-            t.phases.claimSubmitted.emailConfirmation.replace(
+            t("phases.claimSubmitted.emailConfirmation").replace(
               "{email}",
               personalDetails?.email || ""
             ) +
             "\n\n" +
-            t.phases.claimSubmitted.support
+            t("phases.claimSubmitted.support")
           }
         />
 
         {/* Document Upload Section */}
         <div className="bg-white border border-gray-200 rounded-lg p-8 mb-6">
           <h2 className="text-xl font-semibold mb-4">
-            {t.phases.documentUpload.title || "Upload Documents"}
+            {t("phases.documentUpload.title") || "Upload Documents"}
           </h2>
           <p className="text-gray-600 mb-8">
-            {t.phases.documentUpload.description ||
+            {t("phases.documentUpload.description") ||
               "Please upload your booking confirmation and cancellation notification (if available)"}
           </p>
 
           {/* Booking Confirmation Upload */}
           <div className="mb-8">
             <h3 className="font-medium mb-3">
-              {t.phases.documentUpload.bookingConfirmation.title ||
+              {t("phases.documentUpload.bookingConfirmation.title") ||
                 "Booking Confirmation"}{" "}
               <span className="text-red-500">*</span>
             </h3>
@@ -1154,7 +1269,7 @@ export default function ClaimSubmittedPage() {
           {/* Cancellation Notification Upload */}
           <div className="mb-6">
             <h3 className="font-medium mb-3">
-              {t.phases.documentUpload.cancellationNotification.title ||
+              {t("phases.documentUpload.cancellationNotification.title") ||
                 "Cancellation Notification"}{" "}
               <span className="text-gray-400">(optional)</span>
             </h3>
@@ -1195,8 +1310,8 @@ export default function ClaimSubmittedPage() {
         {/* Sharing Section */}
         {state.sharingLink && (
           <div className="bg-white border border-gray-200 rounded-lg p-8 mb-6">
-            <h2 className="text-xl font-semibold mb-4">{t.share.title}</h2>
-            <p className="text-gray-600 mb-4">{t.share.description}</p>
+            <h2 className="text-xl font-semibold mb-4">{t("share.title")}</h2>
+            <p className="text-gray-600 mb-4">{t("share.description")}</p>
             <div className="space-y-4">
               <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-lg">
                 <input
@@ -1206,69 +1321,35 @@ export default function ClaimSubmittedPage() {
                   className="flex-grow bg-transparent border-none focus:outline-none text-gray-600 text-sm"
                 />
                 <button
-                  onClick={async () => {
-                    try {
-                      // Use the Clipboard API directly
-                      await navigator.clipboard.writeText(
-                        state.sharingLink || ""
-                      );
-
-                      // Visual feedback (optional)
-                      const button =
-                        document.activeElement as HTMLButtonElement;
-                      const originalText = button.textContent;
-                      button.textContent = t.share.copied;
-                      setTimeout(() => {
-                        button.textContent = originalText;
-                      }, 2000);
-                    } catch (err) {
-                      console.error("Failed to copy:", err);
-                      // Fallback only if the Clipboard API fails
-                      try {
-                        const textArea = document.createElement("textarea");
-                        textArea.value = state.sharingLink || "";
-                        textArea.style.position = "absolute";
-                        textArea.style.left = "-9999px";
-                        textArea.style.top = "-9999px";
-                        document.body.appendChild(textArea);
-                        textArea.focus();
-                        textArea.select();
-
-                        // Use the deprecated execCommand as a last resort
-                        const success = document.execCommand("copy");
-                        if (!success)
-                          throw new Error("Copy command was unsuccessful");
-
-                        document.body.removeChild(textArea);
-
-                        // Visual feedback
-                        const button =
-                          document.activeElement as HTMLButtonElement;
-                        const originalText = button.textContent;
-                        button.textContent = t.share.copied;
-                        setTimeout(() => {
-                          button.textContent = originalText;
-                        }, 2000);
-                      } catch (fallbackErr) {
-                        console.error(
-                          "Fallback clipboard method failed:",
-                          fallbackErr
-                        );
-                        alert("Failed to copy link");
-                      }
-                    }
+                  onClick={() => {
+                    navigator.clipboard.writeText(state.sharingLink || "");
+                    // TODO: Add toast notification
                   }}
-                  className="px-4 py-2 bg-[#F54538] text-white rounded-lg hover:bg-[#D03C32] whitespace-nowrap"
+                  className="px-4 py-2 bg-[#F54538] text-white rounded-lg hover:bg-red-600 transition-colors"
                 >
-                  {t.share.copy}
+                  {t("share.copy")}
                 </button>
-              </div>
-              <div className="text-sm text-gray-500 mt-2">
-                <p>{t.share.explanation}</p>
               </div>
             </div>
           </div>
         )}
+
+        {/* Restart Button */}
+        <div className="mt-8 flex order-first sm:order-none sm:flex justify-center sm:justify-end w-full">
+          <button
+            onClick={() => setShowRestartModal(true)}
+            className="px-8 py-4 rounded-lg flex items-center justify-center w-full sm:w-auto min-w-[200px] font-medium text-lg transition-all duration-200 bg-[#F54538] hover:bg-[#E03F33] text-white shadow-sm hover:shadow-md active:shadow-sm"
+          >
+            <div className="flex items-center space-x-2">
+              <span className="block sm:hidden">
+                {t("phases.claimSubmitted.navigation.restart")}
+              </span>
+              <span className="hidden sm:block">
+                {t("phases.claimSubmitted.navigation.restart")}
+              </span>
+            </div>
+          </button>
+        </div>
       </div>
     </PhaseGuard>
   );

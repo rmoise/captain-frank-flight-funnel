@@ -13,7 +13,7 @@
   targetPort = 3003
   port = 8888
   autoLaunch = true
-  command = "npm run dev"
+  command = "pnpm run dev"
   publish = ".next"
   functions = "netlify/functions"
   NODE_ENV = "development"
@@ -25,6 +25,44 @@
   external_node_modules = ["axios"]
   included_files = ["netlify/functions/**/*"]
 
+# Specific rules first
+[[redirects]]
+  from = "/:lang/api/searchairportsbyterm"
+  to = "/.netlify/functions/searchAirports"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/:lang/api/searchflightsbyfromiatatoiatadatenumber"
+  to = "/.netlify/functions/searchFlights"
+  status = 200
+  force = true # Assuming this might need force=true as well
+
+[[redirects]]
+  from = "/api/calculatecompensationbyfromiatatoiata"
+  to = "/.netlify/functions/calculateCompensation"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/:lang/api/evaluateeuflightclaim"
+  to = "/.netlify/functions/evaluateeuflightclaim"
+  status = 200
+  force = true # Assuming this might need force=true as well
+
+[[redirects]]
+  from = "/:lang/api/ordereuflightclaim"
+  to = "/.netlify/functions/ordereuflightclaim"
+  status = 200
+  force = true # Assuming this might need force=true as well
+
+[[redirects]]
+  from = "/:lang/api/submitflightnotlisted"
+  to = "/.netlify/functions/submitFlightNotListed"
+  status = 200
+  force = true # Assuming this might need force=true as well
+
+# General language-prefixed rules next
 [[redirects]]
   from = "/:lang/.netlify/functions/*"
   to = "/.netlify/functions/:splat"
@@ -35,37 +73,7 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
-[[redirects]]
-  from = "/:lang/api/searchairportsbyterm"
-  to = "/.netlify/functions/searchAirports"
-  status = 200
-
-[[redirects]]
-  from = "/:lang/api/searchflightsbyfromiatatoiatadatenumber"
-  to = "/.netlify/functions/searchFlights"
-  status = 200
-
-[[redirects]]
-  from = "/:lang/api/calculatecompensationbyfromiatatoiata"
-  to = "/.netlify/functions/calculateCompensation"
-  status = 200
-
-[[redirects]]
-  from = "/:lang/api/evaluateeuflightclaim"
-  to = "/.netlify/functions/evaluateeuflightclaim"
-  status = 200
-
-[[redirects]]
-  from = "/:lang/api/ordereuflightclaim"
-  to = "/.netlify/functions/ordereuflightclaim"
-  status = 200
-
-[[redirects]]
-  from = "/:lang/api/submitflightnotlisted"
-  to = "/.netlify/functions/submitFlightNotListed"
-  status = 200
-
-# Fallback redirects for non-language-prefixed routes
+# Fallback non-language-prefixed rule last
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"

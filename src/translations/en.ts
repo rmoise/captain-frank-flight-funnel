@@ -11,11 +11,12 @@ export const en: Translations = {
     loading: "Loading...",
     error: "Error",
     success: "Success",
-    dateFormat: "DD.MM.YYYY",
+    dateFormat: "DD/MM/YYYY",
     enterAmount: "Enter amount",
     noResults: "No results found",
-    required: "Required field",
-    enterMinChars: "Please enter at least 3 characters",
+    required: "Required",
+    enterMinChars: "Enter at least 3 characters",
+    finish: "Finish",
   },
   salutation: {
     label: "Salutation",
@@ -140,23 +141,30 @@ export const en: Translations = {
       title: "Page Not Accessible",
       message: "Please complete the previous steps before accessing this page.",
       titles: {
+        1: "Initial Assessment Not Accessible",
         2: "Compensation Estimate Not Accessible",
         3: "Flight Details Not Accessible",
         4: "Trip Experience Not Accessible",
         5: "Claim Status Page Not Accessible",
         6: "Agreement Page Not Accessible",
         7: "Claim Submission Not Available",
+        8: "Claim Rejection Page Not Accessible",
       },
       messages: {
+        1: "Please start your claim from the beginning.",
         2: "Please complete the initial assessment before accessing the compensation estimate.",
         3: "Please complete the compensation estimate before accessing flight details.",
         4: "Please complete the flight details before accessing trip experience.",
         5: "Please complete the trip experience before accessing the claim status page.",
-        5.1: "Your claim has been accepted. Please proceed to the claim success page.",
-        5.2: "Your claim has been rejected. Please proceed to the claim rejected page.",
-        5.3: "Please complete the trip experience page first to determine your claim status.",
+        "5_1":
+          "Your claim has been accepted. Please proceed to the claim success page.",
+        "5_2":
+          "Your claim has been rejected. Please proceed to the claim rejected page.",
+        "5_3":
+          "Please complete the trip experience page first to determine your claim status.",
         6: "Please complete the claim status step before accessing the agreement page.",
         7: "Please complete the agreement step before viewing your claim submission.",
+        8: "Please complete the previous steps before accessing the claim rejection page.",
       },
       backText: {
         1: "Return to Initial Assessment",
@@ -164,50 +172,93 @@ export const en: Translations = {
         3: "Return to Flight Details",
         4: "Return to Trip Experience",
         5: "Return to Claim Status",
-        5.1: "Go to Claim Success Page",
-        5.2: "Go to Claim Rejected Page",
-        5.3: "Go to Trip Experience",
+        "5_1": "Go to Claim Success Page",
+        "5_2": "Go to Claim Rejected Page",
+        "5_3": "Go to Trip Experience",
         6: "Return to Agreement",
         7: "Return to Claim Submission",
+        8: "Return to Previous Step",
       },
     },
     initialAssessment: {
       title: "Tell us about your flight",
-      description: "Let's assess your flight claim",
+      description: "Let's assess your flight disruption claim",
       flightDetails: "Flight Details",
       bookingNumber: "Booking Number",
-      whatHappened: "What happened to your flight?",
+      whatHappened: "What happened with your flight?",
       whatHappenedSubtitle:
-        'Did you have a connecting flight? Please enter your flights under "Multi-Stop".',
+        'Did you have a connecting flight? Then please enter your flights under "Multi-Stop".',
+      flightDetailsDescription:
+        "Did you have a flight? Please provide your flight details",
+      step: "Step",
+      wizard: {
+        title: "What happened with your flight?",
+        description:
+          "Please answer a few questions about your flight experience",
+        successMessage: "Answers saved successfully!",
+      },
       personalDetails: {
         title: "Personal Details",
-        subtitle:
-          "Please provide your contact details so we can keep you updated about your claim.",
+        description: "Enter your contact information",
       },
-      termsAndConditions: {
-        title: "Terms and Conditions",
-        subtitle: "Please review and accept the terms to proceed.",
-        terms: "I have read and accept the Terms and Conditions.",
-        privacy: "I have read and accept the Privacy Policy.",
-        marketing:
-          "I agree that Captain Frank can send me advertisements about services, promotions, and satisfaction surveys via email. Captain Frank processes my personal data for this purpose (see Privacy Policy). I can revoke this consent at any time.",
-        marketingDetails:
-          "Stay updated about our latest services and travel tips. You can unsubscribe at any time.",
+      consent: {
+        title: "General Terms & Conditions",
+        description: "Please review and accept the terms to proceed.",
+        terms: "I accept the terms and conditions",
+        privacy: "I accept the privacy policy",
+        marketing: "I would like to receive marketing communications",
+        marketingDetails: "You can unsubscribe at any time",
+      },
+      continueButton: "Continue",
+      stepProgress: "Step {current} of {total}",
+      steps: {
+        flightDetails: {
+          title: "Flight Details",
+          description: "Enter your flight information",
+        },
+        questionnaire: {
+          title: "Questionnaire",
+          description: "Answer some questions",
+        },
+        personalDetails: {
+          title: "Personal Details",
+          description: "Enter your contact details",
+        },
+        termsAndConditions: {
+          title: "Terms & Conditions",
+          description: "Review and accept terms",
+        },
+      },
+      navigation: {
+        title: "Navigation",
+        description: "Navigate through the assessment",
+        back: "Back",
+        continue: "Continue",
       },
       summary: {
+        directFlight: "Direct flight from {from} to {to}",
         questionsAnswered: "{count} questions answered",
         termsAccepted: "Terms and Privacy Policy accepted",
-        directFlight: "Direct flight from {from} to {to}",
-        multiSegment: "Flight with {count} segment{s}: {segments}",
       },
-      welcomeMessage:
-        "Hi, I'm Captain Frank. I'll help you find out if you're entitled to compensation for your flight interruption. Let's get started!",
-      continueButton: "Continue to Compensation Estimate",
-      step: "Step {number}",
+      termsAndConditions: {
+        title: "Terms & Conditions",
+        subtitle: "Please review and accept the terms to proceed.",
+        description:
+          "Please review the following terms and conditions and confirm your acceptance.",
+        summary: "Summary of Terms",
+        terms: "I have read and accept the General Terms and Conditions.",
+        privacy: "I have read and accept the Privacy Policy.",
+        marketing:
+          "I agree that Captain Frank may send me advertising regarding services, promotions and satisfaction surveys by e-mail. Captain Frank processes my personal data for this purpose (see Privacy Policy). I can revoke this consent at any time.",
+        marketingDetails:
+          "Stay updated on our latest services and travel tips. You can unsubscribe at any time.",
+      },
       counter: {
         single: "Question {current} of {total}",
         multiple: "Questions {current} of {total}",
       },
+      welcomeMessage:
+        "Hi, I'm Captain Frank. I'll help you find out if you're entitled to compensation for your flight interruption. Let's get started!",
     },
     tripExperience: {
       title: "Trip Experience",
@@ -238,7 +289,7 @@ export const en: Translations = {
               },
             },
             ticketCost: {
-              title: "How much did you pay for your ticket?",
+              title: "Please tell us the costs you incurred for your trip.",
             },
             alternativeFlightAirlineExpense: {
               title: "Please enter all the flights you actually flew",
@@ -294,12 +345,12 @@ export const en: Translations = {
     },
     agreement: {
       title: "Agreement",
-      description: "Review and sign the agreement",
+      description: "Please review and sign the agreement",
       terms: "Terms and Conditions",
       privacy: "Privacy Policy",
       signature: "Signature",
       message:
-        "I, {salutation} {firstName} {lastName}, residing at {address}, {postalCode} {city}, {country}, hereby assign my claims for compensation from the flight connection with PNR/booking number {bookingNumber} from {departure}{connection} to {arrival} on {date} to Captain Frank GmbH.\n\nCaptain Frank GmbH accepts the declaration of assignment.",
+        "I, {salutation} {firstName} {lastName}, residing at {address}, {postalCode} {city}, {country}, hereby assign my claims for compensation from the flight connection with PNR/booking number {bookingNumber} from {departure}{connection} to {arrival} on {date} to Captain Frank GmbH.\n\nCaptain Frank GmbH accepts the assignment declaration.",
       step: "Step {number}",
       digitalSignature: {
         title: "Digital Signature",
@@ -328,7 +379,7 @@ export const en: Translations = {
     },
     names: {
       initialAssessment: "Initial Assessment",
-      summary: "Summary",
+      summary: "Compensation Estimate",
       flightDetails: "Flight Details",
       tripExperience: "Trip Experience",
       claimStatus: "Claim Status",
@@ -440,6 +491,14 @@ export const en: Translations = {
         contact:
           "Our team will contact you if we need any additional information",
         updates: "You will receive updates about your claim status via email",
+      },
+      navigation: {
+        title: "Need to Start Over?",
+        description:
+          "If you need to submit a claim for a different flight or start completely fresh, you can reset everything and begin a new claim process.",
+        confirmMessage:
+          "Are you sure you want to start over? This will clear all your current claim data and cannot be undone.",
+        restart: "Start New Claim",
       },
     },
     claimRejected: {
@@ -584,13 +643,14 @@ export const en: Translations = {
         firstName: "First Name",
         lastName: "Last Name",
         email: "Email",
-        description:
+        description: "",
+        descriptionPlaceholder:
           "Please provide details about your flight (e.g., airline, flight number, route, date)",
         submit: "Submit",
         submitting: "Submitting...",
         success:
           "Thank you! We have received your flight details and will contact you soon.",
-        characterCount: "{count} / {max}",
+        characterCount: "{count} / {max} characters",
       },
     },
     errors: {

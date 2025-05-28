@@ -1,7 +1,8 @@
-import Agreement from '@/app/phases/agreement/page';
-import type { Metadata } from 'next';
-import { isValidLanguage } from '@/config/language';
-import { getTranslation } from '@/translations';
+import AgreementPageWrapper from "@/app/phases/agreement/wrapper";
+import type { Metadata } from "next";
+import { isValidLocale } from "@/config/language";
+import { getTranslation } from "@/translations";
+import { setRequestLocale } from "next-intl/server";
 
 interface PageProps {
   params: Promise<{ lang: string }>;
@@ -12,7 +13,8 @@ export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
   const resolvedParams = await params;
-  const lang = isValidLanguage(resolvedParams.lang) ? resolvedParams.lang : 'de';
+  const lang = isValidLocale(resolvedParams.lang) ? resolvedParams.lang : "de";
+  await setRequestLocale(lang);
   const t = getTranslation(lang);
 
   return {
@@ -21,6 +23,8 @@ export async function generateMetadata({
   };
 }
 
-export default function AgreementPage() {
-  return <Agreement />;
-}
+const AgreementPage = async () => {
+  return <AgreementPageWrapper />;
+};
+
+export default AgreementPage;

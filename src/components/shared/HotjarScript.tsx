@@ -1,6 +1,11 @@
-import Script from 'next/script';
+import Script from "next/script";
 
 export const HotjarScript = () => {
+  // Skip in development to prevent errors with HTTP vs HTTPS
+  if (process.env.NODE_ENV === "development") {
+    return null;
+  }
+
   return (
     <Script
       id="hotjar-script"

@@ -1,13 +1,17 @@
-'use client';
+"use client";
 
-import { ChromeDebugProvider } from '@/providers/ChromeDebugProvider';
+import StoreProvider from "@/providers/StoreProvider";
+import ClientProviders from "@/providers/ClientProviders";
+import { NavigationProvider } from "@/providers/NavigationProvider.shared";
+import { ExternalScriptsProvider } from "@/providers/ExternalScriptsProvider";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <ChromeDebugProvider>
-      <div className="min-h-screen">
-        <main>{children}</main>
-      </div>
-    </ChromeDebugProvider>
+    <StoreProvider>
+      <NavigationProvider>
+        <ExternalScriptsProvider />
+        <ClientProviders>{children}</ClientProviders>
+      </NavigationProvider>
+    </StoreProvider>
   );
 }

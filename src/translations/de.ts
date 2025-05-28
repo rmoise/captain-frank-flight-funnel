@@ -8,14 +8,15 @@ export const de: Translations = {
     submit: "Absenden",
     cancel: "Abbrechen",
     continue: "Fortfahren",
-    loading: "Lädt...",
+    loading: "Laden...",
     error: "Fehler",
     success: "Erfolg",
-    dateFormat: "TT.MM.JJJJ",
+    dateFormat: "DD.MM.YYYY",
     enterAmount: "Betrag eingeben",
     noResults: "Keine Ergebnisse gefunden",
-    required: "Pflichtfeld",
-    enterMinChars: "Bitte geben Sie mindestens 3 Zeichen ein",
+    required: "Erforderlich",
+    enterMinChars: "Mindestens 3 Zeichen eingeben",
+    finish: "Fertig",
   },
   share: {
     title: "Anspruch teilen",
@@ -153,35 +154,43 @@ export const de: Translations = {
       message:
         "Bitte schließen Sie die vorherigen Schritte ab, bevor Sie auf diese Seite zugreifen.",
       titles: {
+        1: "Ersteinschätzung nicht zugänglich",
         2: "Entschädigungsschätzung nicht zugänglich",
         3: "Flugdetails nicht zugänglich",
         4: "Reiseerlebnis nicht zugänglich",
         5: "Antragsstatusseite nicht zugänglich",
         6: "Vereinbarungsseite nicht zugänglich",
         7: "Antragsübermittlung nicht verfügbar",
+        8: "Antragsablehnungsseite nicht zugänglich",
       },
       messages: {
+        1: "Bitte starten Sie Ihren Antrag von Anfang an.",
         2: "Bitte schließen Sie die Ersteinschätzung ab, bevor Sie auf die Entschädigungsschätzung zugreifen.",
         3: "Bitte schließen Sie die Entschädigungsschätzung ab, bevor Sie auf die Flugdetails zugreifen.",
         4: "Bitte schließen Sie die Flugdetails ab, bevor Sie auf das Reiseerlebnis zugreifen.",
         5: "Bitte schließen Sie das Reiseerlebnis ab, bevor Sie auf die Antragsstatusseite zugreifen.",
-        5.1: "Ihr Antrag wurde angenommen. Bitte gehen Sie zur Antragserfolgseite.",
-        5.2: "Ihr Antrag wurde abgelehnt. Bitte gehen Sie zur Antragsablehnungsseite.",
-        5.3: "Bitte schließen Sie zuerst die Reiseerlebnisseite ab, um Ihren Antragsstatus zu ermitteln.",
-        6: "Bitte schließen Sie den Antragsstatus ab, bevor Sie auf die Vereinbarungsseite zugreifen.",
-        7: "Bitte schließen Sie die Vereinbarung ab, bevor Sie Ihre Antragsübermittlung einsehen.",
+        "5_1":
+          "Ihr Anspruch wurde akzeptiert. Bitte fahren Sie mit der Erfolgsseite fort.",
+        "5_2":
+          "Ihr Anspruch wurde abgelehnt. Bitte fahren Sie mit der Ablehnungsseite fort.",
+        "5_3":
+          "Bitte schließen Sie zuerst die Reiseerfahrungsseite ab, um Ihren Anspruchsstatus zu bestimmen.",
+        6: "Bitte schließen Sie den Anspruchsstatus ab, bevor Sie auf die Vereinbarungsseite zugreifen.",
+        7: "Bitte schließen Sie die Vereinbarung ab, bevor Sie Ihre Anspruchseinreichung einsehen.",
+        8: "Bitte schließen Sie die vorherigen Schritte ab, bevor Sie auf die Antragsablehnungsseite zugreifen.",
       },
       backText: {
         1: "Zurück zur Ersteinschätzung",
         2: "Zurück zur Entschädigungsschätzung",
         3: "Zurück zu den Flugdetails",
-        4: "Zurück zum Reiseerlebnis",
-        5: "Zurück zum Antragsstatus",
-        5.1: "Zur Antragserfolgseite",
-        5.2: "Zur Antragsablehnungsseite",
-        5.3: "Zum Reiseerlebnis",
+        4: "Zurück zur Reiseerfahrung",
+        5: "Zurück zum Anspruchsstatus",
+        "5_1": "Zur Erfolgsseite",
+        "5_2": "Zur Ablehnungsseite",
+        "5_3": "Zur Reiseerfahrung",
         6: "Zurück zur Vereinbarung",
-        7: "Zurück zur Antragsübermittlung",
+        7: "Zurück zur Anspruchseinreichung",
+        8: "Zurück zum vorherigen Schritt",
       },
     },
     initialAssessment: {
@@ -192,15 +201,34 @@ export const de: Translations = {
       whatHappened: "Was ist mit deinem Flug passiert?",
       whatHappenedSubtitle:
         'Hattest du einen Anschlussflug? Dann gebe bitte deine Flüge unter "Multi-Stopp" ein.',
+      flightDetailsDescription:
+        "Hattest du einen Flug? Gib bitte deine Flugdaten an",
+      wizard: {
+        title: "Was ist mit deinem Flug passiert?",
+        description:
+          "Bitte beantworten Sie einige Fragen zu Ihrer Flugerfahrung",
+        successMessage: "Antworten erfolgreich gespeichert!",
+      },
       personalDetails: {
         title: "Persönliche Angaben",
-        subtitle:
-          "Bitte gib uns deine Kontaktdaten, damit wir dich über deinen Anspruch auf dem Laufenden halten können.",
+        description: "Geben Sie Ihre Kontaktinformationen ein",
+      },
+      consent: {
+        title: "Allgemeine Geschäftsbedingungen",
+        description:
+          "Bitte überprüfe und akzeptiere die Bedingungen, um fortzufahren.",
+        terms: "Ich akzeptiere die Geschäftsbedingungen",
+        privacy: "Ich akzeptiere die Datenschutzerklärung",
+        marketing: "Ich möchte Marketing-Mitteilungen erhalten",
+        marketingDetails: "Sie können sich jederzeit abmelden",
       },
       termsAndConditions: {
         title: "Allgemeine Geschäftsbedingungen",
         subtitle:
           "Bitte überprüfe und akzeptiere die Bedingungen, um fortzufahren.",
+        description:
+          "Bitte überprüfe die folgenden Bedingungen und bestätige deine Zustimmung.",
+        summary: "Zusammenfassung der Bedingungen",
         terms:
           "Ich habe die Allgemeinen Geschäftsbedingungen gelesen und akzeptiere sie.",
         privacy:
@@ -211,18 +239,42 @@ export const de: Translations = {
           "Bleibe über unsere neuesten Dienstleistungen und Reisetipps auf dem Laufenden. Du kannst dich jederzeit abmelden.",
       },
       summary: {
-        questionsAnswered: "{count} Fragen beantwortet",
-        termsAccepted: "Bedingungen und Datenschutzerklärung akzeptiert",
-        directFlight: "Direktflug von {from} nach {to}",
-        multiSegment: "Flug mit {count} Segment{s}: {segments}",
+        directFlight: "Flug von {from} nach {to}",
+        questionsAnswered: "Fragen beantwortet",
+        termsAccepted: "Bedingungen akzeptiert",
       },
       welcomeMessage:
         "Hi, ich bin Captain Frank. Ich helfe dir herauszufinden, ob du Anspruch auf eine Entschädigung für deine Flugunterbrechung hast. Los geht's!",
-      continueButton: "Zur Ersteinschätzung",
-      step: "Schritt {number}",
+      continueButton: "Weiter",
+      stepProgress: "Schritt {current} von {total}",
+      step: "Schritt",
       counter: {
         single: "Frage {current} von {total}",
         multiple: "Fragen {current} von {total}",
+      },
+      navigation: {
+        title: "Navigation",
+        description: "Navigiere durch die Bewertung",
+        back: "Zurück",
+        continue: "Weiter",
+      },
+      steps: {
+        flightDetails: {
+          title: "Flugdaten",
+          description: "Gib deine Flugdaten ein",
+        },
+        questionnaire: {
+          title: "Fragebogen",
+          description: "Beantworte einige Fragen",
+        },
+        personalDetails: {
+          title: "Persönliche Angaben",
+          description: "Gib deine Kontaktdaten ein",
+        },
+        termsAndConditions: {
+          title: "Allgemeine Geschäftsbedingungen",
+          description: "Überprüfe und akzeptiere die Bedingungen",
+        },
       },
     },
     tripExperience: {
@@ -254,7 +306,8 @@ export const de: Translations = {
               },
             },
             ticketCost: {
-              title: "Wie viel hast du für dein Ticket bezahlt?",
+              title:
+                "Bitte gib die Kosten an, die du für deine Reise ausgegeben hast.",
             },
             alternativeFlightAirlineExpense: {
               title:
@@ -334,7 +387,7 @@ export const de: Translations = {
         title: "Allgemeine Geschäftsbedingungen",
         subtitle:
           "Bitte überprüfe und akzeptiere die Bedingungen, um fortzufahren.",
-        summary: "Akzeptiere die Allgemeinen Geschäftsbedingungen",
+        summary: "Zusammenfassung der Bedingungen",
         terms:
           "Ich habe die Allgemeinen Geschäftsbedingungen gelesen und akzeptiere sie.",
         privacy:
@@ -351,7 +404,7 @@ export const de: Translations = {
     },
     names: {
       initialAssessment: "Erste Einschätzung",
-      summary: "Zusammenfassung",
+      summary: "Entschädigungsschätzung",
       flightDetails: "Flugdetails",
       tripExperience: "Reiseerfahrung",
       claimStatus: "Antragsstatus",
@@ -538,6 +591,14 @@ export const de: Translations = {
           "Unser Team wird sich bei dir melden, falls wir zusätzliche Informationen benötigen",
         updates: "Du erhältst Updates zum Status deines Antrags per E-Mail",
       },
+      navigation: {
+        title: "Möchten Sie von vorne beginnen?",
+        description:
+          "Wenn Sie eine Forderung für einen anderen Flug einreichen oder komplett neu beginnen müssen, können Sie alles zurücksetzen und einen neuen Forderungsprozess starten.",
+        confirmMessage:
+          "Sind Sie sicher, dass Sie von vorne beginnen möchten? Dies wird alle Ihre aktuellen Forderungsdaten löschen und kann nicht rückgängig gemacht werden.",
+        restart: "Neuen Antrag starten",
+      },
     },
     documentUpload: {
       title: "Dokumente hochladen",
@@ -609,13 +670,14 @@ export const de: Translations = {
         firstName: "Vorname",
         lastName: "Nachname",
         email: "E-Mail",
-        description:
-          "Bitte geben Sie Details zu Ihrem Flug an (z.B. Fluggesellschaft, Flugnummer, Route, Datum)",
+        description: "",
+        descriptionPlaceholder:
+          "Bitte gib Details zu deinem Flug an (z.B. Fluggesellschaft, Flugnummer, Route, Datum)",
         submit: "Absenden",
         submitting: "Wird gesendet...",
         success:
           "Vielen Dank! Wir haben Ihre Flugdaten erhalten und werden uns in Kürze bei Ihnen melden.",
-        characterCount: "{count} / {max}",
+        characterCount: "{count} / {max} Zeichen",
       },
     },
     errors: {
@@ -655,7 +717,7 @@ export const de: Translations = {
     invalidInput: "Ungültige Eingabe",
   },
   personalDetails: {
-    title: "Persönliche Daten",
+    title: "Persönliche Angaben",
     firstName: "Vorname",
     lastName: "Nachname",
     email: "E-Mail",

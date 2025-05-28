@@ -1,20 +1,23 @@
-import { useParams } from 'next/navigation';
-import { getTranslations } from './translations';
+"use client";
 
-export function useTranslation() {
-  const params = useParams();
-  const lang = (params?.lang as string) || 'de';
-  const translations = getTranslations(lang);
+import { useTranslations as useNextIntlTranslations } from "next-intl";
 
+// Enhanced useTranslations hook that provides type safety and namespacing
+export function useTranslations(namespace?: string) {
+  // Use the built-in next-intl useTranslations hook
+  const t = useNextIntlTranslations(namespace);
+
+  // Return a properly typed translation function
   return {
-    t: {
-      flightSelector: {
-        types: {
-          direct: translations['flightSelector.types.direct'],
-          multi: translations['flightSelector.types.multi'],
-        },
-      },
+    t,
+    // Helper to access deeply nested translations
+    translate: (key: string, params?: Record<string, string | number>) => {
+      try {
+        return t(key, params);
+      } catch (error) {
+        console.warn(`Translation key not found: ${key}`);
+        return key;
+      }
     },
-    lang,
   };
 }

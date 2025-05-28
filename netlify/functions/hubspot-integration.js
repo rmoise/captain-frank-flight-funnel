@@ -260,7 +260,7 @@ const createContact = async (payload) => {
             city: normalizedData.city || '',
             zip: normalizedData.zip || '',
             country: normalizedData.country || '',
-            arbeitsrecht_marketing_status: Boolean(normalizedData.arbeitsrecht_marketing_status)
+            arbeitsrecht_marketing_status: normalizedData.arbeitsrecht_marketing_status ? 'true' : 'false'
           }
         })
       });

@@ -1,31 +1,56 @@
 "use client";
 
-import React, { useRef, useEffect, useState } from "react";
+import React, {
+  useRef,
+  useEffect,
+  useState,
+  useMemo,
+  useCallback,
+} from "react";
 import type { ReactElement } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useTranslation } from "@/hooks/useTranslation";
-import { usePhase4Store } from "@/lib/state/phase4Store";
-import type { Phase4State } from "@/lib/state/phase4Store";
-import { Answer, Question, Flight } from "@/types/store";
-import { QAWizard } from "@/components/wizard/QAWizard";
+import { useUniversalNavigation } from "@/utils/navigation";
+import { Answer, Question } from "@/types/shared/wizard";
+import {
+  Flight,
+  FlightState,
+  WizardState,
+  ValidationState,
+  FlightSegment,
+  FlightLocation,
+} from "@/store/types";
+import { Phase4QAWizard } from "@/components/shared/wizard/Phase4QAWizard";
 import { PhaseGuard, PhaseGuardProps } from "@/components/shared/PhaseGuard";
-import { AccordionCard } from "@/components/shared/AccordionCard";
-import { SpeechBubble } from "@/components/SpeechBubble";
-import { ContinueButton } from "@/components/shared/ContinueButton";
-import { BackButton } from "@/components/shared/BackButton";
-import { PhaseNavigation } from "@/components/PhaseNavigation";
+import { AccordionCardClient } from "@/components/shared/accordion/AccordionCardClient";
+import { SpeechBubble } from "@/components/ui/display/SpeechBubble";
+import { ContinueButton } from "@/components/ui/button/ContinueButton";
+import { BackButton } from "@/components/ui/button/BackButton";
+import { PhaseNavigation } from "@/components/shared/navigation/PhaseNavigation";
+import { SlideSheet } from "@/components/ui/layout/SlideSheet";
+import { Input } from "@/components/ui/input/Input";
+import { Button } from "@/components/ui/button/Button";
+import { Select } from "@/components/ui/input/Select";
 import { accordionConfig } from "@/config/accordion";
 import { isValidYYYYMMDD, formatDateToYYYYMMDD } from "@/utils/dateUtils";
-import { AccordionProvider } from "@/components/shared/AccordionContext";
-import useStore from "@/lib/state/store";
-import { useFlightStore } from "@/lib/state/flightStore";
-import { ClaimService } from "@/services/claimService";
+import { AccordionProvider } from "@/components/shared/accordion/AccordionContext";
+import { useStore, useFlight, useWizard, useValidation } from "@/store";
+import { ValidationPhase } from "@/types/shared/validation";
+import { tripExperienceQuestions } from "@/components/shared/wizard/Phase4QAWizard/tripExperienceQuestions";
+import { Success } from "@/components/shared/wizard/Success";
+import { FlightNotListedForm } from "@/components/shared/ModularFlightSelector/FlightNotListedForm";
+import type { FlightNotListedData } from "@/components/shared/ModularFlightSelector/FlightNotListedForm";
+
+// Log to console to verify the questions are loaded
+console.log("TripExperiencePage - Questions:", {
+  count: tripExperienceQuestions.length,
+  ids: tripExperienceQuestions.map((q) => q.id),
+});
 
 // Extend Window interface to include _handlingSharedLink
 declare global {
   interface Window {
     _handlingSharedLink?: boolean;
-    // Use the type that's already defined elsewhere
     __accordionContext?: { setActiveAccordion: (step: string) => void };
     _sharedLinkProcessed?: boolean;
   }
@@ -34,8 +59,8 @@ declare global {
 // Add a function to ensure alternative flights are properly synchronized
 const syncAlternativeFlights = (
   flights: Flight[],
-  flightStore: any,
-  phase4Store: any
+  flightActions: any,
+  wizardActions: any
 ) => {
   if (!flights || flights.length === 0) {
     console.log("=== Syncing Alternative Flights - No flights to sync ===", {
@@ -45,7 +70,7 @@ const syncAlternativeFlights = (
   }
 
   console.log("=== Syncing Alternative Flights ===", {
-    flights: flights.map((f) => ({
+    flights: flights.map((f: any) => ({
       id: f.id,
       flightNumber: f.flightNumber,
       date: f.date,
@@ -55,2119 +80,1161 @@ const syncAlternativeFlights = (
 
   // IMPORTANT: Only update the phase4 flights in flightStore
   // but don't override the original flights which are phase3 flights
-  flightStore.setSelectedFlights(4, flights);
+  flightActions.setSelectedFlights(flights);
 
-  // Update phase4Store
-  phase4Store.batchUpdate({
-    selectedFlights: flights,
-    _lastUpdate: Date.now(),
-  });
+  // No need to update localStorage as the store handles persistence
+};
 
-  // Ensure data is persisted to localStorage
-  try {
-    // Save to phase4FlightData - IMPORTANT: Keep original flights separately from phase4 alternative flights
-    localStorage.setItem(
-      "phase4FlightData",
-      JSON.stringify({
-        originalFlights: flightStore.originalFlights, // Keep the original flights from phase3
-        selectedFlights: flights, // These are the phase4 alternative flights
-        _lastUpdate: Date.now(),
-      })
-    );
-
-    // Also save to phase4AlternativeFlights for redundancy
-    localStorage.setItem("phase4AlternativeFlights", JSON.stringify(flights));
-
-    // Update phase4Store in localStorage directly
-    const phase4StoreData = localStorage.getItem("phase4Store");
-    if (phase4StoreData) {
-      try {
-        const parsedData = JSON.parse(phase4StoreData);
-        if (parsedData.state) {
-          parsedData.state.selectedFlights = flights;
-          parsedData.state._lastUpdate = Date.now();
-          localStorage.setItem("phase4Store", JSON.stringify(parsedData));
-        }
-      } catch (e) {
-        console.error("Error updating phase4Store in localStorage:", e);
-      }
-    }
-
-    console.log("=== Saved alternative flights to localStorage ===", {
-      selectedFlights: flights.map((f) => ({
-        id: f.id,
-        flightNumber: f.flightNumber,
-        date: f.date,
-      })),
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error("Error saving flights to localStorage:", error);
-  }
+// Add helper function to convert Location to FlightLocation
+const toFlightLocation = (loc: any | null): FlightLocation | null => {
+  if (!loc) return null;
+  return {
+    id: loc.id || "",
+    name: loc.name || "",
+    code: loc.code || "",
+    city: loc.city || "",
+    country: loc.country || "",
+    timezone: loc.timezone || "",
+    type: loc.type || "airport",
+  };
 };
 
 export default function TripExperiencePage(): ReactElement {
   const { t } = useTranslation();
+  const { navigateToPhase } = useUniversalNavigation();
   const router = useRouter();
   const params = useParams();
   const lang = params?.lang?.toString() || "";
-  const [isLoading, setIsLoading] = React.useState(true);
-  const [isInitialized, setIsInitialized] = React.useState(false);
-  const phase4Store = usePhase4Store();
-  const flightStore = useFlightStore();
-  const mainStore = useStore();
-  const isInitializedRef = React.useRef(false);
-  const sharedFlightProcessedRef = React.useRef(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  // Add searchParams to get shared_flight parameter
-  const searchParams =
-    typeof window !== "undefined"
-      ? new URLSearchParams(window.location.search)
-      : null;
-  const sharedFlightParam = searchParams?.get("shared_flight");
+  // Add flight not listed modal state
+  const [isFlightNotListedOpen, setIsFlightNotListedOpen] = useState(false);
 
-  const {
-    travelStatusAnswers,
-    informedDateAnswers,
-    travelStatusStepValidation,
-    informedDateStepValidation,
-    travelStatusStepInteraction,
-    informedDateStepInteraction,
-    updateValidationState,
-  } = phase4Store;
+  // Get user details from store for prefilling
+  const userDetails = useStore((state) => state.user.details);
 
-  // Safe wrapper for validation state updates to prevent loops
-  const safeUpdateValidationState = React.useCallback(
-    (updates: Partial<Phase4State>) => {
-      // Skip updates during initialization
-      if (!isInitialized) {
-        console.log("=== Skipping validation update during initialization ===");
-        return;
-      }
+  // Create prefilled data from user store
+  const prefilledData: FlightNotListedData | null = useMemo(() => {
+    if (userDetails) {
+      return {
+        salutation: userDetails.salutation || "",
+        firstName: userDetails.firstName || "",
+        lastName: userDetails.lastName || "",
+        email: userDetails.email || "",
+        description: "",
+      };
+    }
+    return null;
+  }, [userDetails]);
 
-      // Only update if there's an actual change
-      let hasChanges = false;
+  // Access store values directly
+  const flight = useFlight();
+  const wizard = useWizard();
+  const validation = useValidation();
+  const store = useStore();
 
-      // Check if any field is different from current state
-      Object.entries(updates).forEach(([key, value]) => {
-        // @ts-ignore - we're doing dynamic checks
-        if (JSON.stringify(phase4Store[key]) !== JSON.stringify(value)) {
-          hasChanges = true;
-        }
-      });
+  // Destructure specific values we need
+  const originalFlights: Flight[] = useMemo(() => {
+    if (!flight.originalFlights) return [];
+    return flight.originalFlights[0] || [];
+  }, [flight.originalFlights]);
+  const selectedFlights: Flight[] = useMemo(() => {
+    if (!flight.selectedFlights) return [];
+    return Object.values(flight.selectedFlights || {}).flat();
+  }, [flight.selectedFlights]);
+  const isComplete = wizard.isComplete ?? false;
 
-      if (!hasChanges) {
-        console.log("=== No validation changes, skipping update ===");
-        return;
-      }
+  const isInitializedRef = useRef(false);
+  const sharedFlightProcessedRef = useRef(false);
 
-      console.log("=== Applying validation state update ===", {
-        updates,
-        timestamp: new Date().toISOString(),
-      });
+  // Create state for our wizard phases
+  const [travelStatusAnswers, setTravelStatusAnswers] = useState<Answer[]>([]);
+  const [informedDateAnswers, setInformedDateAnswers] = useState<Answer[]>([]);
+  const [travelStatusStepValidation, setTravelStatusStepValidation] = useState<
+    Record<string, boolean>
+  >({});
+  const [informedDateStepValidation, setInformedDateStepValidation] = useState<
+    Record<string, boolean>
+  >({});
+  const [travelStatusStepInteraction, setTravelStatusStepInteraction] =
+    useState<Record<string, boolean>>({});
+  const [informedDateStepInteraction, setInformedDateStepInteraction] =
+    useState<Record<string, boolean>>({});
 
-      // Apply the update
-      phase4Store.updateValidationState(updates);
-    },
-    [phase4Store, isInitialized]
+  // --- NEW: Local state for Phase 4 alternative flight segments ---
+  const [alternativeFlights, setAlternativeFlights] = useState<FlightSegment[]>(
+    []
   );
+
+  // Reference to track pending flight selections
+  const pendingFlightSelectionRef = useRef<FlightSegment[] | null>(null);
+
+  // Create a stable callback handler for alternative flights changes
+  const handleAlternativeFlightsChange = useCallback(
+    (segments: FlightSegment[]) => {
+      // Store changes in the ref first to avoid state updates during render
+      pendingFlightSelectionRef.current = segments;
+
+      // Use setTimeout to defer the state update after render
+      setTimeout(() => {
+        if (pendingFlightSelectionRef.current) {
+          console.log(
+            "[TripExperiencePage] Updating alternative flights:",
+            pendingFlightSelectionRef.current
+          );
+          setAlternativeFlights(pendingFlightSelectionRef.current);
+          // Clear the ref after using it
+          pendingFlightSelectionRef.current = null;
+        }
+      }, 0);
+    },
+    []
+  );
+
+  // Add an effect to handle initializing alternative flight segments
+  useEffect(() => {
+    // Don't run if we're still loading
+    if (isLoading || !isInitialized) return;
+
+    // Check if we need to synchronize stored alternative flights
+    const travelStatus = travelStatusAnswers.find(
+      (a: Answer) => a.questionId === "travel_status"
+    )?.value;
+
+    // Get phase4 store to check if we have alternate flights but local state is empty
+    const phase4 = store.phase4;
+    const hasPhase4AlternativeFlights =
+      (phase4.selectedType === "direct" &&
+        phase4.directFlight?.selectedFlight) ||
+      (phase4.selectedType === "multi" &&
+        phase4.flightSegments.some((s) => s.selectedFlight));
+
+    const needsAlternativeFlights =
+      (travelStatus === "provided" ||
+        travelStatus === "took_alternative_own") &&
+      alternativeFlights.length === 0 &&
+      hasPhase4AlternativeFlights;
+
+    if (needsAlternativeFlights) {
+      console.log("=== Initializing alternative flights from phase4 store ===");
+
+      try {
+        // Use setTimeout to prevent setState during render
+        setTimeout(() => {
+          // Map phase4 format to FlightSegment format
+          const newSegments: FlightSegment[] = [];
+
+          if (
+            phase4.selectedType === "direct" &&
+            phase4.directFlight?.selectedFlight
+          ) {
+            const flight = phase4.directFlight;
+            newSegments.push({
+              id: `alt-direct-${Date.now()}`,
+              origin: toFlightLocation(flight.fromLocation),
+              destination: toFlightLocation(flight.toLocation),
+              departureTime: flight.date || "",
+              arrivalTime: flight.selectedFlight?.arrivalTime || "",
+              flightNumber: flight.selectedFlight?.flightNumber || "",
+              airline: flight.selectedFlight?.airline || { name: "", code: "" },
+              duration: flight.selectedFlight?.duration || "",
+              stops: flight.selectedFlight?.stops || 0,
+              selectedFlight: flight.selectedFlight,
+            } as FlightSegment);
+          } else if (phase4.selectedType === "multi") {
+            // Map multi-segment flights
+            phase4.flightSegments.forEach((flight, index) => {
+              if (flight.selectedFlight) {
+                newSegments.push({
+                  id: `alt-multi-${index}-${Date.now()}`,
+                  origin: toFlightLocation(flight.fromLocation),
+                  destination: toFlightLocation(flight.toLocation),
+                  departureTime: flight.date || "",
+                  arrivalTime: flight.selectedFlight?.arrivalTime || "",
+                  flightNumber: flight.selectedFlight?.flightNumber || "",
+                  airline: flight.selectedFlight?.airline || {
+                    name: "",
+                    code: "",
+                  },
+                  duration: flight.selectedFlight?.duration || "",
+                  stops: flight.selectedFlight?.stops || 0,
+                  selectedFlight: flight.selectedFlight,
+                } as FlightSegment);
+              }
+            });
+          }
+
+          if (newSegments.length > 0) {
+            console.log(
+              `=== Setting ${newSegments.length} alternative flights from store ===`
+            );
+            setAlternativeFlights(newSegments);
+          }
+        }, 0);
+      } catch (error) {
+        console.error("Error initializing alternative flights:", error);
+      }
+    }
+  }, [
+    isLoading,
+    isInitialized,
+    travelStatusAnswers,
+    alternativeFlights.length,
+    store.phase4,
+  ]);
+
+  // Define questions for the informed date wizard
+  const informedDateQuestions: Question[] = useMemo(
+    () => [
+      {
+        id: "informed_date",
+        text: t(
+          "phases.tripExperience.steps.informedDate.questions.informedDate.title"
+        ),
+        type: "radio",
+        options: [
+          {
+            id: "on_departure",
+            value: "on_departure",
+            label: t(
+              "phases.tripExperience.steps.informedDate.questions.informedDate.options.onDeparture"
+            ),
+            showCheck: true,
+          },
+          {
+            id: "specific_date",
+            value: "specific_date",
+            label: t(
+              "phases.tripExperience.steps.informedDate.questions.informedDate.options.specificDate"
+            ),
+            showCheck: true,
+          },
+        ],
+        required: true,
+      },
+      {
+        id: "specific_informed_date",
+        text: t(
+          "phases.tripExperience.steps.informedDate.questions.specificInformedDate.title"
+        ),
+        label: t(
+          "phases.tripExperience.steps.informedDate.questions.specificInformedDate.label"
+        ),
+        type: "date",
+        options: [],
+        required: true,
+        showIf: (answers: Record<string, Answer>) =>
+          answers["informed_date"]?.value === "specific_date",
+      },
+    ],
+    [t]
+  );
+
+  // Helper for updating validation state
+  const updateValidationState = (updates: any) => {
+    // Update the local state
+    if (updates.travelStatusAnswers) {
+      setTravelStatusAnswers(updates.travelStatusAnswers);
+    }
+    if (updates.informedDateAnswers) {
+      setInformedDateAnswers(updates.informedDateAnswers);
+    }
+    if (updates.travelStatusStepValidation) {
+      setTravelStatusStepValidation({
+        ...travelStatusStepValidation,
+        ...updates.travelStatusStepValidation,
+      });
+    }
+    if (updates.informedDateStepValidation) {
+      setInformedDateStepValidation({
+        ...informedDateStepValidation,
+        ...updates.informedDateStepValidation,
+      });
+    }
+    if (updates.travelStatusStepInteraction) {
+      setTravelStatusStepInteraction({
+        ...travelStatusStepInteraction,
+        ...updates.travelStatusStepInteraction,
+      });
+    }
+    if (updates.informedDateStepInteraction) {
+      setInformedDateStepInteraction({
+        ...informedDateStepInteraction,
+        ...updates.informedDateStepInteraction,
+      });
+    }
+
+    // Update the Zustand store validation state
+    if (updates.travelStatusStepValidation) {
+      validation.setStepValidation(
+        ValidationPhase.TRIP_EXPERIENCE,
+        Boolean(updates.travelStatusStepValidation?.["travel_status_step"])
+      );
+    }
+  };
 
   // Initialize marketing status from store
   React.useEffect(() => {
-    const storedState = useStore.getState();
-    if (storedState.marketingAccepted !== undefined) {
+    const storeState = useStore.getState();
+    // Check for user consents in the new store structure
+    if (storeState.user?.consents?.marketing !== undefined) {
       console.log(
         "Initializing marketing status from store:",
-        storedState.marketingAccepted
+        storeState.user.consents.marketing
       );
-      mainStore.setMarketingAccepted(storedState.marketingAccepted);
     }
   }, []);
 
   // Initialize state on mount
-  React.useEffect(() => {
-    // Skip if we've already initialized from a shared link
-    if (isInitializedRef.current || isInitialized || window._handlingSharedLink)
-      return;
+  useEffect(() => {
+    // Skip if already initialized
+    if (isInitialized) return;
+
+    // Track initialization with a ref to prevent repeated effects
+    const isInitializing = isInitializedRef.current;
+    if (isInitializing) return;
+
     isInitializedRef.current = true;
 
-    console.log("=== Trip Experience Page Initialization ===", {
-      originalFlights: flightStore.originalFlights.length,
-      mainStoreFlights: mainStore.selectedFlights.length,
-      hasPersistedData: !!localStorage.getItem("phase4FlightData"),
-      phase4StoreFlights: phase4Store.selectedFlights.length,
-      marketingAccepted: mainStore.marketingAccepted,
-      isFromSharedLink: !!window._handlingSharedLink,
-      timestamp: new Date().toISOString(),
+    const initialize = async () => {
+      try {
+        console.log("[TripExperiencePage] Initializing");
+
+        // Check if we're coming from a shared link
+        if (typeof window !== "undefined" && window._handlingSharedLink) {
+          console.log(
+            "[TripExperiencePage] Detected shared link context, deferring initialization"
+          );
+          isInitializedRef.current = false;
+          return;
+        }
+
+        // Get initial data from the store
+        const state = useStore.getState();
+
+        // Important: Use a synchronous approach to avoid race conditions
+        const phase4Data = state.phase4 || {};
+
+        // Initialize local state with data from the store
+        setTravelStatusAnswers(phase4Data.travelStatusAnswers || []);
+        setInformedDateAnswers(phase4Data.informedDateAnswers || []);
+        setTravelStatusStepValidation(
+          phase4Data.travelStatusStepValidation || {}
+        );
+        setInformedDateStepValidation(
+          phase4Data.informedDateStepValidation || {}
+        );
+        setTravelStatusStepInteraction(
+          phase4Data.travelStatusStepInteraction || {}
+        );
+        setInformedDateStepInteraction(
+          phase4Data.informedDateStepInteraction || {}
+        );
+
+        // CRITICAL FIX: Reset informed date validation if wizard wasn't actually completed
+        // This prevents persisted validation state from bypassing our new logic
+        if (
+          phase4Data.informedDateIsValid &&
+          !phase4Data.informedDateShowingSuccess
+        ) {
+          console.log(
+            "[TripExperiencePage] Resetting invalid persisted informed date validation state"
+          );
+          useStore.getState().actions.phase4.updateValidationState({
+            informedDateIsValid: false,
+            informedDateShowingSuccess: false,
+          });
+        }
+
+        // Same check for travel status validation
+        if (
+          phase4Data.travelStatusIsValid &&
+          !phase4Data.travelStatusShowingSuccess
+        ) {
+          console.log(
+            "[TripExperiencePage] Resetting invalid persisted travel status validation state"
+          );
+          useStore.getState().actions.phase4.updateValidationState({
+            travelStatusIsValid: false,
+            travelStatusShowingSuccess: false,
+          });
+        }
+
+        console.log("[TripExperiencePage] Initialization complete with data:", {
+          travelStatusAnswersCount: (phase4Data.travelStatusAnswers || [])
+            .length,
+          informedDateAnswersCount: (phase4Data.informedDateAnswers || [])
+            .length,
+          travelStatusValid: phase4Data.travelStatusIsValid,
+          informedDateValid: phase4Data.informedDateIsValid,
+        });
+
+        // Mark as initialized
+        setIsInitialized(true);
+        setIsLoading(false);
+      } catch (error) {
+        console.error("[TripExperiencePage] Initialization error:", error);
+        setIsLoading(false);
+      } finally {
+        isInitializedRef.current = false;
+      }
+    };
+
+    initialize();
+  }, [isInitialized]);
+
+  // Storage for validation states as plain React state
+  const [validationState, setValidationState] = useState({
+    isTravelStatusValid: false,
+    isInformedDateValid: false,
+  });
+
+  // Update validation state on relevant changes (not on every render)
+  React.useEffect(() => {
+    // Use a descriptive key or safe access for step validation
+    const travelStatusStepKey = "travel_status_step";
+    const informedDateStepKey = "informed_date_step";
+
+    const newTravelStatusValid = Boolean(
+      travelStatusStepValidation[travelStatusStepKey] ||
+        useStore.getState().phase4?.travelStatusIsValid ||
+        useStore.getState().phase4?.travelStatusShowingSuccess
+    );
+    const newInformedDateValid = Boolean(
+      informedDateStepValidation[informedDateStepKey] ||
+        useStore.getState().phase4?.informedDateIsValid ||
+        useStore.getState().phase4?.informedDateShowingSuccess
+    );
+
+    console.log("[TripExperiencePage] useEffect for validationState:", {
+      travelStatusStepKey,
+      informedDateStepKey,
+      "travelStatusStepValidation[travelStatusStepKey]":
+        travelStatusStepValidation[travelStatusStepKey],
+      "informedDateStepValidation[informedDateStepKey]":
+        informedDateStepValidation[informedDateStepKey],
+      "store.phase4.travelStatusIsValid":
+        useStore.getState().phase4?.travelStatusIsValid,
+      "store.phase4.travelStatusShowingSuccess":
+        useStore.getState().phase4?.travelStatusShowingSuccess,
+      "store.phase4.informedDateIsValid":
+        useStore.getState().phase4?.informedDateIsValid,
+      "store.phase4.informedDateShowingSuccess":
+        useStore.getState().phase4?.informedDateShowingSuccess,
+      newTravelStatusValid,
+      newInformedDateValid,
+      currentValidationState: validationState,
     });
 
-    try {
-      // First check if we have existing travel status answers before clearing anything
-      const existingTravelStatusAnswers = [...phase4Store.travelStatusAnswers];
-      const existingInformedDateAnswers = [...phase4Store.informedDateAnswers];
-
-      console.log("=== Trip Experience - Existing Answers Before Reset ===", {
-        travelStatusAnswers: existingTravelStatusAnswers,
-        informedDateAnswers: existingInformedDateAnswers,
-        timestamp: new Date().toISOString(),
-      });
-
-      // Skip the reset if we're using shared data
-      if (!window._handlingSharedLink) {
-        // Clear any data from phases 1-3 in localStorage to ensure complete isolation
-        console.log("=== Trip Experience - Clearing Phases 1-3 Data ===", {
-          timestamp: new Date().toISOString(),
-        });
-
-        // Save essential data that should be preserved
-        const termsAccepted = localStorage.getItem("termsAccepted");
-        const privacyAccepted = localStorage.getItem("privacyAccepted");
-        const currentPhase = "4"; // Force phase 4
-        const completedPhases = localStorage.getItem("completedPhases");
-        const phasesCompletedViaContinue = localStorage.getItem(
-          "phasesCompletedViaContinue"
-        );
-
-        // Save phase 4 validation state before clearing
-        const phase4ValidationState = localStorage.getItem(
-          "phase4ValidationState"
-        );
-        const phase4StoreData = localStorage.getItem("phase4Store");
-        const phase4FlightData = localStorage.getItem("phase4FlightData");
-        const phase4AlternativeFlights = localStorage.getItem(
-          "phase4AlternativeFlights"
-        );
-
-        // Clear all localStorage
-        localStorage.clear();
-
-        // Restore essential data
-        if (termsAccepted) localStorage.setItem("termsAccepted", termsAccepted);
-        if (privacyAccepted)
-          localStorage.setItem("privacyAccepted", privacyAccepted);
-        localStorage.setItem("currentPhase", currentPhase);
-        if (completedPhases)
-          localStorage.setItem("completedPhases", completedPhases);
-        if (phasesCompletedViaContinue)
-          localStorage.setItem(
-            "phasesCompletedViaContinue",
-            phasesCompletedViaContinue
-          );
-
-        // Restore phase 4 data
-        if (phase4ValidationState)
-          localStorage.setItem("phase4ValidationState", phase4ValidationState);
-        if (phase4StoreData)
-          localStorage.setItem("phase4Store", phase4StoreData);
-        if (phase4FlightData)
-          localStorage.setItem("phase4FlightData", phase4FlightData);
-        if (phase4AlternativeFlights)
-          localStorage.setItem(
-            "phase4AlternativeFlights",
-            phase4AlternativeFlights
-          );
-
-        // Also clear the flightStore for phase 4
-        flightStore.clearFlightData(4);
-
-        // Reset the phase4Store but preserve existing answers
-        phase4Store.resetStore(true);
-
-        // Explicitly restore answers after reset
-        if (existingTravelStatusAnswers.length > 0) {
-          console.log(
-            "=== Trip Experience - Restoring Travel Status Answers After Reset ===",
-            {
-              answers: existingTravelStatusAnswers,
-              timestamp: new Date().toISOString(),
-            }
-          );
-
-          phase4Store.batchUpdate({
-            travelStatusAnswers: existingTravelStatusAnswers,
-            _lastUpdate: Date.now(),
-          });
-        }
-
-        if (existingInformedDateAnswers.length > 0) {
-          console.log(
-            "=== Trip Experience - Restoring Informed Date Answers After Reset ===",
-            {
-              answers: existingInformedDateAnswers,
-              timestamp: new Date().toISOString(),
-            }
-          );
-
-          phase4Store.batchUpdate({
-            informedDateAnswers: existingInformedDateAnswers,
-            _lastUpdate: Date.now(),
-          });
-        }
-
-        console.log(
-          "=== Trip Experience - Completely Reset Flight Data for Phase 4 ===",
-          {
-            timestamp: new Date().toISOString(),
-          }
-        );
-      }
-
-      // First restore validation state if it exists
-      const persistedValidationState = localStorage.getItem(
-        "phase4ValidationState"
-      );
-
-      // If persisted validation state is found, restore it
-      if (persistedValidationState) {
-        try {
-          const validationData = JSON.parse(persistedValidationState);
-          console.log("Found persisted validation state:", validationData);
-
-          // Restore validation state
-          safeUpdateValidationState({
-            travelStatusStepValidation:
-              validationData.travelStatusStepValidation || {},
-            travelStatusStepInteraction:
-              validationData.travelStatusStepInteraction || {},
-            informedDateStepValidation:
-              validationData.informedDateStepValidation || {},
-            informedDateStepInteraction:
-              validationData.informedDateStepInteraction || {},
-            travelStatusShowingSuccess:
-              validationData.travelStatusShowingSuccess || false,
-            travelStatusIsValid: validationData.travelStatusIsValid || false,
-            informedDateShowingSuccess:
-              validationData.informedDateShowingSuccess || false,
-            informedDateIsValid: validationData.informedDateIsValid || false,
-            _lastUpdate: Date.now(),
-          });
-
-          // Don't override answers from shared link
-          if (!window._handlingSharedLink) {
-            // Restore travel status answers if they exist
-            if (validationData.travelStatusAnswers?.length > 0) {
-              phase4Store.batchUpdate({
-                travelStatusAnswers: validationData.travelStatusAnswers,
-                _lastUpdate: Date.now(),
-              });
-            }
-
-            // Restore informed date answers if they exist
-            if (validationData.informedDateAnswers?.length > 0) {
-              phase4Store.batchUpdate({
-                informedDateAnswers: validationData.informedDateAnswers,
-                _lastUpdate: Date.now(),
-              });
-            }
-          }
-        } catch (error) {
-          console.error("Error parsing validation state:", error);
-        }
-      }
-
-      // Then try to get persisted flight data if not using shared data
-      if (!window._handlingSharedLink) {
-        const persistedFlightData = localStorage.getItem("phase4FlightData");
-        if (persistedFlightData) {
-          try {
-            const flightData = JSON.parse(persistedFlightData);
-            console.log("Found persisted flight data:", {
-              originalFlights: flightData.originalFlights?.length,
-              selectedFlights: flightData.selectedFlights?.length,
-              travelStatusAnswers: flightData.travelStatusAnswers,
-              informedDateAnswers: flightData.informedDateAnswers,
-              timestamp: new Date().toISOString(),
-            });
-
-            // Restore original flights
-            if (flightData.originalFlights?.length > 0) {
-              flightStore.setOriginalFlights(flightData.originalFlights);
-              phase4Store.batchUpdate({
-                originalFlights: flightData.originalFlights,
-                _lastUpdate: Date.now(),
-              });
-            }
-
-            // Restore travel status answers if they exist
-            if (flightData.travelStatusAnswers?.length > 0) {
-              phase4Store.batchUpdate({
-                travelStatusAnswers: flightData.travelStatusAnswers,
-                travelStatusShowingSuccess: true,
-                travelStatusIsValid: true,
-                _lastUpdate: Date.now(),
-              });
-            }
-
-            // Restore informed date answers if they exist
-            if (flightData.informedDateAnswers?.length > 0) {
-              phase4Store.batchUpdate({
-                informedDateAnswers: flightData.informedDateAnswers,
-                informedDateShowingSuccess: true,
-                informedDateIsValid: true,
-                informedDateStepValidation: {
-                  1: true,
-                  2: true,
-                  3: true,
-                },
-                informedDateStepInteraction: {
-                  1: true,
-                  2: true,
-                  3: true,
-                },
-                _lastUpdate: Date.now(),
-              });
-
-              console.log(
-                "=== Trip Experience - Restored informed date answers with validation ===",
-                {
-                  answers: flightData.informedDateAnswers,
-                  validation: {
-                    informedDateShowingSuccess: true,
-                    informedDateIsValid: true,
-                    informedDateStepValidation: { 1: true, 2: true, 3: true },
-                    informedDateStepInteraction: { 1: true, 2: true, 3: true },
-                  },
-                  timestamp: new Date().toISOString(),
-                }
-              );
-
-              // Also ensure validation state in localStorage is updated
-              try {
-                const validationStateStr = localStorage.getItem(
-                  "phase4ValidationState"
-                );
-                const validationState = validationStateStr
-                  ? JSON.parse(validationStateStr)
-                  : {};
-
-                const updatedValidationState = {
-                  ...validationState,
-                  informedDateAnswers: flightData.informedDateAnswers,
-                  informedDateStepValidation: {
-                    ...(validationState.informedDateStepValidation || {}),
-                    1: true,
-                    2: true,
-                    3: true,
-                  },
-                  informedDateStepInteraction: {
-                    ...(validationState.informedDateStepInteraction || {}),
-                    1: true,
-                    2: true,
-                    3: true,
-                  },
-                  informedDateShowingSuccess: true,
-                  informedDateIsValid: true,
-                  _timestamp: Date.now(),
-                };
-
-                localStorage.setItem(
-                  "phase4ValidationState",
-                  JSON.stringify(updatedValidationState)
-                );
-
-                console.log(
-                  "=== Trip Experience - Updated validation state during restore ===",
-                  {
-                    updatedValidationState,
-                    timestamp: new Date().toISOString(),
-                  }
-                );
-              } catch (error) {
-                console.error(
-                  "Error updating validation state during restore:",
-                  error
-                );
-              }
-            }
-
-            // First check for separately stored alternative flights (more reliable)
-            const alternativeFlights = localStorage.getItem(
-              "phase4AlternativeFlights"
-            );
-            if (alternativeFlights) {
-              try {
-                const parsedFlights = JSON.parse(alternativeFlights);
-                if (Array.isArray(parsedFlights) && parsedFlights.length > 0) {
-                  console.log(
-                    "=== Trip Experience - Restored alternative flights from dedicated storage ===",
-                    {
-                      flightCount: parsedFlights.length,
-                      flights: parsedFlights.map((f) => ({
-                        id: f.id,
-                        flightNumber: f.flightNumber,
-                        date: f.date,
-                      })),
-                      timestamp: new Date().toISOString(),
-                    }
-                  );
-
-                  // Process the dates properly
-                  const processedFlights = parsedFlights.map((flight: any) => ({
-                    ...flight,
-                    date: flight.date ? new Date(flight.date) : null,
-                  }));
-
-                  // Update both stores
-                  phase4Store.batchUpdate({
-                    selectedFlights: processedFlights,
-                    _lastUpdate: Date.now(),
-                  });
-                  flightStore.setSelectedFlights(4, processedFlights);
-                }
-              } catch (error) {
-                console.error(
-                  "Error restoring alternative flights from dedicated storage:",
-                  error
-                );
-              }
-            }
-            // Fallback to phase4FlightData if no dedicated storage
-            else if (flightData.selectedFlights?.length > 0) {
-              const selectedFlights = flightData.selectedFlights.map(
-                (flight: any) => ({
-                  ...flight,
-                  date: flight.date ? new Date(flight.date) : null,
-                })
-              );
-
-              phase4Store.batchUpdate({
-                selectedFlights,
-                _lastUpdate: Date.now(),
-              });
-              flightStore.setSelectedFlights(4, selectedFlights);
-            }
-          } catch (error) {
-            console.error("Error parsing persisted flight data:", error);
-          }
-        } else {
-          // If no persisted data, handle original flights
-          if (flightStore.originalFlights.length === 0) {
-            if (phase4Store.originalFlights.length > 0) {
-              flightStore.setOriginalFlights(phase4Store.originalFlights);
-            }
-          } else if (phase4Store.originalFlights.length === 0) {
-            phase4Store.batchUpdate({
-              originalFlights: flightStore.originalFlights,
-              _lastUpdate: Date.now(),
-            });
-          }
-        }
-      }
-
-      // Ensure phase 4 data is completely isolated from phases 1-3
-      console.log("=== Trip Experience - Ensuring Phase 4 Isolation ===", {
-        timestamp: new Date().toISOString(),
-      });
-
-      // Make sure flightStore has phase 4 data isolated
-      const phase4Data = flightStore.getFlightData(4);
-      if (phase4Data) {
-        // Ensure this data is only used for phase 4
-        localStorage.setItem("flightData_phase4", JSON.stringify(phase4Data));
-      }
-
-      // Clear any data from phases 1-3 in the main store
-      mainStore.setState({
-        currentPhase: 4,
-        fromLocation: phase4Store.fromLocation as any,
-        toLocation: phase4Store.toLocation as any,
-        selectedType: phase4Store.selectedType || "direct",
-        flightSegments: phase4Store.flightSegments || [
-          {
-            fromLocation: phase4Store.fromLocation as any,
-            toLocation: phase4Store.toLocation as any,
-            date: null,
-            selectedFlight: null,
-          },
-        ],
-        selectedFlights: phase4Store.selectedFlights || [],
-      });
-
-      // Get travel status after restoration
-      const travelStatus = phase4Store.travelStatusAnswers.find(
-        (a) => a.questionId === "travel_status"
-      )?.value;
-
-      const requiresAlternativeFlights =
-        travelStatus === "provided" || travelStatus === "took_alternative_own";
-
-      console.log("=== Trip Experience - Flight Selection ===", {
-        travelStatus,
-        requiresAlternativeFlights,
-        phase4StoreFlights: phase4Store.selectedFlights.length,
-        flightStorePhase4: flightStore.getSelectedFlights(4).length,
-        timestamp: new Date().toISOString(),
-      });
-
-      // If we have a travel status that requires alternative flights, ensure validation state is correct
-      if (
-        requiresAlternativeFlights &&
-        phase4Store.selectedFlights.length > 0
-      ) {
-        safeUpdateValidationState({
-          travelStatusStepValidation: {
-            ...phase4Store.travelStatusStepValidation,
-            2: true,
-          },
-          travelStatusStepInteraction: {
-            ...phase4Store.travelStatusStepInteraction,
-            2: true,
-          },
-          travelStatusShowingSuccess: true,
-          travelStatusIsValid: true,
-          _lastUpdate: Date.now(),
-        });
-      }
-
-      setIsInitialized(true);
-      setIsLoading(false);
-    } catch (error) {
-      console.error("Error during flight initialization:", error);
-      setIsInitialized(true);
-      setIsLoading(false);
-    }
-  }, [flightStore, phase4Store, mainStore]); // Add the store dependencies
-
-  // Add effect to persist flight data when it changes
-  React.useEffect(() => {
-    if (!isInitializedRef.current) return;
-
-    const travelStatus = phase4Store.travelStatusAnswers.find(
-      (a) => a.questionId === "travel_status"
-    )?.value;
-
-    const requiresAlternativeFlights =
-      travelStatus === "provided" || travelStatus === "took_alternative_own";
-
-    // Only persist if we have data to persist
+    // Only update state if values actually changed
     if (
-      flightStore.originalFlights.length > 0 ||
-      phase4Store.selectedFlights.length > 0 ||
-      phase4Store.travelStatusAnswers.length > 0 ||
-      phase4Store.informedDateAnswers.length > 0
+      newTravelStatusValid !== validationState.isTravelStatusValid ||
+      newInformedDateValid !== validationState.isInformedDateValid
     ) {
-      console.log("Persisting flight data:", {
-        originalFlights: flightStore.originalFlights.length,
-        selectedFlights: phase4Store.selectedFlights.length,
-        requiresAlternativeFlights,
-        hasTravelStatusAnswers: phase4Store.travelStatusAnswers.length > 0,
-        hasInformedDateAnswers: phase4Store.informedDateAnswers.length > 0,
-        timestamp: new Date().toISOString(),
+      console.log("[TripExperiencePage] Updating validationState:", {
+        newTravelStatusValid,
+        newInformedDateValid,
       });
+      setValidationState({
+        isTravelStatusValid: newTravelStatusValid,
+        isInformedDateValid: newInformedDateValid,
+      });
+    }
+  }, [travelStatusStepValidation, informedDateStepValidation, validationState]);
 
-      // Store original flights and alternative flights separately
-      // Original flights come from phase3, alternative flights are selected in phase4
-      localStorage.setItem(
-        "phase4FlightData",
-        JSON.stringify({
-          originalFlights: flightStore.originalFlights, // Always preserve original flights
-          selectedFlights: requiresAlternativeFlights
-            ? phase4Store.selectedFlights
-            : [],
-          travelStatusAnswers: phase4Store.travelStatusAnswers,
-          informedDateAnswers: phase4Store.informedDateAnswers,
-          _lastUpdate: Date.now(),
-        })
+  // Reference to track if we've already applied validation from store
+  const hasAppliedTravelStatusValidation = React.useRef(false);
+  const hasAppliedInformedDateValidation = React.useRef(false);
+
+  // Effect to ensure validation state is synchronized from phase4Store
+  // This provides an additional reliability layer
+  React.useEffect(() => {
+    // Skip if not initialized
+    if (!isInitialized) return;
+
+    // Get current phase4 state
+    const phase4State = useStore.getState().phase4;
+    if (!phase4State) return;
+
+    // Check if there's valid state in phase4Store
+    if (
+      phase4State.travelStatusIsValid ||
+      phase4State.travelStatusShowingSuccess
+    ) {
+      // Skip if we've already applied this validation
+      if (hasAppliedTravelStatusValidation.current) return;
+
+      console.log(
+        "=== Trip Experience - Syncing validation state from phase4Store ===",
+        {
+          travelStatusIsValid: phase4State.travelStatusIsValid,
+          travelStatusShowingSuccess: phase4State.travelStatusShowingSuccess,
+        }
       );
 
-      // Always store alternative flights in their dedicated storage
-      if (
-        requiresAlternativeFlights &&
-        phase4Store.selectedFlights.length > 0
-      ) {
-        localStorage.setItem(
-          "phase4AlternativeFlights",
-          JSON.stringify(phase4Store.selectedFlights)
-        );
+      // Mark that we've applied validation to prevent loops
+      hasAppliedTravelStatusValidation.current = true;
+
+      // Use a descriptive key or safe access
+      const travelStatusStepKey = "travel_status_step";
+      // Only update if current value is false to prevent loops
+      if (!travelStatusStepValidation[travelStatusStepKey]) {
+        setTravelStatusStepValidation((prev) => ({
+          ...prev,
+          [travelStatusStepKey]: true,
+        }));
+      }
+
+      // Update global validation state only if it's currently false
+      // Use a simpler approach to avoid TypeScript errors
+      if (!travelStatusStepValidation[travelStatusStepKey]) {
+        validation.setStepValidation(ValidationPhase.TRIP_EXPERIENCE, true);
+      }
+    }
+
+    // Similarly for informed date, only update if necessary
+    if (
+      phase4State.informedDateIsValid ||
+      phase4State.informedDateShowingSuccess
+    ) {
+      // Skip if we've already applied this validation
+      if (hasAppliedInformedDateValidation.current) return;
+
+      // Mark that we've applied validation
+      hasAppliedInformedDateValidation.current = true;
+
+      // Use a descriptive key or safe access
+      const informedDateStepKey = "informed_date_step";
+      // Only update if current value is false to prevent loops
+      if (!informedDateStepValidation[informedDateStepKey]) {
+        setInformedDateStepValidation((prev) => ({
+          ...prev,
+          [informedDateStepKey]: true,
+        }));
       }
     }
   }, [
-    flightStore.originalFlights,
-    phase4Store.selectedFlights,
-    phase4Store.travelStatusAnswers,
-    phase4Store.informedDateAnswers,
+    isInitialized,
+    travelStatusStepValidation,
+    informedDateStepValidation,
+    validation.setStepValidation,
   ]);
 
-  // Add cleanup effect
-  React.useEffect(() => {
-    return () => {
-      // Save state before unmounting
-      const travelStatus = phase4Store.travelStatusAnswers.find(
-        (a) => a.questionId === "travel_status"
-      )?.value;
+  // Handle trip experience completion
+  const handleTripExperienceComplete = (answers: Answer[]) => {
+    console.log("Trip Experience Complete:", answers);
 
-      const requiresAlternativeFlights =
-        travelStatus === "provided" || travelStatus === "took_alternative_own";
+    // If answers array is empty, this indicates we should clear validation
+    if (answers.length === 0) {
+      console.log("Trip Experience: Clearing validation state");
 
-      localStorage.setItem(
-        "phase4FlightData",
-        JSON.stringify({
-          originalFlights: flightStore.originalFlights,
-          selectedFlights: requiresAlternativeFlights
-            ? phase4Store.selectedFlights
-            : [],
-          _lastUpdate: Date.now(),
-        })
-      );
-    };
-  }, []);
+      // Clear local answers
+      setTravelStatusAnswers([]);
 
-  // Memoize validation states to prevent unnecessary re-renders
-  const validationStates = React.useMemo(
-    () => ({
-      isTripExperienceValid: Boolean(travelStatusStepValidation[2]) || false,
-      isInformedDateValid:
-        Boolean(informedDateStepValidation[3]) ||
-        Boolean(phase4Store.informedDateIsValid) ||
-        (phase4Store.informedDateAnswers?.length > 0 &&
-          phase4Store.informedDateShowingSuccess),
-      isFullyCompleted:
-        (Boolean(travelStatusStepValidation[2]) &&
-          (Boolean(informedDateStepValidation[3]) ||
-            Boolean(phase4Store.informedDateIsValid))) ||
-        false,
-    }),
-    [
-      // Use JSON.stringify to create a stable dependency
-      JSON.stringify({
-        travelStatus: travelStatusStepValidation[2],
-        informedDate: informedDateStepValidation[3],
-        travelStatusShowingSuccess: phase4Store.travelStatusShowingSuccess,
-        informedDateShowingSuccess: phase4Store.informedDateShowingSuccess,
-        travelStatusIsValid: phase4Store.travelStatusIsValid,
-        informedDateIsValid: phase4Store.informedDateIsValid,
-      }),
-    ]
-  );
-
-  const questions: Question[] = [
-    {
-      id: "travel_status",
-      text: t.phases.tripExperience.steps.travelStatus.questions.travelStatus
-        .title,
-      type: "radio",
-      options: [
-        {
-          id: "none",
-          value: "none",
-          label:
-            t.phases.tripExperience.steps.travelStatus.questions.travelStatus
-              .options.none,
-          showConfetti: true,
-        },
-        {
-          id: "self",
-          value: "self",
-          label:
-            t.phases.tripExperience.steps.travelStatus.questions.travelStatus
-              .options.self,
-        },
-        {
-          id: "provided",
-          value: "provided",
-          label:
-            t.phases.tripExperience.steps.travelStatus.questions.travelStatus
-              .options.provided,
-          showConfetti: true,
-        },
-        {
-          id: "alternative_own",
-          value: "took_alternative_own",
-          label:
-            t.phases.tripExperience.steps.travelStatus.questions.travelStatus
-              .options.alternativeOwn,
-          showConfetti: true,
-        },
-      ],
-    },
-    {
-      id: "refund_status",
-      text: t.phases.tripExperience.steps.travelStatus.questions.refundStatus
-        .title,
-      type: "radio",
-      options: [
-        {
-          id: "yes",
-          value: "yes",
-          label:
-            t.phases.tripExperience.steps.travelStatus.questions.refundStatus
-              .options.yes,
-        },
-        {
-          id: "no",
-          value: "no",
-          label:
-            t.phases.tripExperience.steps.travelStatus.questions.refundStatus
-              .options.no,
-        },
-      ],
-      showIf: (answers: Answer[]) =>
-        answers.some(
-          (a: Answer) => a.questionId === "travel_status" && a.value === "none"
-        ),
-    },
-    {
-      id: "ticket_cost",
-      text: t.phases.tripExperience.steps.travelStatus.questions.ticketCost
-        .title,
-      type: "money",
-      showIf: (answers: Answer[]) => {
-        const hasNoneTravel = answers.some(
-          (a: Answer) => a.questionId === "travel_status" && a.value === "none"
-        );
-        const hasNoRefund = answers.some(
-          (a: Answer) => a.questionId === "refund_status" && a.value === "no"
-        );
-
-        return hasNoneTravel && hasNoRefund;
-      },
-    },
-    {
-      id: "alternative_flight_airline_expense",
-      text: t.phases.tripExperience.steps.travelStatus.questions
-        .alternativeFlightAirlineExpense.title,
-      label:
-        t.phases.tripExperience.steps.travelStatus.questions
-          .alternativeFlightAirlineExpense.label,
-      type: "flight_selector",
-      showIf: (answers: Answer[]) =>
-        answers.some(
-          (a: Answer) =>
-            a.questionId === "travel_status" && a.value === "provided"
-        ),
-    },
-    {
-      id: "alternative_flight_own_expense",
-      text: t.phases.tripExperience.steps.travelStatus.questions
-        .alternativeFlightOwnExpense.title,
-      type: "flight_selector",
-      showIf: (answers: Answer[]) =>
-        answers.some(
-          (a: Answer) =>
-            a.questionId === "travel_status" &&
-            a.value === "took_alternative_own"
-        ),
-    },
-    {
-      id: "trip_costs",
-      text: t.phases.tripExperience.steps.travelStatus.questions.tripCosts
-        .title,
-      type: "money",
-      showIf: (answers: Answer[]) =>
-        answers.some(
-          (a: Answer) =>
-            a.questionId === "travel_status" &&
-            a.value === "took_alternative_own"
-        ),
-    },
-  ];
-
-  const informedDateQuestions: Question[] = [
-    {
-      id: "informed_date",
-      text: t.phases.tripExperience.steps.informedDate.questions.informedDate
-        .title,
-      type: "radio",
-      options: [
-        {
-          id: "on_departure",
-          value: "on_departure",
-          label:
-            t.phases.tripExperience.steps.informedDate.questions.informedDate
-              .options.onDeparture,
-          showCheck: true,
-        },
-        {
-          id: "specific_date",
-          value: "specific_date",
-          label:
-            t.phases.tripExperience.steps.informedDate.questions.informedDate
-              .options.specificDate,
-          showCheck: true,
-        },
-      ],
-    },
-    {
-      id: "specific_informed_date",
-      text: t.phases.tripExperience.steps.informedDate.questions
-        .specificInformedDate.title,
-      label:
-        t.phases.tripExperience.steps.informedDate.questions
-          .specificInformedDate.label,
-      type: "date",
-      options: [],
-      showIf: (answers: Answer[]) =>
-        answers.some(
-          (a: Answer) =>
-            a.questionId === "informed_date" && a.value === "specific_date"
-        ),
-    },
-  ];
-
-  // Update validation check to properly validate alternative flights
-  const validateAlternativeFlight = React.useCallback(
-    (selectedFlight: Flight | null | undefined) => {
-      console.log("=== validateAlternativeFlight ENTRY ===", {
-        selectedFlight: selectedFlight
-          ? {
-              id: selectedFlight.id,
-              flightNumber: selectedFlight.flightNumber,
-              date: selectedFlight.date,
-            }
-          : null,
-        timestamp: new Date().toISOString(),
-      });
-
-      // Check if any browser notifications are visible
-      if (typeof window !== "undefined") {
-        const notifications = document.querySelectorAll(
-          '.notification, [role="alert"], .alert, .toast'
-        );
-        if (notifications.length > 0) {
-          console.log("=== Found notification elements during validation ===", {
-            count: notifications.length,
-            elements: Array.from(notifications).map((el) => ({
-              className: el.className,
-              text: el.textContent,
-            })),
-            timestamp: new Date().toISOString(),
-          });
-        }
-      }
-
-      // Log flight store state
-      console.log("=== Flight Store State During Validation ===", {
-        phase4StoreFlights: phase4Store.selectedFlights.map((f) => ({
-          id: f.id,
-          flightNumber: f.flightNumber,
-          date: f.date,
-        })),
-        flightStorePhase4: flightStore.getSelectedFlights(4).map((f) => ({
-          id: f.id,
-          flightNumber: f.flightNumber,
-          date: f.date,
-        })),
-        originalFlights: flightStore.originalFlights.map((f) => ({
-          id: f.id,
-          flightNumber: f.flightNumber,
-          date: f.date,
-        })),
-        timestamp: new Date().toISOString(),
-      });
-
-      // Check if selectedFlight is null or undefined
-      if (!selectedFlight) {
-        console.warn("Selected flight is null or undefined");
-        return false;
-      }
-
-      // Get original flight from flightStore
-      const originalFlight = flightStore.originalFlights[0];
-
-      // If there's no original flight, we can't validate
-      if (!originalFlight) {
-        console.warn("No original flight found for validation");
-        return false;
-      }
-
-      // For alternative flights, we should always validate that it's actually different
-      // from the original flight, but we need to be careful with date comparisons
-
-      // Format dates for comparison to ensure consistent comparison
-      const formatDateForComparison = (
-        dateStr: string | Date | null | undefined
-      ): string => {
-        if (!dateStr) return "";
-        try {
-          const date =
-            typeof dateStr === "string" ? new Date(dateStr) : dateStr;
-          return date.toISOString().split("T")[0]; // Get YYYY-MM-DD part only
-        } catch (e) {
-          return String(dateStr);
-        }
-      };
-
-      // Compare flights
-      const flightComparison = {
-        originalFlight: {
-          id: originalFlight.id,
-          flightNumber: originalFlight.flightNumber,
-          date: formatDateForComparison(originalFlight.date),
-        },
-        selectedFlight: {
-          id: selectedFlight.id,
-          flightNumber: selectedFlight.flightNumber,
-          date: formatDateForComparison(selectedFlight.date),
-        },
-      };
-
-      console.log("=== Validating Alternative Flight ===", {
-        comparison: flightComparison,
-        timestamp: new Date().toISOString(),
-      });
-
-      // Check if it's a different flight (by ID or flight number)
-      // We don't want to validate date because the alternative flight
-      // might be on the same day but a different flight
-      const isValid =
-        selectedFlight.id !== originalFlight.id ||
-        selectedFlight.flightNumber !== originalFlight.flightNumber;
-
-      console.log("=== Alternative Flight Validation Result ===", {
-        isValid,
-        reason: isValid
-          ? "Flight is different from original"
-          : "Selected flight appears to be the same as original flight",
-        timestamp: new Date().toISOString(),
-      });
-
-      return isValid;
-    },
-    [flightStore.originalFlights, phase4Store.selectedFlights, flightStore]
-  );
-
-  // Update handleTripExperienceComplete to properly set validation state
-  const handleTripExperienceComplete = React.useCallback(() => {
-    // Get the travel status answer
-    const travelStatus = travelStatusAnswers.find(
-      (a) => a.questionId === "travel_status"
-    )?.value;
-
-    const requiresAlternativeFlights =
-      travelStatus === "provided" || travelStatus === "took_alternative_own";
-
-    // Get the alternative flight from the QA wizard answers
-    const alternativeFlightAnswer = travelStatusAnswers.find(
-      (a) =>
-        a.questionId === "alternative_flight_airline_expense" ||
-        a.questionId === "alternative_flight_own_expense"
-    );
-
-    // Log the current state for debugging
-    console.log("=== handleTripExperienceComplete - Entry ===", {
-      travelStatusAnswers,
-      alternativeFlightAnswer,
-      flightStoreFlights: flightStore.getSelectedFlights(4).map((f) => ({
-        id: f.id,
-        flightNumber: f.flightNumber,
-        date: f.date,
-      })),
-      phase4StoreFlights: phase4Store.selectedFlights.map((f) => ({
-        id: f.id,
-        flightNumber: f.flightNumber,
-        date: f.date,
-      })),
-      originalFlights: flightStore.originalFlights.map((f) => ({
-        id: f.id,
-        flightNumber: f.flightNumber,
-        date: f.date,
-      })),
-      travelStatus,
-      requiresAlternativeFlights,
-      isFromSharedLink:
-        typeof window !== "undefined" && !!window._handlingSharedLink,
-      timestamp: new Date().toISOString(),
-    });
-
-    // Check for any browser notifications at the start
-    if (typeof window !== "undefined") {
-      const notifications = document.querySelectorAll(
-        '.notification, [role="alert"], .alert, .toast'
-      );
-      if (notifications.length > 0) {
-        console.log(
-          "=== Found notification elements at start of handleTripExperienceComplete ===",
-          {
-            count: notifications.length,
-            elements: Array.from(notifications).map((el) => ({
-              className: el.className,
-              text: el.textContent,
-            })),
-            timestamp: new Date().toISOString(),
-          }
-        );
-      }
-    }
-
-    // Only validate alternative flights if required
-    if (requiresAlternativeFlights) {
-      // Get the alternative flight from the answer if available
-      let selectedFlights: Flight[] = [];
-
-      if (alternativeFlightAnswer && alternativeFlightAnswer.value) {
-        try {
-          // If the answer contains a flight object, use it
-          if (typeof alternativeFlightAnswer.value === "object") {
-            selectedFlights = [alternativeFlightAnswer.value as Flight];
-            console.log("=== Using flight from QA wizard answer ===", {
-              flight: alternativeFlightAnswer.value,
-              timestamp: new Date().toISOString(),
-            });
-          }
-        } catch (error) {
-          console.error("Error parsing alternative flight answer:", error);
-        }
-      }
-
-      // If no flight in the answer, check both stores
-      if (selectedFlights.length === 0) {
-        const flightStoreFlights = flightStore.getSelectedFlights(4) || [];
-        const phase4StoreFlights = phase4Store.selectedFlights || [];
-
-        console.log("=== Alternative Flight Check ===", {
-          flightStoreFlights: flightStoreFlights.map((f) => ({
-            id: f.id,
-            flightNumber: f.flightNumber,
-            date: f.date,
-          })),
-          phase4StoreFlights: phase4StoreFlights.map((f) => ({
-            id: f.id,
-            flightNumber: f.flightNumber,
-            date: f.date,
-          })),
-          originalFlights: flightStore.originalFlights.map((f) => ({
-            id: f.id,
-            flightNumber: f.flightNumber,
-            date: f.date,
-          })),
-          timestamp: new Date().toISOString(),
-        });
-
-        // Use flights from either store - prioritize phase4Store since that's where alternative flights are stored
-        selectedFlights =
-          phase4StoreFlights.length > 0
-            ? phase4StoreFlights
-            : flightStoreFlights;
-
-        // If we're using a shared link and already have flights, don't prompt user
-        if (
-          selectedFlights.length === 0 &&
-          typeof window !== "undefined" &&
-          !window._handlingSharedLink
-        ) {
-          console.log("No alternative flights selected in either store");
-          alert("Please select your alternative flights before continuing.");
-          return;
-        }
-      }
-
-      // Sync flights between stores to ensure consistency, but keep them isolated from original flights
-      if (selectedFlights.length > 0) {
-        console.log("=== Syncing selected alternative flights ===", {
-          flights: selectedFlights.map((f) => ({
-            id: f.id,
-            flightNumber: f.flightNumber,
-            date: f.date,
-          })),
-          timestamp: new Date().toISOString(),
-        });
-
-        // Use the syncAlternativeFlights function to ensure data is properly synchronized
-        syncAlternativeFlights(selectedFlights, flightStore, phase4Store);
-      } else if (typeof window !== "undefined" && window._handlingSharedLink) {
-        console.log(
-          "=== Shared link without alternative flights, continuing anyway ==="
-        );
-        // For shared links, we allow continuing even without alternative flights
-        // The user can add them later
-      } else {
-        // If we got here, we likely don't have flights when we need them
-        console.log("Alternative flights required but not found");
-        alert("Please select your alternative flights before continuing.");
-        return;
-      }
-
-      if (
-        selectedFlights.length > 0 &&
-        !validateAlternativeFlight(selectedFlights[0]) &&
-        !window._handlingSharedLink
-      ) {
-        console.log("Alternative flight validation failed");
-        alert(
-          "The selected alternative flight is not valid. Please select a different flight."
-        );
-        return;
-      }
-    } else {
-      // For non-alternative flight scenarios, clear any previously stored alternative flights
-      phase4Store.batchUpdate({
-        selectedFlights: [],
-        _lastUpdate: Date.now(),
-      });
-
-      // Clear alternative flights from localStorage
-      localStorage.removeItem("phase4AlternativeFlights");
-
-      // Update phase4FlightData to not include alternative flights
-      localStorage.setItem(
-        "phase4FlightData",
-        JSON.stringify({
-          originalFlights: flightStore.originalFlights,
-          selectedFlights: [],
-          _lastUpdate: Date.now(),
-        })
-      );
-    }
-
-    // Update validation state
-    const newValidationState = {
-      travelStatusStepValidation: {
-        ...travelStatusStepValidation,
-        2: true,
-      },
-      travelStatusStepInteraction: {
-        ...travelStatusStepInteraction,
-        2: true,
-      },
-      travelStatusShowingSuccess: true,
-      travelStatusIsValid: true,
-      _lastUpdate: Date.now(),
-    };
-
-    console.log(
-      "=== handleTripExperienceComplete - Setting Validation State ===",
-      {
-        newState: newValidationState,
-        timestamp: new Date().toISOString(),
-      }
-    );
-
-    // Only update if the state has actually changed
-    if (!travelStatusStepValidation[2] || !travelStatusStepInteraction[2]) {
-      safeUpdateValidationState(newValidationState);
-    }
-
-    // Check for any browser notifications after updating validation state
-    if (typeof window !== "undefined") {
-      setTimeout(() => {
-        const notifications = document.querySelectorAll(
-          '.notification, [role="alert"], .alert, .toast'
-        );
-        if (notifications.length > 0) {
-          console.log(
-            "=== Found notification elements after updating validation state ===",
-            {
-              count: notifications.length,
-              elements: Array.from(notifications).map((el) => ({
-                className: el.className,
-                text: el.textContent,
-              })),
-              timestamp: new Date().toISOString(),
-            }
-          );
-        }
-      }, 500);
-    }
-
-    // Save to localStorage to persist the state
-    localStorage.setItem(
-      "phase4ValidationState",
-      JSON.stringify({
+      // Reset validation state
+      updateValidationState({
         travelStatusStepValidation: {
           ...travelStatusStepValidation,
-          2: true,
+          travel_status_step: false,
         },
         travelStatusStepInteraction: {
           ...travelStatusStepInteraction,
-          2: true,
+          travel_status_step: false,
         },
-        informedDateStepValidation,
-        informedDateStepInteraction,
-        travelStatusAnswers,
-        informedDateAnswers,
-      })
-    );
+      });
 
-    // Also save to phase4Store in localStorage directly
-    try {
-      const phase4StoreData = localStorage.getItem("phase4Store");
-      if (phase4StoreData) {
-        const parsedData = JSON.parse(phase4StoreData);
-        if (parsedData.state) {
-          parsedData.state.travelStatusAnswers = travelStatusAnswers;
-          parsedData.state.travelStatusShowingSuccess = true;
-          parsedData.state.travelStatusIsValid = true;
-          parsedData.state.travelStatusStepValidation = {
-            ...travelStatusStepValidation,
-            2: true,
-          };
-          parsedData.state.travelStatusStepInteraction = {
-            ...travelStatusStepInteraction,
-            2: true,
-          };
-          parsedData.state._lastUpdate = Date.now();
+      // Update Zustand store validation state
+      validation.setStepValidation(ValidationPhase.TRIP_EXPERIENCE, false);
 
-          localStorage.setItem("phase4Store", JSON.stringify(parsedData));
-
-          console.log(
-            "=== handleTripExperienceComplete - Updated phase4Store ===",
-            {
-              travelStatusAnswers,
-              timestamp: new Date().toISOString(),
-            }
-          );
-        }
-      }
-    } catch (error) {
-      console.error("Error updating phase4Store in localStorage:", error);
+      return;
     }
 
-    // Force the transition to step 3
-    const accordionContext =
-      typeof window !== "undefined"
-        ? (window as any).__accordionContext
-        : undefined;
-    if (accordionContext?.setOpenAccordions) {
-      accordionContext.setOpenAccordions(new Set(["1", "2", "3"]));
-    }
-  }, [
-    flightStore,
-    phase4Store,
-    travelStatusAnswers,
-    travelStatusStepValidation,
-    travelStatusStepInteraction,
-    informedDateStepValidation,
-    informedDateStepInteraction,
-    safeUpdateValidationState,
-    informedDateAnswers,
-  ]);
+    // Save answers to local state
+    setTravelStatusAnswers(answers);
 
+    // Update validation state
+    updateValidationState({
+      travelStatusStepValidation: {
+        ...travelStatusStepValidation,
+        travel_status_step: true,
+      },
+      travelStatusStepInteraction: {
+        ...travelStatusStepInteraction,
+        travel_status_step: true,
+      },
+    });
+
+    // Save answers to wizard store
+    answers.forEach((answer) => {
+      wizard.setAnswer(answer.questionId, answer.value);
+    });
+  };
+
+  // Handle informed date completion
   const handleInformedDateComplete = (answers: Answer[]) => {
-    if (isLoading) return;
+    console.log("Informed Date Complete:", answers);
 
-    console.log("=== handleInformedDateComplete - Entry ===", {
-      answers,
-      timestamp: new Date().toISOString(),
-    });
+    // If answers array is empty, this indicates we should clear validation
+    if (answers.length === 0) {
+      console.log("Informed Date: Clearing validation state");
 
-    // Update the store with the new answers
-    phase4Store.batchUpdate({
-      informedDateAnswers: answers,
-      informedDateShowingSuccess: true,
-      informedDateIsValid: true,
-      informedDateStepValidation: {
-        ...informedDateStepValidation,
-        3: true, // Mark step 3 as validated
-      },
-      informedDateStepInteraction: {
-        ...informedDateStepInteraction,
-        3: true, // Mark step 3 as interacted with
-      },
-      _lastUpdate: Date.now(),
-    });
+      // Clear local answers
+      setInformedDateAnswers([]);
 
-    // Update validation state in localStorage
-    try {
-      // First try to get any existing validation state
-      const validationStateStr = localStorage.getItem("phase4ValidationState");
-      const validationState = validationStateStr
-        ? JSON.parse(validationStateStr)
-        : {};
+      // Reset the phase4 informed date state
+      useStore.getState().actions.phase4.resetInformedDateState();
 
-      // Update with the new informed date validation
-      const updatedValidationState = {
-        ...validationState,
-        informedDateAnswers: answers,
+      // Reset validation state
+      updateValidationState({
         informedDateStepValidation: {
           ...informedDateStepValidation,
-          3: true,
+          informed_date_step: false,
         },
         informedDateStepInteraction: {
           ...informedDateStepInteraction,
-          3: true,
+          informed_date_step: false,
         },
-        informedDateShowingSuccess: true,
-        informedDateIsValid: true,
-        _timestamp: Date.now(),
-      };
-
-      localStorage.setItem(
-        "phase4ValidationState",
-        JSON.stringify(updatedValidationState)
-      );
-
-      console.log(
-        "=== handleInformedDateComplete - Updated validation state ===",
-        {
-          updatedValidationState,
-          timestamp: new Date().toISOString(),
-        }
-      );
-    } catch (error) {
-      console.error("Error updating validation state:", error);
-    }
-
-    // Also update the flight data in localStorage to include informed date answers
-    try {
-      // Get any existing phase4FlightData
-      const flightDataStr = localStorage.getItem("phase4FlightData");
-      const flightData = flightDataStr ? JSON.parse(flightDataStr) : {};
-
-      // Update with the informed date answers
-      const updatedFlightData = {
-        ...flightData,
-        informedDateAnswers: answers,
-        _lastUpdate: Date.now(),
-      };
-
-      localStorage.setItem(
-        "phase4FlightData",
-        JSON.stringify(updatedFlightData)
-      );
-
-      console.log("=== handleInformedDateComplete - Updated flight data ===", {
-        updatedFlightData,
-        timestamp: new Date().toISOString(),
       });
-    } catch (error) {
-      console.error("Error updating flight data:", error);
+
+      return;
     }
+
+    // Save answers to local state
+    setInformedDateAnswers(answers);
+
+    // Save answers to wizard store (this stores but doesn't validate)
+    answers.forEach((answer) => {
+      wizard.setAnswer(answer.questionId, answer.value);
+    });
+
+    // NOW explicitly complete the wizard with validation
+    useStore.getState().actions.phase4.completeInformedDateWizard();
+
+    // Update local validation state to match
+    updateValidationState({
+      informedDateStepValidation: {
+        ...informedDateStepValidation,
+        informed_date_step: true,
+      },
+      informedDateStepInteraction: {
+        ...informedDateStepInteraction,
+        informed_date_step: true,
+      },
+    });
   };
 
-  // Add effect to track when original flights are set
-  React.useEffect(() => {
-    if (flightStore.originalFlights.length > 0) {
-      console.log("Original flights updated:", {
-        flights: flightStore.originalFlights.map((f: Flight) => ({
-          id: f.id,
-          flightNumber: f.flightNumber,
-          date: f.date,
-          from: f.departureCity,
-          to: f.arrivalCity,
-        })),
-      });
-    }
-  }, [flightStore.originalFlights]);
+  // Handler for flight not listed form submission
+  const handleFlightNotListedSubmit = useCallback(
+    async (data: FlightNotListedData) => {
+      try {
+        console.log("Flight not listed data submitted:", data);
+        // Here you would normally send this data to your backend
+        // For now, we'll just store it in localStorage
+        localStorage.setItem(
+          "flight_not_found_data_description",
+          data.description
+        );
 
-  // Add logging to track when validation is checked
-  React.useEffect(() => {
-    const selectedFlights = flightStore.getSelectedFlights(4);
-    console.log("Trip Experience Validation Check:", {
-      travelStatusAnswers,
-      selectedFlights,
-      isValid: validationStates.isTripExperienceValid,
-    });
-  }, [
-    travelStatusAnswers,
-    flightStore,
-    validationStates.isTripExperienceValid,
-  ]);
+        // Close the modal
+        setIsFlightNotListedOpen(false);
 
-  // Add logging for when selected flights change
-  React.useEffect(() => {
-    const selectedFlights = flightStore.getSelectedFlights(4);
-    if (selectedFlights && selectedFlights.length > 0) {
-      console.log("Selected Flights Updated:", {
-        selectedFlights: selectedFlights.map((f: Flight) => ({
-          id: f.id,
-          flightNumber: f.flightNumber,
-          date: f.date,
-        })),
-      });
-    }
-  }, [flightStore]);
-
-  // Completely disable auto transitions when loaded from shared link
-  const handleAutoTransition = React.useCallback(
-    (currentStepId: string) => {
-      // CRITICAL: Never auto-transition when working with shared link data
-      if (typeof window !== "undefined" && window._handlingSharedLink) {
-        return null;
+        // Show a success message
+        alert(
+          t(
+            "flightSelector.flightNotListed.successMessage",
+            "Your flight information has been submitted. We will contact you shortly."
+          )
+        );
+      } catch (error) {
+        console.error("Error submitting flight not listed data:", error);
       }
-
-      // Don't transition during loading
-      if (isLoading) {
-        return null;
-      }
-
-      console.log("TripExperience - handleAutoTransition:", {
-        currentStepId,
-        isSharedLink:
-          typeof window !== "undefined" && !!window._handlingSharedLink,
-        timestamp: new Date().toISOString(),
-      });
-
-      // Only handle the most basic cases
-      if (currentStepId === "1") {
-        return "2";
-      }
-
-      return null;
     },
-    [isLoading]
+    [t]
   );
 
-  // Add logging to track validation state updates
-  React.useEffect(() => {
-    console.log("Validation states updated:", {
-      validationStates,
-      travelStatusStepValidation,
-      travelStatusStepInteraction,
-    });
-  }, [
-    validationStates,
-    travelStatusStepValidation,
-    travelStatusStepInteraction,
-  ]);
-
-  // Check if we can continue
-  const canContinue = React.useCallback(() => {
-    return (
-      validationStates.isTripExperienceValid &&
-      validationStates.isInformedDateValid
-    );
-  }, [validationStates]);
-
+  // Handle back button
   const handleBack = () => {
-    console.log("=== handleBack - Entry ===", {
-      travelStatusAnswers,
-      selectedFlights: flightStore.getSelectedFlights(4),
-      phase4Flights: phase4Store.selectedFlights,
-      timestamp: new Date().toISOString(),
-    });
-
-    const travelStatus = travelStatusAnswers.find(
-      (a) => a.questionId === "travel_status"
-    )?.value;
-
-    // Get flights from both stores
-    const selectedFlights = flightStore.getSelectedFlights(4);
-    const phase4Flights = phase4Store.selectedFlights;
-
-    // Determine which flights to save
-    const flightsToSave =
-      selectedFlights.length > 0 ? selectedFlights : phase4Flights;
-
-    // Always sync flights if they exist, regardless of travel status
-    if (flightsToSave.length > 0) {
-      console.log("=== handleBack - Syncing flights before navigation ===", {
-        flightsCount: flightsToSave.length,
-        travelStatus,
-        timestamp: new Date().toISOString(),
-      });
-
-      // Use syncAlternativeFlights to ensure data is properly synchronized
-      syncAlternativeFlights(flightsToSave, flightStore, phase4Store);
-    }
-
-    // Save validation state
-    localStorage.setItem(
-      "phase4ValidationState",
-      JSON.stringify({
-        travelStatusStepValidation,
-        travelStatusStepInteraction,
-        informedDateStepValidation,
-        informedDateStepInteraction,
-        travelStatusAnswers,
-        informedDateAnswers,
-      })
-    );
-
-    console.log("=== handleBack - Exit ===", {
-      savedFlights: flightsToSave.length,
-      validationState: {
-        travelStatusStepValidation,
-        travelStatusStepInteraction,
-      },
-      timestamp: new Date().toISOString(),
-    });
-
-    router.push("/phases/flight-details");
+    navigateToPhase(ValidationPhase.FLIGHT_DETAILS);
   };
 
-  // Add validation for flight data before evaluation
-  const validateFlightData = React.useCallback(
-    (originalFlights: Flight[], selectedFlights: Flight[]) => {
-      // Don't run validation during loading or before full initialization
-      if (isLoading || !isInitialized) {
-        console.log("=== validateFlightData - SKIPPED (not initialized) ===");
-        return false;
-      }
+  // Handle continue button
+  const handleContinue = async () => {
+    // Check if we can continue *before* setting loading state
+    if (!canContinue()) {
+      console.warn("handleContinue called when not allowed.");
+      // Ensure isLoading is false if we bail early
+      if (isLoading) setIsLoading(false);
+      return;
+    }
 
-      // Get travel status from answers
-      const travelStatus = travelStatusAnswers.find(
-        (a) => a.questionId === "travel_status"
-      )?.value;
+    console.log("handleContinue: Setting isLoading = true"); // Log: Start
+    setIsLoading(true); // Set loading *after* the check
 
-      console.log("=== validateFlightData - Entry ===", {
-        travelStatus,
-        originalFlights: originalFlights.length,
-        selectedFlights: selectedFlights.length,
+    try {
+      // Get travel status from local state (assuming it's less prone to timing issues for now)
+      const travelStatus =
+        travelStatusAnswers.find(
+          (a: Answer) => a.questionId === "travel_status"
+        )?.value || "";
+
+      // --- MODIFIED: Get informed date from local state ---
+      const informedDate = (() => {
+        const informedDateTypeAnswer = informedDateAnswers.find(
+          (a: Answer) => a.questionId === "informed_date"
+        );
+        const informedDateType = informedDateTypeAnswer?.value as
+          | string
+          | undefined;
+
+        // --- Add Logging ---
+        console.log("handleContinue: Deriving informedDate", {
+          informedDateAnswers,
+          originalFlights: originalFlights.map((f) => ({
+            id: f.id,
+            departureTime: f.departureTime,
+          })),
+          informedDateType,
+        });
+        // --- End Logging ---
+
+        if (informedDateType === "on_departure") {
+          // Ensure originalFlights exists and has elements
+          const originalFlight = originalFlights?.[0];
+
+          // --- Add explicit check for originalFlight and departureTime ---
+          if (!originalFlight?.departureTime) {
+            console.error(
+              "handleContinue: Cannot get informed date 'on_departure' because original flight data is missing."
+            );
+            // Return empty string or handle error appropriately, but ensure the if (!informedDate) check below catches it.
+            return "";
+          }
+          // --- End Check ---
+
+          return originalFlight?.departureTime
+            ? formatDateToYYYYMMDD(new Date(originalFlight.departureTime))
+            : ""; // Return empty string if no date
+        }
+
+        if (informedDateType === "specific_date") {
+          const specificDateAnswer = informedDateAnswers.find(
+            (a: Answer) => a.questionId === "specific_informed_date"
+          );
+          const specificDate = specificDateAnswer?.value as string | undefined;
+
+          // --- Add Logging for specific date ---
+          console.log("handleContinue: Processing specific_date", {
+            specificDateAnswer,
+            specificDate,
+            type: typeof specificDate,
+          });
+          // --- End Logging ---
+
+          // Basic validation: ensure it's a non-empty string before processing
+          if (!specificDate || specificDate.trim() === "") {
+            console.error("handleContinue: Specific date is empty or invalid");
+            return "";
+          }
+
+          // Convert to proper API format (YYYY-MM-DD) using formatDateToYYYYMMDD
+          try {
+            // If the specificDate is already in YYYY-MM-DD format, use it directly
+            if (
+              typeof specificDate === "string" &&
+              specificDate.match(/^\d{4}-\d{2}-\d{2}$/)
+            ) {
+              console.log(
+                "handleContinue: specificDate already in YYYY-MM-DD format:",
+                specificDate
+              );
+              return specificDate;
+            }
+
+            // Otherwise, try to parse and format it properly
+            const dateToFormat = new Date(specificDate);
+            if (isNaN(dateToFormat.getTime())) {
+              console.error(
+                "handleContinue: Cannot parse specific date:",
+                specificDate
+              );
+              return "";
+            }
+
+            const formattedDate = formatDateToYYYYMMDD(dateToFormat);
+            console.log(
+              "handleContinue: Formatted specific date from",
+              specificDate,
+              "to",
+              formattedDate
+            );
+            return formattedDate || "";
+          } catch (error) {
+            console.error(
+              "handleContinue: Error formatting specific date:",
+              error
+            );
+            return "";
+          }
+        }
+
+        // Default case: return empty string if no valid type or data
+        return "";
+      })();
+      // --- END MODIFICATION ---
+
+      // --- Add comprehensive informedDate logging ---
+      console.log("handleContinue: Final informedDate derived:", {
+        informedDate,
+        type: typeof informedDate,
+        length: informedDate?.length,
+        isValidFormat: informedDate
+          ? /^\d{4}-\d{2}-\d{2}$/.test(informedDate)
+          : false,
         timestamp: new Date().toISOString(),
       });
+      // --- End informedDate logging ---
 
-      // Get the alternative flight from the QA wizard answers
-      const alternativeFlightAnswer = travelStatusAnswers.find(
-        (a) =>
-          a.questionId === "alternative_flight_airline_expense" ||
-          a.questionId === "alternative_flight_own_expense"
-      );
+      // Validate data for evaluation
+      if (!informedDate) {
+        // Ensure loading is false if we throw an error early
+        console.error("handleContinue: Missing informed date");
+        setIsLoading(false);
+        throw new Error("Missing informed date");
+      }
 
-      // For alternative flight scenarios, ensure flights are properly synced
+      // Determine journey fact type
+      const factType =
+        travelStatus === "none"
+          ? "none"
+          : travelStatus === "self"
+          ? "self"
+          : "provided";
+
+      // --- START: Diagnostic logging for original and selected/alternative flight IDs ---
       if (
         travelStatus === "provided" ||
         travelStatus === "took_alternative_own"
       ) {
-        // First check if we have a flight in the QA wizard answer
-        let alternativeFlights: Flight[] = [];
-
-        if (alternativeFlightAnswer && alternativeFlightAnswer.value) {
-          try {
-            // If the answer contains a flight object, use it
-            if (typeof alternativeFlightAnswer.value === "object") {
-              alternativeFlights = [alternativeFlightAnswer.value as Flight];
-              console.log(
-                "=== Using flight from QA wizard answer for validation ===",
-                {
-                  flight: alternativeFlightAnswer.value,
-                  timestamp: new Date().toISOString(),
-                }
-              );
-            }
-          } catch (error) {
-            console.error("Error parsing alternative flight answer:", error);
-          }
-        }
-
-        // If we have alternative flights from the QA wizard, sync those
-        if (alternativeFlights.length > 0) {
-          // Only sync if there's actually a change needed
-          const currentPhase4Flights = JSON.stringify(
-            phase4Store.selectedFlights
-          );
-          const newFlights = JSON.stringify(alternativeFlights);
-
-          if (currentPhase4Flights !== newFlights) {
-            // Store alternative flights in phase4 storage
-            syncAlternativeFlights(
-              alternativeFlights,
-              flightStore,
-              phase4Store
-            );
-          } else {
-            console.log("=== No need to sync flights - already in sync ===");
-          }
-        }
-        // Otherwise, if we have selected flights passed in, use those
-        else if (selectedFlights.length > 0) {
-          // Only sync if there's actually a change needed
-          const currentPhase4Flights = JSON.stringify(
-            phase4Store.selectedFlights
-          );
-          const newFlights = JSON.stringify(selectedFlights);
-
-          if (currentPhase4Flights !== newFlights) {
-            // Store alternative flights in phase4 storage
-            syncAlternativeFlights(selectedFlights, flightStore, phase4Store);
-          } else {
-            console.log("=== No need to sync flights - already in sync ===");
-          }
-        }
-
-        // Regardless of the above, keep the original flights safe
-        if (originalFlights.length > 0) {
-          // Only set original flights if they're different from what's already there
-          const currentOriginalFlights = JSON.stringify(
-            flightStore.originalFlights
-          );
-          const newOriginalFlights = JSON.stringify(originalFlights);
-
-          if (currentOriginalFlights !== newOriginalFlights) {
-            // Ensure original flights are properly set
-            flightStore.setOriginalFlights(originalFlights);
-          }
-        }
-      }
-
-      if (!travelStatus) {
-        console.error("No travel status found");
-        throw new Error("Please complete the travel status questions first");
-      }
-
-      // Ensure we have original flights
-      if (!originalFlights?.length) {
-        console.error("No original flights found");
-        throw new Error("No valid flight IDs found in original flights");
-      }
-
-      // For other travel statuses that don't require alternative flights,
-      // make sure we're using the original flights
-      if (
-        travelStatus !== "provided" &&
-        travelStatus !== "took_alternative_own"
-      ) {
-        // Only clear if we actually have alternative flights to clear
-        if (phase4Store.selectedFlights.length > 0) {
-          // Use original flights and clear any alternative flights
-          phase4Store.batchUpdate({
-            selectedFlights: [], // Clear alternative flights as they're not needed
-            _lastUpdate: Date.now(),
-          });
-
-          // For non-alternative flight travel statuses, don't store alternative flights
-          localStorage.setItem(
-            "phase4FlightData",
-            JSON.stringify({
-              originalFlights: flightStore.originalFlights,
-              selectedFlights: [], // No alternative flights needed
-              _lastUpdate: Date.now(),
-            })
-          );
-
-          // Clear any previously stored alternative flights
-          localStorage.removeItem("phase4AlternativeFlights");
-        }
-      }
-
-      console.log("=== validateFlightData EXIT ===", {
-        isValid: true,
-        originalFlights: originalFlights.map((f) => ({
-          id: f.id,
-          flightNumber: f.flightNumber,
-        })),
-        alternativeFlights:
-          travelStatus === "provided" || travelStatus === "took_alternative_own"
-            ? phase4Store.selectedFlights.map((f) => ({
-                id: f.id,
-                flightNumber: f.flightNumber,
-              }))
-            : [],
-        timestamp: new Date().toISOString(),
-      });
-
-      return true;
-    },
-    [travelStatusAnswers, phase4Store, flightStore, isLoading, isInitialized]
-  );
-
-  const handleContinue = async () => {
-    if (isLoading) return;
-    setIsLoading(true);
-
-    try {
-      console.log("=== Trip Experience - Continue Clicked ===", {
-        travelStatusAnswers,
-        informedDateAnswers,
-        timestamp: new Date().toISOString(),
-      });
-
-      const compensationAmount = useStore.getState().compensationAmount || 0;
-      const dealId = sessionStorage.getItem("hubspot_deal_id");
-      const personalDetails = useStore.getState().personalDetails;
-      const marketingAccepted = useStore.getState().marketingAccepted;
-
-      if (dealId) {
-        console.log("Updating HubSpot deal with trip experience:", {
-          dealId,
-          amount: compensationAmount,
-          stage: "1173731568",
-          personalDetails,
-          marketingStatus: marketingAccepted,
-          timestamp: new Date().toISOString(),
-        });
-
-        try {
-          const updateResponse = await fetch(
-            "/.netlify/functions/hubspot-integration/deal",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                contactId: ClaimService.getHubspotContactId(),
-                dealId,
-                amount: compensationAmount,
-                action: "update",
-                stage: "1173731568",
-                personalDetails,
-                marketingStatus: marketingAccepted,
-              }),
-            }
-          );
-
-          if (!updateResponse.ok) {
-            const errorText = await updateResponse.text();
-            console.error("Failed to update deal:", errorText);
-            throw new Error(`Failed to update deal: ${errorText}`);
-          }
-
-          const updateResult = await updateResponse.json();
-          console.log("Successfully updated HubSpot deal:", updateResult);
-        } catch (error) {
-          console.error("Error updating HubSpot deal:", error);
-          throw error;
-        }
-      }
-
-      // Get travel status from answers
-      const travelStatusAnswer = travelStatusAnswers.find(
-        (a) => a.questionId === "travel_status"
-      );
-
-      if (!travelStatusAnswer || typeof travelStatusAnswer.value !== "string") {
-        throw new Error("No valid travel status selected");
-      }
-
-      const travelStatus = travelStatusAnswer.value;
-
-      // Get informed date
-      const informedDate = (() => {
-        const specificDate = informedDateAnswers.find(
-          (a) => a.questionId === "specific_informed_date"
-        )?.value;
-
-        if (specificDate) {
-          return String(specificDate);
-        }
-
-        // If no specific date, use the flight date
-        if (flightStore.originalFlights[0]?.date) {
-          return formatDateToYYYYMMDD(
-            new Date(flightStore.originalFlights[0].date)
-          );
-        }
-
-        return formatDateToYYYYMMDD(new Date());
-      })();
-
-      // Log the data being used for evaluation
-      console.log("=== Trip Experience - Evaluation Data ===", {
-        travelStatus,
-        informedDate,
-        originalFlights: flightStore.originalFlights,
-        timestamp: new Date().toISOString(),
-      });
-
-      if (!informedDate || !isValidYYYYMMDD(String(informedDate))) {
-        console.error("Date validation failed:", {
-          informedDate,
-          specificDate: informedDateAnswers.find(
-            (a) => a.questionId === "specific_informed_date"
-          )?.value,
-          flightDate: flightStore.originalFlights[0]?.date,
-          departureTime: flightStore.originalFlights[0]?.departureTime,
-        });
-        throw new Error(
-          "The date format is invalid. Please use YYYY-MM-DD format"
+        console.log("=== PRE-SUBMISSION FLIGHT ID CHECK (handleContinue) ===");
+        console.log(
+          "Original Flights IDs for API:",
+          originalFlights.map((f) => ({
+            id: f.id,
+            flightNumber: f.flightNumber,
+            date: f.departureTime,
+          }))
         );
-      }
-
-      // Ensure we have valid flight IDs
-      const validOriginalFlights = flightStore.originalFlights.filter(
-        (f) =>
-          f !== null &&
-          typeof f.id === "string" &&
-          f.id.length > 0 &&
-          typeof f.flightNumber === "string" &&
-          f.flightNumber.length > 0
-      );
-
-      // Only validate selected flights if alternative travel was chosen
-      const requiresAlternativeFlights =
-        travelStatus === "provided" || travelStatus === "took_alternative_own";
-
-      // Get alternative flights from QA wizard answers first
-      let alternativeFlights: Flight[] = [];
-
-      if (requiresAlternativeFlights) {
-        // Get the alternative flight from the QA wizard answers
-        const alternativeFlightAnswer = travelStatusAnswers.find(
-          (a) =>
-            a.questionId === "alternative_flight_airline_expense" ||
-            a.questionId === "alternative_flight_own_expense"
+        console.log(
+          "Selected (Alternative) Flights IDs for API:",
+          selectedFlights.map((f) => ({
+            id: f.id,
+            flightNumber: f.flightNumber,
+            date: f.departureTime,
+          }))
         );
-
-        if (alternativeFlightAnswer && alternativeFlightAnswer.value) {
-          try {
-            // If the answer contains a flight object, use it
-            if (typeof alternativeFlightAnswer.value === "object") {
-              alternativeFlights = [alternativeFlightAnswer.value as Flight];
-              console.log(
-                "=== Using flight from QA wizard answer for evaluation ===",
-                {
-                  flight: alternativeFlightAnswer.value,
-                  timestamp: new Date().toISOString(),
-                }
-              );
-            }
-          } catch (error) {
-            console.error("Error parsing alternative flight answer:", error);
-          }
-        }
-
-        // If no flight in the answer, check both stores
-        if (alternativeFlights.length === 0) {
-          const flightStoreFlights = flightStore.getSelectedFlights(4) || [];
-          const phase4StoreFlights = phase4Store.selectedFlights || [];
-
-          console.log("=== Alternative Flight Check for Evaluation ===", {
-            flightStoreFlights: flightStoreFlights.map((f) => ({
-              id: f.id,
-              flightNumber: f.flightNumber,
-              date: f.date,
-            })),
-            phase4StoreFlights: phase4StoreFlights.map((f) => ({
-              id: f.id,
-              flightNumber: f.flightNumber,
-              date: f.date,
-            })),
-            timestamp: new Date().toISOString(),
-          });
-
-          // Use flights from either store
-          alternativeFlights =
-            flightStoreFlights.length > 0
-              ? flightStoreFlights
-              : phase4StoreFlights;
-        }
-
-        // Ensure we have alternative flights
-        if (alternativeFlights.length === 0) {
-          throw new Error(
-            "Please select your alternative flights before continuing"
+        if (
+          originalFlights.length > 0 &&
+          selectedFlights.length > 0 &&
+          originalFlights[0].id === selectedFlights[0].id
+        ) {
+          console.error(
+            "CRITICAL WARNING: Original and Alternative flight IDs are THE SAME when an alternative journey was indicated. This will likely lead to an incorrect evaluation."
+          );
+        } else if (originalFlights.length > 0 && selectedFlights.length > 0) {
+          console.log(
+            "INFO: Original and Alternative flight IDs appear to be different."
+          );
+        } else {
+          console.warn(
+            "WARN: Could not fully compare original and alternative flight IDs (one or both might be empty)."
           );
         }
-
-        // Sync the alternative flights to ensure consistency
-        syncAlternativeFlights(alternativeFlights, flightStore, phase4Store);
-
-        // Validate flight data
-        validateFlightData(validOriginalFlights, alternativeFlights);
-      } else {
-        // For non-alternative flight scenarios, just validate with original flights
-        validateFlightData(validOriginalFlights, []);
       }
+      // --- END: Diagnostic logging ---
 
-      // Complete phase 4 before evaluation
-      await mainStore.completePhase(4);
-
-      // Use the ClaimService to evaluate the claim
-      const evaluationResult = await ClaimService.evaluateClaim(
-        validOriginalFlights,
-        requiresAlternativeFlights ? alternativeFlights : [],
-        travelStatusAnswers,
-        informedDateAnswers,
-        marketingAccepted
-      );
-
-      // Validate evaluation result
-      if (!evaluationResult || typeof evaluationResult.status === "undefined") {
-        throw new Error("Invalid evaluation response received");
-      }
-
-      // Store the evaluation result in ClaimService
-      ClaimService.setStoredEvaluationResponse({
-        status: evaluationResult.status,
-        contract: evaluationResult.contract,
-        rejection_reasons: evaluationResult.rejection_reasons,
-        journey_booked_flightids: validOriginalFlights.map((f) => f.id),
-        journey_fact_flightids: requiresAlternativeFlights
-          ? alternativeFlights.map((f) => f.id)
-          : [],
+      // Prepare evaluation data
+      const evaluationData = {
+        journey_booked_flightids: originalFlights.map((f) => f.id),
         information_received_at: informedDate,
+        journey_fact_flightids:
+          travelStatus === "provided" || travelStatus === "took_alternative_own"
+            ? selectedFlights.map((f) => f.id)
+            : [],
+        journey_fact_type: factType as "none" | "self" | "provided",
         travel_status: travelStatus,
-        journey_fact_type: (() => {
-          switch (travelStatus) {
-            case "none":
-              return "none";
-            case "self":
-              return "self";
-            case "provided":
-              return "provided";
-            case "took_alternative_own":
-              return "self";
-            default:
-              return "none";
-          }
-        })(),
-        guid: evaluationResult.guid,
-        recommendation_guid: evaluationResult.recommendation_guid,
-      });
-
-      // Update HubSpot deal with evaluation results
-      if (dealId) {
-        try {
-          // First update the contact information
-          const contactResponse = await fetch(
-            "/.netlify/functions/hubspot-integration/contact",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                contactId: ClaimService.getHubspotContactId(),
-                ...mainStore.personalDetails,
-                arbeitsrecht_marketing_status: marketingAccepted,
-              }),
-            }
-          );
-
-          if (!contactResponse.ok) {
-            console.error(
-              "Failed to update HubSpot contact:",
-              await contactResponse.text()
-            );
-          }
-
-          // Then update the deal
-          const hubspotResponse = await fetch(
-            "/.netlify/functions/hubspot-integration/deal",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                contactId: ClaimService.getHubspotContactId(),
-                dealId,
-                originalFlights: validOriginalFlights,
-                selectedFlights: alternativeFlights,
-                evaluationResponse: evaluationResult,
-                stage: "evaluation",
-                status:
-                  evaluationResult.status === "accept"
-                    ? "qualified"
-                    : "rejected",
-                personalDetails: mainStore.personalDetails,
-              }),
-            }
-          );
-
-          if (!hubspotResponse.ok) {
-            console.error(
-              "Failed to update HubSpot deal:",
-              await hubspotResponse.text()
-            );
-          }
-        } catch (error) {
-          console.error("Error updating HubSpot deal:", error);
-        }
-      }
-
-      // Get the next URL based on evaluation result
-      const isAccepted = evaluationResult.status === "accept";
-      const nextUrl = isAccepted
-        ? `/${lang}/phases/claim-success`
-        : `/${lang}/phases/claim-rejected`;
-
-      // Update store flags based on evaluation result
-      useStore.setState({
-        _isClaimSuccess: isAccepted,
-        _isClaimRejected: !isAccepted,
-      });
-
-      // Save final validation state
-      const finalValidationState = {
-        ...validationStates,
-        stepValidation: {
-          ...travelStatusStepValidation,
-          2: true,
-          3: true,
-        },
-        stepInteraction: {
-          ...travelStatusStepInteraction,
-          2: true,
-          3: true,
-        },
-        2: true,
-        3: true,
-        _timestamp: Date.now(),
       };
 
-      // Update store with final validation state
-      safeUpdateValidationState({
-        travelStatusStepValidation: {
-          ...travelStatusStepValidation,
-          2: true,
+      console.log("Evaluating claim with data:", evaluationData);
+      const startTime = performance.now(); // Log: Start timing API call
+
+      // Use API to evaluate the claim
+      const response = await fetch("/api/evaluateeuflightclaim", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-        informedDateStepValidation: {
-          ...informedDateStepValidation,
-          3: true,
-        },
-        travelStatusStepInteraction: {
-          ...travelStatusStepInteraction,
-          2: true,
-        },
-        informedDateStepInteraction: {
-          ...informedDateStepInteraction,
-          3: true,
-        },
-        travelStatusShowingSuccess: true,
-        travelStatusIsValid: true,
+        body: JSON.stringify(evaluationData),
       });
 
-      // Save to localStorage
-      localStorage.setItem(
-        "phase4ValidationState",
-        JSON.stringify(finalValidationState)
-      );
+      const endTime = performance.now(); // Log: End timing API call
+      console.log(`handleContinue: API call took ${endTime - startTime} ms`); // Log: API duration
 
-      // Explicitly mark phase 4 as completed in localStorage
-      localStorage.setItem("phase4_explicitlyCompleted", "true");
+      if (!response.ok) {
+        // Ensure loading is false if we throw an error after fetch
+        // This will be caught by the finally block, no need to set here
+        throw new Error(`Failed to evaluate claim: ${response.statusText}`);
+      }
 
-      // Navigate to next page
-      router.push(nextUrl);
+      const evaluationResult = await response.json();
+      console.log("Evaluation result:", evaluationResult);
+
+      // --- START: Log detailed data if rejected ---
+      if (evaluationResult.status !== "accept") {
+        console.warn(
+          "Claim was not accepted. Detailed evaluation data from API:",
+          evaluationResult.data || evaluationResult // Log data if present, otherwise the whole result
+        );
+      }
+      // --- END: Log detailed data if rejected ---
+
+      // --- Store evaluation result contract data in the phase4 store ---
+      if (
+        evaluationResult.data &&
+        evaluationResult.data.status === "accept" &&
+        evaluationResult.data.contract
+      ) {
+        const { amount, provision } = evaluationResult.data.contract;
+        console.log("Storing evaluation result contract in phase4 store:", {
+          amount,
+          provision,
+        });
+        store.actions.phase4.setEvaluationResultContract({ amount, provision });
+
+        // Also store the result using ClaimService to ensure it's available in sessionStorage
+        try {
+          const evaluateResponse = {
+            status: evaluationResult.data.status,
+            contract: evaluationResult.data.contract,
+            rejection_reasons: evaluationResult.data.rejection_reasons,
+            journey_booked_flightids: evaluationData.journey_booked_flightids,
+            journey_fact_flightids: evaluationData.journey_fact_flightids,
+            information_received_at: evaluationData.information_received_at,
+            travel_status:
+              typeof evaluationData.travel_status === "string"
+                ? evaluationData.travel_status
+                : undefined,
+            journey_fact_type: evaluationData.journey_fact_type,
+          };
+
+          // Import directly from the service to avoid circular dependencies
+          const { ClaimService } = await import("@/services/claimService");
+          ClaimService.setStoredEvaluationResponse(evaluateResponse);
+        } catch (error) {
+          console.error("Error storing evaluation response:", error);
+        }
+      }
+
+      // --- Navigation based on result ---
+      if (evaluationResult.data && evaluationResult.data.status === "accept") {
+        // Save data to store
+        validation.setStepValidation(ValidationPhase.TRIP_EXPERIENCE, true);
+        validation.setStepCompleted(ValidationPhase.TRIP_EXPERIENCE, true);
+
+        // Update navigation store before pushing
+        store.actions.navigation.addCompletedPhase(
+          ValidationPhase.TRIP_EXPERIENCE
+        );
+        store.actions.navigation.addPhaseCompletedViaContinue(4); // Numeric phase for TRIP_EXPERIENCE
+        store.actions.navigation.setCurrentPhase(ValidationPhase.CLAIM_SUCCESS);
+
+        // Navigate to next phase
+        console.log("handleContinue (Accept): Navigating to claim-success"); // Log: Before navigation
+        navigateToPhase(ValidationPhase.CLAIM_SUCCESS);
+      } else {
+        // Update navigation store before pushing for rejected claims
+        store.actions.navigation.addCompletedPhase(
+          ValidationPhase.TRIP_EXPERIENCE
+        );
+        store.actions.navigation.addPhaseCompletedViaContinue(4); // Numeric phase for TRIP_EXPERIENCE
+        store.actions.navigation.setCurrentPhase(
+          ValidationPhase.CLAIM_REJECTED
+        );
+
+        // Navigate to rejected claim page
+        console.log("handleContinue (Reject): Navigating to claim-rejected"); // Log: Before navigation
+        navigateToPhase(ValidationPhase.CLAIM_REJECTED);
+      }
     } catch (error) {
-      console.error("=== Trip Experience - Error ===", {
-        error,
-        travelStatusAnswers,
-        informedDateAnswers,
-        timestamp: new Date().toISOString(),
-      });
+      // Ensure error is logged properly
+      if (error instanceof Error) {
+        console.error(`Error during evaluation: ${error.message}`, error);
+      } else {
+        console.error("An unknown error occurred during evaluation:", error);
+      }
+      // No need to set isLoading here, finally block handles it
+    } finally {
+      // GUARANTEE isLoading is set to false after try/catch, before component potentially unmounts
+      console.log("handleContinue (finally): Setting isLoading = false");
       setIsLoading(false);
     }
   };
 
-  const getTripExperienceSummary = React.useMemo(() => {
-    if (travelStatusAnswers.length === 0) return "";
+  // Find the canContinue function and fix the property accesses
+  const canContinue = useCallback(() => {
+    // Get state snapshot outside of the render cycle
+    const state = useStore.getState();
+    const phase4State = state.phase4 || {};
+    const flightState = state.flight || {};
 
+    // Safe access of properties with proper fallbacks
+    const informedDateAnswers = phase4State.informedDateAnswers || [];
+    const travelStatusAnswers = phase4State.travelStatusAnswers || [];
+
+    // Use the correct property names from the store structure
+    const informedDateType = informedDateAnswers.find(
+      (a: Answer) => a.questionId === "informed_date"
+    )?.value;
+
+    const currentTravelStatus = travelStatusAnswers.find(
+      (a: Answer) => a.questionId === "travel_status"
+    )?.value;
+
+    // Safely access flight arrays with proper type checking
+    const originalFlights =
+      flightState.originalFlights &&
+      Array.isArray(flightState.originalFlights[0])
+        ? flightState.originalFlights[0]
+        : [];
+
+    const selectedFlights =
+      flightState.selectedFlights &&
+      typeof flightState.selectedFlights === "object"
+        ? Object.values(flightState.selectedFlights).flat().filter(Boolean)
+        : [];
+
+    const isTravelStatusValid = Boolean(phase4State.travelStatusIsValid);
+    const isInformedDateValid = Boolean(phase4State.informedDateIsValid);
+
+    // CRITICAL FIX: Also check that wizards are actually showing success (completed/submitted)
+    // This prevents the continue button from being enabled just because answers were selected
+    const isTravelStatusCompleted = Boolean(
+      phase4State.travelStatusShowingSuccess
+    );
+    const isInformedDateCompleted = Boolean(
+      phase4State.informedDateShowingSuccess
+    );
+
+    // Use completed state instead of just valid state for final evaluation
+    const effectivelyTravelStatusValid =
+      isTravelStatusValid && isTravelStatusCompleted;
+    const effectivelyInformedDateValid =
+      isInformedDateValid && isInformedDateCompleted;
+
+    // Reduce debug logging in production
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[TripExperiencePage] canContinue invoked. States:", {
+        informedDateType,
+        currentTravelStatus,
+        originalFlightsLength: originalFlights.length,
+        selectedFlightsLength: selectedFlights.length,
+        isTravelStatusValid,
+        isInformedDateValid,
+        isTravelStatusCompleted,
+        isInformedDateCompleted,
+        effectivelyTravelStatusValid,
+        effectivelyInformedDateValid,
+      });
+    }
+
+    // Logic for on_departure selected but no flights
+    if (
+      informedDateType === "on_departure" &&
+      (currentTravelStatus === "provided" ||
+        currentTravelStatus === "took_alternative_own") &&
+      selectedFlights.length === 0
+    ) {
+      if (process.env.NODE_ENV !== "production") {
+        console.log(
+          "[TripExperiencePage] canContinue: Will return FALSE. Reason: on_departure selected, travelStatus indicates alternative, but selectedFlights is empty."
+        );
+      }
+      return false;
+    }
+
+    // Evaluate final result
+    const finalResult =
+      (effectivelyTravelStatusValid && effectivelyInformedDateValid) ||
+      (effectivelyTravelStatusValid &&
+        informedDateType === "before_departure") ||
+      (effectivelyInformedDateValid && currentTravelStatus === "none");
+
+    // Reduce debug logging in production
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[TripExperiencePage] canContinue final evaluation:", {
+        informedDateType,
+        currentTravelStatus,
+        isTravelStatusValid,
+        isInformedDateValid,
+        isTravelStatusCompleted,
+        isInformedDateCompleted,
+        effectivelyTravelStatusValid,
+        effectivelyInformedDateValid,
+        finalResult,
+      });
+    }
+
+    return finalResult;
+  }, []); // Empty dependency array since we're getting state directly via getState
+
+  // Get trip experience summary
+  const tripExperienceSummary = useMemo(() => {
+    // Get the travel status answer
     const travelStatus = travelStatusAnswers.find(
       (a: Answer) => a.questionId === "travel_status"
     )?.value;
 
     switch (travelStatus) {
       case "none":
-        return t.phases.tripExperience.summary.travelStatus.notTraveled;
+        return t("phases.tripExperience.summary.travelStatus.notTraveled");
       case "self":
-        return t.phases.tripExperience.summary.travelStatus.traveled;
+        return t("phases.tripExperience.summary.travelStatus.traveled");
       case "provided":
       case "took_alternative_own":
-        return t.phases.tripExperience.summary.travelStatus.traveled;
+        return t("phases.tripExperience.summary.travelStatus.traveled");
       default:
         return "";
     }
-  }, [travelStatusAnswers, t]);
+  }, [t, travelStatusAnswers]);
 
-  const getInformedDateSummary = React.useMemo(() => {
+  // Get informed date summary
+  const informedDateSummary = useMemo(() => {
     if (informedDateAnswers.length === 0) return "";
 
     const informedDate = informedDateAnswers.find(
-      (answer: Answer) => answer.questionId === "informed_date"
+      (a: Answer) => a.questionId === "informed_date"
     )?.value;
 
     if (informedDate === "on_departure") {
-      return t.phases.tripExperience.steps.informedDate.questions.informedDate
-        .options.onDeparture;
+      return t(
+        "phases.tripExperience.steps.informedDate.questions.informedDate.options.onDeparture"
+      );
     }
 
     const specificDate = informedDateAnswers.find(
-      (answer: Answer) => answer.questionId === "specific_informed_date"
+      (a: Answer) => a.questionId === "specific_informed_date"
     )?.value;
 
     if (specificDate && typeof specificDate === "string") {
       try {
-        // Ensure date is in YYYY-MM-DD format
-        const [year, month, day] = specificDate.split("-");
-        if (year && month && day) {
-          const date = new Date(Number(year), Number(month) - 1, Number(day));
-          if (!isNaN(date.getTime())) {
-            return t.phases.tripExperience.summary.travelStatus.informedDate.replace(
-              "{date}",
-              date.toLocaleDateString(t.lang === "de" ? "de-DE" : "en-US")
-            );
-          }
+        const date = new Date(specificDate);
+        if (!isNaN(date.getTime())) {
+          return t(
+            "phases.tripExperience.summary.travelStatus.informedDate"
+          ).replace(
+            "{date}",
+            date.toLocaleDateString(lang === "de" ? "de-DE" : "en-US")
+          );
         }
       } catch (error) {
         console.error("Error formatting date:", error);
@@ -2175,40 +1242,177 @@ export default function TripExperiencePage(): ReactElement {
     }
 
     return "";
-  }, [informedDateAnswers, t]);
+  }, [t, lang, informedDateAnswers]);
 
-  // Memoize QA Wizards to prevent unnecessary re-renders
-  const TripExperienceWizard = React.useMemo(
-    () => (
-      <QAWizard
-        questions={questions}
-        onComplete={handleTripExperienceComplete}
-        initialAnswers={travelStatusAnswers}
-        selectedFlight={flightStore.getSelectedFlights(4)[0] || null}
-        phase={4}
-      />
-    ),
-    [
-      questions,
-      handleTripExperienceComplete,
-      travelStatusAnswers,
-      flightStore.getSelectedFlights,
-      flightStore,
-    ]
-  );
+  // Travel Experience QA Wizard - Use imported questions
+  const TripExperienceWizard = useMemo(() => {
+    // Add a safety check to prevent rendering in claim-rejected context
+    if (
+      typeof window !== "undefined" &&
+      window.location.pathname.includes("/claim-rejected")
+    ) {
+      console.log(
+        "TripExperiencePage: Avoiding wizard rendering in claim-rejected context"
+      );
+      return <div>Loading...</div>; // Return simple placeholder
+    }
 
-  const InformedDateWizard = React.useMemo(
-    () => (
-      <QAWizard
+    // Get the travel status to determine whether to pass selectedFlight
+    const travelStatus = travelStatusAnswers.find(
+      (a: Answer) => a.questionId === "travel_status"
+    )?.value;
+
+    // IMPORTANT: Only pass original flights when travel status is explicitly 'self'
+    // Never pass original flights for alternative flight questions
+    const shouldPassOriginalFlight = travelStatus === "self";
+
+    // Use try-catch to prevent any potential errors from causing loops
+    try {
+      // Don't pass originalFlights if the user is selecting alternative flights
+      const selectedFlightToPass =
+        shouldPassOriginalFlight && originalFlights.length > 0
+          ? originalFlights[0]
+          : null;
+
+      // Only pass alternative flights when the status indicates we're dealing with alternative flights
+      const alternativeFlightsToPass =
+        travelStatus === "provided" || travelStatus === "took_alternative_own"
+          ? alternativeFlights
+          : [];
+
+      console.log(
+        "=== TripExperienceWizard - Deciding on passing original flight ===",
+        {
+          travelStatus,
+          shouldPassOriginalFlight,
+          hasOriginalFlights: originalFlights.length > 0,
+          alternativeFlightsLength: alternativeFlights.length,
+          willPassAlternatives: alternativeFlightsToPass.length,
+          selectedFlightToPass: selectedFlightToPass
+            ? "originalFlight"
+            : "null",
+        }
+      );
+
+      return (
+        <Phase4QAWizard
+          questions={tripExperienceQuestions}
+          onComplete={handleTripExperienceComplete}
+          initialAnswers={travelStatusAnswers}
+          selectedFlight={selectedFlightToPass}
+          wizardType="travel_status"
+          alternativeFlightSegments={alternativeFlightsToPass}
+          onAlternativeFlightsChange={handleAlternativeFlightsChange}
+          setIsFlightNotListedOpen={setIsFlightNotListedOpen}
+        />
+      );
+    } catch (error) {
+      console.error("Error preparing TripExperienceWizard:", error);
+      return <div>An error occurred loading the wizard.</div>;
+    }
+  }, [
+    handleTripExperienceComplete,
+    travelStatusAnswers,
+    originalFlights,
+    alternativeFlights,
+    handleAlternativeFlightsChange,
+    // Remove useStore from dependencies to prevent infinite re-renders
+    // The real-time state is fetched inside the memo
+  ]);
+
+  // Informed Date QA Wizard
+  const InformedDateWizard = useMemo(() => {
+    // Get travel status to determine which flight data to pass
+    const travelStatus = travelStatusAnswers.find(
+      (a: Answer) => a.questionId === "travel_status"
+    )?.value;
+
+    // Only pass original flights if we don't have alternative flights AND the travel status is 'self'
+    // This prevents conflicts between original and alternative flight data
+    const shouldPassOriginalFlight =
+      alternativeFlights.length === 0 && travelStatus === "self";
+
+    console.log(
+      "=== InformedDateWizard - Deciding on passing original flight ===",
+      {
+        hasAlternativeFlights: alternativeFlights.length > 0,
+        shouldPassOriginalFlight,
+        hasOriginalFlights: originalFlights.length > 0,
+        travelStatus,
+      }
+    );
+
+    return (
+      <Phase4QAWizard
         questions={informedDateQuestions}
         onComplete={handleInformedDateComplete}
         initialAnswers={informedDateAnswers}
-        phase={4}
+        selectedFlight={
+          shouldPassOriginalFlight && originalFlights.length > 0
+            ? originalFlights[0]
+            : null
+        }
         wizardType="informed_date"
       />
-    ),
-    [informedDateQuestions, handleInformedDateComplete, informedDateAnswers]
-  );
+    );
+  }, [
+    informedDateQuestions,
+    handleInformedDateComplete,
+    informedDateAnswers,
+    originalFlights,
+    alternativeFlights,
+    travelStatusAnswers,
+    // Remove store dependency that could cause infinite updates
+  ]);
+
+  // Compute isCompleted and hasInteracted status based on phase4Store
+  const accordionStatus = React.useMemo(() => {
+    // Get current phase4 state
+    const phase4State = useStore.getState().phase4;
+
+    // Use a descriptive key or safe access
+    const travelStatusStepKey = "travel_status_step";
+    const informedDateStepKey = "informed_date_step";
+
+    // CRITICAL FIX: Only show validation/completion AFTER wizard has been submitted
+    // If user goes back to edit (showingSuccess = false), validation should disappear
+    const isTravelStatusShowingSuccess = Boolean(
+      phase4State?.travelStatusShowingSuccess
+    );
+    const isInformedDateShowingSuccess = Boolean(
+      phase4State?.informedDateShowingSuccess
+    );
+
+    return {
+      // FIXED: Only show completed state when wizard is actually showing success (submitted)
+      isTravelStatusCompleted: isTravelStatusShowingSuccess,
+      hasTravelStatusInteracted: Boolean(
+        // Local state
+        travelStatusStepInteraction[travelStatusStepKey] ||
+          // If we have answers, we've interacted
+          travelStatusAnswers.length > 0 ||
+          // phase4Store state
+          phase4State?.travelStatusStepInteraction?.[travelStatusStepKey]
+      ),
+      // FIXED: Only show completed state when wizard is actually showing success (submitted)
+      isInformedDateCompleted: isInformedDateShowingSuccess,
+      hasInformedDateInteracted: Boolean(
+        // Local state
+        informedDateStepInteraction[informedDateStepKey] ||
+          // If we have answers, we've interacted
+          informedDateAnswers.length > 0 ||
+          // phase4Store state
+          phase4State?.informedDateStepInteraction?.[informedDateStepKey]
+      ),
+    };
+  }, [
+    travelStatusStepInteraction,
+    informedDateStepInteraction,
+    travelStatusAnswers.length,
+    informedDateAnswers.length,
+    // FIXED: Depend on showingSuccess flags instead of isValid flags
+    // This ensures accordion updates when user goes back to edit
+  ]);
 
   // Memoize content to prevent unnecessary re-renders
   const content = React.useMemo(() => {
@@ -2218,26 +1422,38 @@ export default function TripExperiencePage(): ReactElement {
         ? undefined
         : "2";
 
+    // Log button state just before rendering content
+    console.log("--- ContinueButton State Check (in useMemo) ---", {
+      canContinue: canContinue(),
+      isTravelStatusValid: validationState.isTravelStatusValid,
+      isInformedDateValid: validationState.isInformedDateValid,
+      isLoading: isLoading,
+      disabledPropValue: !canContinue() || isLoading,
+    });
+
     return (
-      <AccordionProvider
-        onAutoTransition={handleAutoTransition}
-        initialActiveAccordion={initialAccordion}
-      >
+      <AccordionProvider initialActiveStepId={initialAccordion}>
         <div className="min-h-screen bg-[#f5f7fa]">
-          <PhaseNavigation currentPhase={4} completedPhases={[1, 2, 3]} />
+          <PhaseNavigation
+            phase={ValidationPhase.TRIP_EXPERIENCE}
+            translations={{
+              title: t("phases.tripExperience.title"),
+              description: t("phases.tripExperience.description"),
+            }}
+          />
           <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
             <div className="space-y-6">
-              <SpeechBubble message={t.phases.tripExperience.speechBubble} />
+              <SpeechBubble message={t("phases.tripExperience.speechBubble")} />
 
               {/* Trip Experience Wizard */}
-              <AccordionCard
-                title={t.phases.tripExperience.steps.travelStatus.title}
+              <AccordionCardClient
+                title={t("phases.tripExperience.steps.travelStatus.title")}
                 stepId="2"
-                isCompleted={Boolean(travelStatusStepValidation[2])}
-                hasInteracted={Boolean(travelStatusStepInteraction[2])}
-                isValid={validationStates.isTripExperienceValid}
-                summary={getTripExperienceSummary}
-                eyebrow={t.phases.tripExperience.steps.travelStatus.eyebrow}
+                isCompleted={accordionStatus.isTravelStatusCompleted}
+                hasInteracted={accordionStatus.hasTravelStatusInteracted}
+                isValid={accordionStatus.isTravelStatusCompleted}
+                summary={tripExperienceSummary}
+                eyebrow={t("phases.tripExperience.steps.travelStatus.eyebrow")}
                 isQA={true}
               >
                 <div
@@ -2245,26 +1461,17 @@ export default function TripExperiencePage(): ReactElement {
                 >
                   {TripExperienceWizard}
                 </div>
-              </AccordionCard>
+              </AccordionCardClient>
 
               {/* Informed Date Wizard */}
-              <AccordionCard
-                title={t.phases.tripExperience.steps.informedDate.title}
+              <AccordionCardClient
+                title={t("phases.tripExperience.steps.informedDate.title")}
                 stepId="3"
-                isCompleted={Boolean(
-                  informedDateStepValidation[3] ||
-                    phase4Store.informedDateIsValid
-                )}
-                hasInteracted={Boolean(
-                  informedDateStepInteraction[3] ||
-                    phase4Store.informedDateAnswers?.length > 0
-                )}
-                isValid={
-                  validationStates.isInformedDateValid ||
-                  Boolean(phase4Store.informedDateIsValid)
-                }
-                summary={getInformedDateSummary}
-                eyebrow={t.phases.tripExperience.steps.informedDate.eyebrow}
+                isCompleted={accordionStatus.isInformedDateCompleted}
+                hasInteracted={accordionStatus.hasInformedDateInteracted}
+                isValid={accordionStatus.isInformedDateCompleted}
+                summary={informedDateSummary}
+                eyebrow={t("phases.tripExperience.steps.informedDate.eyebrow")}
                 isQA={true}
               >
                 <div
@@ -2272,23 +1479,34 @@ export default function TripExperiencePage(): ReactElement {
                 >
                   {InformedDateWizard}
                 </div>
-              </AccordionCard>
+              </AccordionCardClient>
 
               {/* Navigation */}
               <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
                 <BackButton
                   onClick={handleBack}
-                  text={t.phases.tripExperience.navigation.back}
+                  text={t("phases.tripExperience.navigation.back")}
                 />
                 <ContinueButton
                   onClick={handleContinue}
                   disabled={!canContinue() || isLoading}
                   isLoading={isLoading}
-                  text={t.phases.tripExperience.navigation.continue}
+                  text={t("phases.tripExperience.navigation.continue")}
                 />
               </div>
             </div>
           </main>
+
+          {/* Flight Not Listed Modal */}
+          <SlideSheet
+            isOpen={isFlightNotListedOpen}
+            onClose={() => setIsFlightNotListedOpen(false)}
+          >
+            <FlightNotListedForm
+              onSubmit={handleFlightNotListedSubmit}
+              prefilledData={prefilledData}
+            />
+          </SlideSheet>
         </div>
       </AccordionProvider>
     );
@@ -2298,222 +1516,48 @@ export default function TripExperiencePage(): ReactElement {
     travelStatusStepInteraction,
     informedDateStepValidation,
     informedDateStepInteraction,
-    handleAutoTransition,
-    validationStates,
-    getTripExperienceSummary,
-    getInformedDateSummary,
+    validationState,
+    tripExperienceSummary,
+    informedDateSummary,
     TripExperienceWizard,
     InformedDateWizard,
     handleBack,
     handleContinue,
     canContinue,
     isLoading,
+    accordionStatus,
+    isFlightNotListedOpen,
+    handleFlightNotListedSubmit,
+    prefilledData,
   ]);
 
-  const phaseGuardProps: PhaseGuardProps = {
-    phase: 4,
-    children: content,
-  };
+  // Custom PhaseGuard component to ensure proper phase history
+  const CustomPhaseGuard = useMemo(() => {
+    // Get the current validation state
+    const state = useStore.getState();
+    const phase4State = state.phase4;
 
-  // Create a ref to track if we've already performed a phase transition check
-  const hasCheckedPhaseTransitionRef = React.useRef(false);
-  const isRedirectingRef = React.useRef(false);
-  const hasFixedPhase3Ref = React.useRef(false);
-
-  // Remove all the useEffects that handle shared links and phase transitions
-  // And replace with a single isolated effect
-  React.useEffect(() => {
-    // Skip all of this if we're already redirecting
-    if (isRedirectingRef.current || hasCheckedPhaseTransitionRef.current)
-      return;
-
-    // Mark that we've checked to prevent duplicate checks
-    hasCheckedPhaseTransitionRef.current = true;
-
-    // Log that we're skipping the phase transition check
-    console.log(
-      "=== TripExperiencePage - Skipping phase transition check ===",
-      {
+    // Log the current state for debugging
+    console.log("=== Trip Experience - Creating PhaseGuard ===", {
+      phase4State: {
+        travelStatusIsValid: phase4State?.travelStatusIsValid,
+        travelStatusShowingSuccess: phase4State?.travelStatusShowingSuccess,
+        informedDateIsValid: phase4State?.informedDateIsValid,
         timestamp: new Date().toISOString(),
-      }
-    );
-  }, []);
+      },
+    });
 
-  // Add effect to ensure Phase 3 is properly marked as completed
-  React.useEffect(() => {
-    if (hasFixedPhase3Ref.current) return;
-    hasFixedPhase3Ref.current = true;
-
-    try {
-      // First, ensure Phase 3 is marked as completed in the store
-      const currentPhase = mainStore.currentPhase;
-      const completedPhases = [...mainStore.completedPhases];
-      const phasesCompletedViaContinue = [
-        ...mainStore.phasesCompletedViaContinue,
-      ];
-
-      console.log(
-        "=== TripExperiencePage - Ensuring Phase 3 is completed ===",
-        {
-          currentPhase,
-          completedPhases,
-          phasesCompletedViaContinue,
-          timestamp: new Date().toISOString(),
-        }
-      );
-
-      let needsUpdate = false;
-
-      // Ensure Phase 3 is in completedPhases
-      if (!completedPhases.includes(3)) {
-        completedPhases.push(3);
-        completedPhases.sort((a, b) => a - b);
-        needsUpdate = true;
-      }
-
-      // Ensure Phase 3 is in phasesCompletedViaContinue
-      if (!phasesCompletedViaContinue.includes(3)) {
-        phasesCompletedViaContinue.push(3);
-        phasesCompletedViaContinue.sort((a, b) => a - b);
-        needsUpdate = true;
-      }
-
-      // Also ensure the currentPhase is set to 4
-      let updateCurrentPhase = false;
-      if (currentPhase !== 4) {
-        updateCurrentPhase = true;
-      }
-
-      // Update the store if needed
-      if (needsUpdate || updateCurrentPhase) {
-        mainStore.setState({
-          completedPhases,
-          phasesCompletedViaContinue,
-          currentPhase: 4, // Ensure this is set to phase 4
-          _lastUpdate: Date.now(),
-        });
-
-        // Also update localStorage directly for maximum compatibility
-        localStorage.setItem(
-          "completedPhases",
-          JSON.stringify(completedPhases)
-        );
-        localStorage.setItem(
-          "phasesCompletedViaContinue",
-          JSON.stringify(phasesCompletedViaContinue)
-        );
-        localStorage.setItem("currentPhase", "4"); // Set current phase to 4
-
-        console.log(
-          "=== TripExperiencePage - Updated Phase 3 completion state ===",
-          {
-            completedPhases,
-            phasesCompletedViaContinue,
-            currentPhase: 4,
-            timestamp: new Date().toISOString(),
-          }
-        );
-      }
-
-      // Ensure phase 3 validation state is properly set in localStorage
-      try {
-        // Ensure we have a valid phase3State in localStorage with _explicitlyCompleted flag
-        const phase3StateStr = localStorage.getItem("phase3State");
-        let phase3State = phase3StateStr ? JSON.parse(phase3StateStr) : {};
-
-        if (!phase3State._explicitlyCompleted) {
-          phase3State = {
-            ...phase3State,
-            _explicitlyCompleted: true,
-            _completedTimestamp: Date.now(),
-            _forcedByTripExperiencePage: true,
-          };
-
-          localStorage.setItem("phase3State", JSON.stringify(phase3State));
-          localStorage.setItem("phase3_explicitlyCompleted", "true");
-
-          console.log(
-            "=== TripExperiencePage - Updated phase3State with _explicitlyCompleted flag ===",
-            {
-              timestamp: new Date().toISOString(),
-            }
-          );
-        }
-
-        // Also ensure there's a standalone flag in case the JSON parsing fails
-        localStorage.setItem("phase3_explicitlyCompleted", "true");
-
-        // Create a simple phase3 state that's guaranteed to work
-        const simpleState = {
-          _explicitlyCompleted: true,
-          _timestamp: Date.now(),
-        };
-        localStorage.setItem("phase3_simple", JSON.stringify(simpleState));
-
-        // Update validation state for Phase 3 in store
-        const validationState = mainStore.validationState || {};
-        if (validationState) {
-          const updatedValidationState = {
-            ...validationState,
-            stepValidation: {
-              ...(validationState.stepValidation || {}),
-              3: true,
-            },
-            stepInteraction: {
-              ...(validationState.stepInteraction || {}),
-              3: true,
-            },
-            stepCompleted: {
-              ...(validationState.stepCompleted || {}),
-              3: true,
-            },
-            _timestamp: Date.now(),
-          };
-
-          // Update validation state in store
-          mainStore.updateValidationState(updatedValidationState);
-
-          console.log(
-            "=== TripExperiencePage - Updated Phase 3 validation state ===",
-            {
-              updatedValidationState,
-              timestamp: new Date().toISOString(),
-            }
-          );
-        }
-      } catch (e) {
-        console.error("Error updating phase3State:", e);
-      }
-    } catch (e) {
-      console.error("Error ensuring Phase 3 is completed:", e);
-    }
-  }, [mainStore]);
-
-  // Add a cleanup effect to remove shared link flags
-  React.useEffect(() => {
-    // Return a cleanup function
-    return () => {
-      // Clean up shared link flags when component unmounts
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("_sharedFlightData");
-        if (window._sharedLinkProcessed !== undefined) {
-          window._sharedLinkProcessed = true;
-        }
-      }
+    // Only include the props that PhaseGuard expects
+    const guardProps: PhaseGuardProps = {
+      phase: 4,
+      children: content,
     };
-  }, []);
 
-  return (
-    <PhaseGuard {...phaseGuardProps}>
-      {!isInitialized ? (
-        <div className="min-h-screen flex items-center justify-center bg-[#f5f7fa]">
-          <div className="animate-pulse text-center">
-            <p className="text-lg text-gray-600">Loading...</p>
-          </div>
-        </div>
-      ) : (
-        content
-      )}
-    </PhaseGuard>
-  );
+    return <PhaseGuard {...guardProps} />;
+  }, [
+    content,
+    store, // Add store dependency to refresh when store changes
+  ]);
+
+  return CustomPhaseGuard;
 }

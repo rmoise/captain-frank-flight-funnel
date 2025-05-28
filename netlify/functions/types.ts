@@ -1,6 +1,21 @@
 export interface Airport {
+  iata_code?: string;
+  code?: string;
+  name?: string;
+  airport?: string;
+  city?: string;
+  country?: string;
+  lat?: number;
+  latitude?: number;
+  lng?: number;
+  longitude?: number;
+}
+
+export interface FormattedAirport {
   iata_code: string;
   name: string;
+  city: string;
+  country: string;
   lat: number;
   lng: number;
 }
@@ -26,7 +41,7 @@ export interface CompensationResult {
 
 export interface EvaluationResult {
   data: {
-    status: 'accept' | 'reject';
+    status: "accept" | "reject";
     contract?: {
       amount: number;
       provision: number;
@@ -39,5 +54,5 @@ export interface EvaluationRequest {
   journey_booked_flightids: string[];
   journey_fact_flightids?: string[];
   information_received_at: string;
-  journey_fact_type: 'none' | 'self' | 'provided';
+  journey_fact_type: "none" | "self" | "provided";
 }

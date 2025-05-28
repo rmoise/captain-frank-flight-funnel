@@ -29,6 +29,7 @@ export interface FlightSelectorTranslations {
       lastName: string;
       email: string;
       description: string;
+      descriptionPlaceholder: string;
       submit: string;
       submitting: string;
       success: string;
@@ -143,23 +144,26 @@ export interface ValidationTranslations {
   incompleteDateFormat: string;
 }
 
+export interface CommonTranslations {
+  next: string;
+  back: string;
+  submit: string;
+  cancel: string;
+  continue: string;
+  loading: string;
+  error: string;
+  success: string;
+  dateFormat: string;
+  enterAmount: string;
+  noResults: string;
+  required: string;
+  enterMinChars: string;
+  finish: string;
+}
+
 export interface Translations {
-  lang: "en" | "de";
-  common: {
-    next: string;
-    back: string;
-    submit: string;
-    cancel: string;
-    continue: string;
-    loading: string;
-    error: string;
-    success: string;
-    dateFormat: string;
-    enterAmount: string;
-    noResults: string;
-    required: string;
-    enterMinChars: string;
-  };
+  lang: "en" | "de" | "es";
+  common: CommonTranslations;
   share: {
     title: string;
     description: string;
@@ -277,45 +281,13 @@ export interface Translations {
     };
   };
   phases: {
-    initialAssessment: {
-      title: string;
-      description: string;
-      flightDetails: string;
-      bookingNumber: string;
-      whatHappened: string;
-      whatHappenedSubtitle: string;
-      personalDetails: {
-        title: string;
-        subtitle: string;
-      };
-      termsAndConditions: {
-        title: string;
-        subtitle: string;
-        terms: string;
-        privacy: string;
-        marketing: string;
-        marketingDetails: string;
-      };
-      summary: {
-        questionsAnswered: string;
-        termsAccepted: string;
-        directFlight: string;
-        multiSegment: string;
-      };
-      welcomeMessage: string;
-      continueButton: string;
-      step: string;
-      counter: {
-        single: string;
-        multiple: string;
-      };
-    };
+    initialAssessment: InitialAssessmentTranslations;
     unauthorized: {
       title: string;
       message: string;
       titles: Record<number, string>;
-      messages: Record<number, string>;
-      backText: Record<number, string>;
+      messages: Record<string | number, string>;
+      backText: Record<string | number, string>;
     };
     tripExperience: TripExperienceTranslations;
     agreement: {
@@ -449,6 +421,12 @@ export interface Translations {
         contact: string;
         updates: string;
       };
+      navigation: {
+        title: string;
+        description: string;
+        confirmMessage: string;
+        restart: string;
+      };
     };
     claimRejected: {
       title: string;
@@ -554,6 +532,7 @@ export interface Translations {
     general: string;
     [key: string]: string;
   };
+  [key: string]: any;
 }
 
 export interface PersonalDetailsTranslations {
@@ -567,4 +546,78 @@ export interface PersonalDetailsTranslations {
   postalCode: string;
   city: string;
   country: string;
+}
+
+export interface InitialAssessmentTranslations {
+  title: string;
+  description: string;
+  flightDetails: string;
+  bookingNumber: string;
+  whatHappened: string;
+  whatHappenedSubtitle: string;
+  flightDetailsDescription: string;
+  wizard: {
+    title: string;
+    description: string;
+    successMessage: string;
+  };
+  personalDetails: {
+    title: string;
+    description: string;
+  };
+  consent: {
+    title: string;
+    description: string;
+    terms: string;
+    privacy: string;
+    marketing: string;
+    marketingDetails: string;
+  };
+  termsAndConditions: {
+    title: string;
+    subtitle: string;
+    description: string;
+    summary: string;
+    terms: string;
+    privacy: string;
+    marketing: string;
+    marketingDetails: string;
+  };
+  navigation: {
+    title: string;
+    description: string;
+    back: string;
+    continue: string;
+  };
+  summary: {
+    directFlight: string;
+    questionsAnswered: string;
+    termsAccepted: string;
+  };
+  steps: {
+    flightDetails: {
+      title: string;
+      description: string;
+    };
+    questionnaire: {
+      title: string;
+      description: string;
+    };
+    personalDetails: {
+      title: string;
+      description: string;
+    };
+    termsAndConditions: {
+      title: string;
+      description: string;
+    };
+  };
+  welcomeMessage: string;
+  continueButton: string;
+  step: string;
+  stepProgress: string;
+  counter: {
+    single: string;
+    multiple: string;
+  };
 }

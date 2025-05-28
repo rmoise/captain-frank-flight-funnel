@@ -1,17 +1,33 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback, memo } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useTranslation } from "@/hooks/useTranslation";
-import useStore from "@/lib/state/store";
-import { ErrorMessage } from "./ErrorMessage";
-import type { ValidationStep } from "@/lib/state/types";
+import useStore from "@/store/index";
+import { useStoreWithEqualityFn } from "zustand/traditional";
+import { shallow } from "zustand/shallow";
+import { ErrorMessage } from "@/components/ui/feedback/ErrorMessage";
+import { ValidationPhase } from "@/types/shared/validation";
+import type { Store } from "@/store/types";
+import { defaultLocale } from "@/config/language";
+import { getTranslation } from "@/translations";
+
+// Type-safe JSON parse function
+function safeJSONParse<T>(value: string | null, defaultValue: T): T {
+  if (!value) return defaultValue;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return defaultValue;
+  }
+}
 
 // Define valid phases
-const VALID_PHASES: ValidationStep[] = [1, 2, 3, 4, 5, 6, 7];
+const VALID_PHASES = [1, 2, 3, 4, 5, 6, 7, 8] as const;
+type ValidationStep = (typeof VALID_PHASES)[number];
 
 // Define phase to path mapping
-const PHASE_PATHS = {
+const PHASE_PATHS: Record<ValidationStep | 8, string> = {
   1: "/phases/initial-assessment",
   2: "/phases/compensation-estimate",
   3: "/phases/flight-details",
@@ -20,10 +36,10 @@ const PHASE_PATHS = {
   6: "/phases/agreement",
   7: "/phases/claim-submitted",
   8: "/phases/claim-rejected",
-} as const;
+};
 
 // Define phase names for back button text
-const PHASE_NAMES = {
+const PHASE_NAMES: Record<ValidationStep | 8, string> = {
   1: "Initial Assessment",
   2: "Compensation Estimate",
   3: "Flight Details",
@@ -32,836 +48,500 @@ const PHASE_NAMES = {
   6: "Agreement",
   7: "Claim Submitted",
   8: "Claim Rejected",
-} as const;
+};
 
-export interface PhaseGuardProps {
-  phase: number;
-  children: React.ReactNode;
+// Define mapping from numeric phases to ValidationPhase enum
+const PHASE_TO_VALIDATION_PHASE: Record<ValidationStep, ValidationPhase> = {
+  1: ValidationPhase.INITIAL_ASSESSMENT,
+  2: ValidationPhase.COMPENSATION_ESTIMATE,
+  3: ValidationPhase.FLIGHT_DETAILS,
+  4: ValidationPhase.TRIP_EXPERIENCE,
+  5: ValidationPhase.CLAIM_SUCCESS,
+  6: ValidationPhase.AGREEMENT,
+  7: ValidationPhase.CLAIM_SUBMITTED,
+  8: ValidationPhase.CLAIM_REJECTED,
+};
+
+// Define mapping from ValidationPhase enum to numeric phases
+const VALIDATION_PHASE_TO_PHASE: Record<string, ValidationStep | undefined> = {
+  [ValidationPhase.INITIAL_ASSESSMENT]: 1,
+  [ValidationPhase.COMPENSATION_ESTIMATE]: 2,
+  [ValidationPhase.FLIGHT_DETAILS]: 3,
+  [ValidationPhase.TRIP_EXPERIENCE]: 4,
+  [ValidationPhase.CLAIM_SUCCESS]: 5,
+  [ValidationPhase.AGREEMENT]: 6,
+  [ValidationPhase.CLAIM_SUBMITTED]: 7,
+  [ValidationPhase.CLAIM_REJECTED]: 8 as any, // Casting since 8 is not in ValidationStep
+  // Add remaining mappings for other enum values that don't map to numeric phases
+  [ValidationPhase.PERSONAL_DETAILS]: undefined,
+  [ValidationPhase.TERMS_AND_CONDITIONS]: undefined,
+  [ValidationPhase.SUMMARY]: undefined,
+  [ValidationPhase.CONFIRMATION]: undefined,
+  [ValidationPhase.INITIAL]: undefined,
+  [ValidationPhase.EXPERIENCE]: undefined,
+  [ValidationPhase.JOURNEY]: undefined,
+  [ValidationPhase.FINAL]: undefined,
+  [ValidationPhase.STEP_1]: undefined,
+  [ValidationPhase.STEP_2]: undefined,
+  [ValidationPhase.STEP_3]: undefined,
+  [ValidationPhase.STEP_4]: undefined,
+  [ValidationPhase.STEP_5]: undefined,
+};
+
+// Helper function to extract phase from pathname (copied from NavigationProvider)
+function getPhaseFromPathname(pathname: string): ValidationPhase | null {
+  // Remove the language prefix (e.g., /en, /de) if it exists
+  const pathWithoutLang = pathname.replace(/^\/[a-z]{2}(?=\/)/, "");
+
+  const phaseMap: Record<string, ValidationPhase> = {
+    "/phases/initial-assessment": ValidationPhase.INITIAL_ASSESSMENT,
+    "/phases/compensation-estimate": ValidationPhase.COMPENSATION_ESTIMATE,
+    "/phases/flight-details": ValidationPhase.FLIGHT_DETAILS,
+    "/phases/trip-experience": ValidationPhase.TRIP_EXPERIENCE,
+    "/phases/claim-success": ValidationPhase.CLAIM_SUCCESS,
+    "/phases/claim-rejected": ValidationPhase.CLAIM_REJECTED,
+    "/phases/agreement": ValidationPhase.AGREEMENT,
+    "/phases/claim-submitted": ValidationPhase.CLAIM_SUBMITTED,
+  };
+
+  // Use the path without the language prefix for lookup
+  return phaseMap[pathWithoutLang] || null;
 }
 
-// PhaseGuard component that checks if the user is authorized to access the page
-export const PhaseGuard: React.FC<PhaseGuardProps> = ({ phase, children }) => {
-  const router = useRouter();
-  const pathname = usePathname();
-  const { t } = useTranslation();
-  const store = useStore();
-  const [isAuthorized, setIsAuthorized] = useState(true);
-  const [isLoading, setIsLoading] = useState(true);
-  const [blockReason, setBlockReason] = useState<
-    "default" | "claimSuccess" | "claimRejected"
-  >("default");
+export interface PhaseGuardProps {
+  phase: ValidationStep;
+  children: React.ReactNode;
+  skipStoreUpdates?: boolean;
+}
 
-  // Refs to prevent infinite loops
-  const storeUpdateAttemptRef = useRef(0);
-  const hasUpdatedStoreRef = useRef(false);
-
-  // Logging control
-  const logRef = useRef({
-    lastLogTime: 0,
-    lastLogType: "",
-  });
-
-  const controlledLog = (type: string, data: any) => {
-    const now = Date.now();
-    // Only log the same type of message once every 3 seconds
-    if (
-      now - logRef.current.lastLogTime > 3000 ||
-      logRef.current.lastLogType !== type
-    ) {
-      console.log(`=== PhaseGuard - ${type} ===`, {
-        ...data,
-        timestamp: new Date().toISOString(),
-      });
-      logRef.current = {
-        lastLogTime: now,
-        lastLogType: type,
+// Helper function to check if a phase is authorized
+const isPhaseAuthorized = (
+  phase: ValidationStep | string | number,
+  completedPhases: ValidationPhase[],
+  currentPhase: ValidationPhase,
+  phasesCompletedViaContinue: number[],
+  isClaimSuccess: boolean,
+  isClaimRejected: boolean,
+  pathname: string // Add pathname to check directly
+): boolean => {
+  // Convert string/number phase to a consistent numeric phase representation
+  let numericPhase: number | null = null;
+  if (typeof phase === "number") {
+    // Ensure it's a valid phase number
+    if (VALID_PHASES.includes(phase as ValidationStep)) {
+      numericPhase = phase;
+    }
+  } else if (typeof phase === "string") {
+    const parsed = parseInt(phase, 10);
+    if (!isNaN(parsed) && VALID_PHASES.includes(parsed as ValidationStep)) {
+      numericPhase = parsed;
+    } else {
+      const nameMap: { [key: string]: number } = {
+        initial_assessment: 1,
+        compensation_estimate: 2,
+        flight_details: 3,
+        trip_experience: 4,
+        claim_success: 5,
+        agreement: 6,
+        claim_submitted: 7,
+        claim_rejected: 8,
       };
-    }
-  };
-
-  // Helper function to get a valid phase to navigate to
-  const getValidPhaseToNavigate = (): ValidationStep => {
-    // Start with the current phase from the store
-    let targetPhase = store.currentPhase;
-
-    // Ensure it's within valid range
-    if (!VALID_PHASES.includes(targetPhase)) {
-      // If current phase is invalid, find the highest completed phase
-      const completedPhases = store.completedPhases || [];
-      const validCompletedPhases = completedPhases.filter((p) =>
-        VALID_PHASES.includes(p as ValidationStep)
-      ) as ValidationStep[];
-
-      if (validCompletedPhases.length > 0) {
-        // Navigate to the highest completed phase
-        targetPhase = Math.max(...validCompletedPhases) as ValidationStep;
-      } else {
-        // Default to phase 1 if no valid completed phases
-        targetPhase = 1;
-      }
-    }
-
-    return targetPhase;
-  };
-
-  // Helper function to get the appropriate phase to navigate to
-  const getAppropriatePhaseToNavigate = (): ValidationStep => {
-    // Get the valid phase to navigate to
-    const targetPhase = getValidPhaseToNavigate();
-
-    // Special handling for phase 2 (compensation-estimate)
-    if (phase === 2) {
-      // Check if phase 1 was completed via continue button
-      const phasesCompletedViaContinueStr = localStorage.getItem(
-        "phasesCompletedViaContinue"
-      );
-      const phasesCompletedViaContinue = phasesCompletedViaContinueStr
-        ? JSON.parse(phasesCompletedViaContinueStr)
-        : [];
-
-      // Navigate to phase 1 if it wasn't completed via continue button
-      if (!phasesCompletedViaContinue.includes(1)) {
-        return 1 as ValidationStep;
-      }
-    }
-
-    // Special handling for phase 3 (flight-details)
-    if (phase === 3) {
-      // Check if phase 2 was completed
-      const completedPhasesStr = localStorage.getItem("completedPhases");
-      const completedPhases = completedPhasesStr
-        ? JSON.parse(completedPhasesStr)
-        : [];
-
-      const phasesCompletedViaContinueStr = localStorage.getItem(
-        "phasesCompletedViaContinue"
-      );
-      const phasesCompletedViaContinue = phasesCompletedViaContinueStr
-        ? JSON.parse(phasesCompletedViaContinueStr)
-        : [];
-
-      // Navigate to phase 2 if it wasn't completed
+      const mappedPhase = nameMap[phase.toLowerCase()];
+      // Allow 8 even though it's not in VALID_PHASES
       if (
-        !completedPhases.includes(2) &&
-        !phasesCompletedViaContinue.includes(2)
+        mappedPhase &&
+        (VALID_PHASES.includes(mappedPhase as ValidationStep) ||
+          mappedPhase === 8)
       ) {
-        return 2 as ValidationStep;
+        numericPhase = mappedPhase;
       }
     }
+  }
 
-    // Special handling for phase 5 (claim-success)
-    if (phase === 5) {
-      // Navigate to phase 4 (trip-experience) if not completed
-      if (!store.completedPhases.includes(4)) {
-        return 4 as ValidationStep;
-      }
+  if (numericPhase === null) return false;
+
+  // Explicitly allow claim_rejected (phase 8)
+  if (numericPhase === 8) {
+    console.log(
+      "[isPhaseAuthorized] Explicitly allowing access to phase 8 (claim-rejected)"
+    );
+    return true;
+  }
+
+  // Special case for phase 1 (always accessible)
+  if (numericPhase === 1) {
+    return true;
+  }
+
+  // Special case for claim success/rejected conflicts
+  // Check numeric phase directly
+  if (numericPhase === 5 && isClaimRejected) return false;
+  if (numericPhase === 8 && isClaimSuccess) return false; // Already handled above, but safe check
+
+  // === NEW CHECK FOR PHASE 2 ===
+  if (numericPhase === 2) {
+    const phase1ValidationPhase = PHASE_TO_VALIDATION_PHASE[1];
+    if (
+      completedPhases.includes(phase1ValidationPhase) &&
+      !phasesCompletedViaContinue.includes(1)
+    ) {
+      return false;
     }
+  }
 
-    // Special handling for phase 6 (agreement)
-    if (phase === 6) {
-      // Navigate to phase 5 (claim-success) if not completed
-      if (!store.completedPhases.includes(5)) {
-        return 5 as ValidationStep;
-      }
-    }
+  // The current page can be accessed if the URL matches the expected phase
+  const currentPhaseFromPath = getPhaseFromPathname(pathname);
+  const numericPhaseFromPath = currentPhaseFromPath
+    ? VALIDATION_PHASE_TO_PHASE[currentPhaseFromPath]
+    : null;
 
-    // Special handling for phase 7 (claim-submitted)
-    if (phase === 7) {
-      // Navigate to phase 6 (agreement) if not completed
-      if (!store.completedPhases.includes(6)) {
-        return 6 as ValidationStep;
-      }
+  if (numericPhaseFromPath === numericPhase) {
+    console.log(
+      `[isPhaseAuthorized] Access granted: Current path phase (${numericPhaseFromPath}) matches requested phase (${numericPhase}).`
+    );
+    return true;
+  }
 
-      // Check URL for claim_id parameter which indicates successful submission
-      if (typeof window !== "undefined") {
-        const url = new URL(window.location.href);
-        const claimId = url.searchParams.get("claim_id");
+  // Any completed phase can be accessed
+  // Fix type predicate for filter: ensure p is not undefined and is a valid ValidationStep
+  const completedNumericPhases = completedPhases
+    .map((p) => VALIDATION_PHASE_TO_PHASE[p])
+    .filter(
+      (p): p is ValidationStep =>
+        p !== undefined && VALID_PHASES.includes(p as ValidationStep)
+    );
 
-        // If no claim_id, redirect to agreement page
-        if (!claimId) {
-          return 6 as ValidationStep;
-        }
-      }
-    }
+  if (completedNumericPhases.includes(numericPhase as ValidationStep)) {
+    // Cast numericPhase here
+    console.log(
+      `[isPhaseAuthorized] Access granted: Phase ${numericPhase} is in completed phases.`
+    );
+    return true;
+  }
 
-    // If the target phase is the same as the current phase (which shouldn't be accessible),
-    // find the highest completed phase that is not the current phase
-    if (targetPhase === phase) {
-      const completedPhases = store.completedPhases || [];
-      const validCompletedPhases = completedPhases.filter(
-        (p) => VALID_PHASES.includes(p as ValidationStep) && p !== phase
+  // Phase after the last completed one is accessible
+  const lastCompletedNumericPhase =
+    completedNumericPhases.length > 0 ? Math.max(...completedNumericPhases) : 0;
+  // Cast numericPhase for comparison
+  if (
+    numericPhase === lastCompletedNumericPhase + 1 &&
+    VALID_PHASES.includes(numericPhase as ValidationStep)
+  ) {
+    console.log(
+      `[isPhaseAuthorized] Access granted: Phase ${numericPhase} is the next phase after last completed (${lastCompletedNumericPhase}).`
+    );
+    return true;
+  }
+
+  // Default: Deny access
+  console.log(`[isPhaseAuthorized] Access denied for phase ${numericPhase}.`);
+  return false;
+};
+
+// Function to get a valid phase to navigate to
+function getValidPhaseToNavigate(
+  currentPhase: ValidationPhase,
+  completedPhases: ValidationPhase[]
+): ValidationStep {
+  // Convert ValidationPhase enum to numeric phase
+  const currentNumericPhase = VALIDATION_PHASE_TO_PHASE[currentPhase] || 1;
+
+  if (!VALID_PHASES.includes(currentNumericPhase as ValidationStep)) {
+    // Filter completed phases to get only valid numeric phases
+    const validCompletedPhases = completedPhases
+      .map((phase) => VALIDATION_PHASE_TO_PHASE[phase])
+      .filter(
+        (phase) =>
+          phase !== undefined && VALID_PHASES.includes(phase as ValidationStep)
       ) as ValidationStep[];
 
-      if (validCompletedPhases.length > 0) {
-        // Navigate to the highest completed phase that is not the current phase
-        return Math.max(...validCompletedPhases) as ValidationStep;
-      } else {
-        // Default to phase 1 if no valid completed phases
-        return 1 as ValidationStep;
-      }
+    if (validCompletedPhases.length > 0) {
+      return Math.max(...validCompletedPhases) as ValidationStep;
+    } else {
+      return 1 as ValidationStep;
+    }
+  }
+
+  return currentNumericPhase as ValidationStep;
+}
+
+// Function to get the appropriate phase to navigate to
+function getAppropriatePhaseToNavigate(
+  phase: ValidationStep,
+  currentPhase: ValidationPhase,
+  completedPhases: ValidationPhase[],
+  phasesCompletedViaContinue: number[]
+): ValidationStep {
+  // Get the valid phase to navigate to
+  const targetPhase = getValidPhaseToNavigate(currentPhase, completedPhases);
+
+  // Special handling for phase 2 (compensation-estimate)
+  if (phase === 2) {
+    // Navigate to phase 1 if it wasn't completed via continue button
+    if (!phasesCompletedViaContinue.includes(1)) {
+      return 1 as ValidationStep;
+    }
+  }
+
+  // Special handling for phase 3 (flight-details)
+  if (phase === 3) {
+    // Check if phase 2 was completed via store
+    const phase2ValidationKey = PHASE_TO_VALIDATION_PHASE[2];
+    const isPhase2CompletedInStore =
+      completedPhases.includes(phase2ValidationKey);
+
+    // Navigate to phase 2 if it wasn't completed
+    if (!isPhase2CompletedInStore && !phasesCompletedViaContinue.includes(2)) {
+      return 2 as ValidationStep;
+    }
+  }
+
+  // Special handling for phase 5 (claim-success)
+  if (phase === 5) {
+    // Navigate to phase 4 (trip-experience) if not completed
+    const validationPhase = PHASE_TO_VALIDATION_PHASE[4];
+    if (!completedPhases.includes(validationPhase)) {
+      return 4 as ValidationStep;
+    }
+  }
+
+  // Special handling for phase 6 (agreement)
+  if (phase === 6) {
+    // Navigate to phase 5 (claim-success) if not completed
+    const validationPhase = PHASE_TO_VALIDATION_PHASE[5];
+    if (!completedPhases.includes(validationPhase)) {
+      return 5 as ValidationStep;
+    }
+  }
+
+  // Special handling for phase 7 (claim-submitted)
+  if (phase === 7) {
+    // Navigate to phase 6 (agreement) if not completed
+    const validationPhase = PHASE_TO_VALIDATION_PHASE[6];
+    if (!completedPhases.includes(validationPhase)) {
+      return 6 as ValidationStep;
     }
 
-    return targetPhase;
-  };
-
-  // Helper function to get appropriate back button text
-  const getBackButtonText = (): string => {
-    // Get the appropriate phase to navigate to
-    const actualTargetPhase = getAppropriatePhaseToNavigate();
-
-    // Get the phase name for the button text
-    const phaseName = PHASE_NAMES[actualTargetPhase] || "Previous Step";
-
-    // Use translation if available, otherwise use a generic message with the phase name
-    return (
-      t.phases?.unauthorized?.backText?.[actualTargetPhase] ||
-      t.common?.back ||
-      `Go back to ${phaseName}`
-    );
-  };
-
-  // Effect to initialize store from localStorage if needed
-  useEffect(() => {
-    // Only run this once
-    if (hasUpdatedStoreRef.current) return;
-
-    // Check if we need to initialize from localStorage
-    const shouldInitialize =
-      (!store.completedPhases || store.completedPhases.length === 0) &&
-      (!store.phasesCompletedViaContinue ||
-        store.phasesCompletedViaContinue.length === 0);
-
-    if (shouldInitialize) {
-      try {
-        // Get data from localStorage
-        const completedPhasesStr = localStorage.getItem("completedPhases");
-        const phasesCompletedViaContinueStr = localStorage.getItem(
-          "phasesCompletedViaContinue"
-        );
-        const currentPhaseStr = localStorage.getItem("currentPhase");
-
-        // Parse data if available
-        const completedPhases = completedPhasesStr
-          ? JSON.parse(completedPhasesStr)
-          : [];
-        const phasesCompletedViaContinue = phasesCompletedViaContinueStr
-          ? JSON.parse(phasesCompletedViaContinueStr)
-          : [];
-        const currentPhaseValue = currentPhaseStr
-          ? parseInt(currentPhaseStr, 10)
-          : 1;
-
-        // Ensure currentPhase is a valid phase
-        const currentPhase = (
-          VALID_PHASES.includes(currentPhaseValue as ValidationStep)
-            ? currentPhaseValue
-            : 1
-        ) as ValidationStep;
-
-        // Log initialization
-        controlledLog("Store Initialization", {
-          completedPhases,
-          phasesCompletedViaContinue,
-          currentPhase,
-          timestamp: new Date().toISOString(),
-        });
-
-        // Update store if we found data and changes are needed
-        const needsUpdate =
-          completedPhases.length > 0 ||
-          phasesCompletedViaContinue.length > 0 ||
-          currentPhase !== store.currentPhase;
-
-        if (needsUpdate) {
-          hasUpdatedStoreRef.current = true; // Set this first to prevent recursive updates
-          useStore.setState({
-            completedPhases,
-            phasesCompletedViaContinue,
-            currentPhase,
-            _lastUpdate: Date.now(),
-          });
-        }
-      } catch (error) {
-        console.error("Error initializing store from localStorage:", error);
-      }
-    }
-    // Explicitly list dependencies to avoid infinite loops
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run once on mount, don't add dependencies
-
-  // Effect to update store when claim is successful
-  useEffect(() => {
-    // Only run this for phase 5 (claim-success) and phase 6 (agreement)
-    if (phase !== 5 && phase !== 6) return;
-
-    // Check if claim is successful and we haven't updated the store yet
-    if (
-      store._isClaimSuccess &&
-      !hasUpdatedStoreRef.current &&
-      storeUpdateAttemptRef.current < 3
-    ) {
-      storeUpdateAttemptRef.current += 1;
-
-      // Get URL parameters
-      const url = new URL(window.location.href);
-      const bypassCheck = url.searchParams.get("bypass_phase_check") === "true";
-      const redirected = url.searchParams.get("redirected") === "true";
-      const completedPhasesParam = url.searchParams.get("completed_phases");
-
-      controlledLog("Claim Success Store Update", {
-        phase,
-        isClaimSuccess: store._isClaimSuccess,
-        currentPhase: store.currentPhase,
-        completedPhases: store.completedPhases,
-        phasesCompletedViaContinue: store.phasesCompletedViaContinue,
-        bypassCheck,
-        redirected,
-        completedPhasesParam,
-        updateAttempt: storeUpdateAttemptRef.current,
-      });
-
-      // Mark the update as processed before making changes to prevent loops
-      hasUpdatedStoreRef.current = true;
-
-      // If we're on phase 5 (claim-success), ensure phases 1-4 are completed
-      if (phase === 5) {
-        const phasesToComplete = [1, 2, 3, 4] as ValidationStep[];
-        const newCompletedPhases = [
-          ...new Set([...store.completedPhases, ...phasesToComplete]),
-        ] as ValidationStep[];
-        const newPhasesCompletedViaContinue = [
-          ...new Set([
-            ...store.phasesCompletedViaContinue,
-            ...phasesToComplete,
-          ]),
-        ] as ValidationStep[];
-
-        // Update store with completed phases
-        useStore.setState({
-          completedPhases: newCompletedPhases,
-          phasesCompletedViaContinue: newPhasesCompletedViaContinue,
-          currentPhase: 5 as ValidationStep,
-          _lastUpdate: Date.now(),
-        });
-
-        // Update localStorage
-        localStorage.setItem(
-          "completedPhases",
-          JSON.stringify(newCompletedPhases)
-        );
-        localStorage.setItem(
-          "phasesCompletedViaContinue",
-          JSON.stringify(newPhasesCompletedViaContinue)
-        );
-        localStorage.setItem("currentPhase", "5");
-      }
-
-      // If we're on phase 6 (agreement), ensure phases 1-5 are completed
-      if (phase === 6) {
-        const phasesToComplete = [1, 2, 3, 4, 5] as ValidationStep[];
-        const newCompletedPhases = [
-          ...new Set([...store.completedPhases, ...phasesToComplete]),
-        ] as ValidationStep[];
-        const newPhasesCompletedViaContinue = [
-          ...new Set([
-            ...store.phasesCompletedViaContinue,
-            ...phasesToComplete,
-          ]),
-        ] as ValidationStep[];
-
-        // Update store with completed phases
-        useStore.setState({
-          completedPhases: newCompletedPhases,
-          phasesCompletedViaContinue: newPhasesCompletedViaContinue,
-          currentPhase: 6 as ValidationStep,
-          _lastUpdate: Date.now(),
-        });
-
-        // Update localStorage
-        localStorage.setItem(
-          "completedPhases",
-          JSON.stringify(newCompletedPhases)
-        );
-        localStorage.setItem(
-          "phasesCompletedViaContinue",
-          JSON.stringify(newPhasesCompletedViaContinue)
-        );
-        localStorage.setItem("currentPhase", "6");
-      }
-    }
-    // Use a limited set of dependencies to prevent infinite updates
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, store._isClaimSuccess]);
-
-  // Check for debug mode
-  const [showDebug, setShowDebug] = useState(false);
-
-  // Effect to check for debug mode
-  useEffect(() => {
+    // Check URL for claim_id parameter which indicates successful submission
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
-      const debug = url.searchParams.get("debug_phase_guard") === "true";
-      setShowDebug(debug);
+      const claimId = url.searchParams.get("claim_id");
+
+      // If no claim_id, redirect to agreement page
+      if (!claimId) {
+        return 6 as ValidationStep;
+      }
     }
-  }, []);
+  }
 
-  // Create ref to track initialization status
-  const hasCheckedAuthRef = React.useRef(false);
+  // If the target phase is the same as the current phase (which shouldn't be accessible),
+  // find the highest completed phase that is not the current phase
+  if (targetPhase === phase) {
+    // Convert ValidationPhase values to numeric phases
+    const validCompletedPhases = completedPhases
+      .map((phaseValue) => VALIDATION_PHASE_TO_PHASE[phaseValue])
+      .filter(
+        (numericPhase) =>
+          numericPhase !== undefined &&
+          VALID_PHASES.includes(numericPhase as ValidationStep) &&
+          numericPhase !== phase
+      ) as ValidationStep[];
 
-  // Check if the user is authorized to access the page
+    if (validCompletedPhases.length > 0) {
+      // Navigate to the highest completed phase that is not the current phase
+      return Math.max(...validCompletedPhases) as ValidationStep;
+    } else {
+      // Default to phase 1 if no valid completed phases
+      return 1 as ValidationStep;
+    }
+  }
+
+  return targetPhase;
+}
+
+// Main PhaseGuard component
+export const PhaseGuard: React.FC<PhaseGuardProps> = memo((props) => {
+  const {
+    phase: expectedPhaseProp,
+    children,
+    skipStoreUpdates = false,
+  } = props;
+  const router = useRouter();
+  const pathname = usePathname(); // Returns string | null
+  const { t } = useTranslation();
+  const [isAuthorized, setIsAuthorized] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const isStoreInitialized = useStoreWithEqualityFn(
+    useStore,
+    (state: Store) => state.core.isInitialized,
+    shallow
+  );
+  const {
+    completedPhases,
+    currentPhase,
+    phasesCompletedViaContinue,
+    isClaimSuccess,
+    isClaimRejected,
+  } = useStoreWithEqualityFn(
+    useStore,
+    (state: Store) => state.navigation,
+    shallow
+  );
+  const isTransitioning = useStoreWithEqualityFn(
+    useStore,
+    (state: Store) => state.navigation.isTransitioning,
+    shallow
+  );
+  const redirectAttempted = useRef(false);
+
+  // Main authorization and redirection effect
   useEffect(() => {
-    // Only check once to prevent loops
-    if (hasCheckedAuthRef.current) return;
-    hasCheckedAuthRef.current = true;
-
-    // Phase 1 is always accessible
-    if (phase === 1) {
-      setIsAuthorized(true);
-      setIsLoading(false);
+    // Skip if store isn't ready or no pathname
+    if (!isStoreInitialized || !pathname) {
+      console.log(
+        "PhaseGuard: Skipping effect - Store not initialized or no pathname."
+      );
+      setIsLoading(true);
       return;
     }
 
-    // Use the most reliable source of truth - localStorage - to prevent circular dependencies
-    try {
-      const currentPhaseStr = localStorage.getItem("currentPhase");
-      const completedPhasesStr = localStorage.getItem("completedPhases");
-      const currentPhase = currentPhaseStr ? parseInt(currentPhaseStr, 10) : 1;
-      const completedPhases = completedPhasesStr
-        ? JSON.parse(completedPhasesStr)
-        : [];
+    // Determine the phase based on the current URL
+    const urlPhase = getPhaseFromPathname(pathname);
+    const expectedValidationPhase =
+      PHASE_TO_VALIDATION_PHASE[expectedPhaseProp];
 
-      // Check for URL parameters that might bypass phase checks
-      const url = new URL(window.location.href);
-      const bypassCheck = url.searchParams.get("bypass_phase_check") === "true";
-      const sharedFlightParam = url.searchParams.get("shared_flight");
+    console.log("=== PhaseGuard - CHECKING AUTHORIZATION ===", {
+      expectedPhaseProp,
+      expectedValidationPhase,
+      pathname,
+      urlPhase,
+      currentPhaseFromStore: currentPhase,
+      completedPhases,
+      isStoreInitialized,
+      isTransitioning,
+      isClaimSuccess,
+      isClaimRejected,
+      skipStoreUpdates, // Log this prop
+    });
 
-      // Also check for shared link flag in localStorage
-      const hasSharedLink = Boolean(sharedFlightParam);
-      const hasSharedLinkFlag =
-        localStorage.getItem("_sharedFlightData") === "true";
+    // Call the authorization function, passing pathname
+    const shouldBeAuthorized = isPhaseAuthorized(
+      expectedPhaseProp,
+      completedPhases,
+      currentPhase,
+      phasesCompletedViaContinue || [], // Provide default empty array
+      isClaimSuccess || false, // Provide default false
+      isClaimRejected || false, // Provide default false
+      pathname // Pass pathname here
+    );
 
-      // Special case for trip-experience page (phase 4) with shared link
-      if (phase === 4 && (hasSharedLink || hasSharedLinkFlag)) {
-        // Allow access for shared links
-        setIsAuthorized(true);
-        setIsLoading(false);
-        return;
-      }
+    if (shouldBeAuthorized) {
+      console.log(
+        `PhaseGuard: Setting authorized for phase ${expectedPhaseProp}.`
+      );
+      setIsAuthorized(true);
+      setIsLoading(false);
+      setErrorMessage(null);
+      redirectAttempted.current = false; // Reset redirect flag if authorized
+    } else {
+      console.log(
+        `PhaseGuard: Setting NOT authorized for phase ${expectedPhaseProp}. Attempting redirect.`
+      );
+      setIsAuthorized(false);
+      setErrorMessage(null); // Clear previous errors before potential redirect
 
-      // Special case for phase 4 (trip-experience) - check if phases 1-3 are completed
-      if (phase === 4) {
-        const requiredPhases = [1, 2, 3];
+      // Only redirect if not already transitioning and haven't tried yet
+      if (!isTransitioning && !redirectAttempted.current) {
+        redirectAttempted.current = true;
 
-        // Check for phase3 explicit completion flags similar to how we do for phase 3
-        const phase3StateStr = localStorage.getItem("phase3State");
-        const phase3StateObj = phase3StateStr ? JSON.parse(phase3StateStr) : {};
-        const phase3ExplicitlyCompleted = localStorage.getItem(
-          "phase3_explicitlyCompleted"
-        );
-        const phase3Simple = localStorage.getItem("phase3_simple");
-        const phasesCompletedViaContinueStr = localStorage.getItem(
-          "phasesCompletedViaContinue"
-        );
-        const phasesCompletedViaContinue = phasesCompletedViaContinueStr
-          ? JSON.parse(phasesCompletedViaContinueStr)
-          : [];
-
-        // More lenient authorization check for phase 4
-        const isAuthorized =
-          bypassCheck ||
-          phase === currentPhase ||
-          completedPhases.includes(phase) ||
-          phase < currentPhase ||
-          requiredPhases.every((p) => completedPhases.includes(p)) ||
-          completedPhases.includes(3) ||
-          phasesCompletedViaContinue.includes(3) ||
-          phase3ExplicitlyCompleted === "true" ||
-          (phase3StateObj && phase3StateObj._explicitlyCompleted) ||
-          (phase3Simple && JSON.parse(phase3Simple)._explicitlyCompleted);
-
-        console.log(
-          "=== PhaseGuard - Phase 4 Authorization Check [DETAILED] ===",
-          {
-            isAuthorized,
-            bypassCheck,
-            currentPhase,
-            completedPhases,
-            phasesCompletedViaContinue,
-            phase3Completed: completedPhases.includes(3),
-            phase3CompletedViaContinue: phasesCompletedViaContinue.includes(3),
-            phase3StateExists: !!phase3StateStr,
-            phase3StateHasExplicitlyCompleted:
-              phase3StateObj._explicitlyCompleted,
-            phase3ExplicitlyCompletedFlag: phase3ExplicitlyCompleted,
-            phase3SimpleExists: !!phase3Simple,
-            timestamp: new Date().toISOString(),
-          }
-        );
-
-        setIsAuthorized(isAuthorized);
-        setIsLoading(false);
-        return;
-      }
-
-      // Special case for phase 2 (compensation-estimate) - ensure phase 1 is completed via continue
-      if (phase === 2) {
-        const phasesCompletedViaContinueStr = localStorage.getItem(
-          "phasesCompletedViaContinue"
-        );
-        const phasesCompletedViaContinue = phasesCompletedViaContinueStr
-          ? JSON.parse(phasesCompletedViaContinueStr)
-          : [];
-
-        const isAuthorized =
-          bypassCheck ||
-          phase === currentPhase ||
-          completedPhases.includes(phase) ||
-          phase < currentPhase ||
-          phasesCompletedViaContinue.includes(1);
-
-        console.log("=== PhaseGuard - Phase 2 Authorization Check ===", {
-          isAuthorized,
-          bypassCheck,
+        const targetRedirectPhase = getAppropriatePhaseToNavigate(
+          expectedPhaseProp,
           currentPhase,
           completedPhases,
-          phasesCompletedViaContinue,
-          phase1CompletedViaContinue: phasesCompletedViaContinue.includes(1),
-          timestamp: new Date().toISOString(),
-        });
-
-        setIsAuthorized(isAuthorized);
-        setIsLoading(false);
-        return;
-      }
-
-      // Special case for phase 3 (flight-details) - ensure phase 2 is completed via continue
-      if (phase === 3) {
-        const phasesCompletedViaContinueStr = localStorage.getItem(
-          "phasesCompletedViaContinue"
+          phasesCompletedViaContinue || [] // Provide default empty array
         );
-        const phasesCompletedViaContinue = phasesCompletedViaContinueStr
-          ? JSON.parse(phasesCompletedViaContinueStr)
-          : [];
 
-        // Additional debug for phase 2 completion state
-        const phase2StateStr = localStorage.getItem("phase2State");
-        const phase2StateObj = phase2StateStr ? JSON.parse(phase2StateStr) : {};
-        const phase2ExplicitlyCompleted = localStorage.getItem(
-          "phase2_explicitlyCompleted"
-        );
-        const phase2Simple = localStorage.getItem("phase2_simple");
-
-        // CRITICAL: Check if we have a navigating_to_phase3 flag
-        const isNavigatingToPhase3 =
-          localStorage.getItem("navigating_to_phase3") === "true";
-
-        // Check if phase 2 is completed via continue or if it's in completed phases
-        // Also check for the explicit completion flags and navigation flag
-        const isAuthorized =
-          bypassCheck ||
-          phase === currentPhase ||
-          completedPhases.includes(phase) ||
-          phase < currentPhase ||
-          completedPhases.includes(2) ||
-          phasesCompletedViaContinue.includes(2) ||
-          phase2ExplicitlyCompleted === "true" ||
-          (phase2StateObj && phase2StateObj._explicitlyCompleted) ||
-          (phase2Simple && JSON.parse(phase2Simple)._explicitlyCompleted) ||
-          isNavigatingToPhase3;
-
+        if (targetRedirectPhase) {
+          const targetPath = PHASE_PATHS[targetRedirectPhase];
+          // Use defaultLocale if lang is missing (shouldn't happen with middleware)
+          const lang = pathname?.split("/")[1] || defaultLocale;
+          const redirectUrl = `/${lang}${targetPath}`;
+          console.log(`PhaseGuard: Redirecting to ${redirectUrl}`);
+          router.replace(redirectUrl);
+          // Keep loading true while redirecting
+          setIsLoading(true);
+        } else {
+          console.error(
+            `PhaseGuard: Authorization failed for phase ${expectedPhaseProp}, but no redirect target determined.`
+          );
+          setErrorMessage(t("errors.phaseGuard.authorizationFailed"));
+          setIsLoading(false); // Stop loading if error occurs
+        }
+      } else {
         console.log(
-          "=== PhaseGuard - Phase 3 Authorization Check [DETAILED] ===",
-          {
-            isAuthorized,
-            bypassCheck,
-            currentPhase,
-            completedPhases,
-            phasesCompletedViaContinue,
-            phase2Completed: completedPhases.includes(2),
-            phase2CompletedViaContinue: phasesCompletedViaContinue.includes(2),
-            phase2StateExists: !!phase2StateStr,
-            phase2StateHasExplicitlyCompleted:
-              phase2StateObj._explicitlyCompleted,
-            phase2ExplicitlyCompletedFlag: phase2ExplicitlyCompleted,
-            phase2SimpleExists: !!phase2Simple,
-            isNavigatingToPhase3,
-            timestamp: new Date().toISOString(),
-          }
+          "PhaseGuard: Skipping redirect (already transitioning or attempted)."
         );
-
-        // If authorized, clear the navigation flag since we've used it
-        if (isAuthorized && isNavigatingToPhase3) {
-          localStorage.removeItem("navigating_to_phase3");
-        }
-
-        setIsAuthorized(isAuthorized);
-        setIsLoading(false);
-        return;
+        // If we skipped redirect but aren't authorized, show loading briefly
+        // but don't get stuck if redirect fails multiple times.
+        if (!isAuthorized) setIsLoading(false);
       }
-
-      // For all other phases including 5 (claim-success) and 6 (agreement)
-      // Check if the user has completed the required previous phases
-      let isAuthorized =
-        bypassCheck ||
-        phase === currentPhase ||
-        completedPhases.includes(phase) ||
-        phase < currentPhase;
-
-      // Special case for phase 5 (claim-success)
-      if (phase === 5) {
-        // If user has a rejected claim, they shouldn't be able to access claim-success
-        if (store._isClaimRejected) {
-          setIsAuthorized(false);
-          setBlockReason("claimRejected");
-          setIsLoading(false);
-          return;
-        }
-
-        // For phase 5 (claim-success), ensure phase 4 is completed
-        isAuthorized =
-          isAuthorized ||
-          (completedPhases.includes(4) && store._isClaimSuccess);
-      } else if (phase === 6) {
-        // For phase 6 (agreement), ensure phase 5 is completed
-        isAuthorized = isAuthorized || completedPhases.includes(5);
-      } else if (phase === 7) {
-        // Special case for phase 7 (claim-submitted) - accessible after agreement page
-        // Check if we have query parameters indicating we came from successful submission
-        const url = new URL(window.location.href);
-        const claimId = url.searchParams.get("claim_id");
-
-        if (claimId) {
-          console.log("=== PhaseGuard - Claim Submitted With Claim ID ===", {
-            claimId,
-            currentPhase,
-            completedPhases,
-            timestamp: new Date().toISOString(),
-          });
-
-          // Allow access if claim_id is present, this indicates successful submission
-          setIsAuthorized(true);
-          setIsLoading(false);
-
-          // Also update completedPhases to include phase 6 for future navigation
-          if (!completedPhases.includes(6)) {
-            const newCompletedPhases = [...completedPhases, 6];
-            localStorage.setItem(
-              "completedPhases",
-              JSON.stringify(newCompletedPhases)
-            );
-
-            // Get and update phasesCompletedViaContinue as well
-            const phasesCompletedViaContinueStr = localStorage.getItem(
-              "phasesCompletedViaContinue"
-            );
-            const phasesCompletedViaContinue = phasesCompletedViaContinueStr
-              ? JSON.parse(phasesCompletedViaContinueStr)
-              : [];
-
-            if (!phasesCompletedViaContinue.includes(6)) {
-              const newPhasesCompletedViaContinue = [
-                ...phasesCompletedViaContinue,
-                6,
-              ];
-              localStorage.setItem(
-                "phasesCompletedViaContinue",
-                JSON.stringify(newPhasesCompletedViaContinue)
-              );
-
-              // Update store with both arrays
-              useStore.setState({
-                completedPhases: newCompletedPhases,
-                phasesCompletedViaContinue: newPhasesCompletedViaContinue,
-                currentPhase: 7,
-                _lastUpdate: Date.now(),
-              });
-            } else {
-              // Update store with just completedPhases
-              useStore.setState({
-                completedPhases: newCompletedPhases,
-                currentPhase: 7,
-                _lastUpdate: Date.now(),
-              });
-            }
-          }
-
-          return;
-        }
-
-        // Without claim_id, check if phase 6 is completed
-        isAuthorized = isAuthorized || completedPhases.includes(6);
-      } else if (pathname?.includes("claim-rejected")) {
-        // Special case for claim-rejected page - if user has a successful claim, show error
-        if (store._isClaimSuccess) {
-          console.log("=== PhaseGuard - Claim-Rejected Access Blocked ===", {
-            pathname,
-            isClaimSuccess: store._isClaimSuccess,
-            isClaimRejected: store._isClaimRejected,
-            timestamp: new Date().toISOString(),
-          });
-          setIsAuthorized(false);
-          setBlockReason("claimSuccess");
-          setIsLoading(false);
-          return;
-        }
-      } else if (pathname?.includes("claim-success")) {
-        // Additional check for claim-success page - if user has a rejected claim, show error
-        if (store._isClaimRejected) {
-          console.log("=== PhaseGuard - Claim-Success Access Blocked ===", {
-            pathname,
-            isClaimSuccess: store._isClaimSuccess,
-            isClaimRejected: store._isClaimRejected,
-            timestamp: new Date().toISOString(),
-          });
-          setIsAuthorized(false);
-          setBlockReason("claimRejected");
-          setIsLoading(false);
-          return;
-        }
-      }
-
-      setIsAuthorized(isAuthorized);
-      setIsLoading(false);
-
-      // Log decision without causing re-renders
-      console.log("=== PhaseGuard - Initial Authorization Decision ===", {
-        phase,
-        currentPhase,
-        completedPhases,
-        authorized: isAuthorized,
-        timestamp: new Date().toISOString(),
-      });
-    } catch (error) {
-      console.error("Error during phase authorization check:", error);
-      setIsAuthorized(true); // Default to true on error to avoid blocking users
-      setIsLoading(false);
     }
-  }, [phase, pathname]);
 
-  // Show loading state
+    // Add skipStoreUpdates to dependencies
+  }, [
+    isStoreInitialized,
+    expectedPhaseProp,
+    pathname,
+    currentPhase,
+    completedPhases,
+    phasesCompletedViaContinue,
+    isClaimSuccess,
+    isClaimRejected,
+    router,
+    isTransitioning,
+    t,
+    skipStoreUpdates, // Add skipStoreUpdates dependency
+  ]);
+
+  // Render Loading State
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-4">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Loading...</h1>
-          <p className="mb-4">Please wait while we prepare your page.</p>
-          <div className="w-16 h-16 border-t-4 border-blue-500 border-solid rounded-full animate-spin mx-auto"></div>
-        </div>
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: "#f5f7fa",
+        }}
+      >
+        {/* Consistent Loading Spinner */}
+        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
 
-  // Show unauthorized message
-  if (!isAuthorized) {
-    // Get specific messages based on phase
-    let title =
-      t.phases.unauthorized.titles?.[phase] || t.phases.unauthorized.title;
-    let message =
-      t.phases.unauthorized.messages?.[phase] || t.phases.unauthorized.message;
-    let buttonText = getBackButtonText();
-
-    // Use specific messages for different block reasons
-    if (blockReason === "claimRejected") {
-      title = t.phases.claimRejected?.accessDenied?.title || "Claim Rejected";
-      message =
-        t.phases.claimRejected?.accessDenied?.message ||
-        "Your claim has been rejected. You cannot access the claim success page because your claim was rejected. Please check your email for more information.";
-      buttonText =
-        t.phases.claimRejected?.accessDenied?.back ||
-        "View Rejected Claim Details";
-    } else if (blockReason === "claimSuccess") {
-      title = t.phases.claimSuccess?.accessDenied?.title || "Claim Successful";
-      message =
-        t.phases.claimSuccess?.accessDenied?.message ||
-        "Your claim has been successfully processed. You cannot access the claim rejected page because your claim was successful. Please proceed with the next steps to complete your claim.";
-      buttonText =
-        t.phases.claimSuccess?.accessDenied?.back || "Return to Claim Success";
-    }
-
+  // Render Error Message if authorization fails and redirect doesn't happen
+  if (errorMessage) {
     return (
-      <main className="max-w-3xl mx-auto px-4 pt-8">
-        <ErrorMessage
-          title={title}
-          message={message}
-          buttonText={buttonText}
-          onButtonClick={() => {
-            // Navigate based on block reason
-            if (blockReason === "claimRejected") {
-              // Extract language from current path if present
-              const langMatch = pathname?.match(/^\/(de|en)/);
-              const langPrefix = langMatch ? langMatch[0] : "";
-              router.push(`${langPrefix}/phases/claim-rejected`);
-            } else if (blockReason === "claimSuccess") {
-              // Extract language from current path if present
-              const langMatch = pathname?.match(/^\/(de|en)/);
-              const langPrefix = langMatch ? langMatch[0] : "";
-              router.push(`${langPrefix}/phases/claim-success`);
-            } else {
-              // Get the appropriate phase to navigate to
-              const targetPhase = getAppropriatePhaseToNavigate();
-
-              // Extract language from current path if present
-              const langMatch = pathname?.match(/^\/(de|en)/);
-              const langPrefix = langMatch ? langMatch[0] : "";
-
-              // Get the path for the target phase
-              const phasePath = PHASE_PATHS[targetPhase];
-
-              // Navigate to the appropriate page
-              router.push(`${langPrefix}${phasePath}`);
-            }
-          }}
-        />
-      </main>
+      <div style={{ padding: "20px" }}>
+        <p className="text-red-600 font-semibold">Authorization Error</p>
+        <p className="text-red-500 mt-2">{errorMessage}</p>
+      </div>
     );
   }
 
-  // User is authorized, render the children
-  return (
-    <>
-      {children}
+  // Render children only if authorized
+  if (isAuthorized) {
+    return <>{children}</>;
+  }
 
-      {/* Debug overlay - only shown when debug_phase_guard=true is in the URL */}
-      {showDebug && (
-        <div className="fixed bottom-0 right-0 bg-black bg-opacity-80 text-white p-4 max-w-md max-h-96 overflow-auto text-xs z-50 m-2 rounded-lg">
-          <h2 className="text-sm font-bold mb-2">PhaseGuard Debug</h2>
-          <div className="grid grid-cols-2 gap-1">
-            <div>Current Phase:</div>
-            <div>{phase}</div>
-            <div>Store Current Phase:</div>
-            <div>{store.currentPhase}</div>
-            <div>Completed Phases:</div>
-            <div>{store.completedPhases?.join(", ") || "None"}</div>
-            <div>Completed Via Continue:</div>
-            <div>{store.phasesCompletedViaContinue?.join(", ") || "None"}</div>
-            <div>Is Authorized:</div>
-            <div>{isAuthorized ? "Yes" : "No"}</div>
-            <div>Claim Success:</div>
-            <div>{store._isClaimSuccess ? "Yes" : "No"}</div>
-            <div>Claim Rejected:</div>
-            <div>{store._isClaimRejected ? "Yes" : "No"}</div>
-          </div>
-          <div className="mt-2 pt-2 border-t border-gray-600">
-            <button
-              className="bg-red-500 text-white px-2 py-1 rounded text-xs mr-2"
-              onClick={() => setShowDebug(false)}
-            >
-              Close
-            </button>
-            <button
-              className="bg-blue-500 text-white px-2 py-1 rounded text-xs"
-              onClick={() => {
-                localStorage.removeItem("completedPhases");
-                localStorage.removeItem("phasesCompletedViaContinue");
-                localStorage.removeItem("currentPhase");
-                window.location.reload();
-              }}
-            >
-              Reset Phase Data
-            </button>
-          </div>
-        </div>
-      )}
-    </>
+  // Fallback if not authorized and not loading/error (should ideally be handled by redirect)
+  console.log(
+    `PhaseGuard: Rendering fallback (null) for phase ${expectedPhaseProp} as not authorized.`
   );
-};
+  return null;
+});
+
+PhaseGuard.displayName = "PhaseGuard";

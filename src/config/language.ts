@@ -1,13 +1,21 @@
-export const SUPPORTED_LANGUAGES = ['de', 'en'] as const;
-export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
+// Language configuration
+export const locales = ["de", "en"] as const;
+export type Locale = (typeof locales)[number];
 
-export const DEFAULT_LANGUAGE: SupportedLanguage = 'de';
+export const defaultLocale: Locale = "de";
 
-export const LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
-  de: 'Deutsch',
-  en: 'English',
+export function isValidLocale(locale: string | undefined): locale is Locale {
+  return !!locale && locales.includes(locale as Locale);
+}
+
+// Language display names (for UI)
+export const localeNames: Record<Locale, string> = {
+  en: "English",
+  de: "Deutsch",
 };
 
-export const isValidLanguage = (lang: string): lang is SupportedLanguage => {
-  return SUPPORTED_LANGUAGES.includes(lang as SupportedLanguage);
+// Language regions for locale-specific formatting
+export const localeRegions: Record<Locale, string> = {
+  en: "en-US",
+  de: "de-DE",
 };

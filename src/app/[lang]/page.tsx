@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { isValidLanguage } from "@/config/language";
+import { isValidLocale } from "@/config/language";
+import { setRequestLocale } from "next-intl/server";
 
 export type PageProps = {
   params: Promise<{ lang: string }>;
@@ -7,22 +8,29 @@ export type PageProps = {
 };
 
 export default async function Home({ params, searchParams }: PageProps) {
-  // Resolve the promises
-  const resolvedParams = await params;
+  // Access params asynchronously
+  const { lang } = await params;
+
+  // Set locale for this request
+  setRequestLocale(lang);
+
+  // Validate and use the lang parameter
+  const validLang = isValidLocale(lang) ? lang : "de";
+
+  // Get the shared_flight parameter (if any)
   const resolvedSearchParams = await searchParams;
+  const sharedFlightParam =
+    resolvedSearchParams.shared_flight &&
+    typeof resolvedSearchParams.shared_flight === "string"
+      ? resolvedSearchParams.shared_flight
+      : "";
 
-  // Handle the params on the server side
-  const lang = isValidLanguage(resolvedParams.lang)
-    ? resolvedParams.lang
-    : "de";
+  // Construct the path and search params separately
+  const path = "/phases/initial-assessment";
+  const searchString = sharedFlightParam
+    ? `?shared_flight=${sharedFlightParam}`
+    : "";
 
-  // Simply redirect to initial assessment page
-  // The shared_flight logic will be handled in initial-assessment page
-  redirect(
-    `/${lang}/phases/initial-assessment${
-      resolvedSearchParams.shared_flight
-        ? `?shared_flight=${resolvedSearchParams.shared_flight}`
-        : ""
-    }`
-  );
+  // Use Next.js built-in redirect function which works on both server and client
+  redirect(`/${validLang}${path}${searchString}`);
 }

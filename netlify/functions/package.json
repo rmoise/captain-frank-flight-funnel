@@ -1,6 +1,9 @@
 {
   "dependencies": {
+    "@netlify/functions": "^3.0.0",
     "@types/node-fetch": "^2.6.12",
+    "form-data": "^4.0.2",
+    "formidable": "^3.5.2",
     "node-fetch": "^2.7.0",
     "parse-multipart-data": "^1.5.0",
     "uuid": "^11.0.5"

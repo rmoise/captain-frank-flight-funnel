@@ -1,7 +1,8 @@
-import { Metadata } from 'next';
-import ClaimSubmittedPage from '@/app/phases/claim-submitted/page';
-import { isValidLanguage } from '@/config/language';
-import { getTranslation } from '@/translations';
+import { Metadata } from "next";
+import ClaimSubmitted from "@/app/phases/claim-submitted/page";
+import { isValidLocale } from "@/config/language";
+import { getTranslation } from "@/translations";
+import { setRequestLocale } from "next-intl/server";
 
 export type PageProps = {
   params?: Promise<{ lang: string }>;
@@ -11,8 +12,9 @@ export type PageProps = {
 export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
-  const resolvedParams = await params ?? { lang: 'de' };
-  const lang = isValidLanguage(resolvedParams.lang) ? resolvedParams.lang : 'de';
+  const resolvedParams = (await params) ?? { lang: "de" };
+  const lang = isValidLocale(resolvedParams.lang) ? resolvedParams.lang : "de";
+  await setRequestLocale(lang);
   const t = getTranslation(lang);
 
   return {
@@ -22,11 +24,11 @@ export async function generateMetadata({
 }
 
 export async function generateStaticParams() {
-  return [{ lang: 'de' }, { lang: 'en' }];
+  return [{ lang: "de" }, { lang: "en" }];
 }
 
-const Page = () => {
-  return <ClaimSubmittedPage />;
+const ClaimSubmittedPage = async () => {
+  return <ClaimSubmitted />;
 };
 
-export default Page;
+export default ClaimSubmittedPage;
