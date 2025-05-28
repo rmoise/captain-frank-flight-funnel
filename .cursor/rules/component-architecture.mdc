@@ -1,0 +1,204 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# Component Architecture Guidelines
+
+## Directory Structure
+
+Our components are organized in a feature-first approach under `src/components/`:
+
+```
+src/components/
+├── booking/           # Booking-related components
+├── claim/            # Claim process components
+├── common/           # Shared business components
+├── forms/            # Form-specific components
+├── layouts/          # Layout components
+├── modals/           # Modal components
+├── navigation/       # Navigation components
+├── phases/           # Phase-specific components
+├── providers/        # Context providers
+├── shared/           # Shared utility components
+├── ui/               # Base UI components
+└── wizard/           # Wizard flow components
+```
+
+## Component Categories
+
+### 1. Base UI Components (`ui/`)
+- Atomic, reusable components
+- No business logic
+- Examples: Button, Input, Card
+- Should be documented in a component library
+
+### 2. Shared Components (`shared/`)
+- Utility components used across features
+- Minimal business logic
+- Examples: ErrorBoundary, LoadingSpinner
+
+### 3. Feature Components
+- Business logic specific to a feature
+- Can compose UI and shared components
+- Examples: FlightSelector, ClaimForm
+
+### 4. Layout Components (`layouts/`)
+- Page structure components
+- Handle responsive design
+- Examples: MainLayout, SidebarLayout
+
+### 5. Provider Components (`providers/`)
+- Context providers
+- Global state management
+- Examples: ThemeProvider, LocaleProvider
+
+## Component Implementation Rules
+
+### 1. File Structure
+```typescript
+// ComponentName.tsx
+import { type Dependencies } from './types'
+import { useComponentLogic } from './hooks'
+import { SubComponent } from './components'
+import styles from './styles'
+
+export const ComponentName = ({ prop1, prop2 }: Props) => {
+  // Implementation
+}
+
+// index.ts
+export { ComponentName } from './ComponentName'
+export type { ComponentProps } from './types'
+```
+
+### 2. Props Interface
+- Always define and export props interface
+- Use descriptive names
+- Document complex props
+- Example:
+```typescript
+export interface ComponentProps {
+  /** Description of the prop */
+  data: DataType
+  /** Optional callback */
+  onChange?: (value: string) => void
+}
+```
+
+### 3. Component Organization
+- One main component per file
+- Co-locate related files
+- Export from index.ts
+- Example structure:
+```
+ComponentName/
+├── index.ts
+├── ComponentName.tsx
+├── components/
+│   └── SubComponent.tsx
+├── hooks/
+│   └── useComponentLogic.ts
+├── types.ts
+└── styles.ts
+```
+
+### 4. State Management
+- Use hooks for complex logic
+- Keep components focused
+- Lift state when needed
+- Example:
+```typescript
+const useComponentLogic = (props: Props) => {
+  // Component logic
+  return { state, actions }
+}
+```
+
+### 5. Testing
+- Test business logic in hooks
+- Test component rendering
+- Test user interactions
+- Example:
+```typescript
+describe('ComponentName', () => {
+  it('renders correctly', () => {
+    // Test implementation
+  })
+})
+```
+
+## Best Practices
+
+### 1. Component Design
+- Single responsibility
+- Composable and reusable
+- Consistent naming
+- Clear props API
+
+### 2. Performance
+- Memoize when needed
+- Lazy load large components
+- Optimize re-renders
+- Use performance hooks
+
+### 3. Accessibility
+- Semantic HTML
+- ARIA attributes
+- Keyboard navigation
+- Color contrast
+
+### 4. Error Handling
+- Use ErrorBoundary
+- Graceful degradation
+- Clear error states
+- User feedback
+
+## Common Patterns
+
+### 1. Container Pattern
+```typescript
+// Container.tsx
+export const Container = (props) => {
+  const { data, actions } = useContainerLogic(props)
+  return <Presentation data={data} {...actions} />
+}
+
+// Presentation.tsx
+export const Presentation = ({ data, ...actions }) => {
+  // UI implementation
+}
+```
+
+### 2. Compound Components
+```typescript
+const Select = {
+  Root: SelectRoot,
+  Option: SelectOption,
+  Group: SelectGroup,
+}
+
+// Usage
+<Select.Root>
+  <Select.Group>
+    <Select.Option />
+  </Select.Group>
+</Select.Root>
+```
+
+### 3. Render Props
+```typescript
+interface RenderProps {
+  render: (props: { data: Data }) => ReactNode
+}
+
+const Component = ({ render }: RenderProps) => {
+  const data = useData()
+  return render({ data })
+}
+```
+
+## Related Documents
+- [Store Patterns](mdc:store-patterns.mdc)
+- [TypeScript Guidelines](mdc:typescript-guidelines.mdc)
+- [Testing Guidelines](mdc:testing-guidelines.mdc)

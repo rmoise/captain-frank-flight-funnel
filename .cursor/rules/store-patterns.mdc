@@ -1,0 +1,82 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# Store Patterns & Best Practices
+
+## State Management Patterns
+
+### Single Source of Truth
+- Use the main store as the single source of truth
+- Avoid duplicate state across stores
+- Maintain clear data ownership in slices
+
+### Type Safety
+- Define comprehensive types for all state
+- Use TypeScript strict mode
+- Maintain type consistency across the application
+
+### Actions
+- Use descriptive action names
+- Implement atomic updates
+- Maintain clear action boundaries between phases
+- Document side effects
+
+## Code Organization
+
+### Store Implementation
+```typescript
+// Store slice example
+interface SliceState {
+  data: DataType;
+  status: 'idle' | 'loading' | 'error';
+}
+
+interface SliceActions {
+  updateData: (data: DataType) => void;
+  resetState: () => void;
+}
+
+const createSlice = (set) => ({
+  // State
+  data: initialData,
+  status: 'idle',
+
+  // Actions
+  updateData: (data) => set({ data }),
+  resetState: () => set({ data: initialData, status: 'idle' })
+});
+```
+
+### Component Usage
+```typescript
+// Component example
+const MyComponent = () => {
+  const { data, updateData } = useStore(
+    (state) => ({
+      data: state.data,
+      updateData: state.updateData
+    })
+  );
+
+  // Use store data and actions...
+};
+```
+
+## Best Practices
+
+1. **State Updates**
+   - Use immer for complex updates
+   - Avoid nested state mutations
+   - Implement proper cleanup
+
+2. **Performance**
+   - Use selective subscriptions
+   - Implement proper memoization
+   - Avoid unnecessary rerenders
+
+3. **Error Handling**
+   - Maintain error state per slice
+   - Implement proper error recovery
+   - Log errors appropriately

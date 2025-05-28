@@ -1,33 +1,10 @@
-"use client";
-
-import { LoadingProvider } from "@/providers/LoadingProvider";
-import { NavigationProvider } from "@/components/providers/NavigationProvider";
 import "./globals.css";
 import "@/styles/autofill.css";
-import Script from "next/script";
-import { HotjarScript } from "@/components/shared/HotjarScript";
-import { useParams } from "next/navigation";
 import { heebo } from "@/fonts";
-import { isValidLanguage } from "@/config/language";
-import dynamic from "next/dynamic";
 
-// Dynamically import DebugPanel with no SSR to avoid hydration issues
-const DebugPanel = dynamic(() => import("@/components/shared/DebugPanel"), {
-  ssr: false,
-});
-
-// Create a client component for Cookiebot
-const CookiebotScript = () => {
-  return (
-    <Script
-      id="Cookiebot"
-      src="https://consent.cookiebot.com/uc.js"
-      data-cbid="4812d2c5-a615-4c7f-80ba-ed2014b5a07c"
-      data-blockingmode="auto"
-      data-culture="de"
-      strategy="afterInteractive"
-    />
-  );
+export const metadata = {
+  title: "Captain Frank Fresh",
+  description: "Get compensation for your flight delays and cancellations",
 };
 
 export default function RootLayout({
@@ -35,65 +12,11 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const params = useParams();
-  const langParam = params?.lang;
-  const lang =
-    typeof langParam === "string" && isValidLanguage(langParam)
-      ? langParam
-      : "de";
-
+  // Root layout must define an html and body
+  // This layout will be inherited by all nested layouts
   return (
-    <html lang={lang} className={`${heebo.variable}`} suppressHydrationWarning>
-      <head>
-        <CookiebotScript />
-        <meta
-          name="viewport"
-          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
-        />
-        <Script id="google-consent-mode" strategy="beforeInteractive">
-          {`
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-
-            gtag('consent', 'default', {
-              'ad_user_data': 'denied',
-              'ad_personalization': 'denied',
-              'ad_storage': 'denied',
-              'analytics_storage': 'denied',
-              'functionality_storage': 'denied',
-              'personalization_storage': 'denied',
-              'security_storage': 'granted'
-            });
-          `}
-        </Script>
-        <Script id="google-tag-manager" strategy="afterInteractive">
-          {`
-            (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-            new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-            j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-            'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-            })(window,document,'script','dataLayer','GTM-MBBVJT3C');
-          `}
-        </Script>
-        <HotjarScript />
-      </head>
-      <body suppressHydrationWarning className="overflow-x-hidden">
-        <noscript>
-          <iframe
-            src="https://www.googletagmanager.com/ns.html?id=GTM-MBBVJT3C"
-            height="0"
-            width="0"
-            style={{ display: "none", visibility: "hidden" }}
-          />
-        </noscript>
-        <NavigationProvider>
-          <LoadingProvider>
-            <div className="relative w-full overflow-x-hidden">{children}</div>
-            {/* Add the debug panel but only in development environment */}
-            {process.env.NODE_ENV === "development" && <DebugPanel />}
-          </LoadingProvider>
-        </NavigationProvider>
-      </body>
+    <html lang="de" className={heebo.variable} suppressHydrationWarning>
+      <body suppressHydrationWarning>{children}</body>
     </html>
   );
 }

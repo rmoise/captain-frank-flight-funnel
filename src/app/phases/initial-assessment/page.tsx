@@ -1,1828 +1,465 @@
 "use client";
 
-import React, {
-  useEffect,
-  useState,
-  useCallback,
-  useMemo,
-  useRef,
-} from "react";
-import { AccordionCard } from "@/components/shared/AccordionCard";
-import type { Flight, Answer, PassengerDetails } from "@/types/store";
-import { ModularFlightSelector } from "@/components/booking/ModularFlightSelector";
-import QAWizardWrapper from "@/components/wizard/QAWizardWrapper";
-import { PersonalDetailsForm } from "@/components/forms/PersonalDetailsForm";
-import { ConsentCheckbox } from "@/components/ConsentCheckbox";
-import { SpeechBubble } from "@/components/SpeechBubble";
-import type { Question } from "@/types/experience";
-import { useRouter, useSearchParams } from "next/navigation";
-import { pushToDataLayer } from "@/utils/gtm";
-import { useFlightStore } from "@/lib/state/flightStore";
-import type {
-  ValidationStep,
-  FlightSegment,
-  ValidationState,
-  StoreState,
-} from "@/lib/state/types";
-import { PhaseNavigation } from "@/components/PhaseNavigation";
-import { ContinueButton } from "@/components/shared/ContinueButton";
-import { AccordionProvider } from "@/components/shared/AccordionContext";
-import { accordionConfig } from "@/config/accordion";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { useTranslation } from "@/hooks/useTranslation";
-import type { FlightSelectorProps } from "@/components/booking/ModularFlightSelector/types";
-import type { LocationLike } from "@/types/location";
-import useStore, { getLanguageAwareUrl } from "@/lib/state/store";
-import type { Store } from "@/lib/state/store";
-import type { LocationData } from "@/types/store";
-import { getWizardQuestions } from "@/constants/wizardQuestions";
-import { debounce } from "lodash";
-import { processLocation } from "@/lib/state/slices/flightSlice";
-import {
-  saveContactId,
-  verifyContactId,
-  checkContactIdBeforeNavigation,
-  ensureContactId,
-} from "@/utils/contactId";
+import useStore from "@/store";
+import { ValidationPhase } from "@/types/shared/validation";
+import { AccordionCardClient } from "@/components/shared/accordion/AccordionCardClient";
+import { PersonalDetailsForm } from "@/components/shared/forms/PersonalDetailsForm";
+import { ConsentCheckbox } from "@/components/shared/forms/ConsentCheckbox";
+import type { ConsentType } from "@/types/shared/forms";
+import type { PassengerDetails } from "@/types/shared/user";
+import { ModularFlightSelector } from "@/components/shared/ModularFlightSelector";
+import { BackButton } from "@/components/ui/button/BackButton";
+import { ContinueButton } from "@/components/ui/button/ContinueButton";
+import { Phase1QAWizard } from "@/components/shared/wizard/Phase1QAWizard";
+import { getInitialAssessmentQuestions } from "@/components/shared/wizard/Phase1QAWizard/initialAssessmentQuestions";
+import { Success } from "@/components/shared/wizard/Success";
+import { Translations } from "@/translations/types";
+import { SpeechBubble } from "@/components/ui/display/SpeechBubble";
+import { PhaseNavigation } from "@/components/shared/navigation/PhaseNavigation";
+import React from "react";
+import { heebo } from "@/fonts"; // Import the font
+import { AccordionProvider } from "@/components/shared/accordion/AccordionContext";
 
-type StepState = {
-  selectedType: "direct" | "multi";
-  directFlight: FlightSegment;
-  flightSegments: FlightSegment[];
-  fromLocation: LocationLike | null;
-  toLocation: LocationLike | null;
-  wizardAnswers: Answer[];
-  personalDetails: PassengerDetails | null;
-  termsAccepted: boolean;
-  privacyAccepted: boolean;
-  validationState: ValidationState;
-};
-
-type Step = {
-  id: ValidationStep;
-  name: string;
-  title: string;
-  subtitle?: string;
-  component: StepComponent;
-  props:
-    | FlightSelectorProps
-    | QAWizardProps
-    | PersonalDetailsFormProps
-    | TermsAndConditionsProps;
-  getSummary: (state: StepState) => string;
-  shouldStayOpen?: boolean;
-  isOpenByDefault?: boolean;
-};
-
-interface QAWizardProps {
-  questions: Question[];
-  onComplete: (answers: Answer[]) => void;
-  onInteract: () => void;
-  phase: number;
-  stepNumber: ValidationStep;
-  selectedFlights: Flight[];
+// Define a compatible type to match the ExtendedPassengerDetails in the form
+interface ExtendedPassengerDetails extends PassengerDetails {
+  salutation: string;
 }
 
-interface PersonalDetailsFormProps {
-  onComplete: (details: PassengerDetails | null) => void;
-  onInteract: () => void;
-  isClaimSuccess?: boolean;
-  showAdditionalFields?: boolean;
-}
+const createTranslationsAdapter = (t: any): Translations =>
+  ({
+    lang: "de", // Set German as default language
+    common: {
+      next: t("common.next"),
+      back: t("common.back"),
+      submit: t("common.submit"),
+      cancel: t("common.cancel"),
+      continue: t("common.continue"),
+      loading: t("common.loading"),
+      error: t("common.error"),
+      success: t("common.success"),
+      dateFormat: t("common.dateFormat"),
+      enterAmount: t("common.enterAmount"),
+      noResults: t("common.noResults"),
+      required: t("common.required"),
+      enterMinChars: t("common.enterMinChars"),
+      finish: t("common.finish"),
+    },
+    wizard: {
+      questions: {
+        issueType: {
+          text: t("wizard.questions.issueType.text"),
+          options: {
+            delay: t("wizard.questions.issueType.options.delay"),
+            cancel: t("wizard.questions.issueType.options.cancel"),
+            missed: t("wizard.questions.issueType.options.missed"),
+            other: t("wizard.questions.issueType.options.other"),
+          },
+        },
+        delayDuration: {
+          text: t("wizard.questions.delayDuration.text"),
+          options: {
+            lessThan2: t("wizard.questions.delayDuration.options.lessThan2"),
+            between2And3: t(
+              "wizard.questions.delayDuration.options.between2And3"
+            ),
+            moreThan3: t("wizard.questions.delayDuration.options.moreThan3"),
+          },
+        },
+      },
+      success: {
+        answersSaved: t("wizard.success.answersSaved"),
+      },
+    },
+    // Add other required translation fields as needed
+  } as Translations);
 
-interface TermsAndConditionsProps {
-  onInteract: () => void;
-}
-
-type StepComponent =
-  | typeof ModularFlightSelector
-  | typeof QAWizardWrapper
-  | typeof PersonalDetailsForm
-  | React.FC<TermsAndConditionsProps>;
-
-interface ExtendedStore extends Omit<Store, "fromLocation" | "toLocation"> {
-  selectedType: "direct" | "multi";
-  directFlight: FlightSegment;
-  flightSegments: FlightSegment[];
-  fromLocation: LocationLike | null;
-  toLocation: LocationLike | null;
-  activeAccordion: string | null;
-  initialAccordion: string | null;
-  wizardQuestions: Question[];
-  isFirstVisit: boolean;
-  isInitialized: boolean;
-  setIsFirstVisit: (value: boolean) => void;
-  setIsInitialized: (value: boolean) => void;
-  canProceedToNextPhase: () => boolean;
-  setWizardAnswers: (answers: Answer[]) => void;
-  markWizardComplete: (wizardId: string) => void;
-  setPersonalDetails: (details: PassengerDetails | null) => void;
-  setFlightSegments: (segments: FlightSegment[]) => void;
-  completePhase: (phase: number) => void;
-  batchUpdateWizardState: (updates: Partial<StoreState>) => void;
-  validationState: ValidationState;
-  updateValidationState: (state: Partial<ValidationState>) => void;
-}
-
-interface Phase1State {
-  fromLocation?: LocationLike | null;
-  toLocation?: LocationLike | null;
-  selectedType?: "direct" | "multi";
-  directFlight?: FlightSegment;
-  flightSegments?: FlightSegment[];
-  phase?: number;
-  _timestamp?: number;
-  _explicitlyCompleted?: boolean;
-  _completedTimestamp?: number;
-  _forcedByHandleContinue?: boolean;
-  validationState?: ValidationState;
-  [key: string]: any; // Allow for other properties
-}
-
-const handleStepInteraction = (
-  step: ValidationStep,
-  setInteractedSteps: React.Dispatch<React.SetStateAction<ValidationStep[]>>
-) => {
-  setInteractedSteps((prev: ValidationStep[]) => {
-    const newSteps = [...prev, step];
-    return Array.from(new Set(newSteps)) as ValidationStep[];
-  });
-};
-
-const validateStepState = (
-  state: ExtendedStore,
-  step: ValidationStep
-): boolean => {
-  const validationState = state.validationState;
-  if (!validationState?.stepValidation || !validationState?.stepInteraction)
-    return false;
-
-  // Consider completed steps directly and check for flight data for step 1
-  if (step === 1) {
-    // Check if step 1 is already marked as completed
-    if (validationState.stepCompleted?.[1]) return true;
-
-    // Check if we have valid flight data
-    const hasFromLocation = !!(
-      state.fromLocation || state.directFlight?.fromLocation
-    );
-    const hasToLocation = !!(
-      state.toLocation || state.directFlight?.toLocation
-    );
-
-    // For direct flights, check if both locations are valid
-    if (state.selectedType === "direct") {
-      return hasFromLocation && hasToLocation;
-    }
-    // For multi-stop flights, check if all segments have valid from/to locations
-    else if (
-      state.selectedType === "multi" &&
-      state.flightSegments &&
-      state.flightSegments.length > 1
-    ) {
-      const allSegmentsValid = state.flightSegments.every(
-        (segment) => segment.fromLocation && segment.toLocation
-      );
-      return allSegmentsValid;
-    }
+// Helper function to format step text
+const formatStepText = (t: any, current: string, total: string) => {
+  const template = t("phases.initialAssessment.stepProgress");
+  if (template.includes("{current}") && template.includes("{total}")) {
+    return template.replace("{current}", current).replace("{total}", total);
   }
-
-  // Standard validation check
-  return !!(
-    validationState.stepValidation[step] &&
-    validationState.stepInteraction[step]
-  );
+  // Fallback if the translation doesn't have placeholders
+  const step = t("phases.initialAssessment.step");
+  return `${step} ${current}/${total}`;
 };
 
-export default function InitialAssessment() {
-  const router = useRouter();
+const InitialAssessmentPage = () => {
+  console.log(
+    "[InitialAssessmentPage] Component rendering, Font variable:",
+    heebo.variable
+  ); // Log font variable
   const { t } = useTranslation();
-  const storeBase = useStore();
-  const store = {
-    ...storeBase,
-    activeAccordion: null,
-    initialAccordion: null,
-  } as ExtendedStore;
-  const flightStore = useFlightStore();
-  const [interactedSteps, setInteractedSteps] = useState<ValidationStep[]>([]);
-  const [mounted, setMounted] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [openSteps, setOpenSteps] = useState<ValidationStep[]>(() => {
-    // Only open step 1 by default on first visit
-    if (typeof window !== "undefined") {
-      const hasVisited = localStorage.getItem("hasVisitedInitialAssessment");
-      return hasVisited ? [] : [1];
-    }
-    return [];
-  });
-  const initializationRef = useRef(false);
-  const lastUpdateRef = useRef(0);
-  // Add searchParams
-  const searchParams = useSearchParams();
+  const adaptedT = useMemo(() => createTranslationsAdapter(t), [t]);
+  const router = useRouter();
 
-  // Add refs to track interaction state for each step
-  const stepInteractionRef = useRef<{ [key: number]: boolean }>({});
+  // --- State declarations FIRST ---
+  const [isLoading, setIsLoading] = useState(false);
+  const [
+    hasInteractedWithPersonalDetails,
+    setHasInteractedWithPersonalDetails,
+  ] = useState(false);
+  const [hasInteractedWithTerms, setHasInteractedWithTerms] = useState(false);
+  const [hasInteractedWithFlight, setHasInteractedWithFlight] = useState(false);
+  const [hasInteractedWithQA, setHasInteractedWithQA] = useState(false);
+  const [showQASuccess, setShowQASuccess] = useState(false);
+  const [wizardConfettiStatus, setWizardConfettiStatus] = useState(false);
+  // Remove redundant local state and use Zustand directly
+  // --------------------------------
 
-  // Move the onInteract callback to component level and memoize it
-  const handleQAWizardInteract = useCallback(() => {
-    // Skip if already interacted with this step in this render cycle
-    if (stepInteractionRef.current[2]) return;
+  // --- Select validation state reactively using useStore ---
+  const storeCoreInitialized = useStore((state) => state.core.isInitialized);
+  const isStep1Valid = useStore(
+    (state) =>
+      state.validation.stepValidation?.[ValidationPhase.INITIAL_ASSESSMENT] ===
+      true
+  );
+  const isStep2Complete = showQASuccess;
 
-    // Mark this step as interacted with
-    stepInteractionRef.current[2] = true;
+  // Use the validation state from the store for Personal Details step completion
+  const isStep3Complete = useStore(
+    (state) =>
+      state.validation.stepValidation?.[ValidationPhase.PERSONAL_DETAILS] ===
+        true &&
+      // Also ensure that the essential details are actually present,
+      // as validation might be true from a previous state with different data.
+      !!(
+        state.user.details &&
+        state.user.details.salutation &&
+        state.user.details.firstName &&
+        state.user.details.lastName &&
+        state.user.details.email
+      )
+  );
 
-    // Use a callback reference to ensure we're working with the latest state
-    // This helps prevent state update loops
-    setInteractedSteps((prev: ValidationStep[]) => {
-      const newStep = 2 as ValidationStep;
-      // Check if the step is already in the array to prevent unnecessary updates
-      if (prev.includes(newStep)) {
-        return prev;
-      }
-      return Array.from(new Set([...prev, newStep])) as ValidationStep[];
-    });
-  }, []);
-
+  // Access consent data from Zustand directly
   const {
-    currentPhase,
-    validationState: storeValidationState,
-    wizardAnswers,
-    personalDetails,
-    selectedFlights,
-    termsAccepted,
-    privacyAccepted,
-    marketingAccepted,
-    setTermsAccepted: setTermsAcceptedStore,
-    setPrivacyAccepted: setPrivacyAcceptedStore,
-    setMarketingAccepted: setMarketingAcceptedStore,
-    updateValidationState,
-  } = store;
+    terms: termsAccepted,
+    privacy: privacyAccepted,
+    marketing: marketingAccepted,
+  } = useStore((state) => state.user.consents);
+  const isStep4Complete = termsAccepted && privacyAccepted;
+  // -------------------------------------------------------
 
-  // Add controlled logging function to limit log frequency
-  const loggingRef = useRef({
-    lastLogTime: 0,
-    lastLogType: "",
-  });
+  const questionsRef = useRef<any>(null);
 
-  const controlledLog = (type: string, data: any) => {
-    const now = Date.now();
-    // Only log the same type of message once every 3 seconds
-    if (
-      now - loggingRef.current.lastLogTime > 3000 ||
-      loggingRef.current.lastLogType !== type
-    ) {
-      console.log(`=== Initial Assessment - ${type} ===`, {
-        ...data,
-        timestamp: new Date().toISOString(),
-      });
-      loggingRef.current = {
-        lastLogTime: now,
-        lastLogType: type,
-      };
-    }
-  };
-
-  // For error logs
-  const errorLogRef = useRef({
-    lastErrorTime: 0,
-    lastErrorType: "",
-  });
-
-  const controlledErrorLog = (type: string, error: any) => {
-    const now = Date.now();
-    // Only log the same type of error once every 5 seconds
-    if (
-      now - errorLogRef.current.lastErrorTime > 5000 ||
-      errorLogRef.current.lastErrorType !== type
-    ) {
-      console.error(`=== Initial Assessment - ${type} ===`, error);
-      errorLogRef.current = {
-        lastErrorTime: now,
-        lastErrorType: type,
-      };
-    }
-  };
-
-  // Prevent rapid state updates
-  const safeUpdateValidationState = useCallback(
-    (newState: Partial<ValidationState>) => {
-      const now = Date.now();
-      if (now - lastUpdateRef.current < 500) {
-        return; // Skip update if less than 500ms since last update
-      }
-      lastUpdateRef.current = now;
-      updateValidationState(newState);
-    },
-    [updateValidationState]
+  // Memoize the questions for Phase1QAWizard
+  const wizardQuestions = useMemo(
+    () => getInitialAssessmentQuestions(adaptedT),
+    [adaptedT]
   );
 
-  // Save state to localStorage with debounce
-  const saveStateToLocalStorage = useCallback(
-    debounce((state: Partial<StoreState>) => {
-      if (!mounted || isLoading) return;
-      localStorage.setItem("captain-frank-state", JSON.stringify({ state }));
-    }, 1000),
-    [mounted, isLoading]
-  );
-
-  // Save state to localStorage with debounce
-  useEffect(() => {
-    if (!mounted || isLoading) return;
-
-    const stateToSave = {
-      personalDetails,
-      wizardAnswers,
-      selectedFlights,
-      termsAccepted,
-      privacyAccepted,
-      marketingAccepted,
-      validationState: {
-        ...storeValidationState,
-        isWizardValid: wizardAnswers?.length > 0,
-        isWizardSubmitted: wizardAnswers?.length > 0,
-        stepValidation: {
-          ...storeValidationState.stepValidation,
-          2: wizardAnswers?.length > 0,
-        },
-        stepInteraction: {
-          ...storeValidationState.stepInteraction,
-          2: wizardAnswers?.length > 0,
-        },
-        _timestamp: Date.now(),
-      },
-      wizardIsCompleted: wizardAnswers?.length > 0,
-      wizardIsValid: wizardAnswers?.length > 0,
-      wizardShowingSuccess: wizardAnswers?.length > 0,
-    };
-
-    saveStateToLocalStorage(stateToSave);
-  }, [
-    mounted,
-    isLoading,
-    personalDetails,
-    wizardAnswers,
-    selectedFlights,
-    termsAccepted,
-    privacyAccepted,
-    marketingAccepted,
-    storeValidationState,
-    saveStateToLocalStorage,
-  ]);
-
-  const isQAWizardValid = useMemo(() => {
-    if (!wizardAnswers || wizardAnswers.length === 0) return false;
-    return (
-      storeValidationState.isWizardValid &&
-      storeValidationState.isWizardSubmitted
-    );
-  }, [wizardAnswers, storeValidationState]);
-
-  const handleFlightSelect = useCallback(
-    (flight: Flight) => {
-      console.log("=== Initial Assessment - Flight Selection START ===", {
-        flight: {
-          id: flight.id,
-          flightNumber: flight.flightNumber,
-          departureCity: flight.departureCity,
-          arrivalCity: flight.arrivalCity,
-        },
-        currentPhase,
-        timestamp: new Date().toISOString(),
-      });
-
-      // Update flight store
-      flightStore.setSelectedFlights(1, [flight]);
-
-      // Update store validation state
-      safeUpdateValidationState({
-        isFlightValid: true,
-        stepValidation: {
-          ...storeValidationState.stepValidation,
-          [currentPhase]: true,
-        },
-        stepInteraction: {
-          ...storeValidationState.stepInteraction,
-          [currentPhase]: true,
-        },
-        _timestamp: Date.now(),
-      });
-
-      // Push to data layer
-      pushToDataLayer({
-        step_position: currentPhase,
-        dlv_provision: parseInt(flight.id, 10),
-      });
-
-      console.log("=== Initial Assessment - Flight Selection COMPLETE ===", {
-        validationState: {
-          isFlightValid: true,
-          stepValidation: {
-            ...storeValidationState.stepValidation,
-            [currentPhase]: true,
-          },
-        },
-        timestamp: new Date().toISOString(),
-      });
-    },
-    [
-      store,
-      flightStore,
-      safeUpdateValidationState,
-      storeValidationState,
-      currentPhase,
-    ]
-  );
-
-  // Handle QA wizard completion
-  const handleComplete = useCallback(
-    (answers: Answer[]) => {
-      // Immediately open step 3 before any state updates
-      const accordionContext = (window as any).__accordionContext;
-      if (accordionContext?.setOpenAccordions) {
-        accordionContext.setOpenAccordions(new Set(["1", "2", "3"]));
-      }
-
-      store.setWizardAnswers(answers);
-      store.markWizardComplete("initial_assessment");
-
-      // Update validation state for step 2
-      safeUpdateValidationState({
-        ...storeValidationState,
-        stepValidation: {
-          ...storeValidationState.stepValidation,
-          2: true,
-        },
-        stepInteraction: {
-          ...storeValidationState.stepInteraction,
-          2: true,
-        },
-        stepCompleted: {
-          ...storeValidationState.stepCompleted,
-          2: true,
-        },
-        completedSteps: Array.from(
-          new Set([...storeValidationState.completedSteps, 2])
-        ),
-        isWizardValid: true,
-        isWizardSubmitted: true,
-        _timestamp: Date.now(),
-      });
-
-      // Set interacted steps
-      setInteractedSteps((prev: ValidationStep[]) => {
-        const newSteps = [...prev, 2 as ValidationStep];
-        return Array.from(new Set(newSteps)) as ValidationStep[];
-      });
-    },
-    [store, safeUpdateValidationState, storeValidationState, setInteractedSteps]
-  );
-
-  // Handle personal details completion
-  const handlePersonalDetailsComplete = useCallback(
-    async (details: PassengerDetails) => {
-      if (!details) return;
-
-      // Update personal details first
-      store.setPersonalDetails(details);
-
-      // Save to localStorage immediately
-      const currentState = useStore.getState();
-      localStorage.setItem(
-        "captain-frank-state",
-        JSON.stringify({
-          state: {
-            ...currentState,
-            personalDetails: details,
-            _lastUpdate: Date.now(),
-          },
-        })
-      );
-
-      // Then update validation state
-      safeUpdateValidationState({
-        stepValidation: {
-          ...storeValidationState.stepValidation,
-          3: true,
-        },
-        stepInteraction: {
-          ...storeValidationState.stepInteraction,
-          3: true,
-        },
-        isPersonalValid: true,
-        _timestamp: Date.now(),
-      });
-
-      // Update local state
-      setInteractedSteps((prev) => Array.from(new Set([...prev, 3])));
-
-      // Delay accordion update
-      setTimeout(() => {
-        const accordionContext = (window as any).__accordionContext;
-        if (accordionContext?.setOpenAccordions) {
-          accordionContext.setOpenAccordions(new Set(["1", "2", "3", "4"]));
-        }
-      }, 100);
-    },
-    [store, safeUpdateValidationState, storeValidationState, setInteractedSteps]
-  );
-
-  // Handle terms acceptance
-  const handleTermsChange = useCallback(
-    (field: string) => (checked: boolean) => {
-      let isValid = false;
-      let newTermsAccepted = termsAccepted;
-      let newPrivacyAccepted = privacyAccepted;
-      let newMarketingAccepted = marketingAccepted;
-
-      switch (field) {
-        case "hasAcceptedTerms":
-          store.setTermsAccepted(checked);
-          newTermsAccepted = checked;
-          isValid = checked && privacyAccepted;
-          break;
-        case "hasAcceptedPrivacy":
-          store.setPrivacyAccepted(checked);
-          newPrivacyAccepted = checked;
-          isValid = termsAccepted && checked;
-          break;
-        case "hasAcceptedMarketing":
-          store.setMarketingAccepted(checked);
-          newMarketingAccepted = checked;
-          // Update HubSpot contact with marketing status
-          const contactId = sessionStorage.getItem("hubspot_contact_id");
-          if (contactId) {
-            fetch("/.netlify/functions/hubspot-integration/contact", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                contactId,
-                arbeitsrecht_marketing_status: checked,
-              }),
-            }).catch((error) => {
-              console.error("Error updating HubSpot marketing status:", error);
-            });
-          }
-          // Marketing acceptance doesn't affect validation
-          isValid = termsAccepted && privacyAccepted;
-          break;
-      }
-
-      // Update validation state immediately
-      const validationUpdate = {
-        stepValidation: {
-          ...storeValidationState.stepValidation,
-          4: isValid,
-        },
-        stepInteraction: {
-          ...storeValidationState.stepInteraction,
-          4: true,
-        },
-        stepCompleted: {
-          ...storeValidationState.stepCompleted,
-          4: isValid,
-        },
-        isTermsValid: isValid,
-        _timestamp: Date.now(),
-      };
-
-      safeUpdateValidationState(validationUpdate);
-
-      // Save state to localStorage in multiple formats to ensure persistence
-      const currentState = {
-        ...store.getState(),
-        termsAccepted: newTermsAccepted,
-        privacyAccepted: newPrivacyAccepted,
-        marketingAccepted: newMarketingAccepted,
-        validationState: {
-          ...storeValidationState,
-          ...validationUpdate,
-        },
-      };
-
-      // Save the full phase state
-      localStorage.setItem("phase1State", JSON.stringify(currentState));
-
-      // Also save individual checkbox states for redundancy
-      try {
-        localStorage.setItem("termsAccepted", JSON.stringify(newTermsAccepted));
-        localStorage.setItem(
-          "privacyAccepted",
-          JSON.stringify(newPrivacyAccepted)
-        );
-        localStorage.setItem(
-          "marketingAccepted",
-          JSON.stringify(newMarketingAccepted)
-        );
-
-        console.log("=== Checkbox States Saved to LocalStorage ===", {
-          termsAccepted: newTermsAccepted,
-          privacyAccepted: newPrivacyAccepted,
-          marketingAccepted: newMarketingAccepted,
-          timestamp: new Date().toISOString(),
-        });
-      } catch (e) {
-        console.error("Error saving checkbox states to localStorage:", e);
-      }
-
-      // Log validation update
-      console.log("=== Terms Validation Update ===", {
-        field,
-        checked,
-        isValid,
-        newTermsAccepted,
-        newPrivacyAccepted,
-        newMarketingAccepted,
-        validationState: validationUpdate,
-        timestamp: new Date().toISOString(),
-      });
-
-      // Set interacted steps
-      setInteractedSteps((prev: ValidationStep[]) => {
-        const newSteps = [...prev, 4 as ValidationStep];
-        return Array.from(new Set(newSteps)) as ValidationStep[];
-      });
-    },
-    [
-      store,
-      termsAccepted,
-      privacyAccepted,
-      safeUpdateValidationState,
-      storeValidationState,
-      setInteractedSteps,
-    ]
-  );
-
-  // Initialize state
-  useEffect(() => {
-    // Skip if already initialized via ref
-    if (initializationRef.current) {
-      return;
-    }
-
-    // Set mounted state only once on component mount
-    if (!mounted) {
-      setMounted(true);
-
-      // Check if this is the first visit - only do this once when mounting
-      const hasVisited = localStorage.getItem("hasVisitedInitialAssessment");
-      if (!hasVisited) {
-        localStorage.setItem("hasVisitedInitialAssessment", "true");
-        // Set isFirstVisit to true on first visit
-        store.setIsFirstVisit(true);
-      } else {
-        store.setIsFirstVisit(false);
-      }
-    }
-
-    // Skip if already initialized in store
-    if (store.isInitialized) {
-      controlledLog("Already Initialized", {
-        fromLocation: store.fromLocation,
-        toLocation: store.toLocation,
-        selectedType: store.selectedType,
-      });
-      setIsLoading(false);
-      return;
-    }
-
-    // Set initialization flag
-    initializationRef.current = true;
-
-    console.log("=== Initial Assessment - Initialization START ===", {
-      wizardAnswers: store.wizardAnswers,
-      validationState: storeValidationState,
-      completedSteps: store.completedSteps,
-    });
-
-    try {
-      // Set current phase
-      store.setCurrentPhase(1);
-
-      // Initialize wizard questions
-      const questions = getWizardQuestions(t);
-      store.setState({
-        ...store.getState(),
-        wizardQuestions: questions,
-      });
-
-      // Only access localStorage in browser environment
-      if (typeof window !== "undefined") {
-        // First try to restore validation state
-        const storedState = localStorage.getItem("captain-frank-state");
-        if (storedState) {
-          try {
-            const parsedState = JSON.parse(storedState);
-            if (parsedState?.state) {
-              const { wizardAnswers, wizardSuccessMessage, validationState } =
-                parsedState.state;
-
-              // Only update if we have stored answers and validation state
-              if (wizardAnswers?.length > 0 && validationState) {
-                const now = Date.now();
-
-                // Create new validation state with all required fields
-                const newValidationState = {
-                  ...validationState,
-                  stepValidation: {
-                    ...validationState.stepValidation,
-                    2: true, // Ensure step 2 is marked as valid
-                  },
-                  stepInteraction: {
-                    ...validationState.stepInteraction,
-                    2: true, // Ensure step 2 is marked as interacted with
-                  },
-                  isWizardValid: true,
-                  isWizardSubmitted: true,
-                  _timestamp: now,
-                };
-
-                console.log("=== Phase1QAWizard - Restoring State ===", {
-                  wizardAnswers,
-                  validationState: newValidationState,
-                  timestamp: new Date().toISOString(),
-                });
-
-                // Update all states in a single batch
-                store.batchUpdateWizardState({
-                  wizardAnswers,
-                  wizardIsCompleted: true,
-                  wizardIsValid: true,
-                  wizardSuccessMessage,
-                  validationState: newValidationState,
-                  wizardShowingSuccess: true,
-                  _lastUpdate: now,
-                });
-
-                // Mark wizard as complete
-                store.markWizardComplete("initial_assessment");
-              }
-            }
-
-            if (parsedState?.state?.validationState?.isTermsValid) {
-              // Restore terms acceptance state
-              setTermsAcceptedStore(true);
-              setPrivacyAcceptedStore(true);
-            }
-
-            // Update validation state
-            safeUpdateValidationState({
-              ...parsedState.state.validationState,
-              _timestamp: Date.now(),
-            });
-
-            console.log("=== Initial Assessment - Restored State ===", {
-              wizardAnswers: parsedState.state.wizardAnswers,
-              wizardSuccessStates: parsedState.state.wizardSuccessStates,
-              isWizardSubmitted: parsedState.state.isWizardSubmitted,
-              isWizardValid: parsedState.state.isWizardValid,
-              wizardIsCompleted: parsedState.state.wizardIsCompleted,
-              wizardSuccessMessage: parsedState.state.wizardSuccessMessage,
-              timestamp: new Date().toISOString(),
-            });
-          } catch (error) {
-            console.error("Error parsing validation state:", error);
-          }
-        }
-
-        // Then load other saved state
-        const flightState = localStorage.getItem("phase1State");
-        if (flightState) {
-          try {
-            const parsedState = JSON.parse(flightState);
-            console.log("=== Initial Assessment - Found Saved State ===", {
-              selectedType: parsedState.selectedType,
-              flightSegments: parsedState.flightSegments?.length,
-              timestamp: new Date().toISOString(),
-            });
-
-            // Extract flight data
-            const selectedFlights = parsedState.flightSegments
-              ?.map((segment: any) => segment.selectedFlight)
-              .filter(Boolean);
-
-            if (selectedFlights?.length) {
-              flightStore.setOriginalFlights(selectedFlights);
-              flightStore.setSelectedFlights(1, selectedFlights);
-            }
-
-            // Update main store with complete flight state
-            store.setState({
-              ...store.getState(),
-              selectedType: parsedState.selectedType || "direct",
-              flightSegments:
-                parsedState.flightSegments ||
-                (parsedState.selectedType === "multi"
-                  ? [
-                      {
-                        fromLocation: null,
-                        toLocation: null,
-                        selectedFlight: null,
-                        date: null,
-                      },
-                      {
-                        fromLocation: null,
-                        toLocation: null,
-                        selectedFlight: null,
-                        date: null,
-                      },
-                    ]
-                  : [
-                      // For direct flights, create a segment from directFlight if available
-                      parsedState.directFlight
-                        ? {
-                            ...parsedState.directFlight,
-                            id: "direct-flight",
-                            type: "direct",
-                          }
-                        : {
-                            fromLocation: null,
-                            toLocation: null,
-                            selectedFlight: null,
-                            date: null,
-                          },
-                    ]),
-              directFlight: parsedState.directFlight || {
-                fromLocation: null,
-                toLocation: null,
-                date: null,
-                selectedFlight: null,
-              },
-              fromLocation: parsedState.fromLocation || null,
-              toLocation: parsedState.toLocation || null,
-            });
-
-            // If we have flight segments or a valid direct flight, ensure validation state reflects that
-            if (
-              parsedState.flightSegments?.length > 0 ||
-              (parsedState.directFlight?.fromLocation &&
-                parsedState.directFlight?.toLocation)
-            ) {
-              safeUpdateValidationState({
-                ...storeValidationState,
-                isFlightValid: true,
-                stepValidation: {
-                  ...storeValidationState.stepValidation,
-                  1: true,
-                },
-                stepInteraction: {
-                  ...storeValidationState.stepInteraction,
-                  1: true,
-                },
-                _timestamp: Date.now(),
-              });
-            }
-          } catch (error) {
-            console.error("Error parsing saved state:", error);
-          }
-        }
-
-        // Load completed steps
-        const savedCompletedSteps = localStorage.getItem(
-          "initialAssessmentCompletedSteps"
-        );
-        if (savedCompletedSteps) {
-          try {
-            const completedSteps = JSON.parse(savedCompletedSteps);
-            completedSteps.forEach((step: number) => store.completePhase(step));
-          } catch (error) {
-            console.error("Error parsing completed steps:", error);
-          }
-        }
-      }
-
-      store.setIsInitialized(true);
-      console.log("=== Initial Assessment - Initialization COMPLETE ===");
-    } catch (error) {
-      console.error("Error during initialization:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [
-    store,
-    flightStore,
-    store.isInitialized,
-    setTermsAcceptedStore,
-    setPrivacyAcceptedStore,
-    safeUpdateValidationState,
-    store.batchUpdateWizardState,
-  ]);
-
-  // Save active accordion when it changes
-  useEffect(() => {
-    if (mounted && typeof window !== "undefined") {
-      if (store.activeAccordion) {
-        sessionStorage.setItem("activeAccordion", store.activeAccordion);
-      } else {
-        sessionStorage.removeItem("activeAccordion");
-      }
-    }
-  }, [mounted, store.activeAccordion, store.wizardQuestions]);
-
-  // Remove any validation effects that might be interfering with toggling
-  useEffect(() => {
-    if (!mounted) return;
-  }, [mounted]);
-
-  // Add a useEffect to ensure root level locations are synchronized with flight segments
-  useEffect(() => {
-    if (mounted && !isLoading && currentPhase === 1) {
-      const storeState = store.getState();
-
-      // Check if we have flight segments but missing root level locations
-      if (storeState.flightSegments && storeState.flightSegments.length > 0) {
-        const firstSegment = storeState.flightSegments[0];
-        const lastSegment =
-          storeState.flightSegments[storeState.flightSegments.length - 1];
-
-        // Only update if we have valid segments but missing root locations
-        if (
-          (firstSegment?.fromLocation && !storeState.fromLocation) ||
-          (lastSegment?.toLocation && !storeState.toLocation)
-        ) {
-          controlledLog(
-            "Synchronizing root level locations with flight segments",
-            {
-              hasFromLocation: !!storeState.fromLocation,
-              hasToLocation: !!storeState.toLocation,
-              segmentFromLocation: !!firstSegment?.fromLocation,
-              segmentToLocation: !!lastSegment?.toLocation,
-            }
-          );
-
-          // Update the root level locations
-          if (firstSegment?.fromLocation && !storeState.fromLocation) {
-            store.setFromLocation(processLocation(firstSegment.fromLocation));
-          }
-
-          if (lastSegment?.toLocation && !storeState.toLocation) {
-            store.setToLocation(processLocation(lastSegment.toLocation));
-          }
-        }
-      } else {
-        // If we don't have flight segments, try to restore them from flightStore
-        const flightData = flightStore.getFlightData(1);
-
-        if (
-          flightData &&
-          flightData.flightSegments &&
-          flightData.flightSegments.length > 0
-        ) {
-          controlledLog("Restoring flight segments from flightStore", {
-            segmentCount: flightData.flightSegments.length,
-            hasFromLocation: !!flightData.fromLocation,
-            hasToLocation: !!flightData.toLocation,
-          });
-
-          // Update the store with the flight segments from flightStore
-          store.setFlightSegments(flightData.flightSegments);
-
-          // Also update the root level locations
-          if (flightData.fromLocation) {
-            store.setFromLocation(processLocation(flightData.fromLocation));
-          }
-
-          if (flightData.toLocation) {
-            store.setToLocation(processLocation(flightData.toLocation));
-          }
-
-          // Update the selected type
-          if (flightData.selectedType) {
-            store.setSelectedType(flightData.selectedType);
-          }
-        }
-      }
-    }
-  }, [mounted, isLoading, currentPhase, store, flightStore, controlledLog]);
-
-  // Memoize step rendering
-  const renderStep = useCallback(
-    (step: Step) => {
-      const isStepCompleted = validateStepState(store, step.id);
-      const isCurrentStepValid =
-        step.id === 2
-          ? isQAWizardValid
-          : step.id === 3
-          ? storeValidationState.isPersonalValid &&
-            storeValidationState.stepInteraction[3]
-          : storeValidationState.stepValidation[step.id];
-
-      const summary = step.getSummary({
-        selectedType: store.selectedType,
-        directFlight: store.directFlight,
-        flightSegments: store.flightSegments,
-        fromLocation: store.fromLocation,
-        toLocation: store.toLocation,
-        wizardAnswers: store.wizardAnswers,
-        personalDetails: store.personalDetails,
-        termsAccepted: store.termsAccepted,
-        privacyAccepted: store.privacyAccepted,
-        validationState: store.validationState,
-      });
-
-      return (
-        <div key={step.id}>
-          <AccordionCard
-            title={step.title}
-            subtitle={step.subtitle}
-            stepId={step.id.toString()}
-            isCompleted={isStepCompleted}
-            hasInteracted={interactedSteps.includes(step.id)}
-            isValid={isCurrentStepValid}
-            summary={summary}
-            shouldStayOpen={false}
-            className={accordionConfig?.padding?.wrapper || "p-4"}
-            eyebrow={t.phases.initialAssessment.step.replace(
-              "{number}",
-              step.id.toString()
-            )}
-            isQA={step.id === 2}
-            isOpen={openSteps.includes(step.id)}
-            onToggle={() => {
-              const stepId = step.id as ValidationStep;
-              setOpenSteps((prev) => {
-                if (prev.includes(stepId)) {
-                  return prev.filter((s) => s !== stepId);
-                }
-                return [...prev, stepId];
-              });
-              handleStepInteraction(stepId, setInteractedSteps);
-            }}
-          >
-            <div className={accordionConfig?.padding?.content || "px-4 py-4"}>
-              {renderStepContent(step)}
-            </div>
-          </AccordionCard>
-        </div>
-      );
-    },
-    [
-      store.selectedType,
-      store.directFlight,
-      store.flightSegments,
-      store.fromLocation,
-      store.toLocation,
-      store.wizardAnswers,
-      store.personalDetails,
-      store.termsAccepted,
-      store.privacyAccepted,
-      store.validationState,
-      interactedSteps,
-      openSteps,
-      t,
-      setOpenSteps,
-      setInteractedSteps,
-      isQAWizardValid,
-      storeValidationState,
-    ]
-  );
-
-  const renderStepContent = (step: Step) => {
-    if (step.component === ModularFlightSelector) {
-      const props = step.props as FlightSelectorProps;
-      const fromLocationData =
-        store.directFlight?.fromLocation || store.fromLocation;
-      const toLocationData = store.directFlight?.toLocation || store.toLocation;
-
-      return (
-        <div
-          data-flight-locations
-          data-from-location={
-            fromLocationData ? JSON.stringify(fromLocationData) : null
-          }
-          data-to-location={
-            toLocationData ? JSON.stringify(toLocationData) : null
-          }
-        >
-          <ModularFlightSelector
-            onSelect={props.onSelect}
-            onInteract={props.onInteract}
-            showFlightSearch={props.showFlightSearch}
-            showFlightDetails={props.showFlightDetails}
-            currentPhase={props.currentPhase}
-            stepNumber={props.stepNumber}
-            setValidationState={props.setValidationState}
-          />
-        </div>
-      );
-    }
-    if (step.component === QAWizardWrapper) {
-      return <QAWizardWrapper {...(step.props as QAWizardProps)} />;
-    }
-    if (step.component === PersonalDetailsForm) {
-      return (
-        <PersonalDetailsForm {...(step.props as PersonalDetailsFormProps)} />
-      );
-    }
-    const TermsComponent = step.component as React.FC<TermsAndConditionsProps>;
-    return <TermsComponent {...(step.props as TermsAndConditionsProps)} />;
-  };
-
-  // Add a ref for state logging to prevent too many useless renders
-  const prevStateRef = useRef({
-    validationChangesCount: 0,
-    lastLog: 0,
-  });
-
-  // State logging effect - improved to reduce unnecessary renders
-  useEffect(() => {
-    if (!mounted) return;
-
-    // Limit logging frequency to avoid excessive renders
-    const now = Date.now();
-    if (now - prevStateRef.current.lastLog < 2000) {
-      return; // Don't log more than once every 2 seconds
-    }
-
-    // Track validation changes separately so we don't log for every minor update
-    const validationStateChanged =
-      prevStateRef.current.validationChangesCount !==
-      (storeValidationState?._timestamp || 0);
-
-    if (validationStateChanged) {
-      prevStateRef.current = {
-        validationChangesCount: storeValidationState?._timestamp || 0,
-        lastLog: now,
-      };
-
-      // Here you would add any state logging code if needed
-      // console.log('=== State logging ===', { storeValidationState });
-    }
-  }, [mounted, storeValidationState]);
+  // Add a ref for the PersonalDetailsForm to allow triggering validation
+  const personalDetailsFormRef = useRef<{
+    validate: () => boolean;
+  }>(null!);
 
   useEffect(() => {
-    pushToDataLayer({ step_position: 1 });
-  }, []);
+    console.log(
+      "[InitialAssessmentPage] Component mounted, Font variable:",
+      heebo.variable
+    ); // Log font variable
 
-  // Add a memoization ref for summary data to prevent infinite re-renders
-  const prevSummaryDataRef = useRef<{
-    selectedType: string;
-    fromLocation: LocationLike | null;
-    toLocation: LocationLike | null;
-    segments: number;
-    timestamp: number;
-    generatedSummary?: string;
-  }>({
-    selectedType: "",
-    fromLocation: null,
-    toLocation: null,
-    segments: 0,
-    timestamp: 0,
-  });
-
-  // Define steps configuration
-  const createSteps = useCallback(() => {
-    const allSteps = [
-      {
-        id: 1 as ValidationStep,
-        name: t.phases.initialAssessment.flightDetails,
-        title: t.phases.initialAssessment.flightDetails,
-        subtitle: t.phases.initialAssessment.whatHappenedSubtitle,
-        component: ModularFlightSelector,
-        props: {
-          onSelect: handleFlightSelect,
-          onInteract: () => {
-            setInteractedSteps((prev: ValidationStep[]) => {
-              const newStep = 1 as ValidationStep;
-              return Array.from(
-                new Set([...prev, newStep])
-              ) as ValidationStep[];
-            });
-          },
-          showFlightSearch: true,
-          showFlightDetails: true,
-          currentPhase: 1 as number,
-          stepNumber: 1 as ValidationStep,
-          setValidationState: (
-            state:
-              | Record<number, boolean>
-              | ((prev: Record<number, boolean>) => Record<number, boolean>)
-          ) => {
-            if (typeof state === "function") {
-              const newState = state({} as Record<number, boolean>);
-              safeUpdateValidationState({
-                stepValidation: {
-                  ...storeValidationState.stepValidation,
-                  1: newState[1] || false,
-                },
-                stepInteraction: {
-                  ...storeValidationState.stepInteraction,
-                  1: true,
-                },
-                _timestamp: Date.now(),
-              });
-            } else {
-              safeUpdateValidationState({
-                stepValidation: {
-                  ...storeValidationState.stepValidation,
-                  1: state[1] || false,
-                },
-                stepInteraction: {
-                  ...storeValidationState.stepInteraction,
-                  1: true,
-                },
-                _timestamp: Date.now(),
-              });
-            }
-          },
-        },
-        getSummary: (state: StepState) => {
-          // Only log if relevant data has changed or more than 2 seconds have passed
-          const currentData = {
-            selectedType: state.selectedType,
-            fromLocation: state.fromLocation,
-            toLocation: state.toLocation,
-            segments: state.flightSegments?.length || 0,
-            timestamp: Date.now(),
-          };
-
-          // Stricter check on location objects: only compare by value instead of by reference
-          const fromLocationValue = state.fromLocation?.value || null;
-          const toLocationValue = state.toLocation?.value || null;
-          const prevFromLocationValue =
-            prevSummaryDataRef.current.fromLocation?.value || null;
-          const prevToLocationValue =
-            prevSummaryDataRef.current.toLocation?.value || null;
-
-          // Only consider location changes when values are different
-          const locationChanged =
-            fromLocationValue !== prevFromLocationValue ||
-            toLocationValue !== prevToLocationValue;
-
-          const hasRelevantChanges =
-            currentData.selectedType !==
-              prevSummaryDataRef.current.selectedType ||
-            locationChanged ||
-            currentData.segments !== prevSummaryDataRef.current.segments ||
-            currentData.timestamp - prevSummaryDataRef.current.timestamp > 2000;
-
-          if (!hasRelevantChanges) {
-            // Return the previously generated summary without recomputing
-            return prevSummaryDataRef.current.generatedSummary || "";
-          }
-
-          // Update ref with current values
-          prevSummaryDataRef.current = {
-            ...currentData,
-            // Store the actual location objects
-            fromLocation: state.fromLocation,
-            toLocation: state.toLocation,
-            // Add a field to store the generated summary
-            generatedSummary: prevSummaryDataRef.current.generatedSummary,
-          };
-
-          controlledLog("Getting Summary START", {
-            selectedType: state.selectedType,
-            directFlight: state.directFlight,
-            flightSegments: state.flightSegments,
-            fromLocation: state.fromLocation,
-            toLocation: state.toLocation,
-          });
-
-          const parseLocation = (
-            loc: LocationData | string | null
-          ): LocationData | null => {
-            if (!loc) return null;
-            if (typeof loc === "string") {
-              // If it's a simple airport code, return it as a location object
-              if (/^[A-Z]{3}$/.test(loc)) {
-                return {
-                  value: loc,
-                  label: loc,
-                  description: loc,
-                  city: loc,
-                  dropdownLabel: loc,
-                };
-              }
-            }
-            // If it's already a location object, return as is
-            if (typeof loc === "object" && loc !== null) {
-              return loc;
-            }
-            return null;
-          };
-
-          const getLocationLabel = (
-            loc: LocationData | string | null,
-            fallback = ""
-          ): string => {
-            const parsedLoc = parseLocation(loc);
-            if (!parsedLoc) return fallback;
-            return (
-              parsedLoc.label || parsedLoc.value || parsedLoc.city || fallback
-            );
-          };
-
-          // For direct flights
-          if (state.selectedType === "direct") {
-            controlledLog("Direct flight locations - Initial", {
-              fromLocation: state.fromLocation,
-              toLocation: state.toLocation,
-              directFlight: state.directFlight,
-            });
-
-            // Try to get locations from all possible sources
-            let fromLocation: LocationData | null = null;
-            let toLocation: LocationData | null = null;
-
-            // Priority 1: Check directFlight
-            if (state.directFlight) {
-              fromLocation = state.directFlight.fromLocation || fromLocation;
-              toLocation = state.directFlight.toLocation || toLocation;
-            }
-
-            // Priority 2: Check state locations
-            if (!fromLocation && state.fromLocation) {
-              fromLocation = parseLocation(state.fromLocation);
-            }
-            if (!toLocation && state.toLocation) {
-              toLocation = parseLocation(state.toLocation);
-            }
-
-            // Priority 3: Check flightSegments[0]
-            if (state.flightSegments?.[0]) {
-              fromLocation =
-                fromLocation || state.flightSegments[0].fromLocation;
-              toLocation = toLocation || state.flightSegments[0].toLocation;
-            }
-
-            controlledLog("Direct flight locations - After resolution", {
-              fromLocation,
-              toLocation,
-              sources: {
-                directFlight: state.directFlight?.fromLocation ? "yes" : "no",
-                stateLocations: state.fromLocation ? "yes" : "no",
-                flightSegments: state.flightSegments?.[0]?.fromLocation
-                  ? "yes"
-                  : "no",
-              },
-            });
-
-            const fromLabel = getLocationLabel(fromLocation);
-            const toLabel = getLocationLabel(toLocation);
-
-            if (!fromLabel || !toLabel) {
-              controlledLog("Missing location labels", {
-                fromLabel,
-                toLabel,
-                fromLocation,
-                toLocation,
-              });
-              return "";
-            }
-
-            const summary = t.phases.initialAssessment.summary.directFlight
-              .replace("{from}", fromLabel)
-              .replace("{to}", toLabel);
-
-            controlledLog("Generated Summary", {
-              summary,
-              fromLabel,
-              toLabel,
-            });
-
-            // Save the generated summary in the ref before returning
-            prevSummaryDataRef.current.generatedSummary = summary;
-            return summary;
-          }
-
-          // For multi-segment flights
-          if (state.selectedType === "multi" && state.flightSegments) {
-            controlledLog("Multi-segment flight segments - Initial", {
-              segments: state.flightSegments.map((segment) => ({
-                fromLocation: segment.fromLocation,
-                toLocation: segment.toLocation,
-                selectedFlight: segment.selectedFlight
-                  ? {
-                      id: segment.selectedFlight.id,
-                      flightNumber: segment.selectedFlight.flightNumber,
-                      departureCity: segment.selectedFlight.departureCity,
-                      arrivalCity: segment.selectedFlight.arrivalCity,
-                    }
-                  : null,
-              })),
-            });
-
-            // Initialize validatedSegments array
-            const validatedSegments: any[] = [];
-
-            // Process each segment to ensure locations are properly resolved
-            state.flightSegments.forEach((segment: any, index: number) => {
-              let fromLocation: LocationData | null = null;
-              let toLocation: LocationData | null = null;
-
-              // Priority 1: Check segment locations
-              fromLocation = parseLocation(segment.fromLocation);
-              toLocation = parseLocation(segment.toLocation);
-
-              // Priority 2: Check selected flight data
-              if ((!fromLocation || !toLocation) && segment.selectedFlight) {
-                if (!fromLocation) {
-                  fromLocation = {
-                    value: segment.selectedFlight.departureCity,
-                    label: segment.selectedFlight.departureCity,
-                    city: segment.selectedFlight.departureCity,
-                  };
-                }
-                if (!toLocation) {
-                  toLocation = {
-                    value: segment.selectedFlight.arrivalCity,
-                    label: segment.selectedFlight.arrivalCity,
-                    city: segment.selectedFlight.arrivalCity,
-                  };
-                }
-              }
-
-              // Priority 3: For first segment, check root state locations
-              if (index === 0) {
-                if (!fromLocation) {
-                  fromLocation = parseLocation(state.fromLocation);
-                }
-                if (!toLocation) {
-                  toLocation = parseLocation(state.toLocation);
-                }
-              }
-
-              // Priority 4: For subsequent segments, ensure connection with previous segment
-              if (
-                index > 0 &&
-                !fromLocation &&
-                validatedSegments[index - 1]?.toLocation
-              ) {
-                fromLocation = validatedSegments[index - 1].toLocation;
-              }
-
-              // Replace console.debug with controlledLog
-              controlledLog(`Segment ${index} Resolution`, {
-                fromLocation,
-                toLocation,
-                sources: {
-                  segment: Boolean(segment.fromLocation),
-                  flight: Boolean(segment.selectedFlight),
-                  rootState: index === 0 && Boolean(state.fromLocation),
-                  connection:
-                    index > 0 &&
-                    Boolean(validatedSegments[index - 1]?.toLocation),
-                },
-              });
-
-              // If any location is missing, log and add default empty segment
-              if (!fromLocation || !toLocation) {
-                controlledLog(`Missing location for segment ${index}`, {
-                  fromLocation,
-                  toLocation,
-                });
-
-                validatedSegments.push({
-                  index,
-                  fromLocation: fromLocation || null,
-                  toLocation: toLocation || null,
-                  fromLabel: getLocationLabel(
-                    fromLocation,
-                    `Segment ${index + 1} From`
-                  ),
-                  toLabel: getLocationLabel(
-                    toLocation,
-                    `Segment ${index + 1} To`
-                  ),
-                  isValid: Boolean(fromLocation && toLocation),
-                });
-                return; // Skip further processing
-              }
-
-              // Add to validated segments with labels
-              validatedSegments.push({
-                index,
-                fromLocation,
-                toLocation,
-                fromLabel: getLocationLabel(
-                  fromLocation,
-                  `Segment ${index + 1} From`
-                ),
-                toLabel: getLocationLabel(
-                  toLocation,
-                  `Segment ${index + 1} To`
-                ),
-                isValid: true,
-              });
-            });
-
-            controlledLog("ValidatedSegments", {
-              segments: validatedSegments.map((s) => ({
-                index: s.index,
-                fromLabel: s.fromLabel,
-                toLabel: s.toLabel,
-                isValid: s.isValid,
-              })),
-            });
-
-            // Check if all segments are valid
-            const allSegmentsValid = validatedSegments.every((s) => s.isValid);
-            if (!allSegmentsValid) {
-              controlledLog("Invalid multi-segment flight", {
-                invalid: validatedSegments
-                  .filter((s) => !s.isValid)
-                  .map((s) => s.index),
-              });
-              return "";
-            }
-
-            // Generate segments summary text
-            const segmentSummaryParts = validatedSegments.map((segment) => {
-              return `${segment.fromLabel} → ${segment.toLabel}`;
-            });
-
-            // Join all segment summaries and wrap with the multi-flight intro text
-            const summary = t.phases.initialAssessment.summary.multiSegment
-              .replace("{count}", validatedSegments.length.toString())
-              .replace("{s}", validatedSegments.length > 1 ? "en" : "")
-              .replace("{segments}", segmentSummaryParts.join(" | "));
-
-            controlledLog("Generated Multi-Segment Summary", {
-              summary,
-              segmentCount: validatedSegments.length,
-            });
-
-            // Save the generated summary in the ref before returning
-            prevSummaryDataRef.current.generatedSummary = summary;
-            return summary;
-          }
-
-          console.log("=== No valid flight configuration found ===");
-          return "";
-        },
-        shouldStayOpen: true,
-        isOpenByDefault: false,
-      },
-      {
-        id: 2 as ValidationStep,
-        name: "QAWizard",
-        title: t.phases.initialAssessment.whatHappened,
-        component: QAWizardWrapper,
-        props: {
-          questions: store.wizardQuestions || [],
-          onComplete: handleComplete,
-          onInteract: handleQAWizardInteract,
-          phase: 1,
-          stepNumber: 2 as ValidationStep,
-          selectedFlights: selectedFlights,
-        },
-        getSummary: (state: StepState) => {
-          if (!state.wizardAnswers?.length) return "";
-
-          const activeQuestions = store.wizardQuestions.filter(
-            (q: Question) => !q.showIf || q.showIf(state.wizardAnswers)
-          );
-
-          const answeredCount = activeQuestions.filter((q: Question) =>
-            state.wizardAnswers.some(
-              (a: Answer) => a.questionId === q.id && a.value
-            )
-          ).length;
-
-          return answeredCount
-            ? t.phases.initialAssessment.summary.questionsAnswered.replace(
-                "{count}",
-                answeredCount.toString()
-              )
-            : "";
-        },
-        shouldStayOpen: true,
-        isOpenByDefault: false,
-      },
-      {
-        id: 3 as ValidationStep,
-        name: "PersonalDetails",
-        title: t.phases.initialAssessment.personalDetails.title,
-        subtitle: t.phases.initialAssessment.personalDetails.subtitle,
-        component: PersonalDetailsForm,
-        props: {
-          onComplete: handlePersonalDetailsComplete,
-          onInteract: () => {
-            setInteractedSteps((prev: ValidationStep[]) => {
-              const newStep = 3 as ValidationStep;
-              return Array.from(
-                new Set([...prev, newStep])
-              ) as ValidationStep[];
-            });
-          },
-          isClaimSuccess: false,
-          showAdditionalFields: false,
-        } as PersonalDetailsFormProps,
-        getSummary: (state: StepState) => {
-          const details = state.personalDetails;
-          if (!details) return "";
-
-          const parts: string[] = [];
-
-          if (details.firstName && details.lastName) {
-            parts.push(`${details.firstName} ${details.lastName}`);
-          }
-
-          if (details.email) {
-            parts.push(details.email);
-          }
-
-          if (details.phone) {
-            parts.push(details.phone);
-          }
-
-          return parts.join(" • ");
-        },
-        shouldStayOpen: true,
-        isOpenByDefault: false,
-      },
-      {
-        id: 4 as ValidationStep,
-        name: t.phases.initialAssessment.termsAndConditions.title,
-        title: t.phases.initialAssessment.termsAndConditions.title,
-        subtitle: t.phases.initialAssessment.termsAndConditions.subtitle,
-        component: function TermsAndConditions() {
-          return (
-            <div className="space-y-4">
-              <ConsentCheckbox
-                id="terms"
-                type="terms"
-                label={t.phases.initialAssessment.termsAndConditions.terms}
-                checked={termsAccepted}
-                onChange={handleTermsChange("hasAcceptedTerms")}
-                required={true}
-              />
-              <ConsentCheckbox
-                id="privacy"
-                type="privacy"
-                label={t.phases.initialAssessment.termsAndConditions.privacy}
-                checked={privacyAccepted}
-                onChange={handleTermsChange("hasAcceptedPrivacy")}
-                required={true}
-              />
-              <ConsentCheckbox
-                id="marketing"
-                type="marketing"
-                label={t.phases.initialAssessment.termsAndConditions.marketing}
-                checked={marketingAccepted}
-                onChange={handleTermsChange("hasAcceptedMarketing")}
-                details={
-                  t.phases.initialAssessment.termsAndConditions.marketingDetails
-                }
-              />
-            </div>
-          );
-        },
-        props: {
-          onInteract: () => {
-            setInteractedSteps((prev: ValidationStep[]) => {
-              const newStep = 4 as ValidationStep;
-              return Array.from(
-                new Set([...prev, newStep])
-              ) as ValidationStep[];
-            });
-          },
-        } as TermsAndConditionsProps,
-        getSummary: (state: StepState) => {
-          if (!state.termsAccepted || !state.privacyAccepted) return "";
-          return t.phases.initialAssessment.summary.termsAccepted;
-        },
-        shouldStayOpen: true,
-        isOpenByDefault: false,
-      },
-    ];
-    return allSteps;
-  }, [
-    handleFlightSelect,
-    selectedFlights,
-    termsAccepted,
-    privacyAccepted,
-    marketingAccepted,
-    setTermsAcceptedStore,
-    setPrivacyAcceptedStore,
-    setMarketingAcceptedStore,
-    setInteractedSteps,
-    handleComplete,
-    safeUpdateValidationState,
-    storeValidationState,
-    t,
-    store.wizardQuestions,
-  ]);
-
-  // Define steps with memoization
-  const steps = useMemo(() => createSteps(), [createSteps]);
-
-  const handleContinue = async () => {
-    controlledLog("CONTINUE BUTTON CLICKED", {});
-
-    // Verify we have valid flight data to continue
-    const storeState = store.getState();
-
-    // Check for locations in both root level and flight segments
-    let hasValidFromLocation = !!storeState.fromLocation;
-    let hasValidToLocation = !!storeState.toLocation;
-
-    // For multi-segment flights, check locations in segments
-    if (
-      storeState.selectedType === "multi" &&
-      storeState.flightSegments &&
-      storeState.flightSegments.length > 0
-    ) {
-      // Check if we have valid locations in the segments
-      const hasValidSegments = storeState.flightSegments.every(
-        (segment) => segment.fromLocation && segment.toLocation
-      );
-
-      if (hasValidSegments) {
-        // If segments have valid locations, use the first and last segment for from/to
-        hasValidFromLocation = !!storeState.flightSegments[0].fromLocation;
-        hasValidToLocation =
-          !!storeState.flightSegments[storeState.flightSegments.length - 1]
-            .toLocation;
-
-        // Also update the root level locations for consistency
-        if (!storeState.fromLocation && hasValidFromLocation) {
-          store.setFromLocation(
-            processLocation(storeState.flightSegments[0].fromLocation)
-          );
-        }
-
-        if (!storeState.toLocation && hasValidToLocation) {
-          store.setToLocation(
-            processLocation(
-              storeState.flightSegments[storeState.flightSegments.length - 1]
-                .toLocation
-            )
-          );
-        }
-      }
-    }
-
-    const compensationAmount = storeState.compensationAmount || 0;
-    const marketingAccepted = storeState.marketingAccepted || false;
-
-    // Verify we have a Contact ID before continuing, or create one if needed
-    const contactId = verifyContactId();
-    if (!contactId) {
-      console.log("[ContactID] No Contact ID found before continuing");
-
-      // We'll create a real contact ID when we submit the personal details
+    if (!storeCoreInitialized) {
       console.log(
-        "[ContactID] Will create a real Contact ID when personal details are submitted"
+        "[InitialAssessmentPage] Store core not initialized yet, skipping effect logic."
       );
+      return;
+    }
+
+    if (hasInteractedWithQA && !showQASuccess) {
+      console.log(
+        "[InitialAssessmentPage] Skipping state restoration during reset"
+      );
+      return;
+    }
+
+    const storeState = useStore.getState();
+    if (storeState?.wizard) {
+      const wizardState = storeState.wizard;
+      const questions = getInitialAssessmentQuestions(adaptedT);
+
+      const hasAllAnswers = questions.every((q) =>
+        (wizardState.answers || []).some((a) => a.questionId === q.id)
+      );
+
+      if (wizardState.isComplete === true && hasAllAnswers) {
+        console.log(
+          "[InitialAssessmentPage] Restoring wizard success state from Zustand store"
+        );
+        setShowQASuccess(true);
+        setHasInteractedWithQA(true);
+
+        let anyConfetti = false;
+        if (Array.isArray(wizardState.answers) && questions.length > 0) {
+          wizardState.answers.forEach((answer) => {
+            const question = questions.find((q) => q.id === answer.questionId);
+            if (question?.options) {
+              const option = question.options.find(
+                (opt) => String(opt.value) === String(answer.value)
+              );
+              if (option?.showConfetti) {
+                anyConfetti = true;
+              }
+            }
+          });
+        }
+
+        setWizardConfettiStatus(anyConfetti);
+
+        // Access setStepCompleted via store actions
+        const storeActions = useStore.getState().actions;
+        if (storeActions?.validation?.setStepCompleted) {
+          storeActions.validation.setStepCompleted(
+            ValidationPhase.INITIAL_ASSESSMENT,
+            true
+          );
+          storeActions.validation.setStepCompleted(
+            "STEP_1" as ValidationPhase,
+            true
+          );
+        } else {
+          console.warn(
+            "setStepCompleted not found on store actions during init"
+          );
+        }
+      } else {
+        console.log(
+          "[InitialAssessmentPage] Wizard not complete or missing answers, not showing success."
+        );
+        setShowQASuccess(false);
+      }
     } else {
       console.log(
-        "[ContactID] Using existing Contact ID for continue:",
-        contactId
+        "[InitialAssessmentPage] Wizard state not found in store during init."
+      );
+    }
+  }, [adaptedT, hasInteractedWithQA, showQASuccess, storeCoreInitialized]);
+
+  const handleBackFromSuccess = () => {
+    console.log("[InitialAssessmentPage] handleBackFromSuccess called");
+
+    setShowQASuccess(false);
+    setHasInteractedWithQA(true);
+
+    const resetInProgress = true;
+
+    if (typeof window !== "undefined" && window.__backToQuestionsHandler) {
+      const event = new Event("backToQuestions");
+      window.__backToQuestionsHandler(event);
+      console.log(
+        "[InitialAssessmentPage] Called wizard's back to questions handler"
       );
     }
 
-    controlledLog("Continue Prerequisites", {
-      hasValidFromLocation,
-      hasValidToLocation,
-      fromLocation: storeState.fromLocation,
-      toLocation: storeState.toLocation,
-      flightSegments: storeState.flightSegments?.length,
-      selectedType: storeState.selectedType,
-      contactId: contactId || "none",
-    });
-
-    if (!hasValidFromLocation || !hasValidToLocation) {
-      controlledErrorLog("Missing location data, aborting continue", {
-        fromLocation: storeState.fromLocation,
-        toLocation: storeState.toLocation,
-        flightSegments: storeState.flightSegments?.map((segment) => ({
-          fromLocation: segment.fromLocation?.value,
-          toLocation: segment.toLocation?.value,
-        })),
-      });
-      return;
+    const storeActions = useStore.getState().actions;
+    if (storeActions?.wizard?.resetWizard) {
+      storeActions.wizard.resetWizard();
+      console.log("[InitialAssessmentPage] Reset wizard via store");
     }
 
-    // Get data from the store to save
-    const {
-      currentPhase,
-      completedPhases,
-      phasesCompletedViaContinue,
-      fromLocation,
-      toLocation,
-      directFlight,
-      selectedType,
-      flightSegments,
-      personalDetails,
-      marketingAccepted: existingMarketingAccepted,
-    } = store.getState();
-
     try {
-      console.log("=== Initial Assessment - Starting Continue ===", {
-        currentPhase,
-        completedPhases,
-        phasesCompletedViaContinue,
-        timestamp: new Date().toISOString(),
+      const storedState = localStorage.getItem("captain-frank-store");
+      if (storedState) {
+        const parsedState = JSON.parse(storedState);
+        if (parsedState.state?.wizard) {
+          parsedState.state.wizard.isComplete = false;
+          parsedState.state.wizard.currentStep = 1;
+          parsedState.state.wizard.answers = [];
+          localStorage.setItem(
+            "captain-frank-store",
+            JSON.stringify(parsedState)
+          );
+          console.log("[InitialAssessmentPage] Reset wizard in localStorage");
+        }
+      }
+    } catch (e) {
+      console.error("[InitialAssessmentPage] Error updating localStorage:", e);
+    }
+
+    console.log("[InitialAssessmentPage] Forced accordion to show questions");
+  };
+
+  useEffect(() => {
+    console.log("==========================================");
+    console.log("WIZARD DEBUGGING INFO, Font variable:", heebo.variable); // Log font variable
+    console.log("Questions:", getInitialAssessmentQuestions(adaptedT));
+    const currentStoreState = useStore.getState();
+    console.log("Store state:", currentStoreState);
+
+    console.log("VALIDATION STATUS CHECK:");
+    console.log("- Flight segments:", currentStoreState.flight?.segments);
+    console.log(
+      "- ValidationPhase in store:",
+      currentStoreState.validation?.stepValidation
+    );
+    console.log(
+      "- Has valid locations:",
+      currentStoreState.flight?.segments?.some(
+        (segment) => segment.origin?.code && segment.destination?.code
+      )
+    );
+    console.log("==========================================");
+
+    questionsRef.current = getInitialAssessmentQuestions(adaptedT);
+  }, [adaptedT]);
+
+  // Add logging to diagnose performance
+  useEffect(() => {
+    console.log(
+      "[InitialAssessmentPage] Component mounted, Font variable:",
+      heebo.variable
+    ); // Log font variable
+
+    // Cleanup on unmount
+    return () => {
+      console.log(
+        "[InitialAssessmentPage] Component unmounting, Font variable:",
+        heebo.variable
+      ); // Log font variable
+    };
+  }, []);
+
+  if (!adaptedT) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
+
+  const handleSubmit = (details: ExtendedPassengerDetails | null) => {
+    if (details) {
+      console.log("PARENT DEBUG - handleSubmit called with valid details", {
+        details,
+        hasAllRequiredFields:
+          details.salutation &&
+          details.firstName &&
+          details.lastName &&
+          details.email,
       });
 
+      useStore.getState().actions.user.setUserDetails(details);
+
+      // Force update the local state to trigger UI update
+      const isValid =
+        !!details.salutation &&
+        !!details.firstName &&
+        !!details.lastName &&
+        !!details.email;
+      if (isValid) {
+        console.log("PARENT DEBUG - Setting isStep3Complete to true");
+        // Verify the state got updated
+        setTimeout(() => {
+          console.log("PARENT DEBUG - Current store state:", {
+            isComplete: !!useStore.getState().user.details,
+            validationState: useStore.getState().validation,
+          });
+        }, 50);
+      }
+    } else {
+      console.log("PARENT DEBUG - handleSubmit called with null details");
+    }
+  };
+
+  const canContinue = () => {
+    return (
+      isStep1Valid &&
+      isStep2Complete &&
+      isStep3Complete &&
+      termsAccepted &&
+      privacyAccepted
+    );
+  };
+
+  const handleContinue = async () => {
+    // Before proceeding, explicitly validate the personal details form
+    if (personalDetailsFormRef.current) {
+      console.log("Explicitly triggering validation on personal details form");
+      const isValid = personalDetailsFormRef.current.validate();
+      if (!isValid) {
+        console.log("Personal details form validation failed");
+
+        // Show error feedback - expand the form accordion and scroll to it
+        const personalDetailsSection =
+          document.querySelector('[data-step="3"]');
+        if (personalDetailsSection) {
+          // Expand the accordion if not already expanded
+          const accordionButton =
+            personalDetailsSection.querySelector("button");
+          if (
+            accordionButton &&
+            accordionButton.getAttribute("aria-expanded") === "false"
+          ) {
+            accordionButton.click();
+          }
+
+          // Scroll to the form
+          personalDetailsSection.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+
+          // Set focus to first empty required field
+          setTimeout(() => {
+            const firstEmptyField =
+              personalDetailsSection.querySelector("input:invalid");
+            if (firstEmptyField) {
+              (firstEmptyField as HTMLElement).focus();
+            }
+          }, 500);
+        }
+
+        return;
+      }
+    }
+
+    setIsLoading(true);
+
+    try {
+      // Update phase completion status using Zustand store
+      const storeActions = useStore.getState().actions;
+
+      // If we have navigation actions, update the phase status
+      if (storeActions?.navigation) {
+        // Mark phase 1 as completed
+        if (storeActions.navigation.addCompletedPhase) {
+          storeActions.navigation.addCompletedPhase(
+            ValidationPhase.INITIAL_ASSESSMENT
+          );
+          console.log("Added INITIAL_ASSESSMENT to completedPhases");
+        }
+
+        // Mark phase 1 as completed via the continue button
+        if (storeActions.navigation.addPhaseCompletedViaContinue) {
+          storeActions.navigation.addPhaseCompletedViaContinue(1);
+          console.log("Added phase 1 to phasesCompletedViaContinue");
+        }
+
+        // Set current phase to the next phase
+        if (storeActions.navigation.setCurrentPhase) {
+          storeActions.navigation.setCurrentPhase(
+            ValidationPhase.COMPENSATION_ESTIMATE
+          );
+          console.log("Set current phase to COMPENSATION_ESTIMATE");
+        }
+      } else {
+        console.warn("Navigation actions not available in store");
+      }
+
+      // Get data from the store for HubSpot integration
+      const userDetails = useStore.getState().user.details;
+      const marketingAccepted = useStore.getState().user.consents.marketing;
+
       // Create HubSpot contact and deal if we have personal details
-      if (personalDetails && personalDetails.email) {
+      if (userDetails && userDetails.email) {
         try {
           console.log("Creating HubSpot contact:", {
-            email: personalDetails.email,
-            personalDetails,
+            email: userDetails.email,
+            personalDetails: userDetails,
             bookingNumber: sessionStorage.getItem("booking_number") || "",
             timestamp: new Date().toISOString(),
           });
@@ -1836,9 +473,9 @@ export default function InitialAssessment() {
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({
-                email: personalDetails.email,
-                firstName: personalDetails.firstName,
-                lastName: personalDetails.lastName,
+                email: userDetails.email,
+                firstName: userDetails.firstName,
+                lastName: userDetails.lastName,
                 arbeitsrecht_marketing_status: marketingAccepted,
               }),
             }
@@ -1860,9 +497,7 @@ export default function InitialAssessment() {
           // Create initial deal in HubSpot
           console.log("Creating HubSpot deal:", {
             contactId: hubspotResult.hubspotContactId,
-            selectedFlights: store.selectedFlights,
-            fromLocation: directFlight?.fromLocation || fromLocation,
-            toLocation: directFlight?.toLocation || toLocation,
+            selectedFlights: useStore.getState().flight.selectedFlights,
             timestamp: new Date().toISOString(),
           });
 
@@ -1876,15 +511,12 @@ export default function InitialAssessment() {
               body: JSON.stringify({
                 contactId: hubspotResult.hubspotContactId,
                 personalDetails: {
-                  firstName: personalDetails.firstName,
-                  lastName: personalDetails.lastName,
-                  email: personalDetails.email,
+                  firstName: userDetails.firstName,
+                  lastName: userDetails.lastName,
+                  email: userDetails.email,
                 },
-                selectedFlights: store.selectedFlights,
-                directFlight: directFlight,
                 stage: "initial_assessment",
                 status: "New Submission",
-                amount: storeState.compensationAmount || 0,
                 marketingStatus: marketingAccepted,
               }),
             }
@@ -1905,1003 +537,355 @@ export default function InitialAssessment() {
         }
       }
 
-      // Mark phase 1 as completed via continue button
-      // This is critical to ensure proper phase navigation protection
-      store.completePhase(1);
+      // Navigate to the next page after HubSpot integration (or if it fails)
+      router.push("/phases/compensation-estimate");
+    } catch (error) {
+      console.error("Error navigating to next phase:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-      // Process locations using the helper function
-      const processedFromLocation = processLocation(fromLocation);
-      const processedToLocation = processLocation(toLocation);
+  const handleBack = () => {
+    router.back();
+  };
 
-      // CRITICAL: DIRECTLY set _explicitlyCompleted flag in localStorage
-      try {
-        // Get the current data from localStorage
-        const phase1StateStr = localStorage.getItem("phase1State");
-        const phase1StateObj: Phase1State = phase1StateStr
-          ? JSON.parse(phase1StateStr)
-          : {};
+  const handleQAComplete = (shouldShowConfetti: boolean) => {
+    console.log("Phase 1 QA Completed! Confetti status:", shouldShowConfetti);
+    setHasInteractedWithQA(true);
+    setWizardConfettiStatus(shouldShowConfetti);
+    setShowQASuccess(true);
 
-        // Create a completely new object with the explicit flag set
-        const enhancedPhase1State: Phase1State = {
-          ...phase1StateObj,
-          fromLocation: processedFromLocation,
-          toLocation: processedToLocation,
-          selectedType: selectedType,
-          directFlight: directFlight,
-          flightSegments: flightSegments,
-          phase: 1,
-          _explicitlyCompleted: true,
-          _completedTimestamp: Date.now(),
-          _forcedByHandleContinue: true,
-          _timestamp: Date.now(),
-        };
+    try {
+      const currentStore = useStore.getState();
+      if (
+        currentStore.actions?.validation &&
+        typeof currentStore.actions.validation.setStepValidation === "function"
+      ) {
+        // Update validation states for all relevant phase formats
+        const phases = [
+          ValidationPhase.INITIAL_ASSESSMENT,
+          "STEP_1" as ValidationPhase,
+          "STEP_2" as ValidationPhase,
+        ];
 
-        // Directly add the property to ensure it's set
-        Object.defineProperty(enhancedPhase1State, "_explicitlyCompleted", {
-          value: true,
-          writable: true,
-          enumerable: true,
-          configurable: true,
+        // Mark all phases as valid and completed
+        phases.forEach((phase) => {
+          currentStore.actions.validation.setStepValidation(phase, true);
+
+          if (
+            typeof currentStore.actions.validation.setStepCompleted ===
+            "function"
+          ) {
+            currentStore.actions.validation.setStepCompleted(phase, true);
+          }
+
+          if (
+            typeof currentStore.actions.validation.setStepInteraction ===
+            "function"
+          ) {
+            currentStore.actions.validation.setStepInteraction(phase, true);
+          }
         });
-
-        // Save this new object directly to localStorage
-        const serializedState = JSON.stringify(enhancedPhase1State);
-        localStorage.setItem("phase1State", serializedState);
-
-        // Try alternative direct approach - save with _explicitlyCompleted as a separate item
-        localStorage.setItem("phase1_explicitlyCompleted", "true");
 
         console.log(
-          "=== CRITICAL: New Direct phase1State with _explicitlyCompleted flag ===",
-          {
-            serializedState: serializedState.substring(0, 200) + "...",
-            containsFlag: serializedState.includes(
-              '"_explicitlyCompleted":true'
-            ),
-            alternativeFlag: localStorage.getItem("phase1_explicitlyCompleted"),
-            timestamp: new Date().toISOString(),
+          "[InitialAssessmentPage] Updated validation state for all phases"
+        );
+
+        // Force a local storage update to ensure persistence
+        try {
+          const localStorageKey = "captain-frank-store";
+          const currentStorage = localStorage.getItem(localStorageKey);
+
+          if (currentStorage) {
+            const parsedStorage = JSON.parse(currentStorage);
+
+            if (parsedStorage.state && parsedStorage.state.validation) {
+              phases.forEach((phase) => {
+                // Ensure all validation flags are set
+                if (parsedStorage.state.validation.stepValidation) {
+                  parsedStorage.state.validation.stepValidation[phase] = true;
+                }
+                if (parsedStorage.state.validation.stepCompleted) {
+                  parsedStorage.state.validation.stepCompleted[phase] = true;
+                }
+                if (parsedStorage.state.validation.stepInteraction) {
+                  parsedStorage.state.validation.stepInteraction[phase] = true;
+                }
+              });
+
+              parsedStorage.state.validation._timestamp = Date.now();
+
+              localStorage.setItem(
+                localStorageKey,
+                JSON.stringify(parsedStorage)
+              );
+              console.log(
+                "[InitialAssessmentPage] Forced localStorage update for all validation states"
+              );
+            }
           }
-        );
-
-        // Double-check that it was saved correctly
-        const verifyStr = localStorage.getItem("phase1State");
-        const verifyObj: Phase1State = verifyStr ? JSON.parse(verifyStr) : {};
-
-        console.log("=== VERIFICATION: _explicitlyCompleted flag ===", {
-          hasFlag: "_explicitlyCompleted" in verifyObj,
-          flagValue: verifyObj._explicitlyCompleted,
-          rawFlag: verifyStr
-            ? verifyStr.includes('"_explicitlyCompleted":true')
-            : false,
-          timestamp: new Date().toISOString(),
-        });
-
-        // EXTRA VERIFICATION: Save a completely separate simpler object
-        const simplifiedState = {
-          _explicitlyCompleted: true,
-          phase: 1,
-          timestamp: Date.now(),
-        };
-        localStorage.setItem("phase1_simple", JSON.stringify(simplifiedState));
-      } catch (e) {
-        console.error("Error directly setting _explicitlyCompleted flag:", e);
-      }
-
-      // Create new state object
-      const newState = {
-        fromLocation: processedFromLocation,
-        toLocation: processedToLocation,
-        selectedType: selectedType,
-        directFlight: directFlight,
-        flightSegments: flightSegments,
-        phase: 1,
-        _timestamp: Date.now(),
-      };
-
-      // Read the existing phase1State to preserve the _explicitlyCompleted flag
-      let existingPhase1State = {};
-      try {
-        const phase1StateStr = localStorage.getItem("phase1State");
-        if (phase1StateStr) {
-          existingPhase1State = JSON.parse(phase1StateStr);
-        }
-      } catch (e) {
-        console.error("Error reading existing phase1State:", e);
-      }
-
-      // Save state for next phase, preserving the _explicitlyCompleted flag
-      const phase1StateData = {
-        ...existingPhase1State, // Start with existing fields
-        ...newState, // Override with our new state
-        phase: 1,
-        _explicitlyCompleted: true, // EXPLICITLY set this to true regardless of existingPhase1State
-        _completedTimestamp: Date.now(),
-        // Explicitly ensure these location fields are set
-        fromLocation: processedFromLocation,
-        toLocation: processedToLocation,
-      };
-
-      // Make super sure _explicitlyCompleted is set to true
-      Object.defineProperty(phase1StateData, "_explicitlyCompleted", {
-        value: true,
-        writable: true,
-        enumerable: true,
-        configurable: true,
-      });
-
-      console.log("=== DEBUG - Phase1State BEFORE localStorage.setItem ===", {
-        phase1StateData,
-        hasExplicitlyCompletedFlag: "_explicitlyCompleted" in phase1StateData,
-        explicitlyCompletedValue: phase1StateData._explicitlyCompleted,
-        timestamp: new Date().toISOString(),
-      });
-
-      localStorage.setItem("phase1State", JSON.stringify(phase1StateData));
-
-      // Verify what was actually stored in localStorage
-      try {
-        const storedPhase1State = localStorage.getItem("phase1State");
-        const parsedStoredState = storedPhase1State
-          ? JSON.parse(storedPhase1State)
-          : {};
-        console.log("=== DEBUG - Phase1State AFTER localStorage.setItem ===", {
-          parsedStoredState,
-          hasExplicitlyCompletedFlag:
-            "_explicitlyCompleted" in parsedStoredState,
-          explicitlyCompletedValue: parsedStoredState._explicitlyCompleted,
-          timestamp: new Date().toISOString(),
-        });
-      } catch (e) {
-        console.error("Error verifying phase1State in localStorage:", e);
-      }
-
-      const phase2StateData = {
-        ...newState,
-        phase: 2,
-        compensationAmount,
-      };
-      localStorage.setItem("phase2State", JSON.stringify(phase2StateData));
-
-      // Save to flight store
-      flightStore.saveFlightData(2, {
-        fromLocation: processedFromLocation,
-        toLocation: processedToLocation,
-        selectedType: selectedType,
-        selectedFlights: flightSegments
-          .map((segment) => segment.selectedFlight)
-          .filter((flight): flight is Flight => flight !== null),
-        flightSegments: flightSegments.map((segment) => ({
-          ...segment,
-          // Ensure fromLocation and toLocation are properly formatted
-          fromLocation:
-            typeof segment.fromLocation === "string"
-              ? {
-                  value: segment.fromLocation,
-                  label: segment.fromLocation,
-                  description: `${segment.fromLocation} Airport`,
-                }
-              : segment.fromLocation,
-          toLocation:
-            typeof segment.toLocation === "string"
-              ? {
-                  value: segment.toLocation,
-                  label: segment.toLocation,
-                  description: `${segment.toLocation} Airport`,
-                }
-              : segment.toLocation,
-        })),
-        timestamp: Date.now(),
-        _isMultiSegment: selectedType === "multi",
-        _preserveFlightSegments: true,
-      });
-
-      // Also save to phase 1 flight store to ensure consistency
-      // For phase 1, we need to ensure the correct destinations are set
-      const phase1Segments =
-        selectedType === "direct"
-          ? [
-              {
-                fromLocation:
-                  typeof processedFromLocation === "string"
-                    ? {
-                        value: processedFromLocation,
-                        label: processedFromLocation,
-                        description: `${processedFromLocation} Airport`,
-                      }
-                    : processedFromLocation,
-                toLocation:
-                  typeof processedToLocation === "string"
-                    ? {
-                        value: processedToLocation,
-                        label: processedToLocation,
-                        description: `${processedToLocation} Airport`,
-                      }
-                    : processedToLocation,
-                selectedFlight: null,
-                date: null,
-              },
-            ]
-          : [
-              {
-                fromLocation:
-                  typeof processedFromLocation === "string"
-                    ? {
-                        value: processedFromLocation,
-                        label: processedFromLocation,
-                        description: `${processedFromLocation} Airport`,
-                      }
-                    : processedFromLocation,
-                toLocation: null, // No hardcoded intermediate location
-                selectedFlight: null,
-                date: null,
-              },
-              {
-                fromLocation: null, // No hardcoded intermediate location
-                toLocation:
-                  typeof processedToLocation === "string"
-                    ? {
-                        value: processedToLocation,
-                        label: processedToLocation,
-                        description: `${processedToLocation} Airport`,
-                      }
-                    : processedToLocation,
-                selectedFlight: null,
-                date: null,
-              },
-            ];
-
-      flightStore.saveFlightData(1, {
-        fromLocation: processedFromLocation,
-        toLocation: processedToLocation,
-        selectedType: selectedType,
-        selectedFlights: [],
-        flightSegments: phase1Segments,
-        timestamp: Date.now(),
-        _isMultiSegment: selectedType === "multi",
-        _preserveFlightSegments: true,
-      });
-
-      // After state is updated, set the phase and navigate
-      await store.setCurrentPhase(2);
-
-      // Debug logging to check the state of phase1State in localStorage
-      try {
-        const phase1StateDebug = localStorage.getItem("phase1State");
-        const phase1StateObj = phase1StateDebug
-          ? JSON.parse(phase1StateDebug)
-          : {};
-        const phasesCompletedDebug = localStorage.getItem(
-          "phasesCompletedViaContinue"
-        );
-        const completedPhasesDebug = localStorage.getItem("completedPhases");
-
-        console.log("=== DEBUG - Phase1State Before Navigation ===", {
-          phase1State: phase1StateObj,
-          explicitlyCompleted: phase1StateObj._explicitlyCompleted,
-          phasesCompletedViaContinue: phasesCompletedDebug
-            ? JSON.parse(phasesCompletedDebug)
-            : [],
-          completedPhases: completedPhasesDebug
-            ? JSON.parse(completedPhasesDebug)
-            : [],
-          storeCompletedPhases: store.getState().completedPhases,
-          storeCompletedViaContinue:
-            store.getState().phasesCompletedViaContinue,
-          timestamp: new Date().toISOString(),
-        });
-      } catch (e) {
-        console.error("Error during debug logging:", e);
-      }
-
-      const nextUrl = "/phases/compensation-estimate";
-      const langAwareUrl = getLanguageAwareUrl(nextUrl, store.currentLanguage);
-
-      // Double-check Contact ID exists before final navigation
-      const contactIdExists = checkContactIdBeforeNavigation();
-      if (!contactIdExists) {
-        console.error(
-          "[ContactID] WARNING: Attempting to navigate without Contact ID!"
-        );
-
-        // Try to get or recover Contact ID one more time
-        const lastAttemptId = verifyContactId();
-        if (!lastAttemptId) {
+        } catch (error) {
           console.error(
-            "[ContactID] CRITICAL: Failed to recover Contact ID before navigation. Not creating fallback ID."
+            "[InitialAssessmentPage] Error updating localStorage",
+            error
           );
-
-          // Add a query parameter to indicate this was a problem case
-          router.push(`${langAwareUrl}?missing_contact_id=true`);
-        } else {
-          console.log(
-            "[ContactID] Successfully recovered Contact ID before navigation:",
-            lastAttemptId
-          );
-          router.push(langAwareUrl);
         }
       } else {
-        // Normal navigation with verified Contact ID
-        router.push(langAwareUrl);
+        console.warn(
+          "Validation actions not available, step validation not updated"
+        );
       }
-
-      console.log("=== Initial Assessment - Final State ===", {
-        completedPhases: store.getState().completedPhases,
-        phasesCompletedViaContinue: store.getState().phasesCompletedViaContinue,
-        timestamp: new Date().toISOString(),
-      });
     } catch (error) {
-      console.error("Error during phase transition:", error);
+      console.error("Error updating step validation:", error);
     }
   };
 
-  // Add a direct function to check if all steps are completed
-  const manualCheckAllStepsValid = () => {
-    // Get current state
-    const state = store.getState();
-    const validation = state.validationState;
-
-    // Direct checks for each required step - be very forgiving
-
-    // Step 1: Flight Selection - check various signals
-    const hasValidFlightSelection =
-      validation?.stepValidation?.[1] ||
-      !!state.fromLocation ||
-      !!state.toLocation ||
-      (state.flightSegments && state.flightSegments.length > 0);
-
-    // Step 2: QA Wizard - check if completed in multiple ways
-    const hasCompletedWizard =
-      validation?.isWizardValid ||
-      validation?.isWizardSubmitted ||
-      validation?.stepValidation?.[2] ||
-      (state.wizardAnswers && state.wizardAnswers.length > 0) ||
-      (state.completedWizards && state.completedWizards["initial_assessment"]);
-
-    // Step 3: Personal Details - check both validation and actual data
-    const hasValidPersonalDetails =
-      validation?.isPersonalValid ||
-      validation?.stepValidation?.[3] ||
-      (state.personalDetails &&
-        state.personalDetails.email &&
-        state.personalDetails.firstName &&
-        state.personalDetails.lastName);
-
-    // Step 4: Terms - check both validation and actual checkbox states
-    const hasAcceptedTerms =
-      validation?.stepValidation?.[4] ||
-      (state.termsAccepted && state.privacyAccepted);
-
-    // For debugging, log the actual values in state
-    console.log("=== State Values Check ===", {
-      fromLocation: !!state.fromLocation,
-      toLocation: !!state.toLocation,
-      flightSegmentsLength: state.flightSegments?.length || 0,
-      wizardAnswersLength: state.wizardAnswers?.length || 0,
-      completedWizardsInitialAssessment:
-        !!state.completedWizards?.["initial_assessment"],
-      personalDetails: !!state.personalDetails,
-      personalEmail: state.personalDetails?.email,
-      personalFirstName: state.personalDetails?.firstName,
-      personalLastName: state.personalDetails?.lastName,
-      termsAccepted: state.termsAccepted,
-      privacyAccepted: state.privacyAccepted,
-      timestamp: new Date().toISOString(),
-    });
-
-    const allStepsValid =
-      hasValidFlightSelection &&
-      hasCompletedWizard &&
-      hasValidPersonalDetails &&
-      hasAcceptedTerms;
-
-    console.log("=== Manual Continue Button Check ===", {
-      hasValidFlightSelection,
-      hasCompletedWizard,
-      hasValidPersonalDetails,
-      hasAcceptedTerms,
-      allStepsValid,
-      timestamp: new Date().toISOString(),
-    });
-
-    // OVVERRIDE: Force enable the button if everything reasonable seems valid
-    return (
-      allStepsValid ||
-      (!!state.fromLocation &&
-        !!state.toLocation &&
-        !!state.personalDetails?.firstName?.trim() &&
-        !!state.personalDetails.lastName?.trim() &&
-        !!state.personalDetails.email?.trim() &&
-        state.termsAccepted &&
-        state.privacyAccepted)
-    );
-  };
-
-  // Add effect to automatically open the next step when a step is completed
-  useEffect(() => {
-    if (!mounted) return;
-
-    // Check if we have a validation state to work with
-    if (!storeValidationState || !storeValidationState.stepValidation) return;
-
-    // Get completed steps from validation state
-    const completedSteps = Object.entries(storeValidationState.stepValidation)
-      .filter(([key, value]) => value === true && !isNaN(parseInt(key)))
-      .map(([key]) => parseInt(key) as ValidationStep);
-
-    if (completedSteps.length === 0) return;
-
-    // Find the highest completed step number
-    const highestCompletedStep = Math.max(...completedSteps);
-
-    // The next step would be the highest completed step + 1
-    const nextStep = (highestCompletedStep + 1) as ValidationStep;
-
-    // Ensure the next step exists in our steps array
-    const nextStepExists = steps.some((step) => step.id === nextStep);
-
-    // Open the next step if it exists and isn't already open
-    if (nextStepExists && !openSteps.includes(nextStep)) {
-      console.log("=== Auto-opening next step ===", {
-        highestCompletedStep,
-        nextStep,
-        currentOpenSteps: [...openSteps],
-        timestamp: new Date().toISOString(),
-      });
-
-      setOpenSteps((prevOpenSteps) =>
-        Array.from(new Set([...prevOpenSteps, nextStep]))
-      );
-    }
-  }, [mounted, storeValidationState, steps, openSteps]);
-
-  // Initialize Contact ID on mount
-  useEffect(() => {
-    if (!mounted) return;
-
-    // Check if we already have a Contact ID
-    const existingId = verifyContactId();
-    if (existingId) {
-      console.log(
-        "[ContactID] Found existing Contact ID during initial assessment initialization:",
-        existingId
-      );
-    } else {
-      // If no Contact ID exists yet, create a temporary one
-      // This will be replaced when the user submits their personal details and HubSpot contact is created
-      const tempId = ensureContactId();
-      console.log(
-        "[ContactID] Created temporary Contact ID during initial assessment initialization:",
-        tempId
-      );
-    }
-  }, [mounted]);
-
-  // Add this effect to handle shared flight data
-  useEffect(() => {
-    // Only process after component is mounted
-    if (!mounted) return;
-
-    // Check for shared flight data in URL
-    const sharedFlightParam = searchParams?.get("shared_flight");
-
-    // Add a flag to prevent reprocessing
-    const hasProcessedSharedFlight = localStorage.getItem(
-      "_hasProcessedSharedFlight"
-    );
-
-    if (sharedFlightParam && !hasProcessedSharedFlight) {
-      try {
-        console.log("Found shared flight data:", sharedFlightParam);
-        const decodedData = decodeURIComponent(sharedFlightParam);
-        const sharedFlightData = JSON.parse(decodedData);
-
-        console.log("Parsed shared flight data:", sharedFlightData);
-
-        if (sharedFlightData._sharedClaim) {
-          // Process locations - make sure they're properly formatted as objects with all required properties
-          const fromLocation =
-            typeof sharedFlightData.fromLocation === "string"
-              ? {
-                  value: sharedFlightData.fromLocation,
-                  label: sharedFlightData.fromLocation,
-                  city: sharedFlightData.fromLocation,
-                  description: sharedFlightData.fromLocation,
-                }
-              : sharedFlightData.fromLocation;
-
-          const toLocation =
-            typeof sharedFlightData.toLocation === "string"
-              ? {
-                  value: sharedFlightData.toLocation,
-                  label: sharedFlightData.toLocation,
-                  city: sharedFlightData.toLocation,
-                  description: sharedFlightData.toLocation,
-                }
-              : sharedFlightData.toLocation;
-
-          const selectedType = sharedFlightData.selectedType || "direct";
-
-          // Helper function to properly parse and format dates
-          const parseFlightDate = (dateValue: any): Date | string | null => {
-            if (!dateValue) return null;
-
-            try {
-              // If it's already a string in DD.MM.YYYY format, use it directly
-              if (
-                typeof dateValue === "string" &&
-                dateValue.match(/^\d{2}\.\d{2}\.\d{4}$/)
-              ) {
-                // Extract day, month, year
-                const [day, month, year] = dateValue.split(".").map(Number);
-                // Create a proper Date object (using noon UTC to avoid timezone issues)
-                return new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
-              }
-
-              // If it's an ISO string or similar date format
-              if (
-                typeof dateValue === "string" &&
-                (dateValue.includes("T") || dateValue.includes("-"))
-              ) {
-                const date = new Date(dateValue);
-                if (!isNaN(date.getTime())) {
-                  return date;
-                }
-              }
-
-              // If it's already a Date object (after JSON parsing it would be a string though)
-              if (dateValue instanceof Date && !isNaN(dateValue.getTime())) {
-                return dateValue;
-              }
-
-              // Default case - return null for invalid dates
-              return null;
-            } catch (error) {
-              console.error("Error parsing flight date:", error, dateValue);
-              return null;
-            }
-          };
-
-          // Ensure flight segments have properly formatted locations and all required fields
-          const flightSegments = (sharedFlightData.flightSegments || []).map(
-            (segment: any) => {
-              // Parse segment date
-              const parsedDate = parseFlightDate(segment.date);
-
-              // Process selected flight if it exists
-              let selectedFlight = segment.selectedFlight;
-              if (selectedFlight) {
-                // Parse flight date
-                const parsedFlightDate =
-                  parseFlightDate(selectedFlight.date) || parsedDate;
-
-                // Create a properly formatted selected flight object
-                selectedFlight = {
-                  ...selectedFlight,
-                  date: parsedFlightDate,
-                  // Ensure other required fields are present
-                  departureCity:
-                    selectedFlight.departureCity ||
-                    segment.fromLocation?.city ||
-                    "",
-                  arrivalCity:
-                    selectedFlight.arrivalCity ||
-                    segment.toLocation?.city ||
-                    "",
-                  departureAirport:
-                    selectedFlight.departureAirport ||
-                    (typeof segment.fromLocation === "string"
-                      ? segment.fromLocation
-                      : segment.fromLocation?.value) ||
-                    "",
-                  arrivalAirport:
-                    selectedFlight.arrivalAirport ||
-                    (typeof segment.toLocation === "string"
-                      ? segment.toLocation
-                      : segment.toLocation?.value) ||
-                    "",
-                };
-              }
-
-              return {
-                ...segment,
-                fromLocation:
-                  typeof segment.fromLocation === "string"
-                    ? {
-                        value: segment.fromLocation,
-                        label: segment.fromLocation,
-                        city: segment.fromLocation,
-                        description: segment.fromLocation,
-                      }
-                    : segment.fromLocation,
-                toLocation:
-                  typeof segment.toLocation === "string"
-                    ? {
-                        value: segment.toLocation,
-                        label: segment.toLocation,
-                        city: segment.toLocation,
-                        description: segment.toLocation,
-                      }
-                    : segment.toLocation,
-                date: parsedDate,
-                selectedFlight: selectedFlight,
-              };
-            }
-          );
-
-          console.log("Processing shared flight data", {
-            fromLocation,
-            toLocation,
-            selectedType,
-            segments: flightSegments.length,
-            firstSegmentDate: flightSegments[0]?.date,
-            firstSegmentFlight: flightSegments[0]?.selectedFlight
-              ? {
-                  id: flightSegments[0].selectedFlight.id,
-                  flightNumber: flightSegments[0].selectedFlight.flightNumber,
-                  date: flightSegments[0].selectedFlight.date,
-                }
-              : null,
-          });
-
-          // Update the store with the shared flight data
-          store.batchUpdateWizardState({
-            fromLocation,
-            toLocation,
-            selectedType,
-            flightSegments,
-            _lastUpdate: Date.now(),
-          });
-
-          // Also save to flight store for ALL phases to ensure consistency
-          flightStore.saveFlightData(1, {
-            fromLocation,
-            toLocation,
-            selectedType,
-            flightSegments,
-            timestamp: Date.now(),
-          });
-
-          // Also save to phases 2 and 3 to ensure data is available in flight details
-          flightStore.saveFlightData(2, {
-            fromLocation,
-            toLocation,
-            selectedType,
-            flightSegments,
-            timestamp: Date.now(),
-          });
-
-          flightStore.saveFlightData(3, {
-            fromLocation,
-            toLocation,
-            selectedType,
-            flightSegments,
-            timestamp: Date.now(),
-          });
-
-          // Save to localStorage for persistence for ALL relevant phases
-          const sharedStateData = {
-            fromLocation,
-            toLocation,
-            selectedType,
-            flightSegments,
-            _sharedClaimData: true,
-            _dataFromSharedLink: true,
-            timestamp: Date.now(),
-          };
-
-          // Add debugging to verify the dates before saving to localStorage
-          console.log("Saving flight data to localStorage with dates:", {
-            segments: flightSegments.map((seg: any) => ({
-              from:
-                typeof seg.fromLocation === "string"
-                  ? seg.fromLocation
-                  : seg.fromLocation?.value,
-              to:
-                typeof seg.toLocation === "string"
-                  ? seg.toLocation
-                  : seg.toLocation?.value,
-              date: seg.date,
-              flight: seg.selectedFlight
-                ? {
-                    id: seg.selectedFlight.id,
-                    flightNumber: seg.selectedFlight.flightNumber,
-                    date: seg.selectedFlight.date,
-                  }
-                : null,
-            })),
-          });
-
-          localStorage.setItem("phase1State", JSON.stringify(sharedStateData));
-          localStorage.setItem("phase2State", JSON.stringify(sharedStateData));
-          localStorage.setItem("phase3State", JSON.stringify(sharedStateData));
-
-          // Also save without the additional metadata for redundancy
-          const flightOnlyData = {
-            flightSegments,
-            fromLocation,
-            toLocation,
-            selectedType,
-            timestamp: Date.now(),
-          };
-          localStorage.setItem(
-            "flightSegments",
-            JSON.stringify(flightSegments)
-          );
-          localStorage.setItem(
-            "flightData_phase1",
-            JSON.stringify(flightOnlyData)
-          );
-          localStorage.setItem(
-            "flightData_phase2",
-            JSON.stringify(flightOnlyData)
-          );
-          localStorage.setItem(
-            "flightData_phase3",
-            JSON.stringify(flightOnlyData)
-          );
-
-          // Mark flight data as coming from shared link
-          localStorage.setItem("_sharedFlightData", "true");
-
-          // Also explicitly save the shared flight data so it can be found by the flight-details page
-          localStorage.setItem(
-            "sharedFlightData",
-            JSON.stringify(sharedStateData)
-          );
-
-          // Open the flight selection step and mark as interacted
-          setOpenSteps([1, 2]);
-          setInteractedSteps([1, 2]);
-
-          console.log("Successfully loaded shared flight data");
-
-          // Also process wizard answers if present
-          if (
-            sharedFlightData.wizardAnswers &&
-            sharedFlightData.wizardAnswers.length > 0
-          ) {
-            console.log(
-              "Found wizard answers in shared flight data:",
-              sharedFlightData.wizardAnswers
-            );
-
-            // Apply the wizard answers to the store
-            store.setWizardAnswers(sharedFlightData.wizardAnswers);
-
-            // Force update wizard state in localStorage to ensure it's available for the wizard component
-            localStorage.setItem(
-              "wizardAnswers",
-              JSON.stringify(sharedFlightData.wizardAnswers)
-            );
-            localStorage.setItem(
-              "wizardAnswers_1",
-              JSON.stringify(sharedFlightData.wizardAnswers)
-            );
-            localStorage.setItem(
-              "phase1_wizardAnswers",
-              JSON.stringify(sharedFlightData.wizardAnswers)
-            );
-
-            // Update QA validation state in multiple places for redundancy
-            const qaValidationUpdate = {
-              isWizardSubmitted: true,
-              isWizardValid: true,
-              wizardSuccessStates: { 1: true },
-              stepInteraction: {
-                ...store.validationState.stepInteraction,
-                2: true, // Step 2 is the wizard
-              },
-              stepValidation: {
-                ...store.validationState.stepValidation,
-                2: true, // Mark the wizard step as valid
-              },
-              stepCompleted: {
-                ...store.validationState.stepCompleted,
-                2: true,
-              },
-              completedSteps: [
-                ...(store.validationState.completedSteps || []),
-                2 as ValidationStep,
-              ],
-            };
-
-            // Update all validation states in localStorage and store
-            localStorage.setItem(
-              "validationState",
-              JSON.stringify(qaValidationUpdate)
-            );
-
-            // Also update the captain-frank-state object
-            try {
-              const stateStr = localStorage.getItem("captain-frank-state");
-              const stateObj = stateStr ? JSON.parse(stateStr) : { state: {} };
-
-              stateObj.state = {
-                ...stateObj.state,
-                wizardAnswers: sharedFlightData.wizardAnswers,
-                wizardIsCompleted: true,
-                wizardIsValid: true,
-                wizardShowingSuccess: true,
-                validationState: {
-                  ...qaValidationUpdate,
-                  _timestamp: Date.now(),
-                },
-              };
-              localStorage.setItem(
-                "captain-frank-state",
-                JSON.stringify(stateObj)
-              );
-
-              // Directly set the QA wizard as completed
-              store.markWizardComplete("initialAssessment");
-            } catch (error) {
-              console.error("Error updating captain-frank-state", error);
-            }
-          }
-
-          // Process Phase 4 data if present
-          if (sharedFlightData.phase4Data) {
-            console.log(
-              "Found Phase 4 data in shared flight data:",
-              sharedFlightData.phase4Data
-            );
-
-            // Import and initialize the phase4Store
-            const { usePhase4Store } = require("@/lib/state/phase4Store");
-            const phase4Store = usePhase4Store.getState();
-
-            // Process travel status answers
-            if (sharedFlightData.phase4Data.travelStatusAnswers) {
-              console.log(
-                "Setting travel status answers:",
-                sharedFlightData.phase4Data.travelStatusAnswers
-              );
-              phase4Store.batchUpdate({
-                travelStatusAnswers:
-                  sharedFlightData.phase4Data.travelStatusAnswers,
-                travelStatusIsValid: true,
-                travelStatusShowingSuccess: true,
-                _lastUpdate: Date.now(),
-              });
-            }
-
-            // Process informed date answers
-            if (sharedFlightData.phase4Data.informedDateAnswers) {
-              console.log(
-                "Setting informed date answers:",
-                sharedFlightData.phase4Data.informedDateAnswers
-              );
-              phase4Store.batchUpdate({
-                informedDateAnswers:
-                  sharedFlightData.phase4Data.informedDateAnswers,
-                informedDateIsValid: true,
-                informedDateShowingSuccess: true,
-                _lastUpdate: Date.now(),
-              });
-            }
-
-            // Process alternative flights if present
-            if (sharedFlightData.phase4Data.selectedFlights) {
-              console.log(
-                "Setting alternative flights:",
-                sharedFlightData.phase4Data.selectedFlights
-              );
-
-              // Save the alternative flights to both stores
-              phase4Store.setSelectedFlights(
-                sharedFlightData.phase4Data.selectedFlights
-              );
-              flightStore.setSelectedFlights(
-                4,
-                sharedFlightData.phase4Data.selectedFlights
-              );
-
-              // Also save to localStorage for persistence
-              localStorage.setItem(
-                "phase4AlternativeFlights",
-                JSON.stringify(sharedFlightData.phase4Data.selectedFlights)
-              );
-              localStorage.setItem(
-                "phase4FlightData",
-                JSON.stringify({
-                  selectedFlights: sharedFlightData.phase4Data.selectedFlights,
-                  _dataFromSharedLink: true,
-                  _lastUpdate: Date.now(),
-                })
-              );
-            }
-
-            // Save complete phase4Store state to localStorage
-            try {
-              const phase4State = {
-                ...phase4Store,
-                _sharedClaimData: true,
-                _dataFromSharedLink: true,
-                timestamp: Date.now(),
-              };
-              localStorage.setItem(
-                "phase4Store",
-                JSON.stringify({ state: phase4State })
-              );
-              console.log("Successfully saved Phase 4 data to localStorage");
-            } catch (error) {
-              console.error(
-                "Error saving Phase 4 data to localStorage:",
-                error
-              );
-            }
-          }
-
-          // Only now, after all processing is complete, set the flag to indicate we've processed this shared flight data
-          localStorage.setItem("_hasProcessedSharedFlight", "true");
-
-          // Set a flag in localStorage to remember this data came from a shared link
-          localStorage.setItem("_dataFromSharedLink", "true");
-        }
-      } catch (error) {
-        console.error("Error processing shared flight data:", error);
-        // Even if there's an error, set the flag to prevent infinite processing attempts
-        localStorage.setItem("_hasProcessedSharedFlight", "true");
-      }
-    }
-  }, [
-    searchParams,
-    mounted,
-    store,
-    flightStore,
-    setInteractedSteps,
-    setOpenSteps,
-  ]);
-
-  // Add a separate effect to handle cleanup on navigation
-  useEffect(() => {
-    // This will run when the component mounts
-    const handleBeforeUnload = () => {
-      // Clear the shared flight processing flag when navigating away from the page
-      // This allows re-processing if the user comes back to this page
-      localStorage.removeItem("_hasProcessedSharedFlight");
-    };
-
-    // Add event listener for page unload
-    window.addEventListener("beforeunload", handleBeforeUnload);
-
-    // Return cleanup function to remove event listener
-    return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-    };
-  }, []);
-
-  // Return null if not mounted (during SSR)
-  if (!mounted) {
-    return null;
-  }
-
+  // Return the component wrapped with the necessary providers
   return (
-    <AccordionProvider initialActiveAccordion={store.initialAccordion}>
-      <div className="max-w-5xl mx-auto px-4 py-8">
-        <PhaseNavigation
-          currentPhase={currentPhase}
-          completedPhases={store.completedPhases}
+    <AccordionProvider>
+      <PhaseNavigation
+        phase={ValidationPhase.INITIAL_ASSESSMENT}
+        translations={{
+          title: t("phases.initialAssessment.title"),
+          description: t("phases.initialAssessment.description"),
+        }}
+      />
+      <SpeechBubble message={t("phases.initialAssessment.welcomeMessage")} />
+
+      <AccordionCardClient
+        title={t("phases.initialAssessment.flightDetails")}
+        subtitle={t("phases.initialAssessment.flightDetailsDescription")}
+        eyebrow={formatStepText(t, "1", "4")}
+        stepId="1"
+        isCompleted={isStep1Valid}
+        isValid={isStep1Valid}
+        hasInteracted={hasInteractedWithFlight}
+        onInteraction={() => {
+          setHasInteractedWithFlight(true);
+        }}
+      >
+        <ModularFlightSelector
+          phase={1}
+          currentPhase={1}
+          showFlightSearch={false}
+          onFlightTypeChange={() => {}}
+          onInteract={() => {
+            setHasInteractedWithFlight(true);
+          }}
+          setValidationState={(isValid) => {
+            console.log(
+              "Direct validation update via setValidationState:",
+              isValid
+            );
+
+            const currentStore = useStore.getState();
+
+            if (currentStore?.actions?.validation) {
+              if (
+                typeof currentStore.actions.validation.setStepValidation ===
+                "function"
+              ) {
+                try {
+                  currentStore.actions.validation.setStepValidation(
+                    ValidationPhase.INITIAL_ASSESSMENT,
+                    isValid
+                  );
+                } catch (error) {
+                  console.error("Error setting validation:", error);
+                }
+              }
+
+              if (
+                typeof currentStore.actions.validation.setStepInteraction ===
+                "function"
+              ) {
+                try {
+                  currentStore.actions.validation.setStepInteraction(
+                    ValidationPhase.INITIAL_ASSESSMENT,
+                    true
+                  );
+                } catch (error) {
+                  console.error("Error setting interaction:", error);
+                }
+              }
+            }
+          }}
         />
-        <div className="relative">
-          <main className="max-w-3xl mx-auto px-4 pt-8 pb-24">
-            <div className="space-y-6">
-              <SpeechBubble
-                message={t.phases.initialAssessment.welcomeMessage}
+      </AccordionCardClient>
+
+      <AccordionCardClient
+        title={t("phases.initialAssessment.wizard.title")}
+        subtitle={t("phases.initialAssessment.wizard.description")}
+        eyebrow={formatStepText(t, "2", "4")}
+        stepId="2"
+        isCompleted={isStep2Complete}
+        isValid={isStep2Complete}
+        hasInteracted={hasInteractedWithQA}
+        onInteraction={() => setHasInteractedWithQA(true)}
+      >
+        {showQASuccess ? (
+          (() => {
+            const messageKey = wizardConfettiStatus
+              ? "wizard.success.goodChance"
+              : "wizard.success.answersSaved";
+            const successMessage =
+              t(messageKey) ||
+              (wizardConfettiStatus ? "Yay! Good chance!" : "Answers saved.");
+
+            return (
+              <Success
+                message={successMessage}
+                showConfetti={wizardConfettiStatus}
+                onBack={handleBackFromSuccess}
               />
-              {steps.map(renderStep)}
-              <div className="mt-8 flex justify-end">
-                <ContinueButton
-                  onClick={handleContinue}
-                  disabled={!manualCheckAllStepsValid()}
-                  isLoading={isLoading}
-                  text={t.phases.initialAssessment.continueButton}
-                />
-              </div>
-            </div>
-          </main>
+            );
+          })()
+        ) : (
+          <Phase1QAWizard
+            questions={wizardQuestions}
+            onComplete={handleQAComplete}
+            store={useStore.getState()}
+          />
+        )}
+      </AccordionCardClient>
+
+      <AccordionCardClient
+        title={t("phases.initialAssessment.personalDetails.title")}
+        subtitle={t("phases.initialAssessment.personalDetails.description")}
+        eyebrow={formatStepText(t, "3", "4")}
+        stepId="3"
+        isCompleted={isStep3Complete}
+        isValid={isStep3Complete}
+        hasInteracted={hasInteractedWithPersonalDetails}
+        onInteraction={() => setHasInteractedWithPersonalDetails(true)}
+      >
+        <PersonalDetailsForm
+          onComplete={handleSubmit}
+          onInteract={() => setHasInteractedWithPersonalDetails(true)}
+          showAdditionalFields={false}
+          formRef={personalDetailsFormRef}
+        />
+      </AccordionCardClient>
+
+      <AccordionCardClient
+        title={t("phases.initialAssessment.consent.title")}
+        subtitle={t("phases.initialAssessment.consent.description")}
+        eyebrow={formatStepText(t, "4", "4")}
+        stepId="4"
+        isCompleted={isStep4Complete}
+        isValid={isStep4Complete}
+        hasInteracted={hasInteractedWithTerms}
+        onInteraction={() => setHasInteractedWithTerms(true)}
+      >
+        <div className="space-y-4">
+          <ConsentCheckbox
+            type="terms"
+            required
+            checked={termsAccepted}
+            onChange={(checked) => {
+              console.log("Terms onChange called with value:", checked);
+              // Update Zustand store directly
+              useStore
+                .getState()
+                .actions.user.updateConsents({ terms: checked });
+              setHasInteractedWithTerms(true);
+
+              // Update validation state if both checkboxes are checked
+              const privacyState = useStore.getState().user.consents.privacy;
+              if (checked && privacyState) {
+                // Set validation state for step 4
+                useStore
+                  .getState()
+                  .actions.validation.setStepValidation(
+                    "STEP_4" as ValidationPhase,
+                    true
+                  );
+                console.log(
+                  "Set validation for STEP_4 to true (terms changed)"
+                );
+              } else {
+                useStore
+                  .getState()
+                  .actions.validation.setStepValidation(
+                    "STEP_4" as ValidationPhase,
+                    false
+                  );
+                console.log(
+                  "Set validation for STEP_4 to false (terms changed)"
+                );
+              }
+            }}
+            label={t("phases.initialAssessment.consent.terms")}
+          />
+          <ConsentCheckbox
+            type="privacy"
+            required
+            checked={privacyAccepted}
+            onChange={(checked) => {
+              console.log("Privacy onChange called with value:", checked);
+              // Update Zustand store directly
+              useStore
+                .getState()
+                .actions.user.updateConsents({ privacy: checked });
+              setHasInteractedWithTerms(true);
+
+              // Update validation state if both checkboxes are checked
+              const termsState = useStore.getState().user.consents.terms;
+              if (checked && termsState) {
+                // Set validation state for step 4
+                useStore
+                  .getState()
+                  .actions.validation.setStepValidation(
+                    "STEP_4" as ValidationPhase,
+                    true
+                  );
+                console.log(
+                  "Set validation for STEP_4 to true (privacy changed)"
+                );
+              } else {
+                useStore
+                  .getState()
+                  .actions.validation.setStepValidation(
+                    "STEP_4" as ValidationPhase,
+                    false
+                  );
+                console.log(
+                  "Set validation for STEP_4 to false (privacy changed)"
+                );
+              }
+            }}
+            label={t("phases.initialAssessment.consent.privacy")}
+          />
+          <ConsentCheckbox
+            type="marketing"
+            checked={marketingAccepted}
+            onChange={(checked) => {
+              console.log("Marketing onChange called with value:", checked);
+              // Update Zustand store directly
+              useStore
+                .getState()
+                .actions.user.updateConsents({ marketing: checked });
+              setHasInteractedWithTerms(true);
+            }}
+            label={t("phases.initialAssessment.consent.marketing")}
+          />
         </div>
+      </AccordionCardClient>
+
+      <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
+        <div></div>
+        <ContinueButton
+          onClick={handleContinue}
+          disabled={!canContinue()}
+          isLoading={isLoading}
+          text={t("common.continue")}
+          useUniversalNav={true}
+          navigateToPhase={ValidationPhase.COMPENSATION_ESTIMATE}
+        />
       </div>
     </AccordionProvider>
   );
-}
+};
+
+export default InitialAssessmentPage;

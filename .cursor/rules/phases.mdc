@@ -1,0 +1,247 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Application Phases & Flow
+
+## Overview
+
+Captain Frank Fresh implements a multi-phase claim process for flight compensation. Each phase represents a distinct step in the user journey, with specific validation requirements and state management.
+
+## Phase Structure
+
+### 1. Initial Assessment
+- **Purpose**: Evaluate basic eligibility for flight compensation
+- **Key Components**:
+  - Flight delay/cancellation details
+  - Basic flight information
+  - Initial eligibility check
+  - Passenger count
+  - Flight type (EU/non-EU)
+- **Validation**:
+  - Minimum delay time (3+ hours)
+  - Flight within EU jurisdiction
+  - Within claim time limits
+- **Navigation**:
+  - Forward: Compensation Estimate (if eligible)
+  - Forward: Claim Rejected (if not eligible)
+
+### 2. Compensation Estimate
+- **Purpose**: Calculate potential compensation amount
+- **Key Components**:
+  - Distance calculation
+  - Compensation rules application
+  - Preliminary estimate display
+  - Compensation breakdown
+  - Success probability
+- **Validation**:
+  - Flight distance verification
+  - Compensation rule eligibility
+  - Currency conversion
+- **Navigation**:
+  - Forward: Flight Details
+  - Back: Initial Assessment
+
+### 3. Flight Details
+- **Purpose**: Collect comprehensive flight information
+- **Key Components**:
+  - Flight number
+  - Departure/arrival airports
+  - Scheduled times
+  - Actual times
+  - Airline details
+- **Validation**:
+  - Valid flight number format
+  - Valid airport codes
+  - Logical date/time relationships
+  - Real flight verification
+- **Navigation**:
+  - Forward: Trip Experience
+  - Back: Compensation Estimate
+
+### 4. Trip Experience
+- **Purpose**: Gather details about the flight disruption
+- **Key Components**:
+  - Disruption type selection
+  - Delay reasons
+  - Alternative arrangements
+  - Additional expenses
+  - Passenger experience
+- **Validation**:
+  - Required details completion
+  - Valid expense amounts
+  - Supporting information
+- **Navigation**:
+  - Forward: Claim Success/Rejected
+  - Back: Flight Details
+
+### 5. Claim Success/Rejected
+- **Purpose**: Inform user of claim status
+- **Key Components**:
+  - Success/Rejection notification
+  - Next steps guidance
+  - Alternative options (if rejected)
+  - Support contact information
+- **Validation**:
+  - Final eligibility check
+  - Complete information verification
+- **Navigation**:
+  - Forward: Agreement (if successful)
+  - Forward: Exit flow (if rejected)
+  - Back: Not allowed
+
+### 6. Agreement
+- **Purpose**: Legal agreement and consent collection
+- **Key Components**:
+  - Terms and conditions
+  - Privacy policy
+  - Power of attorney
+  - Fee structure
+  - Digital signature
+- **Validation**:
+  - Required consents
+  - Signature validation
+  - Legal requirements
+- **Navigation**:
+  - Forward: Claim Submitted
+  - Back: Not allowed
+
+### 7. Claim Submitted
+- **Purpose**: Final confirmation and next steps
+- **Key Components**:
+  - Submission confirmation
+  - Reference number
+  - Next steps overview
+  - Document requirements
+  - Timeline expectations
+- **Features**:
+  - Email confirmation
+  - Download claim summary
+  - Support contact options
+- **Navigation**:
+  - Final phase
+  - No further navigation
+
+## Phase Navigation
+
+### Navigation Rules
+```typescript
+export enum ValidationPhase {
+  INITIAL_ASSESSMENT = 'INITIAL_ASSESSMENT',
+  COMPENSATION_ESTIMATE = 'COMPENSATION_ESTIMATE',
+  FLIGHT_DETAILS = 'FLIGHT_DETAILS',
+  TRIP_EXPERIENCE = 'TRIP_EXPERIENCE',
+  CLAIM_SUCCESS = 'CLAIM_SUCCESS',
+  CLAIM_REJECTED = 'CLAIM_REJECTED',
+  AGREEMENT = 'AGREEMENT',
+  CLAIM_SUBMITTED = 'CLAIM_SUBMITTED'
+}
+```
+
+### Phase Transitions
+1. Forward progression requires:
+   - Current phase validation passed
+   - All required data collected
+   - No blocking errors
+   - Eligibility maintained
+
+2. Backward navigation:
+   - Only allowed in specific phases
+   - Data persistence maintained
+   - Validation state preserved
+   - Not allowed after Agreement phase
+
+## State Management
+
+### Phase-specific State
+```typescript
+interface PhaseValidationState {
+  status: ValidationStatus;
+  isValid: boolean;
+  errors: ValidationError[];
+  lastValidated: number;
+  metadata?: Record<string, unknown>;
+}
+```
+
+### Global Validation State
+```typescript
+interface ValidationState {
+  phases: Record<ValidationPhase, PhaseValidationState>;
+  currentPhase: ValidationPhase;
+  isValidating: boolean;
+  lastUpdate: number;
+}
+```
+
+## Implementation Guidelines
+
+### 1. Phase Components
+- Each phase has a dedicated directory in `src/app/phases/`
+- Consistent component structure:
+  ```
+  phases/
+  ├── [phase-name]/
+  │   ├── page.tsx
+  │   ├── components/
+  │   ├── hooks/
+  │   └── validation/
+  ```
+
+### 2. Validation Strategy
+- Phase-specific validation rules
+- Immediate validation feedback
+- Cross-phase dependency validation
+- Progressive data collection
+- Eligibility preservation
+
+### 3. Error Handling
+- Clear error messages
+- User-friendly validation feedback
+- Recovery paths for all error states
+- Data preservation on errors
+- Graceful rejection handling
+
+### 4. Performance Considerations
+- Lazy loading of phase components
+- Optimized validation checks
+- Efficient state updates
+- Minimal re-renders
+- Background data processing
+
+## Best Practices
+
+### 1. Phase Implementation
+- Keep phases focused and single-purpose
+- Implement consistent navigation patterns
+- Maintain clear validation rules
+- Preserve user progress
+- Handle edge cases gracefully
+
+### 2. State Management
+- Use appropriate state scope
+- Implement proper cleanup
+- Handle phase transitions smoothly
+- Maintain data consistency
+- Preserve important user inputs
+
+### 3. User Experience
+- Clear progress indication
+- Intuitive navigation
+- Helpful error messages
+- Smooth transitions
+- Loading states for async operations
+
+### 4. Testing
+- Comprehensive phase testing
+- Validation edge cases
+- Navigation scenarios
+- Error recovery paths
+- Success/Failure flows
+
+## Related Documents
+- @Store Architecture
+- @Validation Guidelines
+- @Component Architecture
+- @Testing Guidelines

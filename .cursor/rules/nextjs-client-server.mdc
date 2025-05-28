@@ -1,0 +1,310 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Next.js Client & Server Components
+
+## Core Principles
+
+### Server Components (Default)
+- Render on the server
+- Zero client-side JavaScript
+- Better performance
+- SEO-friendly
+- Direct database/backend access
+
+### Client Components
+- Enable interactivity
+- Use browser APIs
+- Manage client state
+- Handle user events
+- Use hooks and lifecycle methods
+
+## Directory Structure
+```
+src/
+├── app/                    # App router (Server Components by default)
+│   ├── layout.tsx         # Root layout (Server)
+│   ├── page.tsx           # Home page (Server)
+│   └── (routes)/          # Route groups
+├── components/
+│   ├── server/            # Server Components
+│   │   ├── DataTable/
+│   │   └── MetadataDisplay/
+│   ├── client/            # Client Components
+│   │   ├── SearchInput/
+│   │   └── InteractiveForm/
+│   └── shared/            # Shared Components
+└── lib/
+    ├── server/            # Server-only code
+    └── client/            # Client-only code
+```
+
+## Component Patterns
+
+### 1. Server Component Pattern
+```typescript
+// app/products/page.tsx
+import { ProductList } from '@/components/server/ProductList';
+import { db } from '@/lib/server/db';
+
+async function ProductsPage() {
+  // Direct database query - only possible in Server Components
+  const products = await db.products.findMany();
+
+  return (
+    <main>
+      <h1>Products</h1>
+      <ProductList products={products} />
+    </main>
+  );
+}
+```
+
+### 2. Client Component Pattern
+```typescript
+// components/client/InteractiveForm.tsx
+'use client';
+
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+
+export function InteractiveForm() {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { register, handleSubmit } = useForm();
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)}>
+      {/* Interactive form elements */}
+    </form>
+  );
+}
+```
+
+### 3. Hybrid Pattern (Server with Client Islands)
+```typescript
+// Server Component with Client "Islands"
+import { ClientSearch } from '@/components/client/Search';
+
+export default async function ProductPage() {
+  const products = await fetchProducts();
+
+  return (
+    <div>
+      {/* Client "island" for interactivity */}
+      <ClientSearch />
+
+      {/* Server-rendered content */}
+      <ProductGrid products={products} />
+    </div>
+  );
+}
+```
+
+## Best Practices
+
+### 1. Server Component Usage
+```typescript
+// ✅ Good: Data fetching in Server Components
+async function UserProfile({ userId }: { userId: string }) {
+  const user = await fetchUser(userId);
+  return <div>{user.name}</div>;
+}
+
+// ❌ Bad: Moving data fetching to Client Components
+'use client';
+function UserProfile({ userId }: { userId: string }) {
+  const { data: user } = useSWR(`/api/users/${userId}`);
+  return <div>{user?.name}</div>;
+}
+```
+
+### 2. Client Component Boundaries
+```typescript
+// ✅ Good: Minimal Client Component boundary
+function Page() {
+  const data = await fetchData();
+
+  return (
+    <div>
+      <ServerComponent data={data} />
+      <ClientComponentBoundary>
+        <InteractiveFeature />
+      </ClientComponentBoundary>
+    </div>
+  );
+}
+
+// ❌ Bad: Entire page as Client Component
+'use client';
+function Page() {
+  const { data } = useSWR('/api/data');
+  return <div>{/* Everything is client-side */}</div>;
+}
+```
+
+### 3. Data Flow
+```typescript
+// ✅ Good: Server -> Client data flow
+async function ParentServer() {
+  const data = await fetchData();
+  return <ClientChild data={data} />;
+}
+
+// ❌ Bad: Client -> Server data flow
+function ParentClient() {
+  const [data, setData] = useState();
+  return <ServerChild data={data} />; // Won't work!
+}
+```
+
+## Performance Optimization
+
+### 1. Component Splitting
+```typescript
+// ✅ Good: Split interactive parts
+function Page() {
+  return (
+    <div>
+      <StaticContent />
+      <ClientInteractive />
+    </div>
+  );
+}
+
+// ❌ Bad: Everything in one Client Component
+'use client';
+function Page() {
+  return (
+    <div>
+      <StaticContent /> {/* Unnecessarily client-side */}
+      <InteractivePart />
+    </div>
+  );
+}
+```
+
+### 2. Progressive Enhancement
+```typescript
+// components/ProgressiveButton.tsx
+interface Props {
+  children: React.ReactNode;
+  onClick?: () => void;
+}
+
+// Server Component that works without JS
+export function Button({ children }: Props) {
+  return (
+    <form action="/api/action">
+      <button type="submit">{children}</button>
+    </form>
+  );
+}
+
+// Enhanced Client Version
+'use client';
+export function EnhancedButton({ children, onClick }: Props) {
+  return <button onClick={onClick}>{children}</button>;
+}
+```
+
+## State Management
+
+### 1. Server State
+```typescript
+// Fetch and pass data down from Server Components
+async function DataWrapper() {
+  const serverData = await fetchData();
+
+  return (
+    <ClientComponent
+      initialData={serverData}
+    />
+  );
+}
+```
+
+### 2. Client State
+```typescript
+'use client';
+
+function ClientComponent({ initialData }) {
+  // Client-side state for interactivity
+  const [data, setData] = useState(initialData);
+
+  return (
+    <div>
+      {/* Interactive UI */}
+    </div>
+  );
+}
+```
+
+## Error Handling
+
+### 1. Server Error Handling
+```typescript
+// app/error.tsx (Server Error Boundary)
+export default function Error({
+  error,
+  reset,
+}: {
+  error: Error;
+  reset: () => void;
+}) {
+  return (
+    <div>
+      <h2>Something went wrong!</h2>
+      <button onClick={() => reset()}>Try again</button>
+    </div>
+  );
+}
+```
+
+### 2. Client Error Handling
+```typescript
+'use client';
+
+function ClientErrorBoundary({ children }) {
+  const [hasError, setHasError] = useState(false);
+
+  if (hasError) {
+    return <div>Something went wrong in the client component</div>;
+  }
+
+  return children;
+}
+```
+
+## Testing
+
+### 1. Server Component Testing
+```typescript
+// __tests__/ServerComponent.test.tsx
+import { render } from '@testing-library/react';
+
+it('renders server component correctly', async () => {
+  const Component = await ServerComponent({ data });
+  const { container } = render(Component);
+  expect(container).toMatchSnapshot();
+});
+```
+
+### 2. Client Component Testing
+```typescript
+// __tests__/ClientComponent.test.tsx
+import { render, fireEvent } from '@testing-library/react';
+
+it('handles user interaction correctly', () => {
+  const { getByRole } = render(<ClientComponent />);
+  const button = getByRole('button');
+  fireEvent.click(button);
+  // Assert expected behavior
+});
+```
+
+## Related Documents
+- [Component Architecture](mdc:component-architecture.mdc)
+- [Store Architecture](mdc:store-architecture.mdc)
+- [Performance Guidelines](mdc:performance-guidelines.mdc)

@@ -1,3 +1,19 @@
+// Safe loading function for next-intl plugin
+function safeLoadNextIntl() {
+  try {
+    const withNextIntl = require('next-intl/plugin')(
+      './src/app/[lang]/i18n/server.ts'
+    );
+    return withNextIntl;
+  } catch (error) {
+    console.warn('Failed to load next-intl plugin:', error.message);
+    // Return identity function if plugin fails to load
+    return (config) => config;
+  }
+}
+
+const withNextIntl = safeLoadNextIntl();
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -11,10 +27,6 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'cdn.builder.io',
       },
-      {
-        protocol: 'https',
-        hostname: 'cdn.sanity.io',
-      },
     ],
     unoptimized: true,
   },
@@ -27,6 +39,15 @@ const nextConfig = {
       },
     },
     serverExternalPackages: [],
+    webpack: (config, { isServer }) => {
+      // Only run this on the client side
+      if (!isServer) {
+        // Empty module for problematic 3rd party scripts in development
+        config.resolve.alias['cookiebot'] = false;
+        config.resolve.alias['hotjar'] = false;
+      }
+      return config;
+    },
   } : {
     // Production settings
     experimental: {
@@ -79,4 +100,7 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+// Using the withNextIntl HOC to enable internationalization
+// Configured in ./src/app/[lang]/i18n/server.ts
+// This plugin adds the middleware necessary for handling i18n routing
+module.exports = withNextIntl(nextConfig);

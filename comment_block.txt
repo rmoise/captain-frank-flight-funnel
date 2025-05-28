@@ -1,0 +1,25 @@
+      // Reset manual flags after a timeout to allow later automatic updates to work
+      // This prevents the flags from permanently blocking automatic updates
+      /* setTimeout(() => {
+        if (store.flightSegments && store.flightSegments.length > index) {
+          const latestSegments = JSON.parse(
+            JSON.stringify(store.flightSegments)
+          );
+          if (latestSegments[index]) {
+            latestSegments[index][flagName] = false;
+
+            // Update without triggering a cross-phase sync to prevent infinite loops
+            updateSegmentsAndStores(latestSegments, {
+              skipCrossPhaseSync: true,
+              preserveSegments: true,
+            });
+
+            console.log(
+              `=== FlightSegments - Reset ${flagName} flag for segment ${index} ===`,
+              {
+                timestamp: new Date().toISOString(),
+              }
+            );
+          }
+        }
+      }, 1500); // Longer timeout to prevent race conditions with other updates */

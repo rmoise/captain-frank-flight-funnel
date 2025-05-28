@@ -1,0 +1,148 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Backend API Documentation
+
+## Overview
+
+This document outlines the backend API endpoints available for the Captain Frank Fresh application. Each endpoint is documented with its URL, method, parameters, and response format.
+
+## Endpoints
+
+### 1. Search Airports
+- **Name**: `searchAirportsByTerm`
+- **URL**: `/searchairportsbyterm`
+- **Method**: `GET`
+- **Parameters**:
+  - `term`: The "search-term". Min 3-letters, max 30 letters.
+  - `lang` (optional): 2-letter-code for language (match and response)
+- **Response**:
+  - JSON list of all airports matching the search-term (language-specific, if lang provided, English otherwise).
+  - Matching includes airport name, IATA code, ICAO code, near-by city names.
+- **Status**: Completed
+
+### 2. Search Flights
+- **Name**: `searchFlightsByFromiataToiataDateNumber`
+- **URL**: `/searchflightsbyfromiatatoiatadatenumber`
+- **Method**: `GET`
+- **Parameters**:
+  - `from_iata`: IATA code of the departure airport (e.g. MUC)
+  - `to_iata`: IATA code of the destination airport (e.g. FRA)
+  - `flight_date`: Flight date (e.g. 2024-12-10)
+  - `flight_number`: Operating flight number (e.g. LH1234)
+    - Will be used as "flight-number starts with…" (e.g. LH1 matches LH1, LH13, LH1234, but does not match LH21)
+- **Response**:
+  - JSON list of up to 20 flights matching the search filters
+  - All search filters are optional, and all provided search filters will be concatenated with logical "AND"
+- **Status**: Completed
+
+### 3. Calculate Compensation
+- **Name**: `calculateCompensationByFromiataToiata`
+- **URL**: `/calculatecompensationbyfromiatatoiata`
+- **Method**: `GET`
+- **Parameters**:
+  - `from_iata`: IATA code of the departure airport (e.g. MUC)
+  - `to_iata`: IATA code of the destination airport (e.g. FRA)
+- **Response**: Amount of EU compensation in EUR (e.g. 250 or 400)
+- **Status**: Completed
+
+### 4. Evaluate EU Flight Claim
+- **Name**: `evaluateEuflightClaim`
+- **URL**: `/evaluateeuflightclaim`
+- **Method**: `POST`
+- **Parameters**:
+  - `journey_booked_flightids`: Sequenced array of flight IDs (as included in response from /searchflightsby…) (e.g. [71747597, 71747598]) representing the booked journey
+  - `journey_fact_flightids`: Sequenced array of flight IDs (as included in response from /searchflightsby…) (e.g. [71747597, 71747598]) representing the fact-journey
+    - If empty or missing => interpreted as "there was no fact-journey" / "passenger didn't travel at all"
+  - `information_received_at`: Required, date in format YYYY-MM-DD (e.g. 2024-12-16)
+    - The date when the passenger received the information about the cancellation/delay
+    - If not pre-informed by the airline => the date when they noticed the problem at the airport
+- **Response**:
+  ```json
+  {
+    "status": "accept",
+    "contract": {
+      "amount": x,    // compensation amount (e.g. 250)
+      "provision": y  // CF provision in percent (e.g. 30)
+    }
+  }
+  ```
+- **Status**: Mocked
+
+### 5. Order EU Flight Claim
+- **Name**: `orderEuflightClaim`
+- **URL**: `/ordereuflightclaim`
+- **Method**: `POST`
+- **Parameters**:
+  - Journey Details:
+    - `journey_booked_flightids`: Sequenced array of flight IDs representing the booked journey
+    - `journey_fact_flightids`: Sequenced array of flight IDs representing the fact journey
+      - If empty or missing => interpreted as "there was no fact-journey"
+    - `information_received_at`: Required, date in format YYYY-MM-DD
+      - The date when the passenger received the information about the cancellation/delay
+      - If not pre-informed by the airline => the date when they noticed the problem at the airport
+    - `journey_booked_pnr`: The PNR (Passenger Name Record) from the booking/invoice
+    - `journey_fact_type`: The type of the fact journey. One of: none, self, provided
+  - Owner Details:
+    - `owner_salutation`: One of: herr, frau
+    - `owner_firstname`: string
+    - `owner_lastname`: string
+    - `owner_street`: string
+    - `owner_place`: string
+    - `owner_city`: string
+    - `owner_country`: string
+    - `owner_email`: string
+    - `owner_phone`: string (empty string allowed)
+    - `owner_marketable_status`: Boolean (true if owner ticked marketing consent)
+  - Contract Details:
+    - `contract_signature`: Base64-encoded image of the signature
+    - `contract_tac`: Boolean (true if owner ticked terms and conditions consent)
+    - `contract_dp`: Boolean (true if owner ticked data protection consent)
+- **Example Request**:
+  ```json
+  {
+    "journey_booked_flightids": [71908124],
+    "journey_fact_flightids": [71937989],
+    "information_received_at": "2024-12-01",
+    "journey_booked_pnr": "ABC123",
+    "journey_fact_type": "self",
+    "owner_salutation": "herr",
+    "owner_firstname": "Testvorname",
+    "owner_lastname": "Testnachname",
+    "owner_street": "Teststrasse 1",
+    "owner_place": "12345",
+    "owner_city": "Testhausen",
+    "owner_country": "Deutschland",
+    "owner_email": "test@test.com",
+    "owner_phone": "",
+    "owner_marketable_status": true,
+    "contract_signature": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAhUAAAB9CAYAAAAV3JFgAAAam0lEQVR4Xu2dDbR1...",
+    "contract_tac": true,
+    "contract_dp": true
+  }
+  ```
+- **Status**: Mocked
+
+## Implementation Notes
+
+1. **Error Handling**:
+   - All endpoints should implement proper error handling
+   - Return appropriate HTTP status codes
+   - Include detailed error messages in responses
+
+2. **Data Validation**:
+   - Validate all input parameters
+   - Check for required fields
+   - Verify data formats and ranges
+
+3. **Response Format**:
+   - Use consistent JSON structure
+   - Include status indicators
+   - Provide detailed error information when needed
+
+## Related Documents
+- [API Architecture](mdc:api-architecture.mdc)
+- [Store Architecture](mdc:store-architecture.mdc)
+- [TypeScript Guidelines](mdc:typescript-guidelines.mdc)

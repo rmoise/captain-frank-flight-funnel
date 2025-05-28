@@ -1,8 +1,24 @@
-import type { Flight, PassengerDetails } from "@/types/store";
-import type { Answer } from "@/types/wizard";
+import type { Flight, UserDetails } from "@/store/types";
+import type { WizardState, Answer } from "@/types/shared/wizard";
 import api from "@/services/api";
-import useStore from "@/lib/state/store";
+import useStore from "@/store";
 import { getContactId } from "@/utils/contactId";
+import { create } from "zustand";
+import type { Store } from "@/store/types";
+
+// Create a mini store just for claim status
+interface ClaimStatusStore {
+  _isClaimSuccess: boolean;
+  _isClaimRejected: boolean;
+  setClaimStatus: (success: boolean, rejected: boolean) => void;
+}
+
+const useClaimStatusStore = create<ClaimStatusStore>((set: any) => ({
+  _isClaimSuccess: false,
+  _isClaimRejected: false,
+  setClaimStatus: (success: boolean, rejected: boolean) =>
+    set({ _isClaimSuccess: success, _isClaimRejected: rejected }),
+}));
 
 export interface EvaluateClaimRequest {
   journey_booked_flightids: string[];
@@ -73,7 +89,7 @@ export class ClaimService {
     travelStatusAnswers: Answer[]
   ): "none" | "self" | "provided" {
     const travelStatus = travelStatusAnswers.find(
-      (a) => a.questionId === "travel_status"
+      (a) => a.id === "travel_status"
     )?.value;
 
     switch (travelStatus) {
@@ -88,29 +104,62 @@ export class ClaimService {
     }
   }
 
+  private static getInformedDate(
+    informedDateAnswers: Answer[]
+  ): string | undefined {
+    const informedDateOption = informedDateAnswers.find(
+      (a) => a.id === "informed_date"
+    )?.value;
+
+    if (informedDateOption === "specific_date") {
+      return informedDateAnswers.find((a) => a.id === "specific_informed_date")
+        ?.value as string;
+    }
+
+    // If 'on_departure' or not found, return undefined (or handle as needed)
+    return undefined;
+  }
+
+  private static getBookingPNR(answers: Answer[]): string {
+    const pnrAnswer = answers.find((a) => a.id === "booking_number");
+    const pnrValue = pnrAnswer?.value;
+    if (typeof pnrValue !== "string") {
+      console.error("Booking PNR not found or not a string:", pnrValue);
+      throw new Error("Valid Booking PNR not found in answers");
+    }
+    return pnrValue;
+  }
+
   private static getInformationReceivedDate(
     informedDateAnswers: Answer[],
     originalFlights: Flight[]
   ): string {
-    // First try to get specific date from answers
-    const specificDate = informedDateAnswers.find(
-      (a) => a.questionId === "specific_informed_date"
+    const specificDateAnswer = informedDateAnswers.find(
+      (a) => a.id === "specific_informed_date"
+    );
+    const specificDate = specificDateAnswer?.value;
+
+    if (specificDate && typeof specificDate === "string") {
+      // Basic validation or formatting if needed
+      // For now, assume it's a valid date string
+      return specificDate;
+    }
+
+    const informedDateOption = informedDateAnswers.find(
+      (a) => a.id === "informed_date"
     )?.value;
 
-    if (specificDate) {
-      return String(specificDate);
+    // If informed on departure or no specific date given, use flight date
+    if (informedDateOption === "on_departure" || !specificDate) {
+      if (originalFlights?.[0]?.departureTime) {
+        // Use departureTime instead of flightDate
+        return originalFlights[0].departureTime.split("T")[0];
+      } else if (originalFlights?.[0]?.departureTime) {
+        // Use departureTime instead of scheduledDeparture
+        return originalFlights[0].departureTime.split("T")[0];
+      }
     }
 
-    // Try to get date from the first flight
-    if (originalFlights?.[0]?.date) {
-      return originalFlights[0].date.split("T")[0];
-    }
-
-    if (originalFlights?.[0]?.departureTime) {
-      return originalFlights[0].departureTime.split(" ")[0];
-    }
-
-    // If we can't get a valid date, throw an error
     throw new Error(
       "No valid date found for information_received_at. Must have either specific informed date or flight date."
     );
@@ -127,7 +176,7 @@ export class ClaimService {
       originalFlights: originalFlights.map((f) => ({
         id: f.id,
         flightNumber: f.flightNumber,
-        date: f.date || f.departureTime,
+        date: f.departureTime,
       })),
       selectedFlights: selectedFlights.map((f) => ({
         id: f.id,
@@ -137,7 +186,7 @@ export class ClaimService {
 
     const journeyFactType = this.getJourneyFactType(travelStatusAnswers);
     const travelStatus = travelStatusAnswers.find(
-      (a) => a.questionId === "travel_status"
+      (a) => a.id === "travel_status"
     )?.value;
 
     // Ensure all flights have valid IDs and flight numbers
@@ -170,7 +219,7 @@ export class ClaimService {
       travelStatus,
       validOriginalFlights: validOriginalFlights.map((f) => ({
         flightNumber: f.flightNumber,
-        date: f.date || f.departureTime,
+        date: f.departureTime,
       })),
       validSelectedFlights: validSelectedFlights.map((f) => f.flightNumber),
     });
@@ -204,197 +253,92 @@ export class ClaimService {
     };
   }
 
+  // Static memory cache (consider moving to Zustand store if appropriate)
   private static lastEvaluateResponse: EvaluateClaimResponse | null = null;
-  private static lastPersonalDetails: PassengerDetails | null = null;
+  private static lastPersonalDetails: UserDetails | null = null;
+
+  private static updateClaimStatus(success: boolean, rejected: boolean): void {
+    useClaimStatusStore.getState().setClaimStatus(success, rejected);
+  }
 
   private static getStoredEvaluationResponse(): EvaluateClaimResponse | null {
-    const stored = sessionStorage.getItem("claim_evaluation_response");
-    console.log("Getting stored evaluation response:", stored);
-    if (!stored) return null;
-    try {
-      const response = JSON.parse(stored) as EvaluateClaimResponse;
-      console.log("Successfully parsed stored evaluation response:", response);
-      return response;
-    } catch (error) {
-      console.error("Error parsing stored evaluation response:", error);
-      return null;
+    const stored = sessionStorage.getItem("evaluateResponse");
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        // Basic type check
+        if (parsed && typeof parsed === "object" && "status" in parsed) {
+          this.lastEvaluateResponse = parsed;
+          return parsed;
+        }
+      } catch (e) {
+        console.error("Failed to parse stored evaluation response", e);
+        sessionStorage.removeItem("evaluateResponse");
+      }
     }
+    return this.lastEvaluateResponse; // Return from memory if session fails
   }
 
   public static setStoredEvaluationResponse(
     response: EvaluateClaimResponse
   ): void {
-    console.log("Storing evaluation response:", response);
-    sessionStorage.setItem(
-      "claim_evaluation_response",
-      JSON.stringify(response)
-    );
     this.lastEvaluateResponse = response;
-
-    // Update store flags based on evaluation status
-    useStore.setState({
-      _isClaimSuccess: response.status === "accept",
-      _isClaimRejected: response.status === "reject",
-    });
+    try {
+      sessionStorage.setItem("evaluateResponse", JSON.stringify(response));
+    } catch (e) {
+      console.error("Failed to save evaluation response to sessionStorage", e);
+    }
   }
 
   public static getLastEvaluationResponse(): EvaluateClaimResponse | null {
-    try {
-      // If we already have the response in memory, return it without logging
-      if (this.lastEvaluateResponse) {
-        return this.lastEvaluateResponse;
-      }
+    // Prioritize retrieving from storage
+    const storedResponse = this.getStoredEvaluationResponse();
+    if (storedResponse) {
+      return storedResponse;
+    }
+    // Fallback to memory if storage fails or is empty
+    return this.lastEvaluateResponse;
+  }
 
-      // Try to get from sessionStorage
-      console.log("Getting last evaluation response...");
-      console.log("In-memory response:", this.lastEvaluateResponse);
-      const storedResponse = this.getStoredEvaluationResponse();
-
-      if (storedResponse) {
-        // Validate the response structure
-        if (!storedResponse.status) {
-          console.error("Invalid evaluation response: missing status field");
-          return null;
-        }
-
-        // Validate that status is one of the expected values
+  private static getStoredPersonalDetails(): UserDetails | null {
+    const stored = sessionStorage.getItem("personalDetails");
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        // Basic type check for UserDetails might be needed here
         if (
-          storedResponse.status !== "accept" &&
-          storedResponse.status !== "reject"
+          parsed &&
+          typeof parsed === "object" &&
+          "firstName" in parsed &&
+          "email" in parsed
         ) {
-          console.error(`Invalid evaluation status: ${storedResponse.status}`);
-          return null;
+          this.lastPersonalDetails = parsed;
+          return parsed;
         }
-
-        // For 'accept' status, ensure contract exists
-        if (storedResponse.status === "accept" && !storedResponse.contract) {
-          console.error("Invalid accept response: missing contract details");
-          return null;
-        }
-
-        // Cache the response in memory to avoid repeated storage access
-        this.lastEvaluateResponse = storedResponse;
-        console.log("Final response:", storedResponse);
-
-        // Update store flags based on evaluation status
-        useStore.setState({
-          _isClaimSuccess: storedResponse.status === "accept",
-          _isClaimRejected: storedResponse.status === "reject",
-        });
-
-        return storedResponse;
+      } catch (e) {
+        console.error("Failed to parse stored personal details", e);
+        sessionStorage.removeItem("personalDetails");
       }
-
-      return null;
-    } catch (error) {
-      console.error("Error retrieving evaluation response:", error);
-      return null;
     }
+    return this.lastPersonalDetails;
   }
 
-  private static getStoredPersonalDetails(): PassengerDetails | null {
-    const stored = sessionStorage.getItem("claim_personal_details");
-    console.log("Getting stored personal details:", stored);
-    if (!stored) return null;
-    try {
-      const details = JSON.parse(stored) as PassengerDetails;
-      console.log("Successfully parsed stored personal details:", details);
-      return details;
-    } catch (error) {
-      console.error("Error parsing stored personal details:", error);
-      return null;
-    }
-  }
-
-  public static setStoredPersonalDetails(details: PassengerDetails): void {
+  public static setStoredPersonalDetails(details: UserDetails): void {
     console.log("Storing personal details:", details);
-    sessionStorage.setItem("claim_personal_details", JSON.stringify(details));
     this.lastPersonalDetails = details;
+    try {
+      sessionStorage.setItem("personalDetails", JSON.stringify(details));
+    } catch (e) {
+      console.error("Failed to save personal details to sessionStorage", e);
+    }
   }
 
-  public static getLastPersonalDetails(): PassengerDetails | null {
-    console.log("Getting last personal details...");
-    console.log("In-memory details:", this.lastPersonalDetails);
-
-    // First try using the in-memory cached details
-    if (this.lastPersonalDetails) {
-      return this.lastPersonalDetails;
-    }
-
-    // Then try getting from session storage
+  public static getLastPersonalDetails(): UserDetails | null {
     const storedDetails = this.getStoredPersonalDetails();
     if (storedDetails) {
-      // Cache for future use
-      this.lastPersonalDetails = storedDetails;
       return storedDetails;
     }
-
-    // Try getting from localStorage as a fallback
-    try {
-      // Try to get from various phase states that might contain personal details
-      const sources = [
-        "phase1State",
-        "phase2State",
-        "phase3State",
-        "phase4State",
-        "personalDetails",
-      ];
-
-      for (const source of sources) {
-        const stateStr = localStorage.getItem(source);
-        if (stateStr) {
-          try {
-            const state = JSON.parse(stateStr);
-
-            // Check if it contains personal details
-            if (state.personalDetails) {
-              console.log(
-                `Found personal details in ${source}:`,
-                state.personalDetails
-              );
-              const details = state.personalDetails;
-
-              // Only consider it valid if it has at least email
-              if (details.email) {
-                // Store it in sessionStorage for future use
-                this.setStoredPersonalDetails(details);
-                return details;
-              }
-            }
-
-            // Check direct personal fields at root level
-            if (state.firstName && state.lastName && state.email) {
-              console.log(`Found personal details fields in ${source}`);
-              const details = {
-                firstName: state.firstName,
-                lastName: state.lastName,
-                email: state.email,
-                salutation: state.salutation || "",
-                phone: state.phone || "",
-                address: state.address || "",
-                city: state.city || "",
-                postalCode: state.postalCode || "",
-                country: state.country || "",
-              };
-
-              // Store it in sessionStorage for future use
-              this.setStoredPersonalDetails(details);
-              return details;
-            }
-          } catch (error) {
-            console.error(`Error parsing ${source}:`, error);
-          }
-        }
-      }
-    } catch (error) {
-      console.error(
-        "Error looking for personal details in localStorage:",
-        error
-      );
-    }
-
-    console.log("No personal details found");
-    return null;
+    return this.lastPersonalDetails;
   }
 
   private static buildOrderRequest(
@@ -402,33 +346,44 @@ export class ClaimService {
     selectedFlights: Flight[],
     travelStatusAnswers: Answer[],
     informedDateAnswers: Answer[],
-    personalDetails: PassengerDetails,
+    personalDetails: UserDetails,
     bookingNumber: string,
     signature: string,
     termsAccepted: boolean,
     privacyAccepted: boolean,
     marketingAccepted: boolean
   ): OrderClaimRequest {
-    // Get the stored evaluation response
     const evaluationResponse = this.getLastEvaluationResponse();
     if (!evaluationResponse) {
+      throw new Error("Evaluation must be completed before ordering claim.");
+    }
+
+    if (!evaluationResponse.information_received_at) {
       throw new Error(
-        "No evaluation response available. Please complete the trip experience phase first."
+        "Information received date missing from evaluation response."
       );
     }
 
-    // Try to get booking number from phase 3 state if not provided
     let finalBookingNumber = bookingNumber;
-    try {
-      if (!finalBookingNumber) {
-        const phase3State = localStorage.getItem("phase3State");
-        if (phase3State) {
-          const parsedState = JSON.parse(phase3State);
-          finalBookingNumber = parsedState.bookingNumber;
+    if (!finalBookingNumber) {
+      console.warn(
+        "Booking number not provided directly, attempting to retrieve from wizard state..."
+      );
+      const state = useStore.getState();
+      try {
+        const pnrAnswer = state.wizard.answers.find(
+          (a: Answer) => a.id === "booking_number"
+        );
+        if (pnrAnswer && typeof pnrAnswer.value === "string") {
+          finalBookingNumber = pnrAnswer.value;
+          console.log(
+            "Retrieved booking number from state:",
+            finalBookingNumber
+          );
         }
+      } catch (error) {
+        console.error("Error getting booking number from wizard state:", error);
       }
-    } catch (error) {
-      console.error("Error getting booking number from phase 3 state:", error);
     }
 
     if (!finalBookingNumber) {
@@ -446,14 +401,15 @@ export class ClaimService {
       !personalDetails.email ||
       !personalDetails.country ||
       !personalDetails.city ||
-      !personalDetails.address
+      !personalDetails.address ||
+      !personalDetails.postalCode
     ) {
       throw new Error("Missing required personal details");
     }
 
     // Get journey fact type from travel status
     const travelStatus = travelStatusAnswers.find(
-      (a) => a.questionId === "travel_status"
+      (a) => a.id === "travel_status"
     )?.value;
 
     // Use the journey fact type from the evaluation response
@@ -518,6 +474,12 @@ export class ClaimService {
     });
 
     // Build the order request with all required fields properly formatted
+    const address =
+      typeof personalDetails.address === "object" &&
+      personalDetails.address !== null
+        ? (personalDetails.address as any).street || ""
+        : personalDetails.address;
+
     return {
       journey_booked_flightids,
       journey_fact_flightids,
@@ -527,13 +489,15 @@ export class ClaimService {
       travel_status: travelStatus ? String(travelStatus) : undefined,
       guid: evaluationResponse.guid,
       recommendation_guid: evaluationResponse.recommendation_guid,
-      owner_salutation: this.mapSalutationToBackend(personalDetails.salutation),
+      owner_salutation: this.mapSalutationToBackend(
+        personalDetails.salutation || "herr"
+      ),
       owner_firstname: personalDetails.firstName,
       owner_lastname: personalDetails.lastName,
-      owner_street: personalDetails.address || "",
-      owner_place: personalDetails.postalCode || "",
-      owner_city: personalDetails.city || "",
-      owner_country: personalDetails.country || "",
+      owner_street: address,
+      owner_place: personalDetails.postalCode,
+      owner_city: personalDetails.city,
+      owner_country: personalDetails.country,
       owner_email: personalDetails.email,
       owner_phone: personalDetails.phone || "",
       owner_marketable_status: Boolean(marketingAccepted),
@@ -739,7 +703,7 @@ export class ClaimService {
     selectedFlights: Flight[],
     travelStatusAnswers: Answer[],
     informedDateAnswers: Answer[],
-    personalDetails: PassengerDetails,
+    personalDetails: UserDetails,
     bookingNumber: string,
     signature: string,
     termsAccepted: boolean,
@@ -781,25 +745,10 @@ export class ClaimService {
 
       // Submit to Captain Frank API
       const response = await api.orderEuflightClaim(request);
+
       console.log("=== ORDER CLAIM RESPONSE FROM API ===");
       console.log(JSON.stringify(response, null, 2));
       console.log("=====================================");
-
-      // If the response has an error message but no data, log it but don't throw
-      if (response.message && !response.data) {
-        console.warn(
-          "API returned an error but we'll continue:",
-          response.message
-        );
-
-        // Create a minimal valid response object so the UI can continue
-        if (!response.data) {
-          response.data = {
-            guid: `temp-${Date.now()}`,
-            recommendation_guid: `rec-${Date.now()}`,
-          };
-        }
-      }
 
       // If Captain Frank API call is successful, update HubSpot
       if (response.data) {
@@ -895,11 +844,16 @@ export class ClaimService {
       return response;
     } catch (error) {
       console.error("Error submitting claim:", error);
-
-      // Return a response object instead of throwing so the app doesn't crash
-      return {
-        message: error instanceof Error ? error.message : String(error),
-      };
+      throw error;
     }
   }
+
+  // Static selectors for convenience
+  static getWizardAnswers = (state: Store): Answer[] =>
+    state.wizard?.answers || [];
+
+  static getTravelStatusAnswers = (state: Store): Answer[] =>
+    state.wizard?.answers?.filter((a: Answer) =>
+      ["travel_status", "refund_status", "ticket_cost"].includes(a.id)
+    ) || [];
 }

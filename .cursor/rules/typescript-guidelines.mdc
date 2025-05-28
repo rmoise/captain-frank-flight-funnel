@@ -1,0 +1,245 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# TypeScript Guidelines
+
+## Type Organization
+
+### 1. Type File Structure
+```typescript
+// types.ts
+export interface ComponentProps {...}
+export type ComponentState = {...}
+export type ComponentActions = {...}
+```
+
+### 2. Type Naming Conventions
+- Interfaces: PascalCase, descriptive names
+- Types: PascalCase for complex types
+- Generics: Single uppercase letter or descriptive PascalCase
+- Enums: PascalCase, singular form
+
+### 3. Type Location
+- Component types: Colocated in `types.ts`
+- Shared types: In `src/types/shared`
+- Feature types: In feature-specific type files
+- Store types: Colocated with store files
+
+## Type Definitions
+
+### 1. Interface vs Type
+```typescript
+// Use interface for objects
+interface User {
+  id: string
+  name: string
+}
+
+// Use type for unions, intersections, primitives
+type Status = 'idle' | 'loading' | 'success' | 'error'
+type NumberOrString = number | string
+```
+
+### 2. Props Interface
+```typescript
+interface ButtonProps extends HTMLButtonProps {
+  /** Button variant */
+  variant: 'primary' | 'secondary'
+  /** Click handler */
+  onClick?: (event: React.MouseEvent) => void
+}
+```
+
+### 3. Generic Types
+```typescript
+interface List<T> {
+  items: T[]
+  selectedItem?: T
+}
+
+type AsyncState<T> = {
+  data: T | null
+  loading: boolean
+  error: Error | null
+}
+```
+
+### 4. Utility Types
+```typescript
+// Pick specific properties
+type UserName = Pick<User, 'firstName' | 'lastName'>
+
+// Make properties optional
+type PartialUser = Partial<User>
+
+// Make properties required
+type RequiredUser = Required<User>
+
+// Exclude null and undefined
+type NonNullableId = NonNullable<User['id']>
+```
+
+## Type Safety
+
+### 1. Strict Type Checking
+```typescript
+// Enable strict mode in tsconfig.json
+{
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true
+  }
+}
+```
+
+### 2. Type Guards
+```typescript
+function isError(value: unknown): value is Error {
+  return value instanceof Error
+}
+
+function isUser(value: unknown): value is User {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'id' in value &&
+    'name' in value
+  )
+}
+```
+
+### 3. Exhaustive Type Checking
+```typescript
+function assertNever(value: never): never {
+  throw new Error(`Unexpected value: ${value}`)
+}
+
+type Shape = Circle | Square | Triangle
+
+function getArea(shape: Shape): number {
+  switch (shape.type) {
+    case 'circle':
+      return Math.PI * shape.radius ** 2
+    case 'square':
+      return shape.side ** 2
+    case 'triangle':
+      return (shape.base * shape.height) / 2
+    default:
+      return assertNever(shape)
+  }
+}
+```
+
+## Best Practices
+
+### 1. Type Inference
+- Let TypeScript infer types when obvious
+- Explicitly type complex objects
+- Always type function parameters and return types
+```typescript
+// Good - clear inference
+const numbers = [1, 2, 3]
+
+// Good - explicit complex type
+const config: Config = {
+  api: {
+    baseUrl: 'https://api.example.com',
+    timeout: 5000
+  }
+}
+```
+
+### 2. Null Handling
+- Use undefined for optional values
+- Use null for intentional absence
+- Handle both cases in type guards
+```typescript
+interface User {
+  name: string
+  email?: string // optional
+  deletedAt: Date | null // intentionally nullable
+}
+```
+
+### 3. Type Assertions
+- Avoid type assertions when possible
+- Use type guards instead
+- If needed, use as const for literals
+```typescript
+// Avoid
+const value = someValue as string
+
+// Prefer
+if (typeof someValue === 'string') {
+  // someValue is string
+}
+
+// Good use of assertion
+const config = {
+  api: {
+    version: '1.0'
+  }
+} as const
+```
+
+### 4. Generic Constraints
+```typescript
+interface HasId {
+  id: string
+}
+
+function findById<T extends HasId>(items: T[], id: string): T | undefined {
+  return items.find(item => item.id === id)
+}
+```
+
+## Common Patterns
+
+### 1. Builder Pattern
+```typescript
+class QueryBuilder<T> {
+  private query: Partial<T> = {}
+
+  where(key: keyof T, value: T[keyof T]): this {
+    this.query[key] = value
+    return this
+  }
+
+  build(): Partial<T> {
+    return this.query
+  }
+}
+```
+
+### 2. Factory Pattern
+```typescript
+interface Shape {
+  type: string
+  draw(): void
+}
+
+class ShapeFactory {
+  static create<T extends Shape>(type: string): T {
+    // Implementation
+  }
+}
+```
+
+### 3. State Machine Pattern
+```typescript
+type State = 'idle' | 'loading' | 'success' | 'error'
+type Event = 'FETCH' | 'RESOLVE' | 'REJECT' | 'RESET'
+
+interface StateMachine {
+  state: State
+  transition(event: Event): void
+}
+```
+
+## Related Documents
+- [Component Architecture](mdc:component-architecture.mdc)
+- [Store Patterns](mdc:store-patterns.mdc)
+- [Testing Guidelines](mdc:testing-guidelines.mdc)

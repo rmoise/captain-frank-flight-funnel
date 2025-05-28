@@ -1,0 +1,274 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Zustand Store Patterns & Best Practices
+
+## Store Architecture
+
+### 1. Store Organization
+```typescript
+// Store structure
+interface StoreState {
+  // Core state
+  data: DataType;
+  status: 'idle' | 'loading' | 'error';
+  error: Error | null;
+
+  // Actions
+  actions: {
+    fetchData: () => Promise<void>;
+    updateData: (data: DataType) => void;
+    resetState: () => void;
+  };
+}
+```
+
+### 2. Store Creation
+```typescript
+// Create store with proper typing
+const useStore = create<StoreState>((set, get) => ({
+  // Initial state
+  data: initialData,
+  status: 'idle',
+  error: null,
+
+  // Actions
+  actions: {
+    fetchData: async () => {
+      set({ status: 'loading' });
+      try {
+        const data = await fetchDataFromAPI();
+        set({ data, status: 'idle' });
+      } catch (error) {
+        set({ error, status: 'error' });
+      }
+    },
+    updateData: (data) => set({ data }),
+    resetState: () => set({ data: initialData, status: 'idle', error: null })
+  }
+}));
+```
+
+## Best Practices
+
+### 1. State Selection
+```typescript
+// Good: Selective state subscription
+const data = useStore((state) => state.data);
+const status = useStore((state) => state.status);
+
+// Better: Use shallow comparison for objects
+const { data, status } = useStore(
+  (state) => ({
+    data: state.data,
+    status: state.status
+  }),
+  shallow
+);
+
+// Avoid: Subscribing to entire store
+const store = useStore(); // ❌ Causes unnecessary rerenders
+```
+
+### 2. Action Implementation
+```typescript
+// Good: Atomic actions
+const updateUser = (userData: UserData) =>
+  set({ user: userData });
+
+// Better: Immer for complex updates
+const updateUserDetails = (details: Partial<UserDetails>) =>
+  set(produce((state) => {
+    state.user.details = {
+      ...state.user.details,
+      ...details
+    };
+  }));
+
+// Best: With validation and error handling
+const updateUserDetails = (details: Partial<UserDetails>) => {
+  if (!isValidUserDetails(details)) {
+    set({ error: new Error('Invalid user details') });
+    return;
+  }
+
+  set(produce((state) => {
+    state.user.details = {
+      ...state.user.details,
+      ...details
+    };
+  }));
+};
+```
+
+### 3. Store Composition
+```typescript
+// Slice pattern
+const createAuthSlice = (set, get) => ({
+  user: null,
+  setUser: (user) => set({ user }),
+  logout: () => set({ user: null })
+});
+
+const createSettingsSlice = (set, get) => ({
+  theme: 'light',
+  setTheme: (theme) => set({ theme })
+});
+
+// Combine slices
+const useStore = create((set, get) => ({
+  ...createAuthSlice(set, get),
+  ...createSettingsSlice(set, get)
+}));
+```
+
+### 4. TypeScript Integration
+```typescript
+// Define store types
+interface StoreState {
+  data: DataType;
+  status: Status;
+  error: Error | null;
+}
+
+interface StoreActions {
+  fetchData: () => Promise<void>;
+  updateData: (data: DataType) => void;
+  resetState: () => void;
+}
+
+// Create store with combined type
+type Store = StoreState & StoreActions;
+
+const useStore = create<Store>((set, get) => ({
+  // Implementation
+}));
+```
+
+## Performance Optimization
+
+### 1. Memoization
+```typescript
+// Memoize selectors
+const selectUserData = (state: StoreState) => state.user.data;
+const selectUserStatus = (state: StoreState) => state.user.status;
+
+const UserComponent = () => {
+  const userData = useStore(selectUserData, shallow);
+  const status = useStore(selectUserStatus);
+
+  // Component implementation
+};
+```
+
+### 2. Batch Updates
+```typescript
+// Good: Batch related updates
+const updateUserProfile = async (userData: UserData) => {
+  set((state) => ({
+    user: userData,
+    lastUpdated: Date.now(),
+    hasChanges: true
+  }));
+};
+
+// Avoid: Multiple individual updates
+const updateUser = (userData: UserData) => {
+  set({ user: userData }); // ❌ Triggers rerender
+  set({ lastUpdated: Date.now() }); // ❌ Triggers rerender
+  set({ hasChanges: true }); // ❌ Triggers rerender
+};
+```
+
+### 3. Middleware Integration
+```typescript
+// Add middleware for logging
+const logMiddleware = (config) => (set, get, api) =>
+  config(
+    (...args) => {
+      console.log('  applying', args);
+      set(...args);
+      console.log('  new state', get());
+    },
+    get,
+    api
+  );
+
+const useStore = create(
+  logMiddleware((set, get) => ({
+    // Store implementation
+  }))
+);
+```
+
+## Error Handling
+
+### 1. Error States
+```typescript
+interface ErrorState {
+  error: Error | null;
+  errorDetails?: Record<string, unknown>;
+  lastError?: Date;
+}
+
+const handleError = (error: Error) =>
+  set({
+    error,
+    errorDetails: { message: error.message },
+    lastError: new Date()
+  });
+```
+
+### 2. Error Recovery
+```typescript
+const recoverFromError = async () => {
+  set({ status: 'recovering' });
+  try {
+    await retryOperation();
+    set({ error: null, status: 'idle' });
+  } catch (error) {
+    set({ error, status: 'error' });
+  }
+};
+```
+
+## Testing
+
+### 1. Store Testing
+```typescript
+describe('Store', () => {
+  it('updates state correctly', () => {
+    const store = useStore.getState();
+    store.actions.updateData(newData);
+
+    expect(useStore.getState().data).toEqual(newData);
+  });
+
+  it('handles errors properly', async () => {
+    const store = useStore.getState();
+    await store.actions.fetchData();
+
+    expect(useStore.getState().error).toBeNull();
+  });
+});
+```
+
+### 2. Component Integration Testing
+```typescript
+describe('Component with Store', () => {
+  it('renders with store data', () => {
+    render(<Component />);
+    const store = useStore.getState();
+
+    store.actions.updateData(testData);
+    expect(screen.getByText(testData.name)).toBeInTheDocument();
+  });
+});
+```
+
+## Related Documents
+- [Component Architecture](mdc:component-architecture.mdc)
+- [Store Architecture](mdc:store-architecture.mdc)
+- [TypeScript Guidelines](mdc:typescript-guidelines.mdc)

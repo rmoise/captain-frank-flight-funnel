@@ -1,0 +1,114 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# Flight Store Implementation
+
+## Overview
+The flight store manages flight-related data across different phases of the booking process. It uses Zustand with persistence and implements a phase-based architecture.
+
+## Core Types
+
+### Flight Data Structure
+```typescript
+interface FlightSegment {
+  fromLocation: Location | null;
+  toLocation: Location | null;
+  date: string | null;
+  selectedFlight: Flight | null;
+}
+
+interface FlightPhaseData {
+  segments: Record<string, FlightSegment>;
+  timestamp: number;
+}
+
+interface FlightStoreState {
+  flightData: Record<string, FlightPhaseData>;
+}
+```
+
+### Actions Interface
+```typescript
+interface FlightStoreActions {
+  // Segment Management
+  clearSegmentLocation: (phase: string, segmentId: string, locationType: 'from' | 'to') => void;
+  clearSegmentDate: (phase: string, segmentId: string) => void;
+  updateSegmentLocation: (phase: string, segmentId: string, location: Location, locationType: 'from' | 'to') => void;
+  updateSegmentDate: (phase: string, segmentId: string, date: string) => void;
+
+  // Flight Management
+  setSelectedFlight: (phase: string, segmentId: string, flight: Flight) => void;
+  clearSelectedFlight: (phase: string, segmentId: string) => void;
+
+  // Phase Management
+  saveFlightData: (phase: string, data: FlightPhaseData) => void;
+  clearFlightData: (phase: string) => void;
+}
+```
+
+## Store Configuration
+
+### Initialization
+```typescript
+const useFlightStore = create(
+  persist(
+    (set) => ({
+      flightData: {},
+      ...createFlightStoreActions(set)
+    }),
+    {
+      name: 'flight-store'
+    }
+  )
+);
+```
+
+## Implementation Notes
+
+1. **Phase Management**
+   - Each phase maintains its own flight data
+   - Phases are independent and don't share state
+   - Timestamps track data freshness
+
+2. **Data Persistence**
+   - Store persists to localStorage
+   - Automatic rehydration on page load
+   - Configurable storage key
+
+3. **Type Safety**
+   - Full TypeScript coverage
+   - Runtime type checking
+   - Strict null checks
+
+4. **Performance Considerations**
+   - Selective state updates
+   - Atomic operations
+   - Proper cleanup on phase transitions
+
+## Usage Examples
+
+### In Components
+```typescript
+const FlightSelector = () => {
+  const {
+    segments,
+    updateSegmentLocation,
+    updateSegmentDate
+  } = useFlightStore((state) => ({
+    segments: state.flightData[currentPhase]?.segments || {},
+    updateSegmentLocation: state.updateSegmentLocation,
+    updateSegmentDate: state.updateSegmentDate
+  }));
+
+  // Component implementation...
+};
+```
+
+### Data Flow
+1. User selects flight details
+2. Actions update store state
+3. Store triggers persistence
+4. UI reflects changes
+5. Phase transitions preserve data

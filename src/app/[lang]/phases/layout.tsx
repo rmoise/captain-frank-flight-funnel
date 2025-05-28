@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import React from 'react';
-import { WelcomeSection } from '@/components/booking';
-import { Navbar } from '@/components/Navbar';
+import React from "react";
+import { WelcomeSection } from "@/components/shared/welcome/WelcomeSection";
+import { Navbar } from "@/components/shared/navigation/Navbar";
 
 interface PhaseLayoutProps {
   children: React.ReactNode;

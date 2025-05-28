@@ -1,0 +1,100 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# API Types Organization
+
+## Directory Structure
+
+The API types are organized based on the user journey phases and business domains:
+
+```
+src/types/api/
+├── common.ts          # Base API interfaces and shared types
+├── endpoints/         # Endpoint-specific types
+│   ├── flight.ts     # Flight search and selection
+│   ├── evaluate.ts   # Trip experience evaluation
+│   └── claim.ts      # Final claim submission
+└── responses/        # Shared response types
+```
+
+## Phase-Based Organization
+
+### 1. Flight Types (`flight.ts`)
+- **Purpose**: Handle flight search and selection
+- **Used In**: Initial flight search and booking verification
+- **Key Types**:
+  - `Airport`: Airport location data
+  - `RawFlight`: Flight data from external API
+  - `FlightSearchParams`: Search parameters
+  - `FlightResponse`: API response structure
+  - `CompensationResponse`: Initial compensation estimate
+
+### 2. Evaluate Types (`evaluate.ts`)
+- **Purpose**: Handle eligibility evaluation
+- **Used In**: Trip Experience phase
+- **Key Types**:
+  - `EvaluateRequest`: Evaluation criteria
+  - `EvaluateResponse`: Detailed eligibility response
+- **Business Logic**:
+  - Determines claim validity
+  - Calculates potential compensation
+  - Provides rejection reasons if applicable
+
+### 3. Claim Types (`claim.ts`)
+- **Purpose**: Handle final claim submission
+- **Used In**: Agreement phase
+- **Key Types**:
+  - `OrderClaimRequest`: Complete claim data
+  - `OrderClaimResponse`: Claim submission result
+  - `ClaimContract`: Compensation contract details
+- **Business Logic**:
+  - Captures personal details
+  - Handles legal agreements
+  - Processes final submission
+
+## Type Relationships
+
+1. **Phase Independence**:
+   - Each phase has distinct responsibilities
+   - Types evolve independently
+   - Minimal cross-phase dependencies
+
+2. **Data Flow**:
+   ```
+   Flight Search → Evaluation → Claim Submission
+   (flight.ts)   (evaluate.ts)  (claim.ts)
+   ```
+
+3. **Shared Concepts**:
+   - All extend base `ApiResponse`
+   - Common error handling
+   - Consistent status codes
+
+## Implementation Guidelines
+
+### 1. Type Separation
+- Keep types focused on their phase
+- Avoid cross-phase type dependencies
+- Use common.ts for shared types
+
+### 2. Naming Conventions
+- Request types: `*Request`
+- Response types: `*Response`
+- Data types: Clear domain names
+
+### 3. Documentation
+- Document business purpose
+- Note phase relationships
+- Explain type constraints
+
+### 4. Validation
+- Define strict types
+- Use unions for fixed values
+- Document required fields
+
+## Related Documents
+- [Store Architecture](mdc:store-architecture.mdc)
+- [Phases](mdc:phases.mdc)
+- [TypeScript Guidelines](mdc:typescript-guidelines.mdc)

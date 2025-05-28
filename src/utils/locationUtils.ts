@@ -1,124 +1,133 @@
-import { LocationData } from "@/types/store";
+import { LocationData } from "@/types/shared/location";
+import { BaseLocation } from "@/types/shared/location";
 
-// Define the LocationLike interface here since it's not in the types file
-export interface LocationLike {
+/**
+ * Extended location interface with UI-specific fields
+ */
+interface ExtendedLocation {
+  id: string;
+  iata: string;
+  name: string;
+  city: string;
+  country: string;
   value: string;
   label: string;
   description?: string;
-  city?: string;
-  airport?: string;
   dropdownLabel?: string;
 }
 
 /**
- * Creates a consistent LocationData object from various location input formats.
- * Handles null values, string inputs (airport codes, JSON strings), and location objects.
- *
- * @param location - The location input to process
- * @returns A properly formatted LocationData object with string & LocationLike properties or null
+ * Type for a location that is both a string and a location object
+ */
+type LocationResult = (string & ExtendedLocation) | null;
+
+/**
+ * Process a location value into a location object that is also a string
+ * @param location The location to process
+ * @returns A properly formatted location object that is also a string, or null
  */
 export const processLocation = (
-  location: any
-): (string & LocationLike) | null => {
+  location: string | Partial<ExtendedLocation> | null
+): LocationResult => {
   // Handle null, undefined or the string "null"
   if (!location || location === "null" || location === "undefined") {
-    console.log("=== processLocation - Null or invalid input ===", {
-      input: location,
-      result: "null",
-      timestamp: new Date().toISOString(),
-    });
     return null;
   }
 
-  // Handle string inputs
-  if (typeof location === "string") {
-    // If it's a simple airport code, create a LocationLike object
-    if (/^[A-Z]{3}$/.test(location)) {
-      console.log("=== processLocation - Airport Code Input ===", {
-        input: location,
-        result: "LocationObject",
-        timestamp: new Date().toISOString(),
-      });
-
-      return Object.assign(String(location), {
-        value: location,
-        label: location,
-        description: location,
-        city: location,
-        airport: location,
-        dropdownLabel: location,
-      });
-    }
-
-    // Try to parse JSON if it looks like a JSON string
-    if (location.startsWith("{")) {
-      try {
-        const parsed = JSON.parse(location);
-        console.log("=== processLocation - Parsed JSON String ===", {
-          input: "JSON string",
-          result: "Parsing and reprocessing",
-          timestamp: new Date().toISOString(),
-        });
-        return processLocation(parsed);
-      } catch (e) {
-        console.error("Failed to parse location JSON", location, e);
-      }
-    }
-
-    // Default for any other string
-    console.log("=== processLocation - Generic String Input ===", {
-      input: location,
-      result: "LocationObject",
-      timestamp: new Date().toISOString(),
-    });
-
-    return Object.assign(String(location), {
-      value: location,
-      label: location,
-      description: location,
-      city: location,
-      airport: location,
-      dropdownLabel: location,
+  // If it's already a location object, convert it to a string & location object
+  if (typeof location !== "string" && "value" in location) {
+    const baseString = String(location.value);
+    return Object.assign(baseString, {
+      id: location.id || location.value || baseString,
+      iata: location.iata || location.value || baseString,
+      name: location.name || location.label || baseString,
+      city: location.city || "",
+      country: location.country || "",
+      value: location.value || baseString,
+      label: location.label || baseString,
+      description: location.description || "",
+      dropdownLabel: location.dropdownLabel || baseString,
     });
   }
 
-  // Handle object with value property
-  if (typeof location === "object" && location !== null) {
-    const locValue = location.value || "";
-    if (!locValue) {
-      console.log("=== processLocation - Object without value property ===", {
-        input: JSON.stringify(location),
-        result: "null (missing value property)",
-        timestamp: new Date().toISOString(),
-      });
-      return null;
-    }
-
-    console.log("=== processLocation - Object Input ===", {
-      input: `Object with value: ${locValue}`,
-      result: "LocationObject",
-      timestamp: new Date().toISOString(),
-    });
-
-    return Object.assign(String(locValue), {
-      value: locValue,
-      label: location.label || locValue,
-      description: location.description || locValue,
-      city: location.city || locValue,
-      airport: location.airport || locValue,
-      dropdownLabel:
-        location.dropdownLabel ||
-        (location.city ? `${location.city} (${locValue})` : locValue),
-    });
-  }
-
-  console.log("=== processLocation - Unhandled input type ===", {
-    input: typeof location,
-    result: "null",
-    timestamp: new Date().toISOString(),
+  // If it's a string, create a string & location object
+  const baseString = String(location);
+  return Object.assign(baseString, {
+    id: baseString,
+    iata: baseString,
+    name: baseString,
+    city: "",
+    country: "",
+    value: baseString,
+    label: baseString,
+    description: "",
+    dropdownLabel: baseString,
   });
+};
 
-  return null;
+/**
+ * Convert an unknown value to a location object
+ * @param location The location to convert
+ * @returns A location object or null if conversion fails
+ */
+export const convertToLocationLike = (
+  location: unknown
+): ExtendedLocation | null => {
+  if (!location || typeof location !== "object") return null;
+
+  const loc = location as Partial<ExtendedLocation>;
+  if (!loc.id || !loc.iata || !loc.name || !loc.city || !loc.country)
+    return null;
+
+  return {
+    id: loc.id,
+    iata: loc.iata,
+    name: loc.name,
+    city: loc.city,
+    country: loc.country,
+    value: loc.value || loc.iata,
+    label: loc.label || loc.name,
+    description: loc.description || "",
+    dropdownLabel: loc.dropdownLabel || "",
+  };
+};
+
+/**
+ * Reconstruct a location object from individual fields
+ */
+export const reconstructLocation = (
+  id: string,
+  code: string,
+  name: string,
+  city: string,
+  country: string
+): ExtendedLocation => ({
+  id,
+  iata: code,
+  name,
+  city,
+  country,
+  value: code,
+  label: name,
+});
+
+/**
+ * Compare two location objects for equality
+ */
+export const areLocationsEqual = (
+  a: Partial<ExtendedLocation> | null,
+  b: Partial<ExtendedLocation> | null
+): boolean => {
+  if (!a || !b) return a === b;
+  return (
+    a.id === b.id &&
+    a.iata === b.iata &&
+    a.name === b.name &&
+    a.city === b.city &&
+    a.country === b.country &&
+    a.value === b.value &&
+    a.label === b.label
+  );
 };
 
 /**
@@ -129,10 +138,12 @@ export const processLocation = (
  * @returns A safely formatted location object, properly detached from original references
  */
 export const createSafeLocationCopy = (
-  location: any
-): (string & LocationLike) | null => {
+  location: unknown
+): (string & ExtendedLocation) | null => {
   // First process to normalize the format
-  const processed = processLocation(location);
+  const processed = processLocation(
+    location as string | Partial<ExtendedLocation> | null
+  );
   if (!processed) return null;
 
   // Then create a safe deep copy to avoid reference issues
@@ -171,7 +182,114 @@ export const ensureSegmentLocations = (segment: any): any => {
  * @param location - The location to check
  * @returns True if the location is valid, false otherwise
  */
-export const isValidLocation = (location: any): boolean => {
-  const processed = processLocation(location);
+export const isValidLocation = (location: unknown): boolean => {
+  const processed = processLocation(
+    location as string | Partial<ExtendedLocation> | null
+  );
   return Boolean(processed && processed.value);
+};
+
+/**
+ * Gets city name from an airport code synchronously
+ * This is a simple implementation that just returns the code itself
+ * since we don't have access to the full airport database in this context
+ *
+ * @param airportCode - Airport IATA code (e.g., "BER")
+ * @param lang - Optional language code
+ * @returns The city name or the airport code if not found
+ */
+export const getAirportCitySync = (
+  airportCode: string,
+  lang?: string
+): string => {
+  // Check for cached airport data in localStorage
+  // The API should be storing airport names in localStorage when they're fetched
+  try {
+    if (typeof window !== "undefined") {
+      const cacheKey = `airport_${airportCode}_${lang || "en"}`;
+      const cachedData = localStorage.getItem(cacheKey);
+
+      if (cachedData) {
+        try {
+          const parsed = JSON.parse(cachedData);
+          if (parsed && parsed.name) {
+            return `${parsed.name} (${airportCode})`;
+          }
+        } catch (e) {
+          console.error("Error parsing cached airport data:", e);
+        }
+      }
+
+      // Also check for recently used locations that might have the full name
+      const recentLocationsKey = "recent_locations";
+      const recentLocations = localStorage.getItem(recentLocationsKey);
+      if (recentLocations) {
+        try {
+          const locations = JSON.parse(recentLocations);
+          const matchingLocation = locations.find(
+            (loc: any) => loc.value === airportCode || loc.label === airportCode
+          );
+
+          if (matchingLocation && matchingLocation.dropdownLabel) {
+            return matchingLocation.dropdownLabel;
+          } else if (matchingLocation && matchingLocation.description) {
+            return `${matchingLocation.description} (${airportCode})`;
+          }
+        } catch (e) {
+          console.error("Error parsing recent locations:", e);
+        }
+      }
+    }
+  } catch (e) {
+    console.error("Error accessing localStorage for airport data:", e);
+  }
+
+  // For simplicity just return the airport code directly when no cache is available
+  // This is a fallback implementation
+  console.log(
+    "=== getAirportCitySync - Getting city for airport (no cache found) ===",
+    {
+      airportCode,
+      lang: lang || "default",
+      result: airportCode,
+      timestamp: new Date().toISOString(),
+    }
+  );
+
+  return airportCode;
+};
+
+/**
+ * Formats airport information for consistent dropdown display across all components
+ * @param location - The airport location data
+ * @returns Formatted string for dropdown display: "Airport Name (IATA)"
+ */
+export const formatAirportDropdownLabel = (location: {
+  name?: string;
+  city?: string;
+  country?: string;
+  code?: string;
+  iata?: string;
+  iata_code?: string;
+}): string => {
+  const code = location.iata || location.code || location.iata_code || "";
+  const name = location.name || "";
+
+  // If we have both name and code, format as "Name (CODE)"
+  if (name && code) {
+    return `${name} (${code})`;
+  }
+
+  // If we only have code, return just the code
+  if (code) {
+    return code;
+  }
+
+  // If we only have name, return just the name
+  if (name) {
+    return name;
+  }
+
+  // Fallback to empty string
+  return "";
 };

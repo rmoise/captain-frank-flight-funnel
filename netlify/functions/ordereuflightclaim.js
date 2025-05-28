@@ -115,6 +115,24 @@ const handler = async (event) => {
         console.log('PNR:', requestBody.journey_booked_pnr);
         console.log('================================');
         console.log('API request body:', apiRequestBody);
+        // Check if owner_street is an object and extract street value
+        if (typeof requestBody.owner_street === 'object' && requestBody.owner_street !== null) {
+            console.log('owner_street is an object, extracting street value');
+            apiRequestBody.owner_street = requestBody.owner_street.street || '';
+
+            // If postalCode, city, and country are missing in our API request but present in street object, use those values
+            if (!apiRequestBody.owner_place && requestBody.owner_street.postalCode) {
+                apiRequestBody.owner_place = requestBody.owner_street.postalCode;
+            }
+
+            if (!apiRequestBody.owner_city && requestBody.owner_street.city) {
+                apiRequestBody.owner_city = requestBody.owner_street.city;
+            }
+
+            if (!apiRequestBody.owner_country && requestBody.owner_street.country) {
+                apiRequestBody.owner_country = requestBody.owner_street.country;
+            }
+        }
         const response = await fetch(apiUrl, {
             method: 'POST',
             headers: {

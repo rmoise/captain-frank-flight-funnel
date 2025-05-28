@@ -3,5 +3,6 @@ export default function InitialAssessmentLayout({
 }: {
   children: React.ReactNode;
 }) {
+  console.log("[InitialAssessmentLayout] Rendering layout");
   return <>{children}</>;
 }

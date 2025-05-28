@@ -1,80 +1,27 @@
 // Types
-import type { Location } from "@/components/shared/AutocompleteInput";
+import type { AutocompleteLocationOption } from "@/types/shared/location";
+import type {
+  ApiResponse,
+  Airport,
+  RawFlight,
+  FlightResponse,
+  CompensationResponse,
+  EvaluationResponse,
+  OrderClaimResponse,
+  ApiError as IApiError,
+  ApiClientConfig,
+  SearchFlightParams,
+} from "@/types/shared/api";
 import type {
   EvaluateClaimRequest,
   OrderClaimRequest,
 } from "@/services/claimService";
-// TravelStatus is used as the base type for JourneyFactType in OrderClaimRequest
-/* eslint-disable @typescript-eslint/no-unused-vars */
-import type { TravelStatus, JourneyFactType } from "@/types/travel";
-/* eslint-enable @typescript-eslint/no-unused-vars */
-
-export interface ApiResponse<T> {
-  data: T[];
-  status: "success" | "error";
-  message?: string;
-}
-
-export interface Airport {
-  iata_code: string;
-  name: string;
-  lat: number;
-  lng: number;
-}
-
-export interface RawFlight {
-  id: number;
-  flightnumber_iata: string;
-  dep_iata: string;
-  arr_iata: string;
-  dep_time_sched: string;
-  arr_time_sched: string;
-  dep_time_fact: string | null;
-  arr_time_fact: string | null;
-  arr_delay_min: number | null;
-  status: string;
-  aircraft_type?: string;
-}
-
-export interface FlightResponse {
-  data: RawFlight[];
-  status: "success" | "error";
-  message?: string;
-}
-
-export interface CompensationResponse {
-  amount: number;
-  currency?: string;
-  status: "success" | "error";
-  message?: string;
-}
-
-export interface EvaluationResponse {
-  data: {
-    status: "accept" | "reject";
-    guid?: string;
-    recommendation_guid?: string;
-    contract?: {
-      amount: number;
-      provision: number;
-    };
-    rejection_reasons?: Record<string, string>;
-  };
-}
-
-export interface OrderClaimResponse {
-  data?: {
-    guid: string;
-    recommendation_guid: string;
-  };
-  message?: string;
-}
 
 // Core configuration
 const BASE_URL = "/api";
 
 // Core utilities
-class ApiError extends Error {
+class ApiError extends Error implements IApiError {
   constructor(
     public status: number,
     message: string,
@@ -86,16 +33,23 @@ class ApiError extends Error {
 }
 
 class ApiClient {
+  private readonly config: ApiClientConfig;
+
+  constructor(config: Partial<ApiClientConfig> = {}) {
+    this.config = {
+      baseUrl: config.baseUrl || BASE_URL,
+      maxRetries: config.maxRetries || 3,
+      retryDelay: config.retryDelay || 1000,
+    };
+  }
+
   private async makeRequest<T>(
     url: string,
     options: RequestInit = {},
     retryCount = 0
   ): Promise<T> {
-    const MAX_RETRIES = 3;
-    const RETRY_DELAY = 1000; // 1 second
-
     try {
-      const fullUrl = `${BASE_URL}${url}`;
+      const fullUrl = `${this.config.baseUrl}${url}`;
       console.log("Making API request to:", fullUrl, {
         attempt: retryCount + 1,
         method: options.method || "GET",
@@ -111,9 +65,13 @@ class ApiClient {
       });
 
       // For 502 errors, retry the request
-      if (response.status === 502 && retryCount < MAX_RETRIES) {
-        console.log(`Received 502 error, retrying in ${RETRY_DELAY}ms...`);
-        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
+      if (response.status === 502 && retryCount < this.config.maxRetries!) {
+        console.log(
+          `Received 502 error, retrying in ${this.config.retryDelay}ms...`
+        );
+        await new Promise((resolve) =>
+          setTimeout(resolve, this.config.retryDelay!)
+        );
         return this.makeRequest<T>(url, options, retryCount + 1);
       }
 
@@ -155,7 +113,7 @@ class ApiClient {
           );
         }
         // If we've hit max retries or status isn't 502, throw error
-        if (retryCount >= MAX_RETRIES || response.status !== 502) {
+        if (retryCount >= this.config.maxRetries! || response.status !== 502) {
           throw new ApiError(
             response.status,
             `API request failed: Invalid JSON response`
@@ -163,9 +121,11 @@ class ApiClient {
         }
         // For 502 with invalid JSON, retry
         console.log(
-          `Received invalid JSON with 502, retrying in ${RETRY_DELAY}ms...`
+          `Received invalid JSON with 502, retrying in ${this.config.retryDelay}ms...`
         );
-        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
+        await new Promise((resolve) =>
+          setTimeout(resolve, this.config.retryDelay!)
+        );
         return this.makeRequest<T>(url, options, retryCount + 1);
       }
 
@@ -198,58 +158,74 @@ class ApiClient {
           errorMessage = "Internal server error";
         } else if (response.status === 502) {
           errorMessage = "Bad Gateway - The server is temporarily unavailable";
-        } else {
-          errorMessage = `API request failed with status ${response.status}`;
         }
 
         throw new ApiError(response.status, errorMessage, responseData);
       }
 
-      return responseData;
-    } catch (error) {
-      // If it's already an ApiError, rethrow it
+      return responseData as T;
+    } catch (error: unknown) {
       if (error instanceof ApiError) {
         throw error;
       }
-
-      // For network errors, retry if we haven't hit the limit
-      if (error instanceof TypeError && retryCount < MAX_RETRIES) {
-        console.log(`Network error, retrying in ${RETRY_DELAY}ms...`, error);
-        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
-        return this.makeRequest<T>(url, options, retryCount + 1);
-      }
-
-      // For other errors, wrap in ApiError
-      console.error("Unexpected error in API request:", error);
       throw new ApiError(
         500,
-        error instanceof Error ? error.message : "Unknown error occurred"
+        `API request failed: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
       );
     }
   }
 
   // API Methods
-  async searchAirports(term: string): Promise<Location[]> {
+  async searchAirports(
+    term: string,
+    lang: string = "de"
+  ): Promise<AutocompleteLocationOption[]> {
+    const url = `/.netlify/functions/searchAirports?term=${encodeURIComponent(
+      term
+    )}&lang=${encodeURIComponent(lang)}`;
     try {
-      const response = await this.makeRequest<ApiResponse<Airport>>(
-        `/airports/search?term=${encodeURIComponent(term)}`
+      // Assuming makeRequest handles absolute paths starting with '/'
+      // Assuming Netlify function returns the array directly, not wrapped in ApiResponse
+      const responseData = await this.makeRequest<AutocompleteLocationOption[]>(
+        url
       );
-      return response.data.map((airport) => ({
-        value: airport.iata_code,
-        label: `${airport.name} (${airport.iata_code})`,
-        description: airport.name,
-        city: airport.name.split(",")[0].trim(),
-      }));
+      // Basic check if response is an array
+      if (!Array.isArray(responseData)) {
+        console.error(
+          "Netlify function searchAirports did not return an array:",
+          responseData
+        );
+        throw new ApiError(
+          500,
+          "Invalid response format from airport search function"
+        );
+      }
+      return responseData;
     } catch (error) {
-      console.error("Error searching airports:", error);
-      return [];
+      console.error("Error fetching airports from Netlify function:", error);
+      // Rethrow the error to allow higher-level components to handle it
+      throw error;
     }
+  }
+
+  async searchFlights(params: SearchFlightParams): Promise<FlightResponse> {
+    const queryParams = new URLSearchParams();
+    if (params.fromLocation) queryParams.set("from", params.fromLocation);
+    if (params.toLocation) queryParams.set("to", params.toLocation);
+    if (params.date) queryParams.set("date", params.date);
+    if (params.airline) queryParams.set("airline", params.airline);
+    if (params.flightNumber)
+      queryParams.set("flightNumber", params.flightNumber);
+
+    return this.makeRequest<FlightResponse>(`/flights/search?${queryParams}`);
   }
 
   async evaluateEuflightClaim(
     request: EvaluateClaimRequest
   ): Promise<EvaluationResponse> {
-    return this.makeRequest<EvaluationResponse>("/evaluateeuflightclaim", {
+    return this.makeRequest<EvaluationResponse>("/euflight/evaluate", {
       method: "POST",
       body: JSON.stringify(request),
     });
@@ -258,36 +234,13 @@ class ApiClient {
   async orderEuflightClaim(
     request: OrderClaimRequest
   ): Promise<OrderClaimResponse> {
-    console.log("=== API CLIENT ORDER CLAIM METHOD CALLED ===", {
-      timestamp: new Date().toISOString(),
-    });
-
-    console.log("=== ORDER CLAIM REQUEST TO API ===");
-    console.log(JSON.stringify(request, null, 2));
-    console.log("=================================");
-
-    try {
-      const response = await this.makeRequest<OrderClaimResponse>(
-        "/ordereuflightclaim",
-        {
-          method: "POST",
-          body: JSON.stringify(request),
-        }
-      );
-
-      console.log("=== ORDER CLAIM RESPONSE IN API CLIENT ===");
-      console.log(JSON.stringify(response, null, 2));
-      console.log("=========================================");
-
-      return response;
-    } catch (error) {
-      console.error("Error in orderEuflightClaim:", error);
-      // Return a minimal valid response with error info
-      return {
-        message:
-          error instanceof Error ? error.message : "Unknown error occurred",
-      };
-    }
+    return this.makeRequest<OrderClaimResponse>(
+      "/.netlify/functions/ordereuflightclaim",
+      {
+        method: "POST",
+        body: JSON.stringify(request),
+      }
+    );
   }
 }
 

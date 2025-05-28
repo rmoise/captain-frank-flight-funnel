@@ -1,0 +1,361 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# Testing Guidelines
+
+## Application Overview
+
+Captain Frank is a flight compensation claim platform that helps passengers claim compensation for flight disruptions under EU Regulation EC 261/2004. The application:
+
+- Helps passengers determine eligibility for compensation due to:
+  - Flight delays (3+ hours)
+  - Flight cancellations
+  - Denied boarding
+  - Downgraded travel class
+
+- Features a multi-step claim process:
+  1. Initial Assessment: Evaluates basic eligibility
+  2. Flight Details: Collects specific flight information
+  3. Compensation Estimate: Calculates potential compensation amount
+  4. Document Upload: Handles travel documentation
+  5. Claim Submission: Processes the final claim
+
+- Key Technical Features:
+  - Multi-language support (English/German)
+  - Real-time flight data validation
+  - EU regulation compliance checks
+  - Secure document handling
+  - HubSpot integration for claim management
+  - Sanity CMS for content management
+
+This testing guide ensures proper coverage of all critical application features and user flows.
+
+## File Structure & Testing Organization
+```
+src/
+├── __tests__/                     # Global test utilities and setup
+│   ├── setup.ts
+│   ├── test-utils.tsx
+│   └── mocks/
+│       ├── handlers.ts            # API mocks
+│       └── server.ts              # MSW setup
+├── app/                           # Next.js app directory
+│   ├── [lang]/                   # Localized routes
+│   │   └── __tests__/           # Route tests
+│   ├── phases/                   # Claim process phases
+│   │   ├── initial-assessment/
+│   │   │   ├── page.tsx
+│   │   │   └── page.test.tsx
+│   │   ├── flight-details/
+│   │   ├── compensation-estimate/
+│   │   └── claim-success/
+│   ├── api/                      # API routes
+│   │   ├── check-eligibility/
+│   │   ├── evaluateeuflightclaim/
+│   │   ├── ordereuflightclaim/
+│   │   ├── searchairportsbyterm/
+│   │   └── upload-documents/
+│   └── studio/                   # Sanity Studio
+├── components/                    # React components
+│   ├── claim/                    # Claim specific components
+│   │   ├── CompensationCalculator/
+│   │   │   ├── index.tsx
+│   │   │   └── CompensationCalculator.test.tsx
+│   │   └── FlightOptionCard/
+│   ├── forms/                    # Form components
+│   │   ├── PersonalDetailsForm/
+│   │   └── AutocompleteInput/
+│   ├── phases/                   # Phase specific components
+│   ├── ui/                       # UI components
+│   │   ├── Button/
+│   │   ├── Input/
+│   │   └── Select/
+│   ├── shared/                   # Shared components
+│   │   ├── Layout/
+│   │   └── Navbar/
+│   └── wizard/                   # Wizard components
+├── hooks/                        # Custom hooks
+│   ├── useClaimValidation/
+│   │   ├── index.ts
+│   │   └── useClaimValidation.test.ts
+│   └── useCompensationCalculator/
+├── store/                        # State management
+│   └── flightStore/
+│       ├── index.ts
+│       ├── actions.ts
+│       └── __tests__/
+│           ├── store.test.ts
+│           └── actions.test.ts
+├── lib/                          # Utilities and helpers
+│   ├── validation/
+│   │   └── __tests__/
+│   ├── api/
+│   │   └── __tests__/
+│   └── utils/
+│       └── __tests__/
+├── services/                     # External services
+│   ├── hubspot/
+│   │   └── __tests__/
+│   └── sanity/
+│       └── __tests__/
+├── types/                        # TypeScript types
+│   ├── flight.ts
+│   └── claim.ts
+└── e2e/                          # End-to-end tests
+    ├── specs/
+    │   ├── claim-flow.spec.ts
+    │   └── compensation.spec.ts
+    └── fixtures/
+        └── flight-data.json
+```
+
+## Test Categories
+
+### 1. Unit Tests
+- Component tests (colocated with components)
+- Hook tests (in respective hook directories)
+- Utility function tests (in `lib/__tests__`)
+- Store tests (in `store/__tests__`)
+
+### 2. Integration Tests
+- API route tests (in `app/api/__tests__`)
+- Service integration tests (in `services/__tests__`)
+- Multi-component flows (in `__tests__/integration`)
+
+### 3. E2E Tests
+- Complete claim flows
+- Form submissions
+- Document uploads
+- Multi-step wizards
+
+### 4. API Tests
+- HubSpot integration
+- Flight data validation
+- Document processing
+- Compensation calculation
+
+## Next.js Testing Specifics
+
+### 1. Claim Flow Testing
+```typescript
+// app/[lang]/phases/initial-assessment/page.test.tsx
+import { render, screen } from '@testing-library/react'
+import InitialAssessmentPage from './page'
+import { createMockRouter } from '@/test-utils'
+
+jest.mock('next/navigation', () => ({
+  useRouter: () => createMockRouter({ params: { lang: 'en' } })
+}))
+
+describe('InitialAssessmentPage', () => {
+  it('validates flight delay criteria correctly', async () => {
+    render(<InitialAssessmentPage params={{ lang: 'en' }} />)
+
+    const delayInput = screen.getByLabelText(/delay duration/i)
+    await fireEvent.change(delayInput, { target: { value: '3.5' } })
+
+    expect(screen.getByText(/you may be eligible/i)).toBeInTheDocument()
+  })
+})
+```
+
+### 2. Compensation Calculator Testing
+```typescript
+// components/claim/CompensationCalculator/CompensationCalculator.test.tsx
+import { render, screen } from '@testing-library/react'
+import { CompensationCalculator } from './CompensationCalculator'
+
+describe('CompensationCalculator', () => {
+  it('calculates EU flight compensation correctly', () => {
+    const mockFlightData = {
+      distance: 1500,
+      delay: 3.5,
+      flightType: 'EU_FLIGHT'
+    }
+
+    render(<CompensationCalculator flightData={mockFlightData} />)
+
+    expect(screen.getByText(/400 EUR/i)).toBeInTheDocument()
+  })
+
+  it('shows no compensation for ineligible delays', () => {
+    const mockFlightData = {
+      distance: 1500,
+      delay: 1.5, // Less than 3 hours
+      flightType: 'EU_FLIGHT'
+    }
+
+    render(<CompensationCalculator flightData={mockFlightData} />)
+
+    expect(screen.getByText(/not eligible/i)).toBeInTheDocument()
+  })
+})
+```
+
+### 3. API Route Testing
+```typescript
+// app/api/evaluateeuflightclaim/route.test.ts
+import { createMocks } from 'node-mocks-http'
+import { POST } from './route'
+
+describe('EU Flight Claim Evaluation API', () => {
+  it('evaluates claim eligibility correctly', async () => {
+    const { req } = createMocks({
+      method: 'POST',
+      body: {
+        flightNumber: 'LH123',
+        delay: 3.5,
+        distance: 1500,
+        departureAirport: 'FRA',
+        arrivalAirport: 'LHR',
+        date: '2024-01-15'
+      }
+    })
+
+    const response = await POST(req)
+    const data = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(data).toEqual({
+      eligible: true,
+      estimatedCompensation: 400,
+      currency: 'EUR'
+    })
+  })
+})
+```
+
+### 4. Store Testing
+```typescript
+// store/flightStore/__tests__/actions.test.ts
+import { createFlightStoreActions } from '../actions'
+
+describe('Flight Store Actions', () => {
+  it('updates claim details correctly', () => {
+    const store = createFlightStoreActions((set) => ({
+      flightData: {},
+      setFlightData: (data) => set({ flightData: data })
+    }))
+
+    store.setFlightData({
+      flightNumber: 'LH123',
+      delay: 3.5,
+      distance: 1500
+    })
+
+    expect(store.getState().flightData).toEqual({
+      flightNumber: 'LH123',
+      delay: 3.5,
+      distance: 1500
+    })
+  })
+})
+```
+
+## Testing Best Practices
+
+### 1. Test Setup
+```typescript
+// __tests__/setup.ts
+import '@testing-library/jest-dom'
+import { TextEncoder, TextDecoder } from 'util'
+import { server } from './mocks/server'
+
+global.TextEncoder = TextEncoder
+global.TextDecoder = TextDecoder
+
+beforeAll(() => server.listen())
+afterEach(() => {
+  server.resetHandlers()
+  // Clear claim data between tests
+  localStorage.clear()
+})
+afterAll(() => server.close())
+```
+
+### 2. API Mocking
+```typescript
+// __tests__/mocks/handlers.ts
+import { rest } from 'msw'
+
+export const handlers = [
+  rest.post('/api/evaluateeuflightclaim', (req, res, ctx) => {
+    const { delay, distance } = req.body
+
+    const eligible = delay >= 3 && distance > 1500
+    const compensation = eligible ? 400 : 0
+
+    return res(
+      ctx.status(200),
+      ctx.json({
+        eligible,
+        estimatedCompensation: compensation,
+        currency: 'EUR'
+      })
+    )
+  })
+]
+```
+
+### 3. E2E Testing
+```typescript
+// e2e/specs/claim-submission.spec.ts
+describe('Claim Submission Flow', () => {
+  it('completes full claim submission process', () => {
+    cy.visit('/')
+
+    // Initial Assessment
+    cy.findByLabelText(/flight number/i).type('LH123')
+    cy.findByLabelText(/delay duration/i).type('3.5')
+    cy.findByRole('button', { name: /continue/i }).click()
+
+    // Flight Details
+    cy.findByLabelText(/departure airport/i).type('FRA')
+    cy.findByLabelText(/arrival airport/i).type('LHR')
+    cy.findByRole('button', { name: /calculate compensation/i }).click()
+
+    // Compensation Estimate
+    cy.findByText(/400 EUR/i).should('exist')
+    cy.findByRole('button', { name: /submit claim/i }).click()
+
+    // Success Page
+    cy.findByText(/claim submitted successfully/i).should('exist')
+  })
+})
+```
+
+## Jest Configuration
+```javascript
+// jest.config.js
+const nextJest = require('next/jest')
+
+const createJestConfig = nextJest({
+  dir: './'
+})
+
+const customJestConfig = {
+  setupFilesAfterEnv: ['<rootDir>/__tests__/setup.ts'],
+  testEnvironment: 'jest-environment-jsdom',
+  moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/src/$1'
+  },
+  testMatch: [
+    '**/__tests__/**/*.test.[jt]s?(x)',
+    '**/?(*.)+(spec|test).[jt]s?(x)'
+  ],
+  collectCoverageFrom: [
+    'src/**/*.{js,jsx,ts,tsx}',
+    '!src/**/*.d.ts',
+    '!src/**/*.stories.{js,jsx,ts,tsx}'
+  ]
+}
+
+module.exports = createJestConfig(customJestConfig)
+```
+
+## Related Documents
+- [Component Architecture](mdc:component-architecture.mdc)
+- [TypeScript Guidelines](mdc:typescript-guidelines.mdc)
+- [Store Patterns](mdc:store-patterns.mdc)

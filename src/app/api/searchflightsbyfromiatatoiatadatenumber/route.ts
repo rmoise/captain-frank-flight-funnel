@@ -63,7 +63,7 @@ export async function GET(request: Request) {
     const to_iata = searchParams.get("to_iata")?.toUpperCase();
     const date = searchParams.get("date");
     const flight_number = searchParams.get("flight_number")?.toUpperCase();
-    const lang = searchParams.get("lang") || "en";
+    const lang = searchParams.get("lang") || "de";
 
     console.log("Flight search request:", {
       from_iata,

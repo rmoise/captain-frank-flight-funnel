@@ -1,0 +1,68 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# Captain Frank Fresh - Development Rules & Guidelines
+
+## Documentation Structure
+
+This directory contains comprehensive development rules, patterns, and guidelines for the Captain Frank Fresh project. The documentation is organized into the following categories:
+
+### 1. Architecture Rules
+- `store-architecture.mdc`: Core architecture principles for state management
+- `api-architecture.mdc`: API integration patterns and principles
+- `component-architecture.mdc`: Component organization and hierarchy
+
+### 2. Implementation Patterns
+- `store-patterns.mdc`: State management patterns and best practices
+- `component-patterns.mdc`: Reusable component patterns
+- `form-patterns.mdc`: Form handling patterns
+- `error-handling-patterns.mdc`: Error handling strategies
+
+### 3. Feature-Specific Guidelines
+- `phases.mdc`: Application phases and flow management
+- `flight-store.mdc`: Flight data management implementation
+- `wizard-implementation.mdc`: Wizard flow implementation
+- `localization-guidelines.mdc`: i18n implementation
+
+### 4. Best Practices
+- `typescript-guidelines.mdc`: TypeScript usage and type safety
+- `testing-guidelines.mdc`: Testing strategies and patterns
+- `performance-guidelines.mdc`: Performance optimization rules
+
+## Documentation Maintenance
+
+### When to Update
+1. When implementing new features
+2. When refactoring existing code
+3. When discovering new patterns or anti-patterns
+4. When establishing new conventions
+
+### How to Update
+1. Always include:
+   - Clear explanations of patterns/rules
+   - Code examples
+   - Type definitions where applicable
+   - Usage examples
+   - Common pitfalls to avoid
+
+2. Structure each document with:
+   - Overview/Purpose
+   - Implementation Details
+   - Examples
+   - Best Practices
+   - Related Patterns/Rules
+
+3. Cross-reference related documents using relative links
+
+## Current Focus Areas
+- [ ] Complete API architecture documentation
+- [ ] Expand component patterns
+- [ ] Document wizard implementation patterns
+- [ ] Establish performance benchmarks and guidelines
+
+## Version Control
+- Document version: 1.0.0
+- Last updated: [Current Date]
+- Project phase: Development

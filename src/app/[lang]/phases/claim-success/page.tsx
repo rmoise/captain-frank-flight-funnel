@@ -1,19 +1,28 @@
-import ClaimSuccess from '@/app/phases/claim-success/page';
-import type { Metadata } from 'next';
-import { isValidLanguage } from '@/config/language';
-import { getTranslation } from '@/translations';
+import ClaimSuccess from "@/app/phases/claim-success/page";
+import type { Metadata } from "next";
+import { isValidLocale } from "@/config/language";
+import { getTranslation } from "@/translations";
+import { setRequestLocale } from "next-intl/server";
 
 export type PageProps = {
-  params?: Promise<{ lang: string }>;
+  params: Promise<{ lang: string }>;
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 };
 
 export async function generateMetadata({
   params,
-}: PageProps): Promise<Metadata> {
-  const resolvedParams = await params ?? { lang: 'de' };
-  const lang = isValidLanguage(resolvedParams.lang) ? resolvedParams.lang : 'de';
-  const t = getTranslation(lang);
+}: {
+  params: Promise<{ lang: string }>;
+}): Promise<Metadata> {
+  // Access lang asynchronously
+  const { lang } = await params;
+
+  const currentLang = isValidLocale(lang) ? lang : "de";
+
+  // Use setRequestLocale with the resolved lang
+  setRequestLocale(currentLang);
+
+  const t = getTranslation(currentLang);
 
   return {
     title: t.phases.claimSuccess.title,
@@ -21,7 +30,14 @@ export async function generateMetadata({
   };
 }
 
-const ClaimSuccessPage = () => {
+// Make component async to properly handle params
+const ClaimSuccessPage = async ({ params }: PageProps) => {
+  // Access params asynchronously
+  const { lang } = await params;
+
+  // Set locale using the resolved lang
+  setRequestLocale(lang);
+
   return <ClaimSuccess />;
 };
 

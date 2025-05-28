@@ -38,19 +38,19 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const term = searchParams.get("term")?.toUpperCase();
-    const lang = searchParams.get("lang") || "en";
+    const lang = searchParams.get("lang") || "de";
 
     console.log("Airport search request:", { term, lang });
 
-    // Return empty results for short terms
-    if (!term || term.length < 3) {
+    // Return empty results for very short terms
+    if (!term || term.length < 2) {
       return NextResponse.json<ApiResponse>(
         {
           data: [],
           status: "success",
-          message: "Bitte geben Sie mindestens 3 Zeichen ein",
+          message: "Please enter at least 2 characters",
         },
-        { status: 400 }
+        { status: 200 } // Return 200 instead of 400 to avoid error state
       );
     }
 
@@ -77,18 +77,7 @@ export async function GET(request: Request) {
         url: response.url,
       });
 
-      // If it's a validation error (422), return a friendly message
-      if (response.status === 422) {
-        return NextResponse.json<ApiResponse>(
-          {
-            data: [],
-            status: "success",
-            message: "Please refine your search term",
-          },
-          { status: 200 }
-        );
-      }
-
+      // No more mock data - just return the error
       const errorText = await response.text();
       console.error("Error response text:", errorText);
 
@@ -135,8 +124,7 @@ export async function GET(request: Request) {
       lng: airport.lng || airport.longitude || 0,
     }));
 
-    // If the search term is exactly 3 characters and matches an IATA code format,
-    // prioritize exact matches by putting them first in the results
+    // Simple sort - prioritize exact IATA code matches
     if (term.length === 3 && /^[A-Z]{3}$/.test(term)) {
       formattedAirports.sort((a, b) => {
         if (a.iata_code === term) return -1;

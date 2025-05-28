@@ -1,19 +1,26 @@
-import ClaimRejected from '@/app/phases/claim-rejected/page';
-import type { Metadata } from 'next';
-import { isValidLanguage } from '@/config/language';
-import { getTranslation } from '@/translations';
+import ClaimRejected from "@/app/phases/claim-rejected/page";
+import type { Metadata } from "next";
+import { isValidLocale } from "@/config/language";
+import { getTranslation } from "@/translations";
+import { setRequestLocale } from "next-intl/server";
 
 export type PageProps = {
-  params?: Promise<{ lang: string }>;
+  params: Promise<{ lang: string }>;
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 };
 
 export async function generateMetadata({
   params,
-}: PageProps): Promise<Metadata> {
-  const resolvedParams = await params ?? { lang: 'de' };
-  const lang = isValidLanguage(resolvedParams.lang) ? resolvedParams.lang : 'de';
-  const t = getTranslation(lang);
+}: {
+  params: Promise<{ lang: string }>;
+}): Promise<Metadata> {
+  const { lang } = await params;
+
+  const currentLang = isValidLocale(lang) ? lang : "de";
+
+  setRequestLocale(currentLang);
+
+  const t = getTranslation(currentLang);
 
   return {
     title: t.phases.claimRejected.title,
@@ -21,7 +28,11 @@ export async function generateMetadata({
   };
 }
 
-const ClaimRejectedPage = () => {
+const ClaimRejectedPage = async ({ params }: PageProps) => {
+  const { lang } = await params;
+
+  setRequestLocale(lang);
+
   return <ClaimRejected />;
 };
 
