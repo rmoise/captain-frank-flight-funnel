@@ -190,16 +190,19 @@ export const FlightSearchBottomSheet: React.FC<
               <h3 className="text-lg font-medium text-gray-900 mb-2">
                 {errorMessage}
               </h3>
-              <p className="text-gray-500 mb-6">{errorMessage}</p>
+              <p className="text-gray-500 mb-6">
+                {t("flightSelector.labels.noFlightsFoundCriteria")}
+              </p>
               {currentPhase !== 1 && (
-                <SecondaryButton
+                <button
                   onClick={() => {
                     onClose();
                     setIsFlightNotListedOpen(true);
                   }}
+                  className="px-6 py-3 bg-[#F54538] text-white font-medium text-lg rounded-lg hover:bg-[#E03F33] transition-colors shadow-sm hover:shadow-md"
                 >
                   {t("flightSelector.flightNotListed.button")}
-                </SecondaryButton>
+                </button>
               )}
             </div>
           ) : filteredFlights.length === 0 ? (
@@ -218,14 +221,15 @@ export const FlightSearchBottomSheet: React.FC<
                   : t("flightSelector.labels.tryAdjusting")}
               </p>
               {currentPhase !== 1 && (
-                <SecondaryButton
+                <button
                   onClick={() => {
                     onClose();
                     setIsFlightNotListedOpen(true);
                   }}
+                  className="px-6 py-3 bg-[#F54538] text-white font-medium text-lg rounded-lg hover:bg-[#E03F33] transition-colors shadow-sm hover:shadow-md"
                 >
                   {t("flightSelector.flightNotListed.button")}
-                </SecondaryButton>
+                </button>
               )}
             </div>
           ) : (

@@ -484,9 +484,7 @@ export const FlightSegments = ({
             hasDate: !!params.date,
           });
           setSearchResults([]);
-          setSearchError(
-            "Please provide departure, arrival and date to search for flights."
-          );
+          setSearchError(t("flightSelector.errors.noFlightsRoute"));
           setIsSearching(false);
           setIsBottomSheetOpen(false);
           return;
@@ -532,9 +530,7 @@ export const FlightSegments = ({
         if (!Array.isArray(flightResults) || flightResults.length === 0) {
           console.log("No flights found");
           setSearchResults([]);
-          setSearchError(
-            "No flights found for the selected route and date. Please try different search criteria."
-          );
+          setSearchError(t("flightSelector.errors.noFlightsRoute"));
           return;
         }
 
@@ -643,14 +639,12 @@ export const FlightSegments = ({
       } catch (error) {
         console.error("Search error:", error);
         setSearchResults([]);
-        setSearchError(
-          "An unexpected error occurred while searching for flights. Please try again."
-        );
+        setSearchError(t("errors.general"));
       } finally {
         setIsSearching(false);
       }
     },
-    [setIsBottomSheetOpen, internalLocations, setLocations]
+    [setIsBottomSheetOpen, internalLocations, setLocations, t]
   );
 
   const handleSegmentChange = useCallback(
