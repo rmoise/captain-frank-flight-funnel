@@ -1171,8 +1171,8 @@ export default function ClaimSubmittedPage() {
     const { actions } = useStore.getState();
     actions.global.resetAll();
 
-    // Navigate to initial assessment
-    window.location.href = "/en/phases/initial-assessment";
+    // Navigate to initial assessment using current language
+    window.location.href = `/${lang}/phases/initial-assessment`;
   };
 
   return (
