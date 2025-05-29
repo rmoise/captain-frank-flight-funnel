@@ -1482,16 +1482,16 @@ export default function TripExperiencePage(): ReactElement {
               </AccordionCardClient>
 
               {/* Navigation */}
-              <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
-                <BackButton
-                  onClick={handleBack}
-                  text={t("phases.tripExperience.navigation.back")}
-                />
+              <div className="mt-12 pt-8 flex flex-col sm:flex-row justify-between gap-4">
                 <ContinueButton
                   onClick={handleContinue}
                   disabled={!canContinue() || isLoading}
                   isLoading={isLoading}
                   text={t("phases.tripExperience.navigation.continue")}
+                />
+                <BackButton
+                  onClick={handleBack}
+                  text={t("phases.tripExperience.navigation.back")}
                 />
               </div>
             </div>

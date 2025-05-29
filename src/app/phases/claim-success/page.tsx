@@ -663,46 +663,11 @@ function ClaimSuccessContent() {
   const isClaimSuccess = true;
 
   const isPersonalDetailsStepValid = useStore((s) => {
-    // Primary check: validation state from the store
-    const validationState =
-      s.validation.stepValidation?.[ValidationPhase.STEP_1] ?? false;
-
-    // For debugging purposes, log the current state
-    console.log("[isPersonalDetailsStepValid] Selector evaluation:", {
-      validationState,
-      hasUserDetails: !!s.user.details,
-      firstName: s.user.details?.firstName,
-      timestamp: new Date().toISOString(),
-    });
-
-    // If validation state is true, trust it - the form has already done the validation
-    if (validationState) {
-      // Quick sanity check: make sure we actually have user details
-      if (s.user.details && s.user.details.firstName?.trim()) {
-        // Ensure stepCompleted is in sync
-        const isCompleted =
-          s.validation.stepCompleted?.[ValidationPhase.STEP_1] ?? false;
-        if (!isCompleted) {
-          // Async update to sync stepCompleted
-          setTimeout(() => {
-            const currentStore = useStore.getState();
-            if (currentStore.actions?.validation?.setStepCompleted) {
-              currentStore.actions.validation.setStepCompleted(
-                ValidationPhase.STEP_1,
-                true
-              );
-            }
-          }, 0);
-        }
-        return true;
-      }
-    }
-
-    // If we're in claim success mode and validation state is false,
-    // do a quick check to see if all fields are actually filled
-    // This handles cases where navigation causes validation state to be reset
+    // For claim success page, we need all fields including address information
     if (s.user.details) {
       const details = s.user.details;
+
+      // Basic required fields
       const hasBasicFields = !!(
         details.firstName?.trim() &&
         details.lastName?.trim() &&
@@ -710,6 +675,7 @@ function ClaimSuccessContent() {
         details.salutation?.trim()
       );
 
+      // Address fields - all required for claim success
       const hasAddressFields = !!(
         details.address?.street?.trim() &&
         details.address?.postalCode?.trim() &&
@@ -717,36 +683,47 @@ function ClaimSuccessContent() {
         details.address?.country?.trim()
       );
 
-      const hasAllRequiredFields = hasBasicFields && hasAddressFields;
+      // Phone is also required for claim success
+      const hasPhone = !!details.phone?.trim();
 
-      // If we have all fields but validation state is false,
-      // trigger re-validation to sync the state
-      if (hasAllRequiredFields && !validationState) {
-        console.log(
-          "[isPersonalDetailsStepValid] Triggering re-validation due to field/validation mismatch"
-        );
+      const hasAllRequiredFields =
+        hasBasicFields && hasAddressFields && hasPhone;
+
+      // For debugging purposes, log the current state
+      console.log("[isPersonalDetailsStepValid] Selector evaluation:", {
+        hasBasicFields,
+        hasAddressFields,
+        hasPhone,
+        hasAllRequiredFields,
+        firstName: details.firstName,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Update validation state to match actual form completion
+      const currentValidationState =
+        s.validation.stepValidation?.[ValidationPhase.STEP_1] ?? false;
+
+      if (hasAllRequiredFields !== currentValidationState) {
+        // Async update to sync validation state
         setTimeout(() => {
           const currentStore = useStore.getState();
           if (currentStore.actions?.validation?.setStepValidation) {
             currentStore.actions.validation.setStepValidation(
               ValidationPhase.STEP_1,
-              true
+              hasAllRequiredFields
             );
             currentStore.actions.validation.setStepCompleted(
               ValidationPhase.STEP_1,
-              true
+              hasAllRequiredFields
             );
           }
         }, 0);
-
-        // Return true immediately since we know the data is valid
-        return hasAllRequiredFields;
       }
 
       return hasAllRequiredFields;
     }
 
-    return validationState;
+    return false;
   });
   const hasPersonalDetailsInteracted = useStore(
     (s) => s.validation.stepInteraction?.[ValidationPhase.STEP_1] ?? false
@@ -869,17 +846,17 @@ function ClaimSuccessContent() {
             </AccordionCard>
           </div>
 
-          <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
-            <BackButton
-              useUniversalNav={true}
-              navigateToPhase={ValidationPhase.TRIP_EXPERIENCE}
-              text={t("phases.claimSuccess.navigation.back")}
-            />
+          <div className="mt-12 pt-8 flex flex-col sm:flex-row justify-between gap-4">
             <ContinueButton
               onClick={handleContinue}
               disabled={!isPersonalDetailsStepValid}
               isLoading={isLoading}
               text={t("phases.claimSuccess.navigation.viewStatus")}
+            />
+            <BackButton
+              useUniversalNav={true}
+              navigateToPhase={ValidationPhase.TRIP_EXPERIENCE}
+              text={t("phases.claimSuccess.navigation.back")}
             />
           </div>
         </>

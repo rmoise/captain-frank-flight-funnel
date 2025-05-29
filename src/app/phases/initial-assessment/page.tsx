@@ -873,7 +873,7 @@ const InitialAssessmentPage = () => {
         </div>
       </AccordionCardClient>
 
-      <div className="mt-8 flex flex-col sm:flex-row justify-between gap-4">
+      <div className="mt-8 pt-4 flex flex-col sm:flex-row justify-between gap-4">
         <div></div>
         <ContinueButton
           onClick={handleContinue}

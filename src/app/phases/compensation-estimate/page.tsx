@@ -938,12 +938,7 @@ export default function CompensationEstimatePage() {
             </div>
 
             {/* Navigation Buttons */}
-            <div className="flex justify-between">
-              <BackButton
-                useUniversalNav={true}
-                navigateToPhase={ValidationPhase.INITIAL_ASSESSMENT}
-                text={t("phases.compensationEstimate.navigation.back")}
-              />
+            <div className="flex flex-col sm:flex-row justify-between gap-4 mt-12 pt-8">
               <ContinueButton
                 onClick={handleContinue}
                 isLoading={compensationLoading || isNavigating}
@@ -953,6 +948,11 @@ export default function CompensationEstimatePage() {
                     ? "Navigating..."
                     : t("phases.compensationEstimate.navigation.continue")
                 }
+              />
+              <BackButton
+                useUniversalNav={true}
+                navigateToPhase={ValidationPhase.INITIAL_ASSESSMENT}
+                text={t("phases.compensationEstimate.navigation.back")}
               />
             </div>
           </div>

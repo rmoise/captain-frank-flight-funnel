@@ -336,20 +336,24 @@ export const AccordionCardClient: React.FC<AccordionCardClientProps> = ({
       <button
         type="button"
         onClick={handleToggle}
-        className="relative w-full flex flex-col text-left px-4 sm:px-8 py-6"
+        className="relative w-full flex flex-col text-left px-4 sm:px-8 py-4 sm:py-6"
         aria-expanded={isExpanded}
       >
-        <div className="flex items-center justify-between">
-          <div className="flex-1">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
             {eyebrow && (
-              <span className="text-sm text-gray-500 mb-1">{eyebrow}</span>
+              <span className="text-sm text-gray-500 mb-1 block">
+                {eyebrow}
+              </span>
             )}
-            <h3 className="text-lg font-semibold">{title}</h3>
+            <h3 className="text-lg font-semibold leading-tight">{title}</h3>
             {subtitle && (
-              <p className="text-sm text-gray-600 mt-1">{subtitle}</p>
+              <p className="text-sm text-gray-600 mt-1 leading-tight">
+                {subtitle}
+              </p>
             )}
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2 sm:space-x-4 flex-shrink-0 pt-1">
             {getStatusIcon()}
             <ChevronUpIcon
               className={`w-5 h-5 transform transition-transform duration-300 ${

@@ -104,30 +104,35 @@ const SignaturePad = React.forwardRef<SignaturePadRef, SignaturePadProps>(
       e:
         | React.MouseEvent<HTMLCanvasElement>
         | React.TouchEvent<HTMLCanvasElement>
+        | TouchEvent
+        | MouseEvent
     ) => {
       e.preventDefault();
-      const canvas = canvasRef.current;
-      const context = contextRef.current;
-      if (!canvas || !context) return;
 
-      // Clear the justLoadedImage flag and its timeout if drawing starts
+      // Clear the justLoadedImage flag and its timeout on new drawing
       if (justLoadedImageTimeoutRef.current) {
         clearTimeout(justLoadedImageTimeoutRef.current);
         justLoadedImageTimeoutRef.current = null;
       }
       justLoadedImageRef.current = false;
 
+      const canvas = canvasRef.current;
+      const context = contextRef.current;
+      if (!canvas || !context) return;
+
       setIsDrawing(true);
-      hasContentRef.current = false; // Reset at start, will be set true if draw occurs
 
       let clientX, clientY;
 
+      // Handle both React events and native events
       if ("touches" in e) {
         clientX = e.touches[0].clientX;
         clientY = e.touches[0].clientY;
-      } else {
+      } else if ("clientX" in e) {
         clientX = e.clientX;
         clientY = e.clientY;
+      } else {
+        return; // Unknown event type
       }
 
       const rect = canvas.getBoundingClientRect();
@@ -148,6 +153,8 @@ const SignaturePad = React.forwardRef<SignaturePadRef, SignaturePadProps>(
       e:
         | React.MouseEvent<HTMLCanvasElement>
         | React.TouchEvent<HTMLCanvasElement>
+        | TouchEvent
+        | MouseEvent
     ) => {
       e.preventDefault();
       if (!isDrawing) return;
@@ -158,12 +165,15 @@ const SignaturePad = React.forwardRef<SignaturePadRef, SignaturePadProps>(
 
       let clientX, clientY;
 
+      // Handle both React events and native events
       if ("touches" in e) {
         clientX = e.touches[0].clientX;
         clientY = e.touches[0].clientY;
-      } else {
+      } else if ("clientX" in e) {
         clientX = e.clientX;
         clientY = e.clientY;
+      } else {
+        return; // Unknown event type
       }
 
       const rect = canvas.getBoundingClientRect();
@@ -520,6 +530,143 @@ const SignaturePad = React.forwardRef<SignaturePadRef, SignaturePadProps>(
       }
     };
 
+    // Add touch event listeners with { passive: false } to allow preventDefault
+    React.useEffect(() => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const handleTouchStart = (e: TouchEvent) => {
+        e.preventDefault();
+
+        // Clear the justLoadedImage flag and its timeout on new drawing
+        if (justLoadedImageTimeoutRef.current) {
+          clearTimeout(justLoadedImageTimeoutRef.current);
+          justLoadedImageTimeoutRef.current = null;
+        }
+        justLoadedImageRef.current = false;
+
+        const context = contextRef.current;
+        if (!canvas || !context) return;
+
+        setIsDrawing(true);
+
+        const clientX = e.touches[0].clientX;
+        const clientY = e.touches[0].clientY;
+
+        const rect = canvas.getBoundingClientRect();
+        const actualX = clientX - rect.left;
+        const actualY = clientY - rect.top;
+
+        context.beginPath();
+        context.moveTo(actualX, actualY);
+
+        strokePointsCountRef.current = 1;
+        lastPointRef.current = { x: actualX, y: actualY };
+        strokeTotalDistanceRef.current = 0;
+
+        if (onBegin) onBegin();
+      };
+
+      const handleTouchMove = (e: TouchEvent) => {
+        e.preventDefault();
+        if (!isDrawing) return;
+
+        const context = contextRef.current;
+        if (!canvas || !context) return;
+
+        const clientX = e.touches[0].clientX;
+        const clientY = e.touches[0].clientY;
+
+        const rect = canvas.getBoundingClientRect();
+        const actualX = clientX - rect.left;
+        const actualY = clientY - rect.top;
+
+        if (lastPointRef.current) {
+          const dist = Math.sqrt(
+            Math.pow(actualX - lastPointRef.current.x, 2) +
+              Math.pow(actualY - lastPointRef.current.y, 2)
+          );
+          strokeTotalDistanceRef.current += dist;
+        }
+
+        context.lineTo(actualX, actualY);
+        context.stroke();
+
+        strokePointsCountRef.current++;
+        lastPointRef.current = { x: actualX, y: actualY };
+        hasContentRef.current = true;
+      };
+
+      const handleTouchEnd = (e: TouchEvent) => {
+        e.preventDefault();
+        if (!isDrawing) return;
+
+        const context = contextRef.current;
+        if (context) {
+          context.closePath();
+        }
+        setIsDrawing(false);
+
+        const MIN_STROKE_POINTS_FOR_SIGNATURE = 15;
+        const MIN_STROKE_DISTANCE_FOR_SIGNATURE = 100;
+
+        if (
+          strokePointsCountRef.current < MIN_STROKE_POINTS_FOR_SIGNATURE ||
+          strokeTotalDistanceRef.current < MIN_STROKE_DISTANCE_FOR_SIGNATURE
+        ) {
+          console.log(
+            `Touch endDrawing: Stroke too short/small. Points: ${
+              strokePointsCountRef.current
+            }, Distance: ${strokeTotalDistanceRef.current.toFixed(
+              2
+            )}. Treating as empty.`
+          );
+          hasContentRef.current = false;
+        } else {
+          if (strokePointsCountRef.current > 0) {
+            hasContentRef.current = true;
+          }
+          console.log(
+            `Touch endDrawing: Stroke considered substantial. Points: ${
+              strokePointsCountRef.current
+            }, Distance: ${strokeTotalDistanceRef.current.toFixed(2)}.`
+          );
+        }
+
+        requestAnimationFrame(() => {
+          if (canvasRef.current && onChange) {
+            if (hasContentRef.current) {
+              const dataUrl = canvasRef.current.toDataURL();
+              console.log(
+                `Touch endDrawing: hasContent is true, calling onChange with dataUrl length: ${dataUrl.length}`
+              );
+              onChange(dataUrl);
+            } else {
+              console.log(
+                "Touch endDrawing: hasContent is false (likely a click), calling onChange with empty string."
+              );
+              onChange("");
+            }
+          }
+
+          if (onEnd) onEnd();
+        });
+      };
+
+      // Add touch event listeners with passive: false
+      canvas.addEventListener("touchstart", handleTouchStart, {
+        passive: false,
+      });
+      canvas.addEventListener("touchmove", handleTouchMove, { passive: false });
+      canvas.addEventListener("touchend", handleTouchEnd, { passive: false });
+
+      return () => {
+        canvas.removeEventListener("touchstart", handleTouchStart);
+        canvas.removeEventListener("touchmove", handleTouchMove);
+        canvas.removeEventListener("touchend", handleTouchEnd);
+      };
+    }, [isDrawing, onBegin, onChange, onEnd]); // Add dependencies
+
     // Expose methods via ref
     React.useImperativeHandle(ref, () => ({
       clear: clearCanvas,
@@ -537,9 +684,6 @@ const SignaturePad = React.forwardRef<SignaturePadRef, SignaturePadProps>(
           onMouseMove={draw}
           onMouseUp={endDrawing}
           onMouseLeave={endDrawing}
-          onTouchStart={startDrawing}
-          onTouchMove={draw}
-          onTouchEnd={endDrawing}
         />
       </div>
     );

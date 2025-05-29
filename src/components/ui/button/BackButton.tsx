@@ -94,12 +94,12 @@ export function BackButton({
   };
 
   return (
-    <div className="mt-8 order-last sm:order-none flex justify-center sm:justify-start w-full sm:w-auto">
+    <div className="w-full sm:w-auto sm:order-1">
       <button
         type="button"
         onClick={handleClick}
         disabled={disabled}
-        className={`px-10 h-16 rounded-xl transition-colors min-w-[200px] flex items-center justify-center ${
+        className={`px-10 py-4 rounded-xl transition-colors min-w-[200px] w-full flex items-center justify-center ${
           disabled
             ? "text-gray-400 cursor-not-allowed"
             : "text-[#F54538] hover:bg-[#FEF2F2]"

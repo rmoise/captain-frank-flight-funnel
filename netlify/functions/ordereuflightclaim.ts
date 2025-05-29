@@ -244,7 +244,7 @@ const handler: Handler = async (event: HandlerEvent) => {
       owner_country,
       owner_email: requestBody.owner_email,
       owner_phone: requestBody.owner_phone || "0000000000",
-      arbeitsrecht_marketing_status: marketingStatus,
+      owner_marketable_status: marketingStatus,
       contract_signature: requestBody.contract_signature,
       contract_tac: Boolean(requestBody.contract_tac),
       contract_dp: Boolean(requestBody.contract_dp),
@@ -256,9 +256,9 @@ const handler: Handler = async (event: HandlerEvent) => {
     // Add detailed marketing status logging
     console.log("=== FINAL MARKETING STATUS CHECK ===");
     console.log("Marketing Status:", {
-      finalValue: apiRequestBody.arbeitsrecht_marketing_status,
-      type: typeof apiRequestBody.arbeitsrecht_marketing_status,
-      stringified: JSON.stringify(apiRequestBody.arbeitsrecht_marketing_status),
+      finalValue: apiRequestBody.owner_marketable_status,
+      type: typeof apiRequestBody.owner_marketable_status,
+      stringified: JSON.stringify(apiRequestBody.owner_marketable_status),
       timestamp: new Date().toISOString(),
     });
     console.log("=================================");

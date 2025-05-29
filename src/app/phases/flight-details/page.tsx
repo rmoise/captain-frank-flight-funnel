@@ -485,7 +485,6 @@ export default function FlightDetailsPage() {
                 isCompleted={isBookingNumberValid}
                 isValid={isBookingNumberValid}
                 isOpenByDefault={!isBookingNumberValid}
-                className="mb-4"
                 stepId="2"
                 onInteraction={() => {
                   validation.setStepInteraction(
@@ -531,16 +530,16 @@ export default function FlightDetailsPage() {
               </div>
             )}
 
-            <div className="flex justify-between mt-8">
-              <BackButton
-                onClick={handleBack}
-                disabled={isLoading}
-                text={t("common.back")}
-              />
+            <div className="flex flex-col sm:flex-row justify-between gap-4 mt-8 pt-4">
               <ContinueButton
                 onClick={handleContinue}
                 isLoading={isLoading}
                 disabled={!canContinue}
+              />
+              <BackButton
+                onClick={handleBack}
+                disabled={isLoading}
+                text={t("common.back")}
               />
             </div>
           </div>

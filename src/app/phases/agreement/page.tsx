@@ -1283,6 +1283,7 @@ function AgreementPageContent() {
       // handleSignatureChange will then update the store and re-validate.
       setHasInteractedWithSignature(false); // Reset interaction state
       restorationFlagRef.current = false; // Allow re-restoration if needed
+      setHasRestoredSignature(false); // Reset restored signature flag
       // Form errors related to signature should be cleared by validation flow
       // Ensure step validation is set to false
       setStepValidation(ValidationPhase.STEP_1, false);
@@ -1291,6 +1292,7 @@ function AgreementPageContent() {
   }, [
     signatureRef,
     setHasInteractedWithSignature,
+    setHasRestoredSignature,
     setStepValidation,
     setStepCompleted,
   ]);
@@ -1605,17 +1607,17 @@ function AgreementPageContent() {
                   />
                 ))}
 
-              <div className="mt-8 flex flex-col sm:flex-row justify-between items-center space-y-4 sm:space-y-0 sm:space-x-4">
-                <BackButton
-                  onClick={handleBack}
-                  disabled={isSubmitting}
-                  text={t("common.back")}
-                />
+              <div className="flex flex-col sm:flex-row justify-between gap-4 mt-12 pt-8">
                 <ContinueButton
                   onClick={handleContinue}
                   text={t("phases.agreement.submit")}
                   isLoading={isSubmitting}
                   disabled={!canSubmit() || isSubmitting}
+                />
+                <BackButton
+                  onClick={handleBack}
+                  disabled={isSubmitting}
+                  text={t("common.back")}
                 />
               </div>
             </form>

@@ -22,8 +22,14 @@
 
 [functions]
   node_bundler = "esbuild"
-  external_node_modules = ["axios"]
-  included_files = ["netlify/functions/**/*"]
+
+# [functions]
+#   node_bundler = "esbuild"
+#   external_node_modules = ["axios", "form-data", "formidable", "node-fetch", "uuid", "parse-multipart-data"]
+#   included_files = ["netlify/functions/**/*"]
+
+# [functions."*"]
+#   node_bundler = "esbuild"
 
 # Specific rules first
 [[redirects]]

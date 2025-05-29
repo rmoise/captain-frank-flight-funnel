@@ -101,7 +101,7 @@ export function ContinueButton({
   const isDisabled = disabled || isLoading || !mounted;
 
   return (
-    <div className="mt-8 flex order-first sm:order-none sm:flex justify-center sm:justify-end w-full">
+    <div className="w-full sm:w-auto sm:order-2">
       <button
         type="button"
         onClick={handleClick}
@@ -110,7 +110,7 @@ export function ContinueButton({
           px-8 py-4
           rounded-lg
           flex items-center justify-center
-          w-full sm:w-auto
+          w-full
           min-w-[200px]
           font-medium
           text-lg
