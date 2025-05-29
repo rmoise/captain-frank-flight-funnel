@@ -581,7 +581,7 @@ export default function ClaimSubmittedPage() {
 
       console.log("Response status:", response.status);
 
-      let data;
+      let data: any;
       try {
         const responseText = await response.text();
         console.log(

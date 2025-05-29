@@ -999,7 +999,10 @@ export const ModularFlightSelectorClient: React.FC<
       if (onSelect && segmentForCallback) {
         // Use setTimeout to prevent triggering state updates during render
         setTimeout(() => {
-          onSelect(segmentForCallback); // Pass the fully merged segment
+          if (segmentForCallback) {
+            // Additional null check for safety
+            onSelect(segmentForCallback); // Pass the fully merged segment
+          }
         }, 0);
       } else if (onSelect) {
         console.warn(
