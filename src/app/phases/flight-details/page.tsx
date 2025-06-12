@@ -265,7 +265,7 @@ export default function FlightDetailsPage() {
   // Check if booking number is valid
   const isBookingNumberValid =
     !!bookingNumber &&
-    (bookingNumber.trim().length === 6 || bookingNumber.trim().length === 13) &&
+    bookingNumber.trim().length > 0 &&
     /^[A-Z0-9]+$/i.test(bookingNumber.trim());
 
   // Define a custom hook to manage flight selector state

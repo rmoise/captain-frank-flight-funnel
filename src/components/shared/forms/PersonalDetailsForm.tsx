@@ -1257,7 +1257,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
               { value: "herr", label: t("salutation.mr") },
               { value: "frau", label: t("salutation.mrs") },
             ]}
-            required={isClaimSuccess}
+            required={true}
             name="salutation"
             id="salutation"
           />

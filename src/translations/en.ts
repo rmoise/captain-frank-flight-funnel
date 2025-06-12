@@ -565,7 +565,7 @@ export const en: Translations = {
           validation: {
             required: "Please enter your booking number",
             format:
-              "Your booking number should be at least 6 characters long and contain only letters and numbers",
+              "Your booking number should contain only letters and numbers",
           },
         },
       },

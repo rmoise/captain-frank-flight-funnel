@@ -28,22 +28,16 @@ export async function GET(request: Request) {
 
     if (!from_iata || !to_iata) {
       console.error("Missing required parameters");
-      return NextResponse.json<CompensationResponse>(
-        {
-          status: "error",
-          message: "Missing required parameters (from_iata or to_iata)",
-        },
+      return NextResponse.json(
+        { error: "Missing required parameters (from_iata or to_iata)" },
         { status: 400 }
       );
     }
 
     if (!/^[A-Z]{3}$/.test(from_iata) || !/^[A-Z]{3}$/.test(to_iata)) {
       console.error("Invalid IATA codes:", { from_iata, to_iata });
-      return NextResponse.json<CompensationResponse>(
-        {
-          status: "error",
-          message: "Invalid IATA codes provided",
-        },
+      return NextResponse.json(
+        { error: "Invalid IATA codes provided" },
         { status: 400 }
       );
     }
@@ -83,12 +77,11 @@ export async function GET(request: Request) {
       }
 
       // Return a more descriptive error
-      return NextResponse.json<CompensationResponse>({
-        status: "error",
-        message: `Compensation calculation failed with status ${
+      return NextResponse.json({
+        error: `Compensation calculation failed with status ${
           response.status
         }${errorText ? ": " + errorText : ""}`,
-      });
+      }, { status: 500 });
     }
 
     // Get the raw response text first for debugging
@@ -102,10 +95,9 @@ export async function GET(request: Request) {
       console.log("Parsed Netlify function response:", responseData);
     } catch (parseError) {
       console.error("Failed to parse Netlify function response:", parseError);
-      return NextResponse.json<CompensationResponse>({
-        status: "error",
-        message: "Failed to parse compensation data",
-      });
+      return NextResponse.json({
+        error: "Failed to parse compensation data",
+      }, { status: 500 });
     }
 
     // Check if we have the expected amount field
@@ -115,14 +107,9 @@ export async function GET(request: Request) {
         responseData.amount
       );
 
-      // Transform the response to match what the frontend expects
-      const result: CompensationResponse = {
-        status: "success" as const,
-        data: responseData.amount,
-      };
-
-      console.log("Transformed response for frontend:", result);
-      return NextResponse.json<CompensationResponse>(result);
+      // Return the response in the format the frontend expects
+      console.log("Returning compensation amount to frontend:", responseData.amount);
+      return NextResponse.json({ amount: responseData.amount });
     } else {
       console.error(
         "Invalid response format - missing amount field:",
@@ -130,18 +117,16 @@ export async function GET(request: Request) {
       );
 
       // If we don't have a valid amount, return an error
-      return NextResponse.json<CompensationResponse>({
-        status: "error",
-        message: "Invalid compensation data format",
-      });
+      return NextResponse.json({
+        error: "Invalid compensation data format",
+      }, { status: 500 });
     }
   } catch (error) {
     console.error("Error calculating compensation:", error);
-    return NextResponse.json<CompensationResponse>({
-      status: "error",
-      message:
+    return NextResponse.json({
+      error:
         error instanceof Error ? error.message : "Unknown error occurred",
-    });
+    }, { status: 500 });
   }
 }
 

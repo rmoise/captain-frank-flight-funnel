@@ -135,10 +135,12 @@ export default function CompensationEstimatePage() {
   const originLocation: FlightLocation | null =
     flightSegments.length > 0 ? flightSegments[0].origin : null;
 
-  // For direct flights, always use the first segment's destination
-  // For multi-city flights, the logic should be handled differently in the future
+  // For direct flights, use the first segment's destination
+  // For multi-stop flights, use the last segment's destination
   const destinationLocation: FlightLocation | null =
-    flightSegments.length > 0 ? flightSegments[0].destination : null;
+    flightSegments.length > 0 
+      ? flightSegments[flightSegments.length - 1].destination 
+      : null;
 
   // Temporary state for compensation until store implementation is complete
   const [compensationAmount, setCompensationAmount] = useState<number | null>(
@@ -394,6 +396,8 @@ export default function CompensationEstimatePage() {
 
       // Log the exact location data for debugging
       console.log("=== CompensationEstimatePage - Location Data ===", {
+        flightType: selectedType,
+        segmentCount: flightSegments.length,
         origin: {
           code: originLocation?.code,
           name: originLocation?.name,
@@ -404,7 +408,8 @@ export default function CompensationEstimatePage() {
           name: destinationLocation?.name,
           city: destinationLocation?.city,
         },
-        segments: flightSegments.map((segment) => ({
+        segments: flightSegments.map((segment, index) => ({
+          segmentNumber: index + 1,
           origin: {
             code: segment.origin?.code,
             name: segment.origin?.name,
@@ -477,10 +482,17 @@ export default function CompensationEstimatePage() {
                 if (typeof data.amount === "number") {
                   setCompensationAmount(data.amount);
                 } else {
+                  console.error("Invalid response format:", data);
                   setCompensationError("Invalid compensation data format");
                 }
               } else {
-                setCompensationError("Failed to calculate compensation");
+                try {
+                  const errorData = await response.json();
+                  console.error("API error response:", errorData);
+                  setCompensationError(errorData.error || "Failed to calculate compensation");
+                } catch {
+                  setCompensationError("Failed to calculate compensation");
+                }
               }
               setCompensationLoading(false);
             } catch (error) {
@@ -611,33 +623,29 @@ export default function CompensationEstimatePage() {
           console.log("API response status:", response.status);
 
           if (response.ok) {
-            const responseText = await response.text();
-            console.log("Raw API response:", responseText);
+            const data = await response.json();
+            console.log("API response:", data);
 
-            let data;
-            try {
-              data = JSON.parse(responseText);
-              console.log("Parsed API response:", data);
-
-              // Update this condition to match the actual API response format
-              if (data && typeof data.amount === "number") {
-                console.log("Setting compensation amount:", data.amount);
-                setCompensationAmount(data.amount);
-              } else {
-                console.error("Invalid response format:", data);
-                setCompensationError("Invalid response format from API");
-              }
-            } catch (parseError) {
-              console.error("Error parsing JSON response:", parseError);
-              setCompensationError("Invalid response format");
+            if (data && typeof data.amount === "number") {
+              console.log("Setting compensation amount:", data.amount);
+              setCompensationAmount(data.amount);
+            } else {
+              console.error("Invalid response format:", data);
+              setCompensationError("Invalid response format from API");
             }
           } else {
-            console.error(
-              "Error response:",
-              response.status,
-              response.statusText
-            );
-            setCompensationError("Failed to calculate compensation");
+            try {
+              const errorData = await response.json();
+              console.error("API error response:", errorData);
+              setCompensationError(errorData.error || "Failed to calculate compensation");
+            } catch {
+              console.error(
+                "Error response:",
+                response.status,
+                response.statusText
+              );
+              setCompensationError("Failed to calculate compensation");
+            }
           }
           setCompensationLoading(false);
         } catch (error) {

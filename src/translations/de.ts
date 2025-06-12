@@ -565,7 +565,7 @@ export const de: Translations = {
           validation: {
             required: "Bitte geben Sie Ihre Buchungsnummer ein",
             format:
-              "Dein PNR (Passenger Name Record) ist ein 6- oder 13-stelliger Code, der auf deiner Buchungsbestätigung oder deinem E-Ticket zu finden ist.",
+              "Dein PNR (Passenger Name Record) sollte nur Buchstaben und Zahlen enthalten. Du findest ihn auf deiner Buchungsbestätigung oder deinem E-Ticket.",
           },
         },
       },
