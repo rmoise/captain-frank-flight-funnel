@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import * as React from 'react';
-import Image from 'next/image';
-import { useParams, usePathname } from 'next/navigation';
-import Link from 'next/link';
+import * as React from "react";
+import Image from "next/image";
+import { useParams, usePathname } from "next/navigation";
+import Link from "next/link";
 
 interface LogoProps {
   imageUrl: string;
@@ -12,7 +12,7 @@ interface LogoProps {
 
 const Logo: React.FC<LogoProps> = ({ imageUrl, altText }) => {
   const params = useParams();
-  const currentLang = (params?.lang as string) || 'de';
+  const currentLang = (params?.lang as string) || "de";
 
   return (
     <Link
@@ -38,23 +38,38 @@ const Logo: React.FC<LogoProps> = ({ imageUrl, altText }) => {
 const LanguageSwitcher = () => {
   const params = useParams();
   const pathname = usePathname();
-  const currentLang = (params?.lang as string) || 'de';
+  const currentLang = (params?.lang as string) || "de";
 
-  // Remove the language prefix from pathname
-  const pathWithoutLang = pathname?.replace(/^\/[^\/]+/, '') || '';
+  // Handle both localized and non-localized routes
+  const getPathWithoutLang = () => {
+    // Check if the path already has a language prefix
+    if (pathname?.match(/^\/(en|de)\//)) {
+      return pathname?.replace(/^\/[^\/]+/, "") || "";
+    }
+
+    // Handle case where we're on a direct route like /phases/...
+    if (pathname?.startsWith("/phases/")) {
+      return pathname; // Keep the path as is for direct routes
+    }
+
+    // Default case - remove any language prefix or use empty path
+    return pathname?.replace(/^\/[^\/]+/, "") || "";
+  };
+
+  const pathWithoutLang = getPathWithoutLang();
 
   return (
     <div className="flex gap-2">
       <Link
         href={`/de${pathWithoutLang}`}
-        className={`${currentLang === 'de' ? 'font-bold' : ''}`}
+        className={`${currentLang === "de" ? "font-bold" : ""}`}
       >
         DE
       </Link>
       <span>|</span>
       <Link
         href={`/en${pathWithoutLang}`}
-        className={`${currentLang === 'en' ? 'font-bold' : ''}`}
+        className={`${currentLang === "en" ? "font-bold" : ""}`}
       >
         EN
       </Link>

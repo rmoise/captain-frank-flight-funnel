@@ -13,7 +13,17 @@ export default createMiddleware({
   localeDetection: false,
 });
 
-// Match only internationalized pathnames
+// Match both internationalized and non-internationalized pathnames
 export const config = {
-  matcher: ["/", "/(de|en)/:path*"],
+  matcher: [
+    // Home routes
+    "/",
+    // Localized routes
+    "/(de|en)/:path*",
+    // Non-localized routes that should be redirected to localized versions
+    "/phases/:path*",
+    "/api/:path*",
+    // Exclude Next.js internal paths
+    "/((?!_next|_static|favicon.ico).*)",
+  ],
 };
