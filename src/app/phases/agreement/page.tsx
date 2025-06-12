@@ -820,13 +820,13 @@ function AgreementPageContent() {
       // Enhance personal details with required fields if they're missing
       const enhancedPersonalDetails = {
         ...currentPersonalDetails,
-        country: currentPersonalDetails.country || "Deutschland",
-        city: currentPersonalDetails.city, // Remove Berlin default
+        country: currentPersonalDetails.country || currentPersonalDetails.address?.country || "Deutschland",
+        city: currentPersonalDetails.city || currentPersonalDetails.address?.city,
         address:
           typeof currentPersonalDetails.address === "object"
             ? (currentPersonalDetails.address as any)?.street
             : currentPersonalDetails.address,
-        postalCode: currentPersonalDetails.postalCode, // Remove 10115 default
+        postalCode: currentPersonalDetails.postalCode || currentPersonalDetails.address?.postalCode,
         salutation: currentPersonalDetails.salutation || "herr",
       };
 

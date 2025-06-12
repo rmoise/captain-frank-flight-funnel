@@ -475,7 +475,8 @@ export const PhaseGuard: React.FC<PhaseGuardProps> = memo((props) => {
           console.error(
             `PhaseGuard: Authorization failed for phase ${expectedPhaseProp}, but no redirect target determined.`
           );
-          setErrorMessage(t("errors.phaseGuard.authorizationFailed"));
+          // Don't show error message during transitions to avoid flash of error content
+          // setErrorMessage(t("errors.phaseGuard.authorizationFailed"));
           setIsLoading(false); // Stop loading if error occurs
         }
       } else {
@@ -523,7 +524,8 @@ export const PhaseGuard: React.FC<PhaseGuardProps> = memo((props) => {
   }
 
   // Render Error Message if authorization fails and redirect doesn't happen
-  if (errorMessage) {
+  // Suppress error messages during form submissions to prevent flash of error content
+  if (errorMessage && !isTransitioning) {
     return (
       <div style={{ padding: "20px" }}>
         <p className="text-red-600 font-semibold">Authorization Error</p>
@@ -535,6 +537,11 @@ export const PhaseGuard: React.FC<PhaseGuardProps> = memo((props) => {
   // Render children only if authorized
   if (isAuthorized) {
     return <>{children}</>;
+  }
+
+  // Don't render anything during transitions to prevent flash of unauthorized content
+  if (isTransitioning) {
+    return null;
   }
 
   // Fallback if not authorized and not loading/error (should ideally be handled by redirect)
