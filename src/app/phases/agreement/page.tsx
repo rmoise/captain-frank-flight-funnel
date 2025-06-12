@@ -809,18 +809,40 @@ function AgreementPageContent() {
         throw new Error("Personal details are required");
       }
 
+      // Add detailed logging to track data flow
+      console.log("=== PERSONAL DETAILS DEBUG ===");
+      console.log("Store state user details:", currentPersonalDetails);
+      console.log("Address object:", currentPersonalDetails?.address);
+      console.log("Postal code:", currentPersonalDetails?.postalCode);
+      console.log("City:", currentPersonalDetails?.city);
+      console.log("================================");
+
       // Enhance personal details with required fields if they're missing
       const enhancedPersonalDetails = {
         ...currentPersonalDetails,
         country: currentPersonalDetails.country || "Deutschland",
-        city: currentPersonalDetails.city || "Berlin",
+        city: currentPersonalDetails.city, // Remove Berlin default
         address:
           typeof currentPersonalDetails.address === "object"
-            ? (currentPersonalDetails.address as any)?.street || "Test Street 1"
-            : currentPersonalDetails.address || "Test Street 1",
-        postalCode: currentPersonalDetails.postalCode || "10115",
+            ? (currentPersonalDetails.address as any)?.street
+            : currentPersonalDetails.address,
+        postalCode: currentPersonalDetails.postalCode, // Remove 10115 default
         salutation: currentPersonalDetails.salutation || "herr",
       };
+
+      // Validate that required fields are present
+      if (
+        !enhancedPersonalDetails.city ||
+        !enhancedPersonalDetails.postalCode
+      ) {
+        console.error("Missing required address fields:", {
+          city: enhancedPersonalDetails.city,
+          postalCode: enhancedPersonalDetails.postalCode,
+        });
+        throw new Error(
+          "City and postal code are required. Please go back and complete your address information."
+        );
+      }
       console.log("Enhanced personal details:", enhancedPersonalDetails);
 
       const originalFlightKeys = currentOriginalFlightsData

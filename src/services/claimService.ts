@@ -480,7 +480,30 @@ export class ClaimService {
         ? (personalDetails.address as any).street || ""
         : personalDetails.address;
 
-    return {
+    // Extract postalCode and city correctly from nested address structure
+    const postalCode =
+      personalDetails.postalCode ||
+      (typeof personalDetails.address === "object" &&
+      personalDetails.address !== null
+        ? (personalDetails.address as any).postalCode
+        : "");
+
+    const city =
+      personalDetails.city ||
+      (typeof personalDetails.address === "object" &&
+      personalDetails.address !== null
+        ? (personalDetails.address as any).city
+        : "");
+
+    // Add detailed logging for address mapping
+    console.log("=== ADDRESS MAPPING DEBUG ===");
+    console.log("Original personalDetails:", personalDetails);
+    console.log("Extracted address:", address);
+    console.log("Extracted postalCode:", postalCode);
+    console.log("Extracted city:", city);
+    console.log("==============================");
+
+    const orderRequest = {
       journey_booked_flightids,
       journey_fact_flightids,
       information_received_at: evaluationResponse.information_received_at,
@@ -495,8 +518,8 @@ export class ClaimService {
       owner_firstname: personalDetails.firstName,
       owner_lastname: personalDetails.lastName,
       owner_street: address,
-      owner_place: personalDetails.postalCode,
-      owner_city: personalDetails.city,
+      owner_place: postalCode, // This should be the postal code
+      owner_city: city, // This should be the city name
       owner_country: personalDetails.country,
       owner_email: personalDetails.email,
       owner_phone: personalDetails.phone || "",
@@ -507,6 +530,13 @@ export class ClaimService {
       contract_dp: privacyAccepted,
       lang: "en",
     };
+
+    console.log("=== FINAL ORDER REQUEST ===");
+    console.log("owner_place (postal code):", orderRequest.owner_place);
+    console.log("owner_city:", orderRequest.owner_city);
+    console.log("============================");
+
+    return orderRequest;
   }
 
   /**
