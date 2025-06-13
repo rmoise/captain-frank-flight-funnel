@@ -49,7 +49,11 @@ class ApiClient {
     retryCount = 0
   ): Promise<T> {
     try {
-      const fullUrl = `${this.config.baseUrl}${url}`;
+      // For Netlify functions, use the URL directly without baseUrl prefix
+      const fullUrl = url.startsWith("/.netlify/functions/")
+        ? url
+        : `${this.config.baseUrl}${url}`;
+
       console.log("Making API request to:", fullUrl, {
         attempt: retryCount + 1,
         method: options.method || "GET",
