@@ -42,12 +42,24 @@ export async function GET(request: Request) {
       );
     }
 
-    // Two options for implementation:
-    // 1. Call Netlify function directly (recommended in local dev)
-    // 2. Call external API directly (more reliable in production)
+    // Call Netlify function with proper URL resolution
+    // In production, we need to construct the full URL to the Netlify function
+    const getNetlifyFunctionUrl = () => {
+      // Get the host from the request
+      const host = request.headers.get('host');
+      const protocol = host?.includes('localhost') ? 'http' : 'https';
+      
+      if (host) {
+        return `${protocol}://${host}/.netlify/functions/calculateCompensation`;
+      }
+      
+      // Fallback to production URL if we can't determine host
+      return 'https://captainfrankfunnel.netlify.app/.netlify/functions/calculateCompensation';
+    };
 
-    // Option 1: Call Netlify function (recommended in local development)
-    const netlifyUrl = `/.netlify/functions/calculateCompensation?from_iata=${from_iata}&to_iata=${to_iata}`;
+    const netlifyFunctionUrl = getNetlifyFunctionUrl();
+    const netlifyUrl = `${netlifyFunctionUrl}?from_iata=${from_iata}&to_iata=${to_iata}`;
+    
     console.log("Calling Netlify function:", netlifyUrl);
 
     const response = await fetch(netlifyUrl, {
@@ -58,7 +70,7 @@ export async function GET(request: Request) {
       },
     });
 
-    console.log("Netlify response status:", response.status);
+    console.log("Netlify function response status:", response.status);
 
     if (!response.ok) {
       console.error("Netlify function call failed:", {
@@ -100,12 +112,9 @@ export async function GET(request: Request) {
       }, { status: 500 });
     }
 
-    // Check if we have the expected amount field
+    // Netlify function returns { amount: number, currency: "EUR" }
     if (responseData && typeof responseData.amount === "number") {
-      console.log(
-        "Successfully extracted compensation amount:",
-        responseData.amount
-      );
+      console.log("Successfully extracted compensation amount:", responseData.amount);
 
       // Return the response in the format the frontend expects
       console.log("Returning compensation amount to frontend:", responseData.amount);
