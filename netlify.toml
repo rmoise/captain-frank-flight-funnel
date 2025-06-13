@@ -66,7 +66,13 @@
   from = "/:lang/api/ordereuflightclaim"
   to = "/.netlify/functions/ordereuflightclaim"
   status = 200
-  force = true # Assuming this might need force=true as well
+  force = true
+
+[[redirects]]
+  from = "/api/ordereuflightclaim"
+  to = "/.netlify/functions/ordereuflightclaim"
+  status = 200
+  force = true
 
 [[redirects]]
   from = "/:lang/api/submitflightnotlisted"

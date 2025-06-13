@@ -932,6 +932,17 @@ function AgreementPageContent() {
         safeSetClaimId(orderResult.data.guid);
         safeSetClaimSubmitted(true);
 
+        // Update store navigation state BEFORE navigation to prevent PhaseGuard unauthorized flash
+        const storeActions = useStore.getState().actions;
+        if (storeActions?.navigation?.setCurrentPhase) {
+          storeActions.navigation.setCurrentPhase(
+            ValidationPhase.CLAIM_SUBMITTED
+          );
+        }
+        if (storeActions?.navigation?.addCompletedPhase) {
+          storeActions.navigation.addCompletedPhase(ValidationPhase.AGREEMENT);
+        }
+
         const langPrefix = lang ? `/${lang}` : "";
         router.push(
           `${langPrefix}/phases/claim-submitted?claim_id=${orderResult.data.guid}&scrollTop=true`
@@ -947,6 +958,17 @@ function AgreementPageContent() {
         const tempClaimId = `temp-${Date.now()}`;
         safeSetClaimId(tempClaimId);
         safeSetClaimSubmitted(true);
+
+        // Update store navigation state BEFORE navigation to prevent PhaseGuard unauthorized flash
+        const storeActions = useStore.getState().actions;
+        if (storeActions?.navigation?.setCurrentPhase) {
+          storeActions.navigation.setCurrentPhase(
+            ValidationPhase.CLAIM_SUBMITTED
+          );
+        }
+        if (storeActions?.navigation?.addCompletedPhase) {
+          storeActions.navigation.addCompletedPhase(ValidationPhase.AGREEMENT);
+        }
 
         const langPrefix = lang ? `/${lang}` : "";
         router.push(
