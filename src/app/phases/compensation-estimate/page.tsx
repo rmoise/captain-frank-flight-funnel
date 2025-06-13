@@ -131,19 +131,68 @@ export default function CompensationEstimatePage() {
   const completedPhases = navigation.completedPhases;
   const personalDetails = userState.details;
 
+  // DEBUG: Log the raw store data
+  console.log("=== DEBUG: Raw Store Data ===", {
+    flightState,
+    flightSegments,
+    flightSegmentsLength: flightSegments.length,
+    selectedType,
+    currentPhase,
+    storeStructure: {
+      flight: Object.keys(flightState),
+      navigation: Object.keys(navigation),
+      validation: Object.keys(validation),
+      user: Object.keys(userState),
+    },
+    rawSegments: flightSegments.map((segment, index) => ({
+      index,
+      id: segment.id,
+      origin: segment.origin,
+      destination: segment.destination,
+      hasOrigin: !!segment.origin,
+      hasDestination: !!segment.destination,
+      originCode: segment.origin?.code,
+      destinationCode: segment.destination?.code,
+    })),
+  });
+
   // Get departure and destination FlightLocation objects from the segments
   // Handle both Phase 4 format (fromLocation/toLocation) and standard format (origin/destination)
   const originLocation: FlightLocation | null = (() => {
-    if (flightSegments.length === 0) return null;
+    if (flightSegments.length === 0) {
+      console.log("=== DEBUG: No flight segments available for origin extraction ===");
+      return null;
+    }
     const segment = flightSegments[0] as any;
+    console.log("=== DEBUG: Origin extraction from first segment ===", {
+      segment,
+      hasOrigin: !!segment.origin,
+      hasFromLocation: !!segment.fromLocation,
+      originCode: segment.origin?.code,
+      fromLocationCode: segment.fromLocation?.code,
+      selectedResult: segment.origin || segment.fromLocation || null,
+    });
     return segment.origin || segment.fromLocation || null;
   })();
 
   // For direct flights, use the first segment's destination
   // For multi-stop flights, use the last segment's destination
   const destinationLocation: FlightLocation | null = (() => {
-    if (flightSegments.length === 0) return null;
+    if (flightSegments.length === 0) {
+      console.log("=== DEBUG: No flight segments available for destination extraction ===");
+      return null;
+    }
     const segment = flightSegments[flightSegments.length - 1] as any;
+    console.log("=== DEBUG: Destination extraction from last segment ===", {
+      segmentIndex: flightSegments.length - 1,
+      segment,
+      hasDestination: !!segment.destination,
+      hasToLocation: !!segment.toLocation,
+      destinationCode: segment.destination?.code,
+      toLocationCode: segment.toLocation?.code,
+      selectedResult: segment.destination || segment.toLocation || null,
+      fullSegmentStructure: JSON.stringify(segment, null, 2),
+    });
     return segment.destination || segment.toLocation || null;
   })();
 
@@ -475,8 +524,27 @@ export default function CompensationEstimatePage() {
         // Save phase data - Use codes directly
         const fromValue = getLocationValue(originLocation);
         const toValue = getLocationValue(destinationLocation);
+        
+        console.log("=== DEBUG: getLocationValue results ===", {
+          originLocation,
+          destinationLocation,
+          fromValue,
+          toValue,
+          originLocationCode: originLocation?.code,
+          destinationLocationCode: destinationLocation?.code,
+        });
 
         // Calculate compensation if needed
+        console.log("=== DEBUG: Initial compensation calculation check ===", {
+          fromValue,
+          toValue,
+          hasFromValue: !!fromValue,
+          hasToValue: !!toValue,
+          compensationAmount,
+          compensationLoading,
+          willCalculate: fromValue && toValue && !compensationAmount && !compensationLoading,
+        });
+        
         if (
           fromValue &&
           toValue &&
@@ -489,6 +557,17 @@ export default function CompensationEstimatePage() {
           if (fromIata.length === 3 && toIata.length === 3) {
             try {
               setCompensationLoading(true);
+              
+              console.log("=== DEBUG: Making compensation API call ===", {
+                fromIata,
+                toIata,
+                originalFromValue: fromValue,
+                originalToValue: toValue,
+                originLocation,
+                destinationLocation,
+                apiUrl: `/api/calculatecompensationbyfromiatatoiata?from_iata=${fromIata}&to_iata=${toIata}`,
+              });
+              
               // Simulate API call
               const response = await fetch(
                 `/api/calculatecompensationbyfromiatatoiata?from_iata=${fromIata}&to_iata=${toIata}`
@@ -609,10 +688,27 @@ export default function CompensationEstimatePage() {
       console.log("=== Location Change Detected ===", {
         departureCode,
         arrivalCode,
+        originLocation,
+        destinationLocation,
+        originLocationExists: !!originLocation,
+        destinationLocationExists: !!destinationLocation,
+        flightSegmentsLength: flightSegments.length,
+        firstSegment: flightSegments[0],
+        lastSegment: flightSegments[flightSegments.length - 1],
         timestamp: new Date().toISOString(),
       });
 
-      if (!departureCode || !arrivalCode) return;
+      if (!departureCode || !arrivalCode) {
+        console.log("=== DEBUG: Missing departure or arrival codes ===", {
+          departureCode,
+          arrivalCode,
+          hasOriginLocation: !!originLocation,
+          hasDestinationLocation: !!destinationLocation,
+          originLocationCode: originLocation?.code,
+          destinationLocationCode: destinationLocation?.code,
+        });
+        return;
+      }
 
       // Clear any existing error
       if (compensationError) {
@@ -627,6 +723,11 @@ export default function CompensationEstimatePage() {
         console.log("=== Recalculating Compensation ===", {
           fromIata,
           toIata,
+          originalDepartureCode: departureCode,
+          originalArrivalCode: arrivalCode,
+          originLocation,
+          destinationLocation,
+          apiUrl: `/api/calculatecompensationbyfromiatatoiata?from_iata=${fromIata}&to_iata=${toIata}`,
           timestamp: new Date().toISOString(),
         });
 
@@ -675,7 +776,16 @@ export default function CompensationEstimatePage() {
           setCompensationLoading(false);
         }
       } else {
-        console.error("Invalid IATA codes:", { departureCode, arrivalCode });
+        console.error("Invalid IATA codes:", { 
+          departureCode, 
+          arrivalCode,
+          fromIata,
+          toIata,
+          fromIataLength: fromIata.length,
+          toIataLength: toIata.length,
+          originLocation,
+          destinationLocation,
+        });
         setCompensationError("Invalid airport codes provided");
       }
     };
