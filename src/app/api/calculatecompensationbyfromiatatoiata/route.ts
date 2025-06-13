@@ -42,30 +42,38 @@ export async function GET(request: Request) {
       );
     }
 
-    // Simplified approach - directly call the external API
-    // This avoids the Netlify function complexity and potential edge runtime issues
-    const directApiUrl = `https://secure.captain-frank.net/api/services/euflightclaim/calculatecompensationbyfromiatatoiata?from_iata=${from_iata}&to_iata=${to_iata}`;
-    
-    console.log("=== Attempting direct API call ===");
-    console.log("Direct API URL:", directApiUrl);
-
-    try {
-      const response = await fetch(directApiUrl, {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
-      });
-
-      console.log("External API response status:", response.status);
-      console.log("External API response headers:", Object.fromEntries(response.headers.entries()));
+    // Call Netlify function with proper URL resolution
+    // In production, we need to construct the full URL to the Netlify function
+    const getNetlifyFunctionUrl = () => {
+      // Get the host from the request
+      const host = request.headers.get('host');
+      const protocol = host?.includes('localhost') ? 'http' : 'https';
       
-      // Log response URL to check if request worked
-      console.log("Actual response URL:", response.url);
+      if (host) {
+        return `${protocol}://${host}/.netlify/functions/calculateCompensation`;
+      }
+      
+      // Fallback to production URL if we can't determine host
+      return 'https://captainfrankfunnel.netlify.app/.netlify/functions/calculateCompensation';
+    };
 
-      if (!response.ok) {
-      console.error("External API call failed:", {
+    const netlifyFunctionUrl = getNetlifyFunctionUrl();
+    const netlifyUrl = `${netlifyFunctionUrl}?from_iata=${from_iata}&to_iata=${to_iata}`;
+    
+    console.log("Calling Netlify function:", netlifyUrl);
+
+    const response = await fetch(netlifyUrl, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+    });
+
+    console.log("Netlify function response status:", response.status);
+
+    if (!response.ok) {
+      console.error("Netlify function call failed:", {
         status: response.status,
         statusText: response.statusText,
         url: response.url,
@@ -90,42 +98,36 @@ export async function GET(request: Request) {
 
     // Get the raw response text first for debugging
     const rawResponseText = await response.text();
-    console.log("Raw external API response text:", rawResponseText);
+    console.log("Raw Netlify function response text:", rawResponseText);
 
     // Then parse it
     let responseData;
     try {
       responseData = JSON.parse(rawResponseText);
-      console.log("Parsed external API response:", responseData);
+      console.log("Parsed Netlify function response:", responseData);
     } catch (parseError) {
-      console.error("Failed to parse external API response:", parseError);
+      console.error("Failed to parse Netlify function response:", parseError);
       return NextResponse.json({
         error: "Failed to parse compensation data",
       }, { status: 500 });
     }
 
-    // External API returns { data: number }
-    if (responseData && typeof responseData.data === "number") {
-      console.log("Successfully extracted compensation amount:", responseData.data);
+    // Netlify function returns { amount: number, currency: "EUR" }
+    if (responseData && typeof responseData.amount === "number") {
+      console.log("Successfully extracted compensation amount:", responseData.amount);
 
       // Return the response in the format the frontend expects
-      console.log("Returning compensation amount to frontend:", responseData.data);
-      return NextResponse.json({ amount: responseData.data });
+      console.log("Returning compensation amount to frontend:", responseData.amount);
+      return NextResponse.json({ amount: responseData.amount });
     } else {
       console.error(
-        "Invalid response format - missing data field:",
+        "Invalid response format - missing amount field:",
         responseData
       );
 
       // If we don't have a valid amount, return an error
       return NextResponse.json({
         error: "Invalid compensation data format",
-      }, { status: 500 });
-    }
-    } catch (fetchError) {
-      console.error("Error calling external API:", fetchError);
-      return NextResponse.json({
-        error: fetchError instanceof Error ? fetchError.message : "Failed to call external API",
       }, { status: 500 });
     }
   } catch (error) {
