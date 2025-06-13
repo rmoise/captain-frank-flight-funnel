@@ -132,15 +132,20 @@ export default function CompensationEstimatePage() {
   const personalDetails = userState.details;
 
   // Get departure and destination FlightLocation objects from the segments
-  const originLocation: FlightLocation | null =
-    flightSegments.length > 0 ? flightSegments[0].origin : null;
+  // Handle both Phase 4 format (fromLocation/toLocation) and standard format (origin/destination)
+  const originLocation: FlightLocation | null = (() => {
+    if (flightSegments.length === 0) return null;
+    const segment = flightSegments[0] as any;
+    return segment.origin || segment.fromLocation || null;
+  })();
 
   // For direct flights, use the first segment's destination
   // For multi-stop flights, use the last segment's destination
-  const destinationLocation: FlightLocation | null =
-    flightSegments.length > 0 
-      ? flightSegments[flightSegments.length - 1].destination 
-      : null;
+  const destinationLocation: FlightLocation | null = (() => {
+    if (flightSegments.length === 0) return null;
+    const segment = flightSegments[flightSegments.length - 1] as any;
+    return segment.destination || segment.toLocation || null;
+  })();
 
   // Temporary state for compensation until store implementation is complete
   const [compensationAmount, setCompensationAmount] = useState<number | null>(
@@ -196,16 +201,20 @@ export default function CompensationEstimatePage() {
       }
 
       // Add segment locations (access nested origin/destination codes)
+      // Handle both Phase 4 format (fromLocation/toLocation) and standard format (origin/destination)
       flightSegments.forEach((segment: FlightSegment) => {
-        // Ensure segment is typed
-        if (segment.origin?.code && /^[A-Z]{3}$/.test(segment.origin.code)) {
-          airportCodes.add(segment.origin.code);
+        const segmentAny = segment as any;
+        
+        // Check origin/fromLocation
+        const origin = segment.origin || segmentAny.fromLocation;
+        if (origin?.code && /^[A-Z]{3}$/.test(origin.code)) {
+          airportCodes.add(origin.code);
         }
-        if (
-          segment.destination?.code &&
-          /^[A-Z]{3}$/.test(segment.destination.code)
-        ) {
-          airportCodes.add(segment.destination.code);
+        
+        // Check destination/toLocation
+        const destination = segment.destination || segmentAny.toLocation;
+        if (destination?.code && /^[A-Z]{3}$/.test(destination.code)) {
+          airportCodes.add(destination.code);
         }
       });
 
@@ -233,19 +242,27 @@ export default function CompensationEstimatePage() {
       }
 
       // Also get names from segments if available
+      // Handle both Phase 4 format (fromLocation/toLocation) and standard format (origin/destination)
       flightSegments.forEach((segment: FlightSegment) => {
-        if (segment.origin?.code && segment.origin?.name) {
-          airportDetailsMap[segment.origin.code] = {
-            iata_code: segment.origin.code,
-            name: segment.origin.name,
-            city: segment.origin.city || "",
+        const segmentAny = segment as any;
+        
+        // Check origin/fromLocation
+        const origin = segment.origin || segmentAny.fromLocation;
+        if (origin?.code && origin?.name) {
+          airportDetailsMap[origin.code] = {
+            iata_code: origin.code,
+            name: origin.name,
+            city: origin.city || "",
           };
         }
-        if (segment.destination?.code && segment.destination?.name) {
-          airportDetailsMap[segment.destination.code] = {
-            iata_code: segment.destination.code,
-            name: segment.destination.name,
-            city: segment.destination.city || "",
+        
+        // Check destination/toLocation
+        const destination = segment.destination || segmentAny.toLocation;
+        if (destination?.code && destination?.name) {
+          airportDetailsMap[destination.code] = {
+            iata_code: destination.code,
+            name: destination.name,
+            city: destination.city || "",
           };
         }
       });
