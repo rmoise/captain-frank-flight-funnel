@@ -45,6 +45,12 @@
   force = true # Assuming this might need force=true as well
 
 [[redirects]]
+  from = "/:lang/api/calculatecompensationbyfromiatatoiata"
+  to = "/.netlify/functions/calculateCompensation"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/api/calculatecompensationbyfromiatatoiata"
   to = "/.netlify/functions/calculateCompensation"
   status = 200
@@ -74,12 +80,7 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
-# SPECIFIC EXCLUSION: Prevent language-prefixed compensation API from being redirected
-[[redirects]]
-  from = "/:lang/api/calculatecompensationbyfromiatatoiata"
-  to = "/api/calculatecompensationbyfromiatatoiata"
-  status = 200
-  force = true
+# REMOVED: Direct redirect to Netlify function added above
 
 # MODIFIED: Changed to non-force redirects to allow Next.js API routes to take precedence
 [[redirects]]
