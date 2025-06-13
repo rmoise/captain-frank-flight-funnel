@@ -182,16 +182,24 @@ export default function CompensationEstimatePage() {
       console.log("=== DEBUG: No flight segments available for destination extraction ===");
       return null;
     }
-    const segment = flightSegments[flightSegments.length - 1] as any;
-    console.log("=== DEBUG: Destination extraction from last segment ===", {
-      segmentIndex: flightSegments.length - 1,
+    
+    // CRITICAL FIX: For direct flights, always use the first segment's destination
+    // For multi-city flights, use the last segment's destination
+    const segmentIndex = selectedType === "direct" ? 0 : flightSegments.length - 1;
+    const segment = flightSegments[segmentIndex] as any;
+    
+    console.log("=== DEBUG: Destination extraction ===", {
+      selectedType,
+      segmentIndex,
+      totalSegments: flightSegments.length,
       segment,
       hasDestination: !!segment.destination,
       hasToLocation: !!segment.toLocation,
       destinationCode: segment.destination?.code,
       toLocationCode: segment.toLocation?.code,
       selectedResult: segment.destination || segment.toLocation || null,
-      fullSegmentStructure: JSON.stringify(segment, null, 2),
+      isDirectFlight: selectedType === "direct",
+      usingFirstSegment: segmentIndex === 0,
     });
     return segment.destination || segment.toLocation || null;
   })();
