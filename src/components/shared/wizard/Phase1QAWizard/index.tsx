@@ -883,7 +883,7 @@ export const Phase1QAWizard = ({
             className="px-6 py-2 font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             type="button"
           >
-            Back
+            {t("common.back")}
           </button>
         </div>
 
@@ -898,7 +898,7 @@ export const Phase1QAWizard = ({
               className="px-6 py-2 font-medium text-white bg-[#F54538] rounded-lg hover:bg-red-600 transition-colors"
               type="button"
             >
-              {currentStep < questions.length ? "Next" : "Finish"}
+              {currentStep < questions.length ? t("common.next") : t("common.finish")}
             </button>
           </div>
         )}
