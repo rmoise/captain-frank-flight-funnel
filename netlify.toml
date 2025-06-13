@@ -44,11 +44,13 @@
   status = 200
   force = true # Assuming this might need force=true as well
 
-[[redirects]]
-  from = "/api/calculatecompensationbyfromiatatoiata"
-  to = "/.netlify/functions/calculateCompensation"
-  status = 200
-  force = true
+# REMOVED: Conflicting redirect for calculatecompensationbyfromiatatoiata
+# This API route is now handled by Next.js API route in src/app/api/calculatecompensationbyfromiatatoiata/route.ts
+# [[redirects]]
+#   from = "/api/calculatecompensationbyfromiatatoiata"
+#   to = "/.netlify/functions/calculateCompensation"
+#   status = 200
+#   force = true
 
 [[redirects]]
   from = "/:lang/api/evaluateeuflightclaim"
@@ -74,16 +76,19 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
+# MODIFIED: Changed to non-force redirects to allow Next.js API routes to take precedence
 [[redirects]]
   from = "/:lang/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
+  force = false
 
-# Fallback non-language-prefixed rule last
+# MODIFIED: Changed to non-force redirects to allow Next.js API routes to take precedence  
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
+  force = false
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
