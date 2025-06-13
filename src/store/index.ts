@@ -27,13 +27,7 @@ const getEnhancedStorage = () => ({
   getItem: (name: string) => {
     if (!isClient) return null;
     try {
-      console.log(`[Store Storage] Getting item: ${name}`);
-      const startTime = performance.now();
       const value = localStorageManager.safeGetItem(name);
-      const endTime = performance.now();
-      console.log(
-        `[Store Storage] Got item in ${(endTime - startTime).toFixed(2)}ms`
-      );
       return value ? JSON.parse(value) : null;
     } catch (e) {
       console.error(`Error parsing localStorage item "${name}":`, e);
@@ -44,21 +38,14 @@ const getEnhancedStorage = () => ({
     if (!isClient) return;
 
     try {
-      console.log(`[Store Storage] Setting item: ${name}`);
-      const startTime = performance.now();
       const stringifiedValue = JSON.stringify(value);
       localStorageManager.safeSetItem(name, stringifiedValue);
-      const endTime = performance.now();
-      console.log(
-        `[Store Storage] Set item in ${(endTime - startTime).toFixed(2)}ms`
-      );
     } catch (e) {
       console.error(`Error setting localStorage item "${name}":`, e);
     }
   },
   removeItem: (name: string) => {
     if (!isClient) return;
-    console.log(`[Store Storage] Removing item: ${name}`);
     localStorageManager.safeRemoveItem(name);
   },
 });

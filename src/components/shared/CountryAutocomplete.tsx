@@ -176,10 +176,13 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
         }
 
         if (matchingOption && onChange) {
-          console.log("Updating with matching option:", matchingOption);
-          onChange(matchingOption.value);
-          setSearchTerm(matchingOption.label);
-          lastValidValueRef.current = matchingOption.label;
+          // Only update if the value actually changed
+          if (value !== matchingOption.value && value !== matchingOption.label && value !== matchingOption.germanName) {
+            console.log("Updating with matching option:", matchingOption);
+            onChange(matchingOption.value);
+            setSearchTerm(matchingOption.label);
+            lastValidValueRef.current = matchingOption.label;
+          }
         }
       }
     };
@@ -218,7 +221,10 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
             // If we found a match, use it
             setSearchTerm(matchingOption.label);
             lastValidValueRef.current = matchingOption.label;
-            if (onChange) onChange(matchingOption.value);
+            // Only call onChange if the value actually changed
+            if (onChange && value !== matchingOption.value) {
+              onChange(matchingOption.value);
+            }
           } else if (selectedOption) {
             // If no match but we have a selected option, restore it
             setSearchTerm(selectedOption.label);
@@ -229,7 +235,8 @@ export const CountryAutocomplete: React.FC<CountryAutocompleteProps> = ({
             const lastValidOption = options.find(
               (opt) => opt.label === lastValidValueRef.current
             );
-            if (lastValidOption && onChange) {
+            // Only call onChange if the value actually changed
+            if (lastValidOption && onChange && value !== lastValidOption.value) {
               onChange(lastValidOption.value);
             }
           }

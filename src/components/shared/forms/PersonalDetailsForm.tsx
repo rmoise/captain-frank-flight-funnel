@@ -327,10 +327,6 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
 
   const validateFormWithDetails = useCallback(
     (isStrict: boolean, detailsToValidate: ExtendedPassengerDetails | null) => {
-      console.log(
-        `[validateFormWithDetails] Starting validation, isStrict: ${isStrict}`
-      );
-
       if (!detailsToValidate) return false;
 
       // Check each required field individually and log which ones are missing
@@ -343,7 +339,7 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
             : !!value;
 
         if (!isValid) {
-          console.log(`Field '${field}' validation failed: value=${value}`);
+          // Field validation failed
         }
         return { field, isValid };
       });
@@ -359,9 +355,6 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
       if (emailValue.trim() !== "") {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         isEmailValid = emailRegex.test(emailValue);
-        console.log(
-          `[validateFormWithDetails] Email validation: ${isEmailValid} for "${emailValue}"`
-        );
       } else if (requiredFields.includes("email")) {
         isEmailValid = false;
       }
@@ -393,9 +386,6 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
         isEmailValid &&
         (!isClaimSuccess || hasRequiredAddressFields);
 
-      console.log(
-        `[validateFormWithDetails] Final validation result: ${isValid}`
-      );
       return isValid;
     },
     [getRequiredFields, isClaimSuccess]
@@ -417,9 +407,6 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
       clearTimeout(validationUpdateTimerRef.current);
     }
     validationUpdateTimerRef.current = setTimeout(() => {
-      console.log(
-        `[debouncedUpdateValidation] setTimeout fired. isValid: ${isValid}. Current isValidationLocked.current (at timeout): ${isValidationLocked.current}`
-      );
       // The primary decision to update the store should be based on `isValid`.
       // The lock state (isValidationLocked.current) is managed by handleInputChange and updateStoreValidation itself.
       updateStoreValidation(isValid);
@@ -429,10 +416,6 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
   // Separate function to update store validation
   const updateStoreValidation = useCallback(
     (isValid: boolean) => {
-      console.log(
-        `🔴🔴🔴 [updateStoreValidation] isValid: ${isValid}, currentPhase: ${currentValidationPhase}`
-      );
-
       // SIMPLIFIED: Always update the store validation states directly
       if (setStepValidation) {
         setStepValidation(currentValidationPhase, isValid);
@@ -451,9 +434,6 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
 
       // Always set step completed based on validity
       if (setStepCompleted) {
-        console.log(
-          `[updateStoreValidation] Setting completed to ${isValid} for all phases`
-        );
         // IMPORTANT: isCompleted must always match isValid to prevent UI inconsistencies
         setStepCompleted(currentValidationPhase, isValid);
         setStepCompleted(otherValidationPhase, isValid);
@@ -483,40 +463,22 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
       isValid: boolean,
       detailsToCompleteWith?: ExtendedPassengerDetails | null
     ): void => {
-      console.log(
-        `[updateValidationState] Called with isValid=${isValid}, isValidationLocked.current=${isValidationLocked.current}`
-      );
-
       // If validation is locked and we're trying to set it as valid, don't do anything
       // This prevents flickering when field receives focus then immediately loses it
       if (isValidationLocked.current && isValid) {
-        console.log(
-          "[updateValidationState] Validation locked, only updating state for valid form"
-        );
         return;
       }
 
       // If validation is locked but the form is now INVALID, we should unlock
       // This is critical for handling cases where a previously valid form becomes invalid
       if (isValidationLocked.current && !isValid) {
-        console.log(
-          "[updateValidationState] Form is now invalid, unlocking validation to allow updates"
-        );
         isValidationLocked.current = false;
       }
 
       // Update local validation state
       if (detailsToCompleteWith) {
         if (isValid) {
-          console.log(
-            "[updateValidationState] Form is valid, calling onComplete with:",
-            JSON.stringify(detailsToCompleteWith, null, 2)
-          );
           onComplete && onComplete(detailsToCompleteWith);
-        } else {
-          console.log(
-            "[updateValidationState] Form is invalid, not calling onComplete"
-          );
         }
       }
 
@@ -527,18 +489,12 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
 
       // Immediately update the store for invalid state
       if (!isValid) {
-        console.log(
-          "[updateValidationState] Form is invalid, immediately updating store with false"
-        );
         updateStoreValidation(false);
         return;
       }
 
       // For valid state, use debounce to prevent flickering during rapid changes
       validationUpdateTimerRef.current = setTimeout(() => {
-        console.log(
-          `[debouncedUpdateValidation] setTimeout fired. isValid: ${isValid}. Current isValidationLocked.current (at timeout): ${isValidationLocked.current}`
-        );
         updateStoreValidation(isValid);
       }, 300);
     },
@@ -564,9 +520,6 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
           (!stableSalutationRef.current ||
             stableSalutationRef.current !== newValue)
         ) {
-          console.log(
-            `[PersonalDetailsForm] New stable salutation value: "${newValue}"`
-          );
           stableSalutationRef.current = newValue;
 
           // Clear any existing timer
@@ -619,9 +572,6 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
         return;
       }
 
-      console.log(
-        `[PersonalDetailsForm] Detected autofill for ${fieldName}: "${newValue}"`
-      );
 
       // Update our state with the autofilled value
       const newDetails = personalDetails
@@ -692,9 +642,6 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
     if (salutationSelect)
       salutationSelectRef.current = salutationSelect as HTMLSelectElement;
 
-    console.log(
-      "[PersonalDetailsForm] Setting up autofill detection for all fields"
-    );
 
     // Check all form fields at once for a more comprehensive validation
     const checkFormCompletion = () => {
@@ -719,10 +666,6 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
 
       // Only proceed if we have at least one value
       if (Object.values(currentValues).some((v) => v)) {
-        console.log(
-          "[checkFormCompletion] Checking form with values:",
-          currentValues
-        );
 
         // Create a new details object with all current values
         const newDetails = personalDetails
@@ -751,7 +694,6 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
           );
 
         if (needsUpdate) {
-          console.log("[checkFormCompletion] Updating state with new values");
           updatingRef.current = true;
           setPersonalDetails(newDetails);
           updatingRef.current = false;
@@ -767,7 +709,6 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
         // Check if form is now valid
         const isValid = validateFormWithDetails(true, newDetails);
         if (isValid) {
-          console.log("[checkFormCompletion] Form is now valid");
           updateValidationState(isValid, newDetails);
         }
       } else {
@@ -854,7 +795,6 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
     // Experimental: detect webkit autofill animation
     const handleAnimation = (e: AnimationEvent) => {
       if (e.animationName.includes("webkit-autofill")) {
-        console.log("[PersonalDetailsForm] Detected webkit-autofill animation");
         checkForAutofill();
       }
     };
@@ -1046,9 +986,6 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
   // Replace the complex handleInputChange with a simpler version
   const handleInputChange = useCallback(
     (field: string, value: string) => {
-      console.log(
-        `[handleInputChange] Field '${field}' changing to '${value}'`
-      );
 
       // Ensure interaction is tracked
       ensureInteractionTracked();
@@ -1079,9 +1016,6 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
 
       // Validate the form with the new details immediately
       const isValid = validateFormWithDetails(true, newDetails);
-      console.log(
-        `[handleInputChange] Validation result after ${field} change: ${isValid}`
-      );
 
       // Always update the store validation state
       updateStoreValidation(isValid);
@@ -1149,10 +1083,6 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
         return;
       }
 
-      console.log(
-        "[checkFormCompletion] Checking form with values:",
-        currentData
-      );
 
       // First pass: Check if we have all the basic required fields
       const requiredFields = getRequiredFields();
@@ -1167,7 +1097,6 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
             : !!value;
 
         if (!isFieldValid) {
-          console.log(`Field '${field}' validation failed: value=${value}`);
           hasAllRequiredFields = false;
         }
       });
@@ -1179,17 +1108,6 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
       if (emailValue) {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         isEmailValid = emailRegex.test(emailValue);
-        console.log(
-          "[validateFormWithDetails] Email validation:",
-          isEmailValid,
-          "for",
-          emailValue,
-          "(isStrict:",
-          true,
-          ", looksComplete:",
-          true,
-          ")"
-        );
       } else {
         isEmailValid = false;
       }
@@ -1204,15 +1122,6 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
           !!getNestedValue(currentData, "address.country")?.trim();
 
         if (!hasRequiredAddressFields) {
-          console.log(
-            "[checkFormCompletion] Address fields validation failed:",
-            {
-              street: getNestedValue(currentData, "address.street"),
-              postalCode: getNestedValue(currentData, "address.postalCode"),
-              city: getNestedValue(currentData, "address.city"),
-              country: getNestedValue(currentData, "address.country"),
-            }
-          );
         }
       }
 
@@ -1359,24 +1268,21 @@ export const PersonalDetailsForm: React.FC<PersonalDetailsFormProps> = ({
                   );
 
                   if (selectedOption) {
-                    // Store the actual country name for display and API submission
-                    console.log(
-                      `[CountryAutocomplete] Selected country: ${selectedOption.label} (${value})`
-                    );
-
                     // Use the appropriate value based on language
                     const countryValue =
                       lang === "en"
                         ? selectedOption.label
                         : selectedOption.germanName || selectedOption.label;
 
-                    handleInputChange("address.country", countryValue);
+                    // Only update if value changed
+                    if (getNestedValue(personalDetails, "address.country") !== countryValue) {
+                      handleInputChange("address.country", countryValue);
+                    }
                   } else {
                     // If not found in options but we have a value, use it as-is
-                    console.log(
-                      `[CountryAutocomplete] Using raw country value: ${value}`
-                    );
-                    handleInputChange("address.country", value);
+                    if (getNestedValue(personalDetails, "address.country") !== value) {
+                      handleInputChange("address.country", value);
+                    }
                   }
                 }}
                 options={

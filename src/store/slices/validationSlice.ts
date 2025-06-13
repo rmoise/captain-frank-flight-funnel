@@ -15,38 +15,16 @@ export const createValidationSlice: StateCreator<
   ValidationActions
 > = (set) => ({
   setStepValidation: (phase: ValidationPhase, isValid: boolean) => {
-    console.log("🔍 VALIDATION SLICE: setStepValidation called", {
-      phase,
-      isValid,
-      timestamp: new Date().toISOString(),
-    });
-
-    // Use the standard Zustand set function. Persist middleware handles storage.
-    set((state) => {
-      console.log("🔍 VALIDATION SLICE: Current state before update", {
-        currentValidation: state.validation.stepValidation,
-        updating: { [phase]: isValid },
-      });
-
-      const newState = {
-        validation: {
-          ...state.validation,
-          stepValidation: {
-            ...state.validation.stepValidation,
-            [phase]: isValid,
-          },
-          _timestamp: Date.now(),
+    set((state) => ({
+      validation: {
+        ...state.validation,
+        stepValidation: {
+          ...state.validation.stepValidation,
+          [phase]: isValid,
         },
-      };
-
-      console.log("🔍 VALIDATION SLICE: New state after update", {
-        newValidation: newState.validation.stepValidation,
-      });
-
-      // No manual localStorage update needed here
-
-      return newState;
-    });
+        _timestamp: Date.now(),
+      },
+    }));
   },
 
   setStepCompleted: (phase: ValidationPhase, isComplete: boolean) =>

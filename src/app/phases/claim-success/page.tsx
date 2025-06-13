@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useEffect, useCallback } from "react";
+import React, { Suspense, useEffect, useCallback, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useStore } from "@/store";
 import { useUniversalNavigation } from "@/utils/navigation";
@@ -146,7 +146,6 @@ function ClaimSuccessContent() {
   useEffect(() => {
     const currentWizardAnswers = useStore.getState().wizard.answers;
     if (currentWizardAnswers) {
-      // console.log("Current wizard answers on mount:", currentWizardAnswers);
     }
   }, []);
 
@@ -161,19 +160,8 @@ function ClaimSuccessContent() {
       const currentCore = currentState.core;
       const currentAllActions = currentState.actions;
 
-      console.log(
-        "ClaimSuccessContent subscriber: Store updated. Checking readiness...",
-        {
-          isCoreInitialized: currentCore?.isInitialized,
-          hasPhase4Actions: !!currentAllActions?.phase4,
-          allActionKeys: Object.keys(currentAllActions || {}),
-        }
-      );
 
       if (currentCore?.isInitialized && currentAllActions?.phase4) {
-        console.log(
-          "ClaimSuccessContent subscriber: Store IS READY. Setting storeReadyForInit=true."
-        );
         setStoreReadyForInit(true);
         unsubscribe(); // Unsubscribe once ready
       }
@@ -186,11 +174,6 @@ function ClaimSuccessContent() {
       setStoreReadyForInit(true);
       unsubscribe(); // Unsubscribe if already ready
     } else if (initialCore?.isInitialized && !initialActions?.phase4) {
-      console.log(
-        "ClaimSuccessContent useEffect initial check: Core IS initialized, but phase4 actions MISSING. Inspecting 'actions' object:"
-      );
-      console.log("Initial initialActions object:", initialActions);
-      console.log("Keys in initialActions:", Object.keys(initialActions || {}));
     }
 
     return () => {
@@ -208,9 +191,6 @@ function ClaimSuccessContent() {
       return;
     }
 
-    console.log(
-      "ClaimSuccessContent init useEffect: Proceeding to initializeState."
-    );
 
     const initializeState = async () => {
       if (!mountedRef.current) return;
@@ -234,15 +214,10 @@ function ClaimSuccessContent() {
         }
 
         const existingPersonalDetails = useStore.getState().user.details;
-        // console.log(
-        //   "Personal details from Zustand store on init:",
-        //   existingPersonalDetails
-        // );
 
         let evaluationResponse;
         try {
           evaluationResponse = ClaimService.getLastEvaluationResponse();
-          // console.log("Retrieved evaluation result:", evaluationResponse);
         } catch (error) {
           console.error("Error getting evaluation response:", error);
           if (mountedRef.current) {
@@ -254,9 +229,6 @@ function ClaimSuccessContent() {
         }
 
         if (!evaluationResponse) {
-          // console.log(
-          //   "No evaluation result available - potentially redirect or show error"
-          // );
           if (mountedRef.current) {
             setIsLoading(false);
             setError("Your claim could not be processed at this time.");
@@ -269,10 +241,6 @@ function ClaimSuccessContent() {
           evaluationResponse.status !== "accept" ||
           !evaluationResponse.contract
         ) {
-          // console.log("Evaluation result is invalid or not accepted:", {
-          //   hasContract: !!evaluationResponse.contract,
-          //   status: evaluationResponse.status,
-          // });
           if (mountedRef.current) {
             setIsLoading(false);
             setError("Your claim could not be processed at this time.");
@@ -283,11 +251,6 @@ function ClaimSuccessContent() {
 
         const { amount, provision } = evaluationResponse.contract;
 
-        // console.log(
-        //   "Retrieved evaluation result (inside initializeState):",
-        //   evaluationResponse,
-        //   evaluationResponse?.contract
-        // );
 
         setClaimDetails((prev) => ({
           ...prev,
@@ -376,13 +339,8 @@ function ClaimSuccessContent() {
   }, [storeReadyForInit]); // Runs when storeReadyForInit changes
 
   React.useEffect(() => {
-    const currentPhaseFromStore = useStore.getState().navigation.currentPhase;
-    const completedPhasesFromStore =
-      useStore.getState().navigation.completedPhases;
     const compensationAmountFromStore =
       useStore.getState().phase4?.evaluationResultContract?.amount;
-    const personalDetailsValid =
-      useStore.getState().validation.stepValidation?.[ValidationPhase.STEP_1];
 
     if (
       compensationAmountFromStore !== undefined &&
@@ -393,19 +351,10 @@ function ClaimSuccessContent() {
         amount: compensationAmountFromStore,
       }));
     }
+  }, [claimDetails.amount]);
 
-    console.log("Claim Success Page State (from Zustand selectors):", {
-      isLoading,
-      error,
-      claimDetails,
-      storeState: {
-        currentPhase: currentPhaseFromStore,
-        completedPhases: completedPhasesFromStore,
-        compensationAmount: compensationAmountFromStore,
-        isStepValid: personalDetailsValid,
-      },
-    });
-  }, [isLoading, error, claimDetails]);
+  const lastProcessedDetailsRef = useRef<string>("");
+  const lastHubSpotCallRef = useRef<number>(0);
 
   const handlePersonalDetailsComplete = useCallback(
     (details: any | null) => {
@@ -413,23 +362,21 @@ function ClaimSuccessContent() {
         return;
       }
 
+      // Prevent redundant calls by checking if details actually changed
+      const detailsHash = JSON.stringify(details);
+      if (lastProcessedDetailsRef.current === detailsHash) {
+        // Skipping - same details already processed
+        return;
+      }
+
       try {
         isUpdatingRef.current = true;
+        lastProcessedDetailsRef.current = detailsHash;
         const storeActions = useStore.getState().actions;
 
-        console.log("=== Personal Details Validation Start (Zustand) ===");
-        console.log(
-          "Received details from form:",
-          JSON.stringify(details, null, 2)
-        );
 
         const currentDetailsInStore = useStore.getState().user.details;
         if (JSON.stringify(currentDetailsInStore) === JSON.stringify(details)) {
-          console.log(
-            "No changes detected in personal details, but proceeding with validation and step update."
-          );
-          // isUpdatingRef.current = false;
-          // return;
         }
 
         // For claim success page, ensure address fields are required
@@ -477,9 +424,6 @@ function ClaimSuccessContent() {
             ?.toString()
             .trim();
 
-          console.log(
-            `Validating fieldPath: ${fieldPath}, fieldName: ${fieldName}, extracted value: '${value}'`
-          );
 
           if (!value || value.length === 0) {
             isValid = false;
@@ -497,18 +441,9 @@ function ClaimSuccessContent() {
             fieldErrorsUpdate.email = "This field is required";
           }
         }
-        console.log("Field validation results:", {
-          isValid,
-          isEmailValid,
-          fieldErrorsUpdate: JSON.stringify(fieldErrorsUpdate, null, 2),
-        });
 
         // Store the details regardless of validation result
         storeActions.user.setUserDetails(details);
-        console.log(
-          "Updated user.details in store. New store state for user.details:",
-          JSON.stringify(useStore.getState().user.details, null, 2)
-        );
 
         // Update validation state
         storeActions.validation.resetValidation();
@@ -529,49 +464,48 @@ function ClaimSuccessContent() {
           setInteractedSteps((prev) => [...prev, ValidationPhase.STEP_1]);
         }
 
-        console.log("=== Personal Details Validation End (Zustand) ===");
-        console.log(
-          "Final validation status for STEP_1:",
-          isValid && isEmailValid
-        );
 
         if (isValid && isEmailValid) {
           const contactId = sessionStorage.getItem("hubspot_contact_id");
-          console.log("=== HubSpot Personal Details Update (Zustand) ===", {
-            contactId,
-            details,
-            timestamp: new Date().toISOString(),
-          });
 
           if (contactId) {
-            fetch("/.netlify/functions/hubspot-integration/contact", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                contactId,
-                email: details.email,
-                firstName: details.firstName,
-                lastName: details.lastName,
-                salutation: details.salutation,
-                phone: details.phone || "",
-                mobilephone: details.phone || "",
-                address: details.address || "",
-                city: details.city || "",
-                postalCode: details.postalCode || "",
-                country: details.country || "",
-                arbeitsrecht_marketing_status:
-                  useStore.getState().user.consents.marketing,
-              }),
-            })
-              .then((response) => response.json())
-              .then((data) => {
-                console.log("HubSpot update response:", data);
+            // Rate limiting: Only call HubSpot API every 2 seconds
+            const now = Date.now();
+            const timeSinceLastCall = now - lastHubSpotCallRef.current;
+            const MIN_INTERVAL = 2000; // 2 seconds
+
+            if (timeSinceLastCall < MIN_INTERVAL) {
+            } else {
+              lastHubSpotCallRef.current = now;
+
+              fetch("/.netlify/functions/hubspot-integration/contact", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  contactId,
+                  email: details.email,
+                  firstName: details.firstName,
+                  lastName: details.lastName,
+                  salutation: details.salutation,
+                  phone: details.phone || "",
+                  mobilephone: details.phone || "",
+                  address: details.address || "",
+                  city: details.city || "",
+                  postalCode: details.postalCode || "",
+                  country: details.country || "",
+                  arbeitsrecht_marketing_status:
+                    useStore.getState().user.consents.marketing,
+                }),
               })
-              .catch((error) => {
-                console.error("Error updating HubSpot contact:", error);
-              });
+                .then((response) => response.json())
+                .then((data) => {
+                })
+                .catch((error) => {
+                  console.error("Error updating HubSpot contact:", error);
+                });
+            }
           }
         }
       } finally {
@@ -603,9 +537,6 @@ function ClaimSuccessContent() {
     try {
       let evaluationResponse = ClaimService.getLastEvaluationResponse();
       if (!evaluationResponse) {
-        console.log(
-          "No valid evaluation response found, creating a minimal one for navigation."
-        );
         const currentCompensation =
           currentStoreState.phase4?.evaluationResultContract?.amount || 0;
         evaluationResponse = {
@@ -688,37 +619,6 @@ function ClaimSuccessContent() {
 
       const hasAllRequiredFields =
         hasBasicFields && hasAddressFields && hasPhone;
-
-      // For debugging purposes, log the current state
-      console.log("[isPersonalDetailsStepValid] Selector evaluation:", {
-        hasBasicFields,
-        hasAddressFields,
-        hasPhone,
-        hasAllRequiredFields,
-        firstName: details.firstName,
-        timestamp: new Date().toISOString(),
-      });
-
-      // Update validation state to match actual form completion
-      const currentValidationState =
-        s.validation.stepValidation?.[ValidationPhase.STEP_1] ?? false;
-
-      if (hasAllRequiredFields !== currentValidationState) {
-        // Async update to sync validation state
-        setTimeout(() => {
-          const currentStore = useStore.getState();
-          if (currentStore.actions?.validation?.setStepValidation) {
-            currentStore.actions.validation.setStepValidation(
-              ValidationPhase.STEP_1,
-              hasAllRequiredFields
-            );
-            currentStore.actions.validation.setStepCompleted(
-              ValidationPhase.STEP_1,
-              hasAllRequiredFields
-            );
-          }
-        }, 0);
-      }
 
       return hasAllRequiredFields;
     }

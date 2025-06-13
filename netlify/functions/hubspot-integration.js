@@ -155,6 +155,22 @@ const createContact = async (payload) => {
       arbeitsrecht_marketing_status
     } = data;
 
+    // Handle address object properly - extract individual fields
+    let addressString = '';
+    let cityString = city || '';
+    let zipString = zip || postalCode || '';
+    let countryString = country || '';
+
+    // If address is an object, extract the fields
+    if (address && typeof address === 'object') {
+      addressString = address.street || '';
+      cityString = cityString || address.city || '';
+      zipString = zipString || address.postalCode || '';
+      countryString = countryString || address.country || '';
+    } else if (typeof address === 'string') {
+      addressString = address;
+    }
+
     // Use normalized values
     const normalizedData = {
       email: data.email,
@@ -163,10 +179,10 @@ const createContact = async (payload) => {
       salutation,
       phone,
       mobilephone,
-      address,
-      city,
-      zip: zip || postalCode,
-      country,
+      address: addressString,
+      city: cityString,
+      zip: zipString,
+      country: countryString,
       arbeitsrecht_marketing_status
     };
 

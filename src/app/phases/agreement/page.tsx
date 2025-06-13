@@ -204,6 +204,12 @@ function AgreementPageContent() {
     informedDateAnswers,
   ]);
 
+  // Add a ref to prevent infinite loops in HubSpot calls
+  const hubspotUpdateRef = useRef<{
+    lastMarketing?: boolean;
+    timestamp?: number;
+  }>({});
+
   useEffect(() => {
     if (!isClient || !mounted.current) return;
 
@@ -241,15 +247,37 @@ function AgreementPageContent() {
           }
         }
 
-        if (hubspotContactId && marketing !== undefined) {
+        // Prevent infinite loop by checking if we've already updated this marketing status recently
+        const now = Date.now();
+        const shouldUpdateHubSpot =
+          hubspotContactId &&
+          marketing !== undefined &&
+          (hubspotUpdateRef.current.lastMarketing !== marketing ||
+            !hubspotUpdateRef.current.timestamp ||
+            now - hubspotUpdateRef.current.timestamp > 30000); // 30 second throttle
+
+        if (shouldUpdateHubSpot) {
           try {
+            console.log("Updating HubSpot marketing status:", {
+              contactId: hubspotContactId,
+              marketing,
+              lastMarketing: hubspotUpdateRef.current.lastMarketing,
+              timeSinceLastUpdate: hubspotUpdateRef.current.timestamp
+                ? now - hubspotUpdateRef.current.timestamp
+                : "never",
+            });
+
+            hubspotUpdateRef.current = {
+              lastMarketing: marketing,
+              timestamp: now,
+            };
+
             const response = await safeApiCall(
-              "/.netlify/functions/hubspot-integration",
+              "/.netlify/functions/hubspot-integration/contact",
               {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  path: "contact",
                   contactId: hubspotContactId,
                   arbeitsrecht_marketing_status: marketing,
                 }),
@@ -260,6 +288,8 @@ function AgreementPageContent() {
               console.log(
                 "HubSpot marketing status update failed but continuing"
               );
+            } else {
+              console.log("HubSpot marketing status updated successfully");
             }
           } catch (error) {
             console.log(
@@ -267,6 +297,10 @@ function AgreementPageContent() {
               error
             );
           }
+        } else if (hubspotContactId && marketing !== undefined) {
+          console.log(
+            "Skipping HubSpot update - already updated recently or unchanged"
+          );
         }
 
         const storedSignature = signature;
@@ -820,13 +854,19 @@ function AgreementPageContent() {
       // Enhance personal details with required fields if they're missing
       const enhancedPersonalDetails = {
         ...currentPersonalDetails,
-        country: currentPersonalDetails.country || currentPersonalDetails.address?.country || "Deutschland",
-        city: currentPersonalDetails.city || currentPersonalDetails.address?.city,
+        country:
+          currentPersonalDetails.country ||
+          currentPersonalDetails.address?.country ||
+          "Deutschland",
+        city:
+          currentPersonalDetails.city || currentPersonalDetails.address?.city,
         address:
           typeof currentPersonalDetails.address === "object"
             ? (currentPersonalDetails.address as any)?.street
             : currentPersonalDetails.address,
-        postalCode: currentPersonalDetails.postalCode || currentPersonalDetails.address?.postalCode,
+        postalCode:
+          currentPersonalDetails.postalCode ||
+          currentPersonalDetails.address?.postalCode,
         salutation: currentPersonalDetails.salutation || "herr",
       };
 
@@ -942,7 +982,31 @@ function AgreementPageContent() {
     }
   };
 
+  // Add a ref to prevent duplicate HubSpot direct updates
+  const directUpdateRef = useRef<{ lastCall?: number; inProgress?: boolean }>(
+    {}
+  );
+
   const updateHubSpotDirectly = async () => {
+    // Prevent multiple simultaneous calls
+    if (directUpdateRef.current.inProgress) {
+      console.log("HubSpot direct update already in progress, skipping");
+      return;
+    }
+
+    // Throttle calls to prevent spam
+    const now = Date.now();
+    if (
+      directUpdateRef.current.lastCall &&
+      now - directUpdateRef.current.lastCall < 5000
+    ) {
+      console.log("HubSpot direct update called too recently, skipping");
+      return;
+    }
+
+    directUpdateRef.current.inProgress = true;
+    directUpdateRef.current.lastCall = now;
+
     try {
       const storeState = useStore.getState();
       const currentPersonalDetails = storeState.user.details;
@@ -966,14 +1030,13 @@ function AgreementPageContent() {
       }
 
       const contactResponse = await safeApiCall(
-        "/.netlify/functions/hubspot-integration",
+        "/.netlify/functions/hubspot-integration/contact",
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            path: "contact",
             contactId: currentContactId,
             email: currentPersonalDetails?.email || "",
             firstname: currentPersonalDetails?.firstName || "",
@@ -1008,14 +1071,13 @@ function AgreementPageContent() {
         });
 
         const dealResponse = await safeApiCall(
-          "/.netlify/functions/hubspot-integration",
+          "/.netlify/functions/hubspot-integration/deal",
           {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              path: "deal",
               dealId: currentDealId,
               contactId: currentContactId,
               amount: currentCompAmount,
@@ -1037,6 +1099,8 @@ function AgreementPageContent() {
       }
     } catch (error) {
       console.error("Error in HubSpot update (non-fatal):", error);
+    } finally {
+      directUpdateRef.current.inProgress = false;
     }
   };
 

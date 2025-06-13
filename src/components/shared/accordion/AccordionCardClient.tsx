@@ -88,6 +88,7 @@ export const AccordionCardClient: React.FC<AccordionCardClientProps> = ({
   const [prevCompletedState, setPrevCompletedState] = useState(isCompleted);
   const [localHasInteracted, setLocalHasInteracted] = useState(hasInteracted);
   const contentRef = useRef<HTMLDivElement>(null);
+  const contentStableRef = useRef(false);
 
   const isThisActive = activeStepId === stepId && !isCompleted;
 
@@ -141,28 +142,17 @@ export const AccordionCardClient: React.FC<AccordionCardClientProps> = ({
   }, [propIsCompleted, isValid, stepId, activeStepId, isThisActive, title]);
 
   useEffect(() => {
-    const handleContentInteraction = () => {
-      if (!propIsCompleted) {
-        setActiveStepId(stepId);
-        if (!localHasInteracted) {
-          setLocalHasInteracted(true);
-          if (onInteraction) {
-            onInteraction();
-          }
-        }
-      }
-    };
-
     const contentElement = contentRef.current;
-    if (contentElement) {
-      const observer = new MutationObserver(handleContentInteraction);
-      const config = { childList: true, subtree: true, attributes: true };
-      observer.observe(contentElement, config);
-
-      // Also listen for focus/click within the content to ensure interaction is captured
+    if (contentElement && isExpanded && !propIsCompleted) {
       const handleFocusOrClick = (event: FocusEvent | MouseEvent) => {
         if (contentElement.contains(event.target as Node)) {
-          handleContentInteraction();
+          setActiveStepId(stepId);
+          if (!localHasInteracted) {
+            setLocalHasInteracted(true);
+            if (onInteraction) {
+              onInteraction();
+            }
+          }
         }
       };
 
@@ -170,18 +160,11 @@ export const AccordionCardClient: React.FC<AccordionCardClientProps> = ({
       contentElement.addEventListener("click", handleFocusOrClick);
 
       return () => {
-        observer.disconnect();
         contentElement.removeEventListener("focusin", handleFocusOrClick);
         contentElement.removeEventListener("click", handleFocusOrClick);
       };
     }
-  }, [
-    propIsCompleted,
-    stepId,
-    setActiveStepId,
-    localHasInteracted,
-    onInteraction,
-  ]);
+  }, [isExpanded, propIsCompleted, stepId, setActiveStepId, localHasInteracted, onInteraction]);
 
   // Update based on external hasInteracted changes
   useEffect(() => {

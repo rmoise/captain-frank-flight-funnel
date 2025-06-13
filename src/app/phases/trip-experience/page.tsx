@@ -1081,11 +1081,14 @@ export default function TripExperiencePage(): ReactElement {
   };
 
   // Find the canContinue function and fix the property accesses
-  const canContinue = useCallback(() => {
+  const canContinue = () => {
     // Get state snapshot outside of the render cycle
     const state = useStore.getState();
     const phase4State = state.phase4 || {};
     const flightState = state.flight || {};
+
+    // Get current accordion status to check if wizards are currently being edited
+    const currentAccordionStatus = accordionStatus;
 
     // Safe access of properties with proper fallbacks
     const informedDateAnswers = phase4State.informedDateAnswers || [];
@@ -1118,11 +1121,14 @@ export default function TripExperiencePage(): ReactElement {
 
     // CRITICAL FIX: Also check that wizards are actually showing success (completed/submitted)
     // This prevents the continue button from being enabled just because answers were selected
+    // ADDITIONAL FIX: Use accordion status to ensure wizards are actually completed (not just showing success)
     const isTravelStatusCompleted = Boolean(
-      phase4State.travelStatusShowingSuccess
+      phase4State.travelStatusShowingSuccess &&
+        currentAccordionStatus.isTravelStatusCompleted
     );
     const isInformedDateCompleted = Boolean(
-      phase4State.informedDateShowingSuccess
+      phase4State.informedDateShowingSuccess &&
+        currentAccordionStatus.isInformedDateCompleted
     );
 
     // Use completed state instead of just valid state for final evaluation
@@ -1142,6 +1148,23 @@ export default function TripExperiencePage(): ReactElement {
         isInformedDateValid,
         isTravelStatusCompleted,
         isInformedDateCompleted,
+        // Add raw phase4 state for debugging
+        rawPhase4State: {
+          travelStatusIsValid: phase4State.travelStatusIsValid,
+          informedDateIsValid: phase4State.informedDateIsValid,
+          travelStatusShowingSuccess: phase4State.travelStatusShowingSuccess,
+          informedDateShowingSuccess: phase4State.informedDateShowingSuccess,
+        },
+        accordionState: {
+          isTravelStatusCompleted:
+            currentAccordionStatus.isTravelStatusCompleted,
+          isInformedDateCompleted:
+            currentAccordionStatus.isInformedDateCompleted,
+          hasTravelStatusInteracted:
+            currentAccordionStatus.hasTravelStatusInteracted,
+          hasInformedDateInteracted:
+            currentAccordionStatus.hasInformedDateInteracted,
+        },
         effectivelyTravelStatusValid,
         effectivelyInformedDateValid,
       });
@@ -1162,12 +1185,10 @@ export default function TripExperiencePage(): ReactElement {
       return false;
     }
 
-    // Evaluate final result
+    // Evaluate final result - FIXED: Require both sections to be completed
+    // Only allow continue when BOTH travel status AND informed date are properly completed
     const finalResult =
-      (effectivelyTravelStatusValid && effectivelyInformedDateValid) ||
-      (effectivelyTravelStatusValid &&
-        informedDateType === "before_departure") ||
-      (effectivelyInformedDateValid && currentTravelStatus === "none");
+      effectivelyTravelStatusValid && effectivelyInformedDateValid;
 
     // Reduce debug logging in production
     if (process.env.NODE_ENV !== "production") {
@@ -1181,11 +1202,21 @@ export default function TripExperiencePage(): ReactElement {
         effectivelyTravelStatusValid,
         effectivelyInformedDateValid,
         finalResult,
+        validationBreakdown: {
+          travelStatusValid: isTravelStatusValid,
+          travelStatusCompleted: isTravelStatusCompleted,
+          travelStatusEffective: effectivelyTravelStatusValid,
+          informedDateValid: isInformedDateValid,
+          informedDateCompleted: isInformedDateCompleted,
+          informedDateEffective: effectivelyInformedDateValid,
+          bothRequired:
+            "Both travel status AND informed date must be completed",
+        },
       });
     }
 
     return finalResult;
-  }, []); // Empty dependency array since we're getting state directly via getState
+  };
 
   // Get trip experience summary
   const tripExperienceSummary = useMemo(() => {
@@ -1257,6 +1288,11 @@ export default function TripExperiencePage(): ReactElement {
       return <div>Loading...</div>; // Return simple placeholder
     }
 
+    // Prevent re-rendering if store is not initialized
+    if (!isInitialized) {
+      return null;
+    }
+
     // Get the travel status to determine whether to pass selectedFlight
     const travelStatus = travelStatusAnswers.find(
       (a: Answer) => a.questionId === "travel_status"
@@ -1311,6 +1347,7 @@ export default function TripExperiencePage(): ReactElement {
       return <div>An error occurred loading the wizard.</div>;
     }
   }, [
+    isInitialized,
     handleTripExperienceComplete,
     travelStatusAnswers,
     originalFlights,
@@ -1322,6 +1359,11 @@ export default function TripExperiencePage(): ReactElement {
 
   // Informed Date QA Wizard
   const InformedDateWizard = useMemo(() => {
+    // Prevent re-rendering if store is not initialized
+    if (!isInitialized) {
+      return null;
+    }
+
     // Get travel status to determine which flight data to pass
     const travelStatus = travelStatusAnswers.find(
       (a: Answer) => a.questionId === "travel_status"
@@ -1356,6 +1398,7 @@ export default function TripExperiencePage(): ReactElement {
       />
     );
   }, [
+    isInitialized,
     informedDateQuestions,
     handleInformedDateComplete,
     informedDateAnswers,
