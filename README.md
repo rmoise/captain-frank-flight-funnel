@@ -150,7 +150,6 @@ The Captain Frank Flight Funnel is a sophisticated multi-step web application de
 ### Development Tools
 - **ESLint** - Code linting
 - **TypeScript** - Type checking
-- **Vitest** - Testing framework
 
 ### Additional Libraries
 - **styled-components 6.1.13** - CSS-in-JS
