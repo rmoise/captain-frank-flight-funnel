@@ -153,11 +153,13 @@ The Captain Frank Flight Funnel is a sophisticated multi-step web application de
 - **Vitest** - Testing framework
 
 ### Additional Libraries
-- **@mui/material 5.14.10** - Material UI components
 - **styled-components 6.1.13** - CSS-in-JS
 - **pako 2.1.0** - Compression library
 - **vaul 1.1.2** - Drawer/Sheet component
 - **use-debounce 10.0.4** - Debounce hook
+- **class-variance-authority 0.7.1** - CSS class utilities
+- **clsx 2.1.1** - Utility for className strings
+- **tailwind-merge 1.14.0** - Merge Tailwind CSS classes
 
 ---
 
