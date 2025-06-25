@@ -50,3 +50,6 @@ next-env.d.ts
 
 # Local Netlify folder
 .netlify
+
+# YoYo AI version control directory
+.yoyo/

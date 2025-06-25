@@ -68,6 +68,46 @@ const createTranslationsAdapter = (t: any): Translations =>
             moreThan3: t("wizard.questions.delayDuration.options.moreThan3"),
           },
         },
+        cancellationNotice: {
+          text: t("wizard.questions.cancellationNotice.text"),
+          options: {
+            notAtAll: t("wizard.questions.cancellationNotice.options.notAtAll"),
+            zeroToSeven: t("wizard.questions.cancellationNotice.options.zeroToSeven"),
+            eightToFourteen: t("wizard.questions.cancellationNotice.options.eightToFourteen"),
+            moreThanFourteen: t("wizard.questions.cancellationNotice.options.moreThanFourteen"),
+          },
+        },
+        missedCosts: {
+          text: t("wizard.questions.missedCosts.text"),
+          options: {
+            yes: t("wizard.questions.missedCosts.options.yes"),
+            no: t("wizard.questions.missedCosts.options.no"),
+          },
+        },
+        missedCostsAmount: {
+          text: t("wizard.questions.missedCostsAmount.text"),
+        },
+        alternativeFlightAirline: {
+          text: t("wizard.questions.alternativeFlightAirline.text"),
+          options: {
+            yes: t("wizard.questions.alternativeFlightAirline.options.yes"),
+            no: t("wizard.questions.alternativeFlightAirline.options.no"),
+          },
+        },
+        alternativeFlightOwn: {
+          text: t("wizard.questions.alternativeFlightOwn.text"),
+          options: {
+            yes: t("wizard.questions.alternativeFlightOwn.options.yes"),
+            no: t("wizard.questions.alternativeFlightOwn.options.no"),
+          },
+        },
+        refundStatus: {
+          text: t("wizard.questions.refundStatus.text"),
+          options: {
+            yes: t("wizard.questions.refundStatus.options.yes"),
+            no: t("wizard.questions.refundStatus.options.no"),
+          },
+        },
       },
       success: {
         answersSaved: t("wizard.success.answersSaved"),
@@ -105,7 +145,7 @@ const InitialAssessmentPage = () => {
   const [hasInteractedWithTerms, setHasInteractedWithTerms] = useState(false);
   const [hasInteractedWithFlight, setHasInteractedWithFlight] = useState(false);
   const [hasInteractedWithQA, setHasInteractedWithQA] = useState(false);
-  const [showQASuccess, setShowQASuccess] = useState(false);
+  // showQASuccess removed - Phase1QAWizard now handles its own completion state
   const [wizardConfettiStatus, setWizardConfettiStatus] = useState(false);
   // Remove redundant local state and use Zustand directly
   // --------------------------------
@@ -117,7 +157,7 @@ const InitialAssessmentPage = () => {
       state.validation.stepValidation?.[ValidationPhase.INITIAL_ASSESSMENT] ===
       true
   );
-  const isStep2Complete = showQASuccess;
+  const isStep2Complete = useStore((state) => state.wizard.isComplete === true);
 
   // Use the validation state from the store for Personal Details step completion
   const isStep3Complete = useStore(
@@ -170,45 +210,25 @@ const InitialAssessmentPage = () => {
       return;
     }
 
-    if (hasInteractedWithQA && !showQASuccess) {
+    const wizardComplete = useStore.getState().wizard.isComplete;
+    if (hasInteractedWithQA && !wizardComplete) {
       console.log(
         "[InitialAssessmentPage] Skipping state restoration during reset"
       );
       return;
     }
 
+    // Remove the duplicate wizard completion check since Phase1QAWizard
+    // now handles its own completion state internally
     const storeState = useStore.getState();
     if (storeState?.wizard) {
       const wizardState = storeState.wizard;
-      const questions = getInitialAssessmentQuestions(adaptedT);
-
-      const hasAllAnswers = questions.every((q) =>
-        (wizardState.answers || []).some((a) => a.questionId === q.id)
-      );
-
-      if (wizardState.isComplete === true && hasAllAnswers) {
+      
+      if (wizardState.isComplete === true) {
         console.log(
-          "[InitialAssessmentPage] Restoring wizard success state from Zustand store"
+          "[InitialAssessmentPage] Wizard is complete, letting Phase1QAWizard handle completion display"
         );
-        setShowQASuccess(true);
         setHasInteractedWithQA(true);
-
-        let anyConfetti = false;
-        if (Array.isArray(wizardState.answers) && questions.length > 0) {
-          wizardState.answers.forEach((answer) => {
-            const question = questions.find((q) => q.id === answer.questionId);
-            if (question?.options) {
-              const option = question.options.find(
-                (opt) => String(opt.value) === String(answer.value)
-              );
-              if (option?.showConfetti) {
-                anyConfetti = true;
-              }
-            }
-          });
-        }
-
-        setWizardConfettiStatus(anyConfetti);
 
         // Access setStepCompleted via store actions
         const storeActions = useStore.getState().actions;
@@ -228,60 +248,16 @@ const InitialAssessmentPage = () => {
         }
       } else {
         console.log(
-          "[InitialAssessmentPage] Wizard not complete or missing answers, not showing success."
+          "[InitialAssessmentPage] Wizard not complete, not updating validation."
         );
-        setShowQASuccess(false);
       }
     } else {
       console.log(
         "[InitialAssessmentPage] Wizard state not found in store during init."
       );
     }
-  }, [adaptedT, hasInteractedWithQA, showQASuccess, storeCoreInitialized]);
+  }, [adaptedT, hasInteractedWithQA, storeCoreInitialized]);
 
-  const handleBackFromSuccess = () => {
-    console.log("[InitialAssessmentPage] handleBackFromSuccess called");
-
-    setShowQASuccess(false);
-    setHasInteractedWithQA(true);
-
-    const resetInProgress = true;
-
-    if (typeof window !== "undefined" && window.__backToQuestionsHandler) {
-      const event = new Event("backToQuestions");
-      window.__backToQuestionsHandler(event);
-      console.log(
-        "[InitialAssessmentPage] Called wizard's back to questions handler"
-      );
-    }
-
-    const storeActions = useStore.getState().actions;
-    if (storeActions?.wizard?.resetWizard) {
-      storeActions.wizard.resetWizard();
-      console.log("[InitialAssessmentPage] Reset wizard via store");
-    }
-
-    try {
-      const storedState = localStorage.getItem("captain-frank-store");
-      if (storedState) {
-        const parsedState = JSON.parse(storedState);
-        if (parsedState.state?.wizard) {
-          parsedState.state.wizard.isComplete = false;
-          parsedState.state.wizard.currentStep = 1;
-          parsedState.state.wizard.answers = [];
-          localStorage.setItem(
-            "captain-frank-store",
-            JSON.stringify(parsedState)
-          );
-          console.log("[InitialAssessmentPage] Reset wizard in localStorage");
-        }
-      }
-    } catch (e) {
-      console.error("[InitialAssessmentPage] Error updating localStorage:", e);
-    }
-
-    console.log("[InitialAssessmentPage] Forced accordion to show questions");
-  };
 
   useEffect(() => {
     console.log("==========================================");
@@ -546,15 +522,11 @@ const InitialAssessmentPage = () => {
     }
   };
 
-  const handleBack = () => {
-    router.back();
-  };
 
   const handleQAComplete = (shouldShowConfetti: boolean) => {
     console.log("Phase 1 QA Completed! Confetti status:", shouldShowConfetti);
     setHasInteractedWithQA(true);
     setWizardConfettiStatus(shouldShowConfetti);
-    setShowQASuccess(true);
 
     try {
       const currentStore = useStore.getState();
@@ -724,30 +696,11 @@ const InitialAssessmentPage = () => {
         hasInteracted={hasInteractedWithQA}
         onInteraction={() => setHasInteractedWithQA(true)}
       >
-        {showQASuccess ? (
-          (() => {
-            const messageKey = wizardConfettiStatus
-              ? "wizard.success.goodChance"
-              : "wizard.success.answersSaved";
-            const successMessage =
-              t(messageKey) ||
-              (wizardConfettiStatus ? "Yay! Good chance!" : "Answers saved.");
-
-            return (
-              <Success
-                message={successMessage}
-                showConfetti={wizardConfettiStatus}
-                onBack={handleBackFromSuccess}
-              />
-            );
-          })()
-        ) : (
-          <Phase1QAWizard
-            questions={wizardQuestions}
-            onComplete={handleQAComplete}
-            store={useStore.getState()}
-          />
-        )}
+        <Phase1QAWizard
+          questions={wizardQuestions}
+          onComplete={handleQAComplete}
+          store={useStore.getState()}
+        />
       </AccordionCardClient>
 
       <AccordionCardClient

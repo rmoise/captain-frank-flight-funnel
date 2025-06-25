@@ -57,6 +57,62 @@ export const getInitialAssessmentQuestions = (t: Translations): Question[] => {
       ],
       showIf: (answers) => answers["issue_type"]?.value === "delay",
     },
-    // ... other questions moved from wizardQuestions.ts
+    {
+      id: "cancellationNotice",
+      text: t.wizard.questions.cancellationNotice.text,
+      type: "radio" as QuestionType,
+      options: [
+        {
+          id: "not_at_all",
+          label: t.wizard.questions.cancellationNotice.options.notAtAll,
+          value: "not_at_all",
+        },
+        {
+          id: "zero_to_seven",
+          label: t.wizard.questions.cancellationNotice.options.zeroToSeven,
+          value: "zero_to_seven",
+        },
+        {
+          id: "eight_to_fourteen",
+          label: t.wizard.questions.cancellationNotice.options.eightToFourteen,
+          value: "eight_to_fourteen",
+        },
+        {
+          id: "more_than_fourteen",
+          label: t.wizard.questions.cancellationNotice.options.moreThanFourteen,
+          value: "more_than_fourteen",
+          showConfetti: true,
+        },
+      ],
+      showIf: (answers) => answers["issue_type"]?.value === "cancel",
+    },
+    {
+      id: "missedCosts",
+      text: t.wizard.questions.missedCosts.text,
+      type: "radio" as QuestionType,
+      options: [
+        {
+          id: "yes",
+          label: t.wizard.questions.missedCosts.options.yes,
+          value: "yes",
+        },
+        {
+          id: "no",
+          label: t.wizard.questions.missedCosts.options.no,
+          value: "no",
+          showConfetti: true,
+        },
+      ],
+      showIf: (answers) => answers["issue_type"]?.value === "missed",
+    },
+    {
+      id: "missedCostsAmount",
+      text: t.wizard.questions.missedCostsAmount.text,
+      type: "money" as QuestionType,
+      placeholder: "0.00",
+      showIf: (answers) => 
+        answers["issue_type"]?.value === "missed" && 
+        answers["missedCosts"]?.value === "yes",
+    },
   ];
 };

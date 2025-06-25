@@ -153,12 +153,12 @@ export const MoneyInput: React.FC<MoneyInputProps> = ({
                 onChange("");
               } else if (newValue === "+") {
                 const currentValue = parseFloat(localValue || "0");
-                const newVal = (currentValue + 1).toString();
+                const newVal = (currentValue + 1).toFixed(2);
                 setLocalValue(newVal);
                 onChange(newVal);
               } else if (newValue === "-") {
                 const currentValue = parseFloat(localValue || "0");
-                const newVal = Math.max(0, currentValue - 1).toString();
+                const newVal = Math.max(0, currentValue - 1).toFixed(2);
                 setLocalValue(newVal);
                 onChange(newVal);
               } else {

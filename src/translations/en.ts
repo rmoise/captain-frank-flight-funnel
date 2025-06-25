@@ -16,7 +16,7 @@ export const en: Translations = {
     noResults: "No results found",
     required: "Required",
     enterMinChars: "Enter at least 3 characters",
-    finish: "Finish",
+    finish: "Complete",
   },
   salutation: {
     label: "Salutation",

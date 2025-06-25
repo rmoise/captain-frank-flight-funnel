@@ -10,12 +10,21 @@ declare global {
 }
 /* eslint-enable @typescript-eslint/no-unused-vars */
 
-import { useCallback, useState, useEffect, useRef } from "react";
-import type { Question, QuestionOption } from "@/types/shared/wizard";
+import { useCallback, useState, useEffect, useRef, useMemo } from "react";
+import type { Question, QuestionOption, Answer } from "@/types/shared/wizard";
 import { motion, AnimatePresence } from "framer-motion";
+import { MoneyInput } from "@/components/ui/input/MoneyInput";
 import useStore from "@/store"; // Import store hooks
 import { useAccordion } from "@/components/shared/accordion/AccordionContext";
 import { useTranslation } from "@/hooks/useTranslation";
+
+// Helper function to convert array of answers to a Record for showIf
+const answersToRecord = (answers: Answer[]): Record<string, Answer> => {
+  return answers.reduce((acc, answer) => {
+    acc[answer.questionId] = answer;
+    return acc;
+  }, {} as Record<string, Answer>);
+};
 
 interface Phase1QAWizardProps {
   questions: Question[];
@@ -35,6 +44,8 @@ export const WizardCompletionState = ({
   message?: string;
   showConfetti?: boolean;
 }) => {
+  const { t } = useTranslation();
+  
   const icon = showConfetti ? (
     <span className="text-[64px]">🎉</span>
   ) : (
@@ -59,14 +70,14 @@ export const WizardCompletionState = ({
         <div className="text-center space-y-4">
           <h2 className="text-2xl font-bold text-gray-900">{message}</h2>
           <p className="text-sm text-gray-500">
-            We are processing your information...
+            {t("wizard.success.processing")}
           </p>
           <div className="mt-6">
             <button
               onClick={onBackToQuestions}
               className="px-6 py-2 text-[#F54538] border border-[#F54538] rounded-md hover:bg-red-50"
             >
-              Back to questions
+              {t("wizard.success.backToQuestions")}
             </button>
           </div>
         </div>
@@ -97,6 +108,9 @@ export const Phase1QAWizard = ({
   const [isComplete, setIsComplete] = useState(false);
   const [selectedOption, setSelectedOption] = useState("");
   const [currentOptionConfetti, setCurrentOptionConfetti] = useState(false);
+  const [shouldShowConfetti, setShouldShowConfetti] = useState(false);
+  const [isMoneyInputFocused, setIsMoneyInputFocused] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
   // Memoize answers to avoid loops
   const answersRef = useRef(answers);
@@ -104,117 +118,44 @@ export const Phase1QAWizard = ({
     answersRef.current = answers;
   }, [answers]);
 
-  // Initialize component state from localStorage or store only on first render
+  // Filter questions based on showIf conditions
+  const visibleQuestions = useMemo(() => {
+    const answersRecord = answersToRecord(answers);
+    return questions.filter((q) => {
+      const shouldShow = !q.showIf || q.showIf(answersRecord);
+      return shouldShow;
+    });
+  }, [questions, answers]);
+
+  // Get current question based on visible questions
+  const getCurrentVisibleQuestion = useCallback(() => {
+    if (visibleQuestions.length === 0) return null;
+    const currentIndex = currentStep - 1;
+    if (currentIndex < 0 || currentIndex >= visibleQuestions.length) return null;
+    return visibleQuestions[currentIndex];
+  }, [currentStep, visibleQuestions]);
+
+  // Initialize component state from store only on first render
   const initializedRef = useRef(false);
+  const onCompleteCalledRef = useRef(false);
+  
   useEffect(() => {
     if (initializedRef.current) return;
     initializedRef.current = true;
 
-    // Try to load from localStorage directly first for maximum reliability
-    try {
-      const storedState = localStorage.getItem("captain-frank-store");
-      if (storedState) {
-        const parsedState = JSON.parse(storedState);
-        if (parsedState.state?.wizard) {
-          const wizardState = parsedState.state.wizard;
-
-          // Validate the isComplete status - only accept if we have answers for all questions
-          const hasAllAnswers = questions.every((q) =>
-            (wizardState.answers || []).some(
-              (a: { questionId: string }) => a.questionId === q.id
-            )
-          );
-
-          // Only set isComplete if we have all answers or the stored value is explicitly false
-          const shouldBeComplete =
-            wizardState.isComplete === true && hasAllAnswers;
-
-          // If not complete, make sure we activate the accordion and reset stored state
-          if (!shouldBeComplete) {
-            // Force reset wizard state in localStorage for reliability
-            try {
-              // Clear the wizard completion flag
-              parsedState.state.wizard.isComplete = false;
-              localStorage.setItem(
-                "captain-frank-store",
-                JSON.stringify(parsedState)
-              );
-              console.log(
-                "[Phase1QAWizard] Reset incomplete wizard state in localStorage"
-              );
-            } catch (e) {
-              console.error("[Phase1QAWizard] Error updating localStorage:", e);
-            }
-
-            // Set the accordion to be active
-            if (stepId) {
-              setActiveStepId(stepId);
-            }
-          }
-
-          // Set initial values from localStorage
-          if (
-            typeof wizardState.currentStep === "number" &&
-            wizardState.currentStep >= 1
-          ) {
-            setCurrentStep(wizardState.currentStep);
-          }
-
-          if (
-            Array.isArray(wizardState.answers) &&
-            wizardState.answers.length > 0
-          ) {
-            setAnswers(wizardState.answers);
-          }
-
-          // Set isComplete status based on our validation
-          setIsComplete(shouldBeComplete);
-
-          // Trigger onComplete if the wizard is already complete
-          if (shouldBeComplete) {
-            // Find if any selected options had showConfetti=true
-            let anyConfetti = false;
-            if (Array.isArray(wizardState.answers) && questions.length > 0) {
-              // Check each answer for confetti option
-              wizardState.answers.forEach((answer: any) => {
-                const question = questions.find(
-                  (q) => q.id === answer.questionId
-                );
-                if (question?.options) {
-                  const option = question.options.find(
-                    (opt) => String(opt.value) === String(answer.value)
-                  );
-                  if (option?.showConfetti) {
-                    anyConfetti = true;
-                  }
-                }
-              });
-            }
-
-            // Call onComplete with confetti status, use a small timeout to ensure component is fully mounted
-            setTimeout(() => onComplete(anyConfetti), 100);
-          }
-
-          console.log("[Phase1QAWizard] Initialized from localStorage", {
-            currentStep: wizardState.currentStep,
-            answersCount: wizardState.answers?.length || 0,
-            isComplete: shouldBeComplete,
-            hasAllAnswers,
-          });
-
-          return; // Skip store initialization if localStorage worked
-        }
-      }
-    } catch (e) {
-      console.error("[Phase1QAWizard] Error reading from localStorage:", e);
-    }
-
-    // Fallback to store if localStorage didn't work
+    // Initialize from store
     if (storeState?.wizard) {
       const wizardState = storeState.wizard;
 
-      // Validate isComplete status
-      const hasAllAnswers = questions.every((q) =>
+      // Calculate visible questions based on answers to validate completion
+      const answersRecord = answersToRecord(wizardState.answers || []);
+      const visibleQuestionsForValidation = questions.filter((q) => {
+        const shouldShow = !q.showIf || q.showIf(answersRecord);
+        return shouldShow;
+      });
+      
+      // Validate isComplete status against visible questions only
+      const hasAllAnswers = visibleQuestionsForValidation.every((q) =>
         (wizardState.answers || []).some(
           (a: { questionId: string }) => a.questionId === q.id
         )
@@ -247,7 +188,7 @@ export const Phase1QAWizard = ({
       setIsComplete(shouldBeComplete);
 
       // Trigger onComplete if the wizard is already complete
-      if (shouldBeComplete) {
+      if (shouldBeComplete && !onCompleteCalledRef.current) {
         // Find if any selected options had showConfetti=true
         let anyConfetti = false;
         if (Array.isArray(wizardState.answers) && questions.length > 0) {
@@ -265,6 +206,12 @@ export const Phase1QAWizard = ({
           });
         }
 
+        // Set the confetti state
+        setShouldShowConfetti(anyConfetti);
+        
+        // Mark that we've called onComplete to prevent duplicate calls
+        onCompleteCalledRef.current = true;
+        
         // Call onComplete with confetti status, use a small timeout to ensure component is fully mounted
         setTimeout(() => onComplete(anyConfetti), 100);
       }
@@ -281,18 +228,18 @@ export const Phase1QAWizard = ({
     if (stepId) {
       setActiveStepId(stepId);
     }
-  }, [storeState?.wizard, questions, stepId, setActiveStepId, onComplete]);
+  }, [storeState?.wizard, stepId, setActiveStepId, onComplete]); // Removed questions from deps to prevent re-initialization
 
   // Update selectedOption when current step or answers change
   useEffect(() => {
-    // Return early if questions aren't loaded
-    if (!questions?.length) return;
+    // Return early if visible questions aren't loaded
+    if (!visibleQuestions?.length) return;
 
     const currentStepIndex = currentStep - 1;
-    if (currentStepIndex < 0 || currentStepIndex >= questions.length) return;
+    if (currentStepIndex < 0 || currentStepIndex >= visibleQuestions.length) return;
 
     // Get current question and look for an answer
-    const currentQuestion = questions[currentStepIndex];
+    const currentQuestion = visibleQuestions[currentStepIndex];
     const answer = answers.find((a) => a.questionId === currentQuestion.id);
 
     if (answer) {
@@ -314,21 +261,31 @@ export const Phase1QAWizard = ({
       setSelectedOption("");
       setCurrentOptionConfetti(false);
     }
-  }, [currentStep, answers, questions]);
+  }, [currentStep, answers, visibleQuestions]);
+
+  // Adjust currentStep if it exceeds visible questions length
+  useEffect(() => {
+    if (visibleQuestions.length > 0 && currentStep > visibleQuestions.length) {
+      console.log(
+        `[Phase1QAWizard] Adjusting currentStep from ${currentStep} to ${visibleQuestions.length}`
+      );
+      setCurrentStep(visibleQuestions.length);
+    }
+  }, [visibleQuestions.length, currentStep]);
 
   // Handle option selection
   const handleAnswer = useCallback(
-    (questionId: string, value: any, option: QuestionOption) => {
+    (questionId: string, value: any, option?: QuestionOption) => {
       console.log(
         `[Phase1QAWizard] handleAnswer: question=${questionId}, value=${value}`
       );
 
       // Update local UI state immediately
       setSelectedOption(String(value));
-      setCurrentOptionConfetti(!!option.showConfetti);
+      setCurrentOptionConfetti(!!option?.showConfetti);
 
       // Handle external links
-      if (option.externalLink) {
+      if (option?.externalLink) {
         console.log(
           `[Phase1QAWizard] Opening external link: ${option.externalLink}`
         );
@@ -377,41 +334,6 @@ export const Phase1QAWizard = ({
         store.actions.wizard.setAnswer(questionId, value);
       }
 
-      // Direct localStorage update as extra reliability
-      try {
-        const storedState = localStorage.getItem("captain-frank-store");
-        if (storedState) {
-          const parsedState = JSON.parse(storedState);
-          if (parsedState.state?.wizard) {
-            // Find existing answer or add new one
-            let wizardAnswers = parsedState.state.wizard.answers || [];
-            const existingIndex = wizardAnswers.findIndex(
-              (a: { questionId: string }) => a.questionId === questionId
-            );
-
-            if (existingIndex >= 0) {
-              wizardAnswers[existingIndex] = newAnswer;
-            } else {
-              wizardAnswers = [...wizardAnswers, newAnswer];
-            }
-
-            // Update the wizard answers in the parsed state
-            parsedState.state.wizard.answers = wizardAnswers;
-
-            // Reset isComplete to false to make sure user can continue
-            parsedState.state.wizard.isComplete = false;
-
-            // Save back to localStorage
-            localStorage.setItem(
-              "captain-frank-store",
-              JSON.stringify(parsedState)
-            );
-            console.log(`[Phase1QAWizard] Updated localStorage directly`);
-          }
-        }
-      } catch (e) {
-        console.error("[Phase1QAWizard] Error updating localStorage:", e);
-      }
     },
     [storeState, store]
   );
@@ -419,10 +341,10 @@ export const Phase1QAWizard = ({
   // Handle next button click
   const handleNext = useCallback(() => {
     console.log(
-      `[Phase1QAWizard] handleNext: currentStep=${currentStep}, total=${questions.length}`
+      `[Phase1QAWizard] handleNext: currentStep=${currentStep}, total=${visibleQuestions.length}`
     );
 
-    if (currentStep < questions.length) {
+    if (currentStep < visibleQuestions.length) {
       // Go to next step
       const nextStep = currentStep + 1;
       setCurrentStep(nextStep);
@@ -434,72 +356,87 @@ export const Phase1QAWizard = ({
         store.actions.wizard.setCurrentStep(nextStep);
       }
 
-      // Direct localStorage update for reliability
-      try {
-        const storedState = localStorage.getItem("captain-frank-store");
-        if (storedState) {
-          const parsedState = JSON.parse(storedState);
-          if (parsedState.state?.wizard) {
-            parsedState.state.wizard.currentStep = nextStep;
-            localStorage.setItem(
-              "captain-frank-store",
-              JSON.stringify(parsedState)
-            );
-          }
-        }
-      } catch (e) {
-        console.error("[Phase1QAWizard] Error updating localStorage:", e);
-      }
     } else {
+      // Include the current selection in the answers check
+      const currentQuestion = visibleQuestions[currentStep - 1];
+      const effectiveAnswers = [...answers];
+      
+      // If there's a selected option for the current question that's not yet in answers, include it
+      if (currentQuestion && selectedOption) {
+        const hasCurrentAnswer = answers.some((a) => a.questionId === currentQuestion.id);
+        if (!hasCurrentAnswer) {
+          effectiveAnswers.push({
+            questionId: currentQuestion.id,
+            value: selectedOption,
+            timestamp: Date.now(),
+            validationErrors: []
+          });
+        }
+      }
+
       // Verify we have all answers before completion
-      const hasAllAnswers = questions.every((q) =>
-        answers.some((a: { questionId: string }) => a.questionId === q.id)
+      const hasAllAnswers = visibleQuestions.every((q) =>
+        effectiveAnswers.some((a: { questionId: string }) => a.questionId === q.id)
       );
+
+      console.log("[Phase1QAWizard] Checking completion:", {
+        visibleQuestions: visibleQuestions.length,
+        answers: answers.length,
+        hasAllAnswers,
+        currentStep,
+        selectedOption
+      });
 
       if (!hasAllAnswers) {
         console.warn("[Phase1QAWizard] Cannot complete - missing answers");
         return;
       }
 
-      // Complete the wizard
-      console.log("[Phase1QAWizard] Wizard completed");
-      setIsComplete(true);
-
-      // Update store
-      if (storeState?.actions?.wizard?.completeWizard) {
-        storeState.actions.wizard.completeWizard();
-      } else if (store?.actions?.wizard?.completeWizard) {
-        store.actions.wizard.completeWizard();
-      }
-
-      // Direct localStorage update for reliability
-      try {
-        const storedState = localStorage.getItem("captain-frank-store");
-        if (storedState) {
-          const parsedState = JSON.parse(storedState);
-          if (parsedState.state?.wizard) {
-            parsedState.state.wizard.isComplete = true;
-            localStorage.setItem(
-              "captain-frank-store",
-              JSON.stringify(parsedState)
-            );
+      // Calculate if we should show confetti based on answers
+      let anyConfetti = false;
+      effectiveAnswers.forEach((answer) => {
+        const question = visibleQuestions.find((q) => q.id === answer.questionId);
+        if (question?.options) {
+          const option = question.options.find(
+            (opt) => String(opt.value) === String(answer.value)
+          );
+          if (option?.showConfetti) {
+            anyConfetti = true;
           }
         }
-      } catch (e) {
-        console.error("[Phase1QAWizard] Error updating localStorage:", e);
-      }
+      });
 
-      onComplete(currentOptionConfetti);
+      // Complete the wizard with transition
+      console.log("[Phase1QAWizard] Starting transition to completion");
+      setIsTransitioning(true);
+      setShouldShowConfetti(anyConfetti);
+
+      // Wait for animation before showing completion
+      setTimeout(() => {
+        console.log("[Phase1QAWizard] Wizard completed");
+        setIsComplete(true);
+        setIsTransitioning(false);
+
+        // Update store
+        if (storeState?.actions?.wizard?.completeWizard) {
+          storeState.actions.wizard.completeWizard();
+        } else if (store?.actions?.wizard?.completeWizard) {
+          store.actions.wizard.completeWizard();
+        }
+
+        onComplete(currentOptionConfetti);
+      }, 300); // Match the animation duration
     }
   }, [
     currentStep,
-    questions.length,
+    visibleQuestions.length,
     storeState,
     store,
     onComplete,
     currentOptionConfetti,
     answers,
-    questions,
+    visibleQuestions,
+    selectedOption,
   ]);
 
   // Handle back button click
@@ -546,6 +483,10 @@ export const Phase1QAWizard = ({
     setAnswers([]);
     setIsComplete(false);
     setSelectedOption("");
+    setShouldShowConfetti(false);
+    
+    // Reset the onComplete called flag
+    onCompleteCalledRef.current = false;
 
     // Reset store state
     if (storeState?.actions?.wizard?.resetWizard) {
@@ -554,25 +495,6 @@ export const Phase1QAWizard = ({
       store.actions.wizard.resetWizard();
     }
 
-    // Reset localStorage
-    try {
-      const storedState = localStorage.getItem("captain-frank-store");
-      if (storedState) {
-        const parsedState = JSON.parse(storedState);
-        if (parsedState.state?.wizard) {
-          parsedState.state.wizard.currentStep = 1;
-          parsedState.state.wizard.answers = [];
-          parsedState.state.wizard.isComplete = false;
-          localStorage.setItem(
-            "captain-frank-store",
-            JSON.stringify(parsedState)
-          );
-          console.log("[Phase1QAWizard] Reset localStorage directly");
-        }
-      }
-    } catch (e) {
-      console.error("[Phase1QAWizard] Error resetting localStorage:", e);
-    }
 
     // Activate accordion
     if (stepId) {
@@ -584,8 +506,18 @@ export const Phase1QAWizard = ({
   const handleBackToQuestions = useCallback(() => {
     console.log("[Phase1QAWizard] Handling back to questions");
 
+    // Reset local state completely
+    setCurrentStep(1);
+    setAnswers([]);
+    setSelectedOption("");
+    setCurrentOptionConfetti(false);
+    
     // Set isComplete to false to show questions again
     setIsComplete(false);
+    setShouldShowConfetti(false);
+    
+    // Reset the onComplete called flag
+    onCompleteCalledRef.current = false;
 
     // Reset wizard completion status in store
     if (storeState?.actions?.wizard?.resetWizard) {
@@ -594,42 +526,19 @@ export const Phase1QAWizard = ({
       store.actions.wizard.resetWizard();
     }
 
-    // Update localStorage for reliability
-    try {
-      const storedState = localStorage.getItem("captain-frank-store");
-      if (storedState) {
-        const parsedState = JSON.parse(storedState);
-        if (parsedState.state?.wizard) {
-          parsedState.state.wizard.isComplete = false;
-          localStorage.setItem(
-            "captain-frank-store",
-            JSON.stringify(parsedState)
-          );
-          console.log(
-            "[Phase1QAWizard] Updated localStorage isComplete to false"
-          );
-        }
-      }
-    } catch (e) {
-      console.error("[Phase1QAWizard] Error updating localStorage:", e);
-    }
-
     // Set the step to active in the accordion
     if (stepId) {
       setActiveStepId(stepId);
     }
 
-    // Call parent handler if provided
-    if (onBackToQuestions) {
-      onBackToQuestions();
-    }
+    // Don't call parent handler here - it creates a circular dependency
+    // The parent should handle its own state reset separately
   }, [
     setIsComplete,
     storeState,
     store,
     stepId,
     setActiveStepId,
-    onBackToQuestions,
   ]);
 
   // Fix: Move useEffect outside conditional block and add conditional logic inside
@@ -651,26 +560,29 @@ export const Phase1QAWizard = ({
     };
   }, [isComplete, handleBackToQuestions]);
 
-  // For debugging - add a button to force reset when isComplete is true
-  if (isComplete) {
-    console.log("[Phase1QAWizard] Rendering completion state");
+  // Helper function to render questions
+  const renderQuestions = () => {
 
-    // Don't render anything when complete - let the parent accordion handle the success state
-    return null;
-  }
-
-  // Get current question
+  // Get current question from visible questions
   const currentStepIndex = currentStep - 1;
-  const currentQuestion = questions[currentStepIndex];
+  const currentQuestion = visibleQuestions[currentStepIndex];
 
   if (!currentQuestion) {
     console.log(
-      "[Phase1QAWizard] Rendering null due to no current question at index",
-      currentStepIndex
+      `[Phase1QAWizard] No question found at index ${currentStepIndex}, visibleQuestions.length=${visibleQuestions.length}, currentStep=${currentStep}`
     );
+    
+    // If we have visible questions but current step is out of bounds, reset to step 1
+    if (visibleQuestions.length > 0 && currentStep > visibleQuestions.length) {
+      console.log("[Phase1QAWizard] Auto-adjusting to first question");
+      setCurrentStep(1);
+      return null; // Return null to trigger re-render with correct step
+    }
+    
+    // If no visible questions at all, show error
     return (
       <div className="text-center p-4">
-        <p className="text-sm text-gray-500 mb-3">Question not found</p>
+        <p className="text-sm text-gray-500 mb-3">No questions available</p>
         <button
           onClick={handleReset}
           className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
@@ -682,10 +594,10 @@ export const Phase1QAWizard = ({
   }
 
   // Determine if we should show the Next button
-  const showNextButton = selectedOption !== "";
+  const showNextButton = selectedOption !== "" && selectedOption !== undefined;
 
-  // Calculate progress
-  const totalSteps = questions.length;
+  // Calculate progress based on visible questions
+  const totalSteps = visibleQuestions.length;
   const progressPercent = totalSteps > 0 ? (currentStep / totalSteps) * 100 : 0;
 
   // Render the question UI
@@ -737,8 +649,24 @@ export const Phase1QAWizard = ({
           </div>
 
           <div className="space-y-3 mt-4">
-            {currentQuestion.options?.map((option) => {
-              const isSelected = selectedOption === option.value;
+            {currentQuestion.type === "money" ? (
+              <MoneyInput
+                label=""
+                value={selectedOption || ""}
+                onChange={(value) => {
+                  setSelectedOption(value);
+                  // For money inputs, pass undefined as the option parameter
+                  handleAnswer(currentQuestion.id, value, undefined);
+                }}
+                onFocus={() => setIsMoneyInputFocused(true)}
+                onBlur={() => setIsMoneyInputFocused(false)}
+                isFocused={isMoneyInputFocused}
+                placeholder={currentQuestion.placeholder || "0.00"}
+                className="w-full"
+              />
+            ) : (
+              currentQuestion.options?.map((option) => {
+                const isSelected = selectedOption === option.value;
 
               // For external link options, create a direct link
               if (option.externalLink) {
@@ -868,7 +796,8 @@ export const Phase1QAWizard = ({
                   </div>
                 </label>
               );
-            })}
+            })
+            )}
           </div>
         </motion.div>
       </AnimatePresence>
@@ -898,7 +827,7 @@ export const Phase1QAWizard = ({
               className="px-6 py-2 font-medium text-white bg-[#F54538] rounded-lg hover:bg-red-600 transition-colors"
               type="button"
             >
-              {currentStep < questions.length ? t("common.next") : t("common.finish")}
+              {currentStep < visibleQuestions.length ? t("common.next") : t("common.finish")}
             </button>
           </div>
         )}
@@ -906,5 +835,37 @@ export const Phase1QAWizard = ({
         {!showNextButton && <div />}
       </div>
     </div>
+  );
+  };
+
+  // Render with animation wrapper
+  return (
+    <AnimatePresence mode="wait">
+      {isComplete ? (
+        <motion.div
+          key="completion"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          transition={{ duration: 0.3, ease: "easeInOut" }}
+        >
+          <WizardCompletionState
+            onBackToQuestions={handleBackToQuestions}
+            message={shouldShowConfetti ? t("wizard.success.goodChance") : t("wizard.success.answersSaved")}
+            showConfetti={shouldShowConfetti}
+          />
+        </motion.div>
+      ) : (
+        <motion.div
+          key="questions"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          {renderQuestions()}
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };
