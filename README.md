@@ -633,7 +633,7 @@ npm run build:functions
 
 ## Contact & Support
 
-For technical questions or support regarding this project, please contact me at roderickfmoise@gmail.com
+For technical questions or support regarding this project, please contact me at roderickfmoise@gmail.com.
 
 **Last Updated:** June 25, 2025
 **Version:** 0.1.0
