@@ -233,6 +233,8 @@ captain-frank-flight-funnel/
 │
 ├── public/                 # Static assets
 ├── next.config.js         # Next.js configuration
+├── tailwind.config.ts    # Tailwind CSS configuration
+├── postcss.config.js     # PostCSS configuration
 ├── netlify.toml          # Netlify configuration
 ├── package.json          # Dependencies
 └── tsconfig.json         # TypeScript configuration
