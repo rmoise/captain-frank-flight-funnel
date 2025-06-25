@@ -75,9 +75,7 @@ flowchart LR
     Start([User Visits Site]) --> Lang{Choose Language<br/>DE/EN}
     Lang --> Phase1[Phase 1<br/>Initial Assessment]
     
-    Phase1 --> Check1{Eligible?}
-    Check1 -->|No| Reject[Claim Rejected Page]
-    Check1 -->|Yes| Phase2[Phase 2<br/>Flight Details]
+    Phase1 --> Phase2[Phase 2<br/>Flight Details]
     
     Phase2 --> Search[Search Flights<br/>or Manual Entry]
     Search --> Phase3[Phase 3<br/>Compensation Estimate]
@@ -91,16 +89,15 @@ flowchart LR
     Phase5 --> Sign[Digital Signature<br/>& Document Upload]
     Sign --> Submit[Submit Claim]
     
-    Submit --> API{Evaluate Claim}
+    Submit --> API{Evaluate Claim<br/>API}
     API -->|Accepted| Success[Claim Success<br/>Reference Number]
-    API -->|Rejected| Reject2[Claim Rejected<br/>Reasons Provided]
+    API -->|Rejected| Reject[Claim Rejected<br/>Reasons Provided]
     
     Success --> CRM[HubSpot CRM<br/>Lead Created]
     
     style Start fill:#e1f5e1,stroke:#4caf50,stroke-width:2px
     style Success fill:#e1f5e1,stroke:#4caf50,stroke-width:2px
     style Reject fill:#ffe1e1,stroke:#f44336,stroke-width:2px
-    style Reject2 fill:#ffe1e1,stroke:#f44336,stroke-width:2px
 ```
 
 ---
