@@ -400,16 +400,16 @@ All routes are prefixed with `[lang]` for internationalization:
    - Basic eligibility questions
    - Flight type determination
    - EU regulation checks
-
-3. **`/phases/flight-details`** - Phase 2
-   - Flight search and selection
-   - Manual entry option
-   - Flight validation
-
-4. **`/phases/compensation-estimate`** - Phase 3
+  
+3. **`/phases/compensation-estimate`** - Phase 2
    - Compensation calculation
    - Amount display
    - Proceed to claim option
+
+4. **`/phases/flight-details`** - Phase 3
+   - Flight search and selection
+   - Manual entry option
+   - Flight validation
 
 5. **`/phases/trip-experience`** - Phase 4
    - Detailed questionnaire
